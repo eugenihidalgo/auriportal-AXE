@@ -7,10 +7,17 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
-import dotenv from 'dotenv';
 
-// Cargar variables de entorno
-dotenv.config();
+// Cargar y validar variables de entorno (sin exponer secretos)
+import { loadEnvIfNeeded, getRequiredEnv, getRequiredEnvKeys } from './src/core/config/env.js';
+
+// Cargar variables de entorno si es necesario
+const envLoadResult = loadEnvIfNeeded();
+if (envLoadResult.loaded) {
+  console.log(`📁 Variables de entorno cargadas desde: ${envLoadResult.path}`);
+} else if (envLoadResult.reason) {
+  console.log(`ℹ️  ${envLoadResult.reason}`);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -86,11 +93,25 @@ import { validateEnvironmentVariables } from './src/config/validate.js';
 import { iniciarScheduler } from './src/services/scheduler.js';
 import { initRequestContext } from './src/core/observability/request-context.js';
 
+// Validar variables de entorno requeridas al inicio (falla temprano si faltan)
+console.log('🔍 Validando variables de entorno requeridas...');
+try {
+  const requiredKeys = getRequiredEnvKeys();
+  getRequiredEnv(requiredKeys);
+  console.log('✅ Todas las variables requeridas están configuradas');
+} catch (error) {
+  console.error('❌ ERROR: Variables de entorno requeridas faltantes');
+  console.error(error.message);
+  console.error('\n⚠️  El servidor no puede iniciar sin estas variables.');
+  console.error('   Ejecuta: node scripts/verify-env.js para más detalles.\n');
+  process.exit(1);
+}
+
 // Inicializar base de datos PostgreSQL (única fuente de verdad v4)
 initPostgreSQL();
 
-// Validar configuración al inicio
-console.log('🔍 Validando configuración...');
+// Validar configuración adicional al inicio
+console.log('🔍 Validando configuración adicional...');
 const env = {
   CLICKUP_API_TOKEN: process.env.CLICKUP_API_TOKEN,
   KAJABI_CLIENT_ID: process.env.KAJABI_CLIENT_ID,

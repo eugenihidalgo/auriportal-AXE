@@ -82,6 +82,93 @@ Puedes editarlo manualmente si necesitas agregar más carpetas o configuraciones
 
 ---
 
+## 🔐 Configuración de Variables de Entorno (.env)
+
+### Verificar que .env existe y está configurado
+
+El proyecto requiere un archivo `.env` con las variables de entorno necesarias. Para verificar que todo está correcto:
+
+```bash
+cd /var/www/aurelinportal
+node scripts/verify-env.js
+```
+
+Este script:
+- ✅ Verifica que el archivo `.env` existe
+- ✅ Valida que todas las variables requeridas están configuradas
+- ✅ **NO expone valores reales** de secretos (solo muestra estado OK/MISSING)
+
+### Crear/Actualizar .env
+
+Si falta el archivo `.env` o faltan variables:
+
+```bash
+# 1. Copiar desde el ejemplo (si no existe)
+cp .env.example .env
+
+# 2. Editar y configurar valores reales
+nano .env
+
+# 3. Verificar que todo está correcto
+node scripts/verify-env.js
+```
+
+### Variables Requeridas
+
+Las variables mínimas requeridas son:
+- `CLICKUP_API_TOKEN` - Token de API de ClickUp
+- `GOOGLE_WORKER_URL` - URL del Google Apps Script Worker
+- `GOOGLE_WORKER_SECRET` - Secreto para autenticar con el worker
+- Variables de PostgreSQL: `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` (o `DATABASE_URL`)
+
+Consulta `.env.example` para ver la lista completa con descripciones.
+
+## 🚀 Iniciar el Servidor con PM2
+
+### Usar ecosystem.config.js (Recomendado)
+
+El archivo `ecosystem.config.js` está configurado para cargar automáticamente las variables de entorno desde `.env`:
+
+```bash
+# Iniciar en producción
+pm2 start ecosystem.config.js --only aurelinportal-prod
+
+# Iniciar en desarrollo
+pm2 start ecosystem.config.js --only aurelinportal-dev
+
+# Iniciar en beta/staging
+pm2 start ecosystem.config.js --only aurelinportal-beta
+```
+
+### Verificar que PM2 carga las variables correctamente
+
+Después de iniciar con PM2, verifica que el servidor carga las variables:
+
+```bash
+# Ver logs del servidor
+pm2 logs aurelinportal-prod
+
+# Deberías ver mensajes como:
+# ✅ Todas las variables requeridas están configuradas
+# ✅ PostgreSQL conectado correctamente
+```
+
+Si ves errores sobre variables faltantes, verifica:
+1. Que el archivo `.env` existe en la raíz del proyecto
+2. Que contiene todas las variables requeridas
+3. Ejecuta `node scripts/verify-env.js` para diagnóstico
+
+### Nota sobre .env por entorno
+
+El `ecosystem.config.js` soporta archivos específicos por entorno:
+- `.env.prod` para producción (si existe, se usa en lugar de `.env`)
+- `.env.beta` para beta/staging
+- `.env.dev` para desarrollo
+
+Si no existen estos archivos específicos, se usa `.env` por defecto.
+
+---
+
 **🎉 ¡Listo!** Ahora cada vez que abras ese workspace, Cursor se conectará automáticamente al servidor y abrirá la carpeta del proyecto.
 
 
