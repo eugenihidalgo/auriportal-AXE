@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Limpieza energética con Aurelín" />
+<title>AuriPortal — Limpieza Energética</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #faf7f2;
+    color: #333;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 30px;
+  }
+
+  .aura-circle {
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, #ffe9a8 0%, #f8d56d 40%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(10px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 110px;
+    position: absolute;
+    top: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(255,190,80,0.45);
+  }
+
+  .boton {
+    padding: 15px 30px;
+    background: linear-gradient(135deg, #ffd86b, #ffcd4a);
+    border: none;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #333;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    transition: all 0.2s ease;
+    margin: 15px 0;
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .boton:hover {
+    background: linear-gradient(135deg, #ffe395, #ffda5a);
+    transform: scale(1.03);
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .aura-circle {
+      width: 180px;
+      height: 180px;
+    }
+
+    .auri-img {
+      width: 100px;
+      top: 40px;
+    }
+
+    .boton {
+      font-size: 1.1rem;
+      padding: 14px 25px;
+    }
+  }
+
+  /* Escritorio grande */
+  @media (min-width: 1200px) {
+    .container {
+      max-width: 700px;
+    }
+
+    .aura-circle {
+      width: 240px;
+      height: 240px;
+    }
+
+    .auri-img {
+      width: 130px;
+      top: 55px;
+    }
+  }
+
+  
+
+
+
+
+  /* Ajustes para móvil */
+  @media (max-width: 768px) {
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="aura-container">
+      <div class="aura-circle"></div>
+      <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
+    </div>
+
+    <button class="boton" onclick="location.href='{{URL_LIMPIEZA_RAPIDA}}'">
+      Limpieza rápida
+    </button>
+
+    <button class="boton" onclick="location.href='{{URL_LIMPIEZA_BASICA}}'">
+      Limpieza básica
+    </button>
+
+    <button class="boton" onclick="location.href='{{URL_LIMPIEZA_PROFUNDA}}'">
+      Limpieza profunda
+    </button>
+
+    <button class="boton" onclick="location.href='{{URL_LIMPIEZA_TOTAL}}'">
+      Limpieza total
+    </button>
+  </div>
+
+</body>
+</html>
+

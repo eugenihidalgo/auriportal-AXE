@@ -1,0 +1,781 @@
+/* ============================================================================
+   OVERRIDES DE TEMA - AuriPortal
+   Aplicación sistemática de variables CSS a todos los componentes
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   ELEMENTOS BASE
+   ---------------------------------------------------------------------------- */
+body {
+  background: var(--bg-main, var(--bg-primary)) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   CONTENEDORES Y PANELES
+   ---------------------------------------------------------------------------- */
+.container {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.card,
+.contador,
+.preparaciones-container,
+.aspectos-container,
+.tecnicas-container {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle, var(--border-soft)) !important;
+  box-shadow: 0 2px 8px var(--shadow-sm) !important;
+  border-radius: var(--radius-lg, 20px) !important;
+}
+
+/* Modo oscuro - efecto continuo sin cajas */
+body.theme-dark .card,
+body.theme-dark .contador,
+body.theme-dark .preparaciones-container,
+body.theme-dark .aspectos-container,
+body.theme-dark .tecnicas-container {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Cards activas y hover - sutiles */
+.card:hover,
+.preparaciones-container:hover {
+  background: var(--bg-card-active) !important;
+  box-shadow: 0 4px 12px var(--shadow-md) !important;
+}
+
+body.theme-dark .card:hover,
+body.theme-dark .preparaciones-container:hover {
+  background: var(--bg-card-active) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-color: var(--border-soft) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   TIPOGRAFÍA Y TEXTOS
+   ---------------------------------------------------------------------------- */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-accent) !important;
+  font-weight: 600 !important;
+}
+
+/* Títulos en modo oscuro - mejor contraste y peso aumentado */
+body.theme-dark h1,
+body.theme-dark h2,
+body.theme-dark h3,
+body.theme-dark h4,
+body.theme-dark h5,
+body.theme-dark h6 {
+  color: var(--text-accent) !important;
+  font-weight: 700 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  letter-spacing: -0.01em;
+}
+
+/* Títulos específicos con más peso */
+body.theme-dark h1 {
+  font-weight: 700 !important;
+}
+
+body.theme-dark h2,
+body.theme-dark h3 {
+  font-weight: 650 !important;
+}
+
+p, span, div, .frase, .progreso {
+  color: var(--text-primary) !important;
+}
+
+.streak, .racha {
+  color: var(--text-streak) !important;
+  font-weight: 600 !important;
+}
+
+/* Textos secundarios - mejor contraste en modo oscuro */
+.texto-vacio,
+.preparacion-meta,
+.aspecto-descripcion {
+  color: var(--text-secondary) !important;
+}
+
+body.theme-dark .texto-vacio,
+body.theme-dark .preparacion-meta,
+body.theme-dark .aspecto-descripcion,
+body.theme-dark .progreso,
+body.theme-dark .tecnica-descripcion,
+body.theme-dark .aspecto-info {
+  color: var(--text-secondary) !important;
+  opacity: 0.9;
+}
+
+/* ----------------------------------------------------------------------------
+   BOTONES Y CTAs
+   ---------------------------------------------------------------------------- */
+.boton,
+.boton-practico,
+.boton-guardar,
+button,
+button[type="submit"],
+.btn,
+.btn-primary,
+a.boton-practico {
+  background: var(--gradient-primary) !important;
+  color: var(--button-text-color) !important;
+  box-shadow: 0 4px 12px var(--shadow-md) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Botones de confirmación/activación - VERDE para estados positivos */
+.boton-confirmar,
+.btn-activar,
+.btn-success,
+button[type="submit"].success {
+  background: var(--gradient-success) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+  font-weight: 700 !important; /* Peso alto para acciones positivas */
+  border-radius: var(--radius-md, 16px) !important;
+}
+
+.boton-confirmar:hover,
+.btn-activar:hover,
+.btn-success:hover,
+button[type="submit"].success:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5) !important;
+  transform: translateY(-1px) scale(1.01) !important;
+}
+
+/* Modo oscuro - verde más vibrante */
+body.theme-dark .boton-confirmar,
+body.theme-dark .btn-activar,
+body.theme-dark .btn-success {
+  background: var(--gradient-success) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.boton:hover,
+.boton-practico:hover,
+.boton-guardar:hover,
+button:hover,
+button[type="submit"]:hover,
+.btn:hover,
+.btn-primary:hover,
+a.boton-practico:hover {
+  background: var(--gradient-hover) !important;
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 6px 16px var(--shadow-lg) !important;
+}
+
+.boton:active,
+.boton-practico:active,
+button:active {
+  transform: translateY(0) scale(0.99) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   INPUTS Y FORMULARIOS
+   ---------------------------------------------------------------------------- */
+input[type="text"],
+input[type="email"],
+input[type="number"],
+textarea,
+select {
+  background: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  border: 2px solid var(--input-border) !important;
+  border-radius: var(--radius-md, 16px) !important;
+  padding: 10px 14px !important;
+  transition: all 0.2s ease !important;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--input-focus-border) !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1) !important;
+}
+
+/* Placeholders */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.7 !important;
+}
+
+/* ----------------------------------------------------------------------------
+   CHECKBOXES Y RADIOS
+   ---------------------------------------------------------------------------- */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent-primary) !important;
+  width: 20px !important;
+  height: 20px !important;
+  cursor: pointer !important;
+}
+
+body.theme-dark input[type="checkbox"],
+body.theme-dark input[type="radio"] {
+  filter: brightness(1.3) contrast(1.1);
+}
+
+/* ----------------------------------------------------------------------------
+   BADGES Y ESTADOS
+   ---------------------------------------------------------------------------- */
+.badge-activo,
+.estado-badge.estado-pasado,
+.estado-badge.estado-activo {
+  background: var(--badge-bg-active) !important;
+  color: var(--badge-text-active) !important;
+  padding: 4px 10px !important;
+  border-radius: var(--radius-sm, 12px) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important; /* Peso alto para estados positivos */
+  display: inline-block !important;
+}
+
+/* Modo oscuro - verde más vibrante para mejor visibilidad */
+body.theme-dark .badge-activo,
+body.theme-dark .estado-badge.estado-pasado,
+body.theme-dark .estado-badge.estado-activo {
+  background: var(--badge-bg-active) !important;
+  color: #ffffff !important; /* Blanco para máximo contraste sobre verde */
+  font-weight: 700 !important;
+}
+
+.badge-inactivo,
+.estado-badge.estado-pendiente {
+  background: var(--badge-bg-pending) !important;
+  color: var(--badge-text-pending) !important;
+  padding: 4px 10px !important;
+  border-radius: var(--radius-sm, 12px) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  display: inline-block !important;
+}
+
+/* Modo oscuro - mejor contraste para pendientes */
+body.theme-dark .badge-inactivo,
+body.theme-dark .estado-badge.estado-pendiente {
+  background: var(--badge-bg-pending) !important;
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+}
+
+.obligatoria-badge {
+  background: var(--badge-bg-obligatory) !important;
+  color: var(--badge-text-obligatory) !important;
+  padding: 3px 8px !important;
+  border-radius: var(--radius-sm, 12px) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  display: inline-block !important;
+  margin-left: 6px !important;
+}
+
+.badge-info {
+  background: var(--accent-primary) !important;
+  color: var(--button-text-color) !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+/* ----------------------------------------------------------------------------
+   ITEMS DE LISTA Y CARDS ESPECÍFICAS
+   ---------------------------------------------------------------------------- */
+.nota-item,
+.canalizacion-item,
+.diario-item,
+.item-lista,
+.tema-card,
+.preparacion-item,
+.aspecto-item {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-left: 3px solid var(--border-accent) !important;
+  border-color: var(--border-soft) !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Modo oscuro - bordes más sutiles para efecto continuo */
+body.theme-dark .nota-item,
+body.theme-dark .canalizacion-item,
+body.theme-dark .diario-item,
+body.theme-dark .item-lista,
+body.theme-dark .tema-card,
+body.theme-dark .preparacion-item,
+body.theme-dark .aspecto-item {
+  border-left: 2px solid var(--border-accent) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+.nota-item:hover,
+.canalizacion-item:hover,
+.diario-item:hover,
+.item-lista:hover,
+.tema-card:hover,
+.preparacion-item:hover,
+.aspecto-item:hover {
+  background: var(--bg-card-active) !important;
+  border-left-color: var(--accent-primary) !important;
+  box-shadow: 0 4px 12px var(--shadow-md) !important;
+}
+
+body.theme-dark .nota-item:hover,
+body.theme-dark .canalizacion-item:hover,
+body.theme-dark .diario-item:hover,
+body.theme-dark .item-lista:hover,
+body.theme-dark .tema-card:hover,
+body.theme-dark .preparacion-item:hover,
+body.theme-dark .aspecto-item:hover {
+  background: var(--bg-card-active) !important;
+  border-left-color: var(--accent-primary) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.nota-item.no-leida,
+.canalizacion-item.no-leida,
+.item-lista.activo,
+.preparacion-item:has(input:checked) {
+  background: var(--bg-card-active) !important;
+  border-left-color: var(--accent-primary) !important;
+}
+
+/* Preparaciones específicas */
+.preparacion-checkbox {
+  background: transparent !important;
+}
+
+.preparacion-info strong {
+  color: var(--text-accent) !important;
+}
+
+.preparacion-info {
+  color: var(--text-primary) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   HEADERS Y NAVEGACIÓN
+   ---------------------------------------------------------------------------- */
+.header {
+  background: var(--gradient-header) !important;
+  color: var(--text-accent) !important;
+}
+
+.header .info {
+  color: var(--text-muted) !important;
+}
+
+/* Tabs */
+.tabs-header {
+  border-bottom-color: var(--border-soft) !important;
+}
+
+.tab-button {
+  color: var(--text-muted) !important;
+  background: transparent !important;
+  border-bottom-color: transparent !important;
+  transition: all 0.2s ease !important;
+}
+
+.tab-button:hover {
+  color: var(--text-primary) !important;
+  background: rgba(124, 58, 237, 0.1) !important;  /* Violeta suave */
+}
+
+body.theme-dark .tab-button:hover {
+  color: var(--text-primary) !important;
+  background: rgba(124, 58, 237, 0.15) !important;  /* Violeta más visible en oscuro */
+}
+
+.tab-button.active {
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--accent-primary) !important;
+  font-weight: 600 !important;
+  background: rgba(124, 58, 237, 0.15) !important;  /* Fondo violeta suave para activo */
+}
+
+body.theme-dark .tab-button.active {
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--accent-primary) !important;
+  background: rgba(124, 58, 237, 0.2) !important;  /* Fondo violeta más visible en oscuro */
+}
+
+/* ----------------------------------------------------------------------------
+   LINKS
+   ---------------------------------------------------------------------------- */
+a {
+  color: var(--accent-primary) !important;
+  text-decoration: none !important;
+  transition: color 0.2s ease !important;
+}
+
+a:hover {
+  color: var(--accent-hover) !important;
+  text-decoration: underline !important;
+}
+
+/* ----------------------------------------------------------------------------
+   LABELS
+   ---------------------------------------------------------------------------- */
+label {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+/* ----------------------------------------------------------------------------
+   AURA Y ELEMENTOS DECORATIVOS
+   ---------------------------------------------------------------------------- */
+.aura-circle {
+  background: var(--aura-gradient) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   SCROLLBARS
+   ---------------------------------------------------------------------------- */
+.buzon::-webkit-scrollbar-thumb {
+  background: var(--accent-primary) !important;
+  border-radius: 4px !important;
+}
+
+.buzon::-webkit-scrollbar-track {
+  background: var(--bg-secondary) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   MENSAJES Y ALERTAS
+   REGLA: Fondo oscuro semántico, texto claro con contraste AA/AAA, font-weight ≥ 600
+   ---------------------------------------------------------------------------- */
+.mensaje-exito,
+.mensaje-completado {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: var(--accent-success) !important;
+  border-left: 4px solid var(--accent-success) !important;
+  padding: 12px 16px !important;
+  border-radius: var(--radius-md, 16px) !important;
+  font-weight: 700 !important; /* VERDE = font-weight 700 para estados correctos */
+}
+
+/* Modo oscuro - fondo oscuro semántico, texto claro con alto contraste */
+body.theme-dark .mensaje-exito,
+body.theme-dark .mensaje-completado {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important; /* Verde más claro para mejor contraste */
+  border-left: 4px solid var(--accent-success) !important;
+  font-weight: 600 !important;
+}
+
+.mensaje-error {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: var(--accent-error) !important;
+  border-left: 4px solid var(--accent-error) !important;
+  padding: 12px 16px !important;
+  border-radius: var(--radius-md, 16px) !important;
+  font-weight: 600 !important;
+}
+
+/* Modo oscuro - fondo oscuro semántico, texto claro con alto contraste */
+body.theme-dark .mensaje-error {
+  background: rgba(239, 68, 68, 0.25) !important;
+  color: #f87171 !important; /* Rojo más claro para mejor contraste */
+  border-left: 4px solid var(--accent-error) !important;
+  font-weight: 600 !important;
+}
+
+.mensaje-warning {
+  background: rgba(245, 158, 11, 0.2) !important; /* Ámbar oscuro, no amarillo claro */
+  color: var(--accent-warning) !important;
+  border-left: 4px solid var(--accent-warning) !important;
+  padding: 12px 16px !important;
+  border-radius: var(--radius-md, 16px) !important;
+  font-weight: 600 !important;
+}
+
+/* Modo oscuro - fondo oscuro semántico, texto claro con alto contraste */
+body.theme-dark .mensaje-warning {
+  background: rgba(251, 191, 36, 0.25) !important;
+  color: #fbbf24 !important; /* Amarillo más claro para mejor contraste */
+  border-left: 4px solid var(--accent-warning) !important;
+  font-weight: 600 !important;
+}
+
+/* Avisos informativos (info) - fondo oscuro, texto claro */
+.mensaje-info,
+.aviso-info,
+.importante {
+  background: rgba(99, 102, 241, 0.2) !important;
+  color: var(--accent-primary) !important;
+  border-left: 4px solid var(--accent-primary) !important;
+  padding: 12px 16px !important;
+  border-radius: var(--radius-md, 16px) !important;
+  font-weight: 600 !important;
+}
+
+/* Modo oscuro - fondo oscuro semántico, texto claro con alto contraste */
+body.theme-dark .mensaje-info,
+body.theme-dark .aviso-info,
+body.theme-dark .importante {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #818cf8 !important; /* Índigo más claro para mejor contraste */
+  border-left: 4px solid var(--accent-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* ----------------------------------------------------------------------------
+   LISTAS GRUPADAS (Limpiezas)
+   ---------------------------------------------------------------------------- */
+.lista-grupo {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius-lg, 20px) !important;
+  padding: 16px !important;
+  margin-bottom: 20px !important;
+}
+
+/* Modo oscuro - sin borde visible para efecto continuo */
+body.theme-dark .lista-grupo {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+.lista-titulo {
+  color: var(--text-accent) !important;
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 12px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 2px solid var(--border-accent) !important;
+}
+
+body.theme-dark .lista-titulo {
+  font-weight: 700 !important;
+  border-bottom-color: var(--border-accent) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   TÉCNICAS Y ASPECTOS (Limpiezas)
+   ---------------------------------------------------------------------------- */
+.tecnica-item {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius-md, 16px) !important;
+  padding: 14px !important;
+  margin-bottom: 12px !important;
+}
+
+/* Modo oscuro - bordes sutiles */
+body.theme-dark .tecnica-item {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+.tecnica-nombre {
+  color: var(--text-accent) !important;
+  font-weight: 600 !important;
+  font-size: 1.05rem !important;
+}
+
+body.theme-dark .tecnica-nombre {
+  font-weight: 700 !important;
+}
+
+.tecnica-descripcion {
+  color: var(--text-secondary) !important;
+  font-size: 0.9rem !important;
+  margin-top: 6px !important;
+}
+
+.tecnica-nivel {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem !important;
+  margin-top: 6px !important;
+}
+
+.aspecto-nombre {
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+  font-size: 1rem !important;
+}
+
+body.theme-dark .aspecto-nombre {
+  color: var(--text-accent) !important;
+  font-weight: 700 !important;
+}
+
+.aspecto-descripcion {
+  color: var(--text-secondary) !important;
+  font-size: 0.9rem !important;
+  margin-top: 6px !important;
+}
+
+.aspecto-lista {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem !important;
+  margin-top: 6px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   ESPECIALES PARA MODO OSCURO
+   REGLA ABSOLUTA: TODO debe ser oscuro - NO fondos claros, NO amarillos, NO beige
+   Efecto continuo sin cajas - bordes sutiles, fondos integrados
+   ---------------------------------------------------------------------------- */
+body.theme-dark .preparacion-item {
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .preparacion-item:hover {
+  border-color: var(--border-soft) !important;
+  background: var(--bg-card-active) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+body.theme-dark .aspecto-item {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md, 16px) !important;
+  padding: 12px !important;
+  margin-bottom: 10px !important;
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .aspecto-item:hover {
+  border-color: var(--border-soft) !important;
+  background: var(--bg-card-active) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Accordions oscuros con efecto continuo */
+body.theme-dark .accordion-header {
+  background: var(--gradient-accordion) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .accordion-header:hover {
+  background: var(--gradient-accordion-hover) !important;
+  border-color: var(--border-soft) !important;
+}
+
+body.theme-dark .accordion-content {
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Total minutos oscuro */
+body.theme-dark .total-minutos {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .total-minutos-titulo {
+  color: var(--text-accent) !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .total-minutos-valor {
+  color: var(--text-primary) !important;
+}
+
+/* Elementos de práctica oscuros */
+body.theme-dark .elemento-nombre {
+  color: var(--text-accent) !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .elemento-contenido {
+  color: var(--text-primary) !important;
+}
+
+body.theme-dark .elemento-contenido h1,
+body.theme-dark .elemento-contenido h2,
+body.theme-dark .elemento-contenido h3 {
+  color: var(--text-accent) !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .elemento-minutos {
+  color: var(--text-secondary) !important;
+}
+
+/* Progreso oscuro - mejor contraste */
+body.theme-dark .progreso {
+  color: var(--text-secondary) !important;
+  opacity: 0.9;
+}
+
+/* Contenedores específicos de limpiezas - sin bordes visibles */
+body.theme-dark .aspectos-container,
+body.theme-dark .tecnicas-container {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* Tabs oscuros */
+body.theme-dark .tabs-header {
+  border-bottom-color: var(--border-soft) !important;
+}
+
+body.theme-dark .tab-button {
+  color: var(--text-secondary) !important;
+}
+
+body.theme-dark .tab-button:hover {
+  color: var(--text-primary) !important;
+  background: rgba(124, 58, 237, 0.15) !important;
+}
+
+body.theme-dark .tab-button.active {
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--accent-primary) !important;
+  background: rgba(124, 58, 237, 0.2) !important;
+}
+
+/* Títulos específicos de limpiezas y prácticas - peso aumentado */
+body.theme-dark .tecnicas-titulo,
+body.theme-dark .lista-titulo,
+body.theme-dark .preparacion-info strong {
+  font-weight: 700 !important;
+  color: var(--text-accent) !important;
+}
+
+/* Preparaciones - títulos más pesados */
+body.theme-dark .preparacion-info strong {
+  font-weight: 700 !important;
+  color: var(--text-accent) !important;
+}
+
+/* Asegurar que ningún elemento tenga fondo claro */
+body.theme-dark input[type="text"],
+body.theme-dark input[type="email"],
+body.theme-dark input[type="number"],
+body.theme-dark textarea,
+body.theme-dark select {
+  background: var(--input-bg) !important;
+  background-color: var(--input-bg) !important;
+}

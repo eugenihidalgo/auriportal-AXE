@@ -1,0 +1,104 @@
+<div class="p-6 bg-slate-900 min-h-screen">
+  <h1 class="text-3xl font-bold text-white mb-6">{{DECRETO_ID === 'nuevo' ? '📜 Nuevo Decreto' : '📜 Editar Decreto'}}</h1>
+  
+  <div class="bg-slate-800 rounded-lg shadow-lg p-6 mb-6 border border-slate-700">
+    <form id="formDecreto" onsubmit="guardarDecreto(event)">
+      <input type="hidden" id="decretoId" value="{{DECRETO_ID}}">
+      
+      <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Nombre del Decreto *</label>
+        <input 
+          type="text" 
+          id="nombre" 
+          value="{{NOMBRE}}" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Ej: Decreto de Protección"
+        >
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Nivel Mínimo</label>
+        <select 
+          id="nivelMinimo" 
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="1" {{NIVEL_MINIMO == 1 ? 'selected' : ''}}>Nivel 1</option>
+          <option value="2" {{NIVEL_MINIMO == 2 ? 'selected' : ''}}>Nivel 2</option>
+          <option value="3" {{NIVEL_MINIMO == 3 ? 'selected' : ''}}>Nivel 3</option>
+          <option value="4" {{NIVEL_MINIMO == 4 ? 'selected' : ''}}>Nivel 4</option>
+          <option value="5" {{NIVEL_MINIMO == 5 ? 'selected' : ''}}>Nivel 5</option>
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Posición</label>
+        <select 
+          id="posicion" 
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="inicio" {{POSICION == 'inicio' ? 'selected' : ''}}>Inicio</option>
+          <option value="fin" {{POSICION == 'fin' ? 'selected' : ''}}>Fin</option>
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input 
+            type="checkbox" 
+            id="obligatoriaGlobal" 
+            {{OBLIGATORIA_GLOBAL}}
+            class="w-4 h-4 text-indigo-600 bg-slate-700 border-slate-600 rounded focus:ring-indigo-500"
+          >
+          <span class="text-white font-medium">Obligatoria Global</span>
+        </label>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Obligatoriedad por Nivel (JSON)</label>
+        <textarea 
+          id="obligatoriaPorNivel" 
+          rows="3"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder='{"1": true, "2": false}'
+        >{{OBLIGATORIA_POR_NIVEL}}</textarea>
+        <p class="text-slate-400 text-xs mt-1">Formato JSON: {"1": true, "2": false}</p>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Contenido HTML *</label>
+        <textarea 
+          id="contenidoHtml" 
+          rows="15"
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="<p>Contenido del decreto en HTML...</p>"
+        >{{CONTENIDO_HTML}}</textarea>
+        <p class="text-slate-400 text-xs mt-1">Editor visual aún no implementado. Usa HTML directamente.</p>
+      </div>
+      
+      <div class="flex gap-2">
+        <button 
+          type="submit" 
+          class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors"
+        >
+          💾 Guardar
+        </button>
+        <a 
+          href="/admin/decretos" 
+          class="px-6 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded transition-colors"
+        >
+          ← Volver
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/js/admin-decretos.js"></script>
+
+
+
+
+
+

@@ -1,0 +1,49 @@
+{
+  "name": "auriportal-server",
+  "version": "4.0.0",
+  "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build:css": "npx tailwindcss -i ./src/css/input.css -o ./public/css/tailwind.css --minify",
+    "watch:css": "npx tailwindcss -i ./src/css/input.css -o ./public/css/tailwind.css --watch",
+    "pm2:start": "pm2 start server.js --name aurelinportal",
+    "pm2:stop": "pm2 stop aurelinportal",
+    "pm2:restart": "pm2 restart aurelinportal",
+    "pm2:logs": "pm2 logs aurelinportal",
+    "transcripcion:forzar-todos": "node scripts/forzar-transcripcion-todos.js",
+    "verificar-v4": "node scripts/verificar-v4.js",
+    "mcp:google-workspace": "node mcp-server/google-workspace.js",
+    "mcp:test": "node mcp-server/test-connection.js"
+  },
+  "keywords": [
+    "nodejs",
+    "clickup",
+    "kajabi",
+    "education"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.3",
+    "busboy": "^1.6.0",
+    "dotenv": "^16.4.5",
+    "googleapis": "^144.0.0",
+    "mailgun.js": "^11.0.0",
+    "music-metadata": "^11.10.3",
+    "node-cron": "^4.2.1",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^7.0.11",
+    "pg": "^8.11.3",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "pm2": "^5.4.3",
+    "tailwindcss": "^3.4.18"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

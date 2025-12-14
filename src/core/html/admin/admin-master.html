@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Panel de administración de AuriPortal - Modo Master">
+  <title>{{TITLE}} - AuriPortal Admin</title>
+  <link href="/css/tailwind.css" rel="stylesheet">
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #0f172a;
+    }
+    .sidebar-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sidebar-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .sidebar-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+    .menu-item-active {
+      background-color: #4f46e5;
+      color: white;
+    }
+    .content-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+    .content-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .content-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Sidebar collapse styles */
+    .sidebar {
+      transition: width 0.3s ease;
+      position: relative;
+      min-width: 4rem;
+      max-width: 500px;
+    }
+    .sidebar.collapsed {
+      width: 4rem !important;
+    }
+    .sidebar.collapsed .sidebar-resizer {
+      display: none;
+    }
+    
+    /* Sidebar resizer */
+    .sidebar-resizer {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      cursor: col-resize;
+      background-color: transparent;
+      z-index: 10;
+      user-select: none;
+      transition: background-color 0.2s;
+    }
+    .sidebar-resizer:hover {
+      background-color: rgba(79, 70, 229, 0.5);
+    }
+    .sidebar-resizer.resizing {
+      background-color: rgba(79, 70, 229, 0.8);
+    }
+    
+    @media (max-width: 768px) {
+      .sidebar-resizer {
+        display: none;
+      }
+    }
+    .sidebar.collapsed .sidebar-content {
+      display: none;
+    }
+    .sidebar.collapsed .sidebar-icon {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .sidebar.collapsed .sidebar-header {
+      justify-content: center;
+      padding: 1rem 0.5rem;
+    }
+    .sidebar-toggle {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0.375rem;
+      border-radius: 0.375rem;
+      transition: all 0.2s;
+      opacity: 0.6;
+      font-size: 1rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      flex-shrink: 0;
+    }
+    .sidebar-toggle:hover {
+      opacity: 1;
+      background: rgba(51, 65, 85, 0.4);
+      color: #cbd5e1;
+    }
+    .sidebar.collapsed .sidebar-toggle {
+      margin: 0 auto;
+    }
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar-icon {
+      display: none;
+    }
+    
+    /* Responsive para móvil */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      
+      .sidebar.collapsed {
+        transform: translateX(-100%);
+      }
+      
+      .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+      }
+      
+      .sidebar-overlay.active {
+        display: block;
+      }
+      
+      .mobile-menu-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        background: #1e293b;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 60;
+        touch-action: manipulation;
+      }
+      
+      .main-content-wrapper {
+        margin-left: 0;
+        width: 100%;
+      }
+      
+      header {
+        padding: 12px 16px !important;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+      }
+      
+      header > div:first-child {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+        width: 100%;
+      }
+      
+      header h2 {
+        font-size: 1.1rem !important;
+        margin-left: 50px;
+      }
+      
+      header .w-16 {
+        width: 48px !important;
+        height: 48px !important;
+      }
+      
+      header .text-2xl {
+        font-size: 1.25rem !important;
+      }
+      
+      header .text-sm {
+        font-size: 0.75rem !important;
+        flex-wrap: wrap;
+      }
+      
+      header .flex.gap-3 {
+        flex-direction: column;
+        width: 100%;
+        gap: 8px !important;
+      }
+      
+      header .flex.gap-3 a {
+        width: 100%;
+        text-align: center;
+        padding: 10px !important;
+      }
+      
+      .tabs-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        padding: 0 16px;
+      }
+      
+      .tabs-container button {
+        font-size: 0.875rem;
+        padding: 10px 16px !important;
+        white-space: nowrap;
+      }
+      
+      main {
+        padding: 12px !important;
+      }
+      
+      nav a, nav button {
+        min-height: 44px;
+        padding: 12px 16px !important;
+      }
+    }
+    
+    @media (min-width: 769px) {
+      .mobile-menu-button {
+        display: none;
+      }
+      
+      .sidebar-overlay {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-900">
+  <!-- Botón hamburguesa para móvil -->
+  <button id="mobile-menu-button" class="mobile-menu-button" aria-label="Abrir menú">
+    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+    </svg>
+  </button>
+  
+  <!-- Overlay para móvil -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+  
+  <!-- Layout con Sidebar -->
+  <div class="flex h-screen overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar bg-slate-950 text-slate-200 flex flex-col border-r border-slate-800">
+      <!-- Resizer handle -->
+      <div id="sidebar-resizer" class="sidebar-resizer" title="Arrastra para redimensionar"></div>
+      
+      <div class="p-4 border-b border-slate-800 sidebar-header">
+        <h1 class="text-xl font-bold text-white sidebar-content">✨ AuriPortal Admin</h1>
+        <div class="sidebar-icon">✨</div>
+        <button id="sidebar-toggle" class="sidebar-toggle" title="Colapsar/Expandir menú" aria-label="Colapsar menú">
+          <span class="sidebar-content">◀</span>
+          <span class="sidebar-icon">◀</span>
+        </button>
+      </div>
+      
+      <nav id="sidebar-nav" class="flex-1 overflow-y-auto sidebar-scroll px-2 py-4">
+        <div class="space-y-1 sidebar-content">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📊</span>
+            Dashboard
+          </a>
+          <div class="my-2 border-t border-slate-800"></div>
+          <a href="/admin/alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🧍</span>
+            Alumnos
+          </a>
+          <a href="/admin/master/{{ALUMNO_ID}}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg menu-item-active">
+            <span class="mr-3 text-lg">🧙</span>
+            Modo Master
+          </a>
+        </div>
+      </nav>
+    </aside>
+    
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden bg-slate-900 main-content-wrapper">
+      
+      <!-- Top Bar / Cabecera del Alumno -->
+      <header class="bg-slate-800 shadow-lg border-b border-slate-700 px-6 py-4">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-4">
+            <!-- Avatar placeholder -->
+            <div class="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center text-2xl text-white">
+              {{NOMBRE|slice:0:1|upper}}
+            </div>
+            <div>
+              <h2 class="text-2xl font-semibold text-white">{{NOMBRE}}</h2>
+              <div class="flex items-center gap-3 text-sm text-slate-400">
+                <span>{{EMAIL}}</span>
+                <span>•</span>
+                <span>Apodo: {{APODO}}</span>
+                <span>•</span>
+                <span>Nivel {{NIVEL}}</span>
+                <span>•</span>
+                <span>Fase: {{FASE}}</span>
+                <span>•</span>
+                <span>Racha: {{RACHA}} días</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                Última práctica: {{FECHA_ULTIMA_PRACTICA}}
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <a href="/portal/master-view/{{ALUMNO_ID}}" 
+               class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg">
+              Ver como alumno
+            </a>
+            <a href="/admin/alumno/{{ALUMNO_ID}}" 
+               class="bg-slate-700 text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors border border-slate-600">
+              Editar alumno
+            </a>
+          </div>
+        </div>
+      </header>
+      
+      <!-- Tabs Navigation -->
+      <div class="bg-slate-800 border-b border-slate-700 px-6 tabs-container">
+        <div class="flex gap-2 overflow-x-auto">
+          <button onclick="openTab('tab-info')" 
+                  class="tab-button bg-indigo-600 text-white px-4 py-2 rounded-t-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
+            Información General
+          </button>
+          <button onclick="openTab('tab-energetico')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Progreso Energético
+          </button>
+          <button onclick="openTab('tab-gamificado')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Progreso Gamificado
+          </button>
+          <button onclick="openTab('tab-practicas')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Prácticas y Reflexiones
+          </button>
+          <button onclick="openTab('tab-creacion')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Creación
+          </button>
+          <button onclick="openTab('tab-emocional')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Área Emocional
+          </button>
+          <button onclick="openTab('tab-notas')" 
+                  class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors whitespace-nowrap">
+            Notas del Master
+          </button>
+        </div>
+      </div>
+      
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto bg-slate-900 content-scroll">
+        <div class="p-6">
+          
+          <!-- Tab 1: Información General -->
+          <div id="tab-info" class="tab-content active" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Información General</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 2: Progreso Energético -->
+          <div id="tab-energetico" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Progreso Energético</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 3: Progreso Gamificado -->
+          <div id="tab-gamificado" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Progreso Gamificado</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 4: Prácticas y Reflexiones -->
+          <div id="tab-practicas" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Prácticas y Reflexiones</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 5: Creación -->
+          <div id="tab-creacion" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Creación</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 6: Área Emocional -->
+          <div id="tab-emocional" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Área Emocional</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+          <!-- Tab 7: Notas del Master -->
+          <div id="tab-notas" class="tab-content" data-alumno-id="{{ALUMNO_ID}}" data-loaded="false">
+            <div class="space-y-4">
+              <h3 class="text-xl font-bold text-white">Notas del Master</h3>
+              <p class="text-slate-300">Cargando datos...</p>
+            </div>
+          </div>
+          
+        </div>
+      </main>
+      
+    </div>
+  </div>
+  
+  <script src="/js/admin-master.js"></script>
+  <script>
+    // Resaltar menú activo y restaurar scroll
+    document.addEventListener('DOMContentLoaded', function() {
+      const currentPath = window.location.pathname;
+      const menuItems = document.querySelectorAll('aside nav a');
+      const sidebarNav = document.getElementById('sidebar-nav');
+      
+      // Restaurar posición de scroll del sidebar
+      const savedScroll = localStorage.getItem('adminSidebarScroll');
+      if (savedScroll && sidebarNav) {
+        sidebarNav.scrollTop = parseInt(savedScroll, 10);
+      }
+      
+      // Guardar posición de scroll antes de navegar
+      menuItems.forEach(item => {
+        if (item.getAttribute('href') === currentPath) {
+          item.classList.add('menu-item-active');
+        }
+        
+        item.addEventListener('click', function() {
+          if (sidebarNav) {
+            localStorage.setItem('adminSidebarScroll', sidebarNav.scrollTop.toString());
+          }
+        });
+      });
+      
+      // Guardar scroll también al hacer scroll manualmente
+      if (sidebarNav) {
+        let scrollTimeout;
+        sidebarNav.addEventListener('scroll', function() {
+          clearTimeout(scrollTimeout);
+          scrollTimeout = setTimeout(() => {
+            localStorage.setItem('adminSidebarScroll', sidebarNav.scrollTop.toString());
+          }, 100);
+        });
+      }
+      
+      // Inicializar ancho del sidebar
+      const sidebar = document.getElementById('sidebar');
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const sidebarResizer = document.getElementById('sidebar-resizer');
+      const savedWidth = localStorage.getItem('adminSidebarWidth');
+      const isCollapsed = localStorage.getItem('adminSidebarCollapsed') === 'true';
+      
+      // Restaurar ancho guardado o usar el predeterminado
+      if (!isCollapsed && sidebar) {
+        if (savedWidth) {
+          sidebar.style.width = savedWidth + 'px';
+        } else {
+          sidebar.style.width = '16rem'; // w-64 = 16rem = 256px
+        }
+      }
+      
+      if (isCollapsed && sidebar) {
+        sidebar.classList.add('collapsed');
+        updateToggleIcon(true);
+      } else {
+        updateToggleIcon(false);
+      }
+      
+      // Funcionalidad de redimensionamiento del sidebar
+      if (sidebarResizer && window.innerWidth > 768) {
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+        
+        sidebarResizer.addEventListener('mousedown', function(e) {
+          if (sidebar.classList.contains('collapsed')) return;
+          
+          isResizing = true;
+          startX = e.clientX;
+          startWidth = sidebar.offsetWidth;
+          sidebarResizer.classList.add('resizing');
+          sidebar.style.transition = 'none'; // Desactivar transición durante resize
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+          
+          e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+          if (!isResizing) return;
+          
+          const diff = e.clientX - startX;
+          let newWidth = startWidth + diff;
+          
+          // Limitar el ancho mínimo y máximo
+          const minWidth = 64; // 4rem
+          const maxWidth = 500;
+          
+          if (newWidth < minWidth) newWidth = minWidth;
+          if (newWidth > maxWidth) newWidth = maxWidth;
+          
+          sidebar.style.width = newWidth + 'px';
+        });
+        
+        document.addEventListener('mouseup', function() {
+          if (isResizing) {
+            isResizing = false;
+            sidebarResizer.classList.remove('resizing');
+            sidebar.style.transition = 'width 0.3s ease'; // Reactivar transición
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            // Guardar el nuevo ancho
+            if (!sidebar.classList.contains('collapsed')) {
+              localStorage.setItem('adminSidebarWidth', sidebar.offsetWidth.toString());
+            }
+          }
+        });
+      }
+      
+      function updateToggleIcon(collapsed) {
+        const toggleContent = sidebarToggle?.querySelector('.sidebar-content');
+        const toggleIcon = sidebarToggle?.querySelector('.sidebar-icon');
+        if (collapsed) {
+          if (toggleContent) toggleContent.textContent = '▶';
+          if (toggleIcon) toggleIcon.textContent = '▶';
+        } else {
+          if (toggleContent) toggleContent.textContent = '◀';
+          if (toggleIcon) toggleIcon.textContent = '◀';
+        }
+      }
+      
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', function() {
+          if (sidebar) {
+            const wasCollapsed = sidebar.classList.contains('collapsed');
+            sidebar.classList.toggle('collapsed');
+            const isNowCollapsed = sidebar.classList.contains('collapsed');
+            
+            if (isNowCollapsed) {
+              // Guardar el ancho actual antes de colapsar
+              localStorage.setItem('adminSidebarWidth', sidebar.offsetWidth.toString());
+            } else {
+              // Restaurar el ancho guardado al expandir
+              const savedWidth = localStorage.getItem('adminSidebarWidth');
+              if (savedWidth) {
+                sidebar.style.width = savedWidth + 'px';
+              } else {
+                sidebar.style.width = '16rem';
+              }
+            }
+            
+            localStorage.setItem('adminSidebarCollapsed', isNowCollapsed.toString());
+            updateToggleIcon(isNowCollapsed);
+          }
+        });
+      }
+      
+      // Inicializar primera pestaña
+      const firstTab = document.querySelector('.tab-content.active');
+      if (firstTab) {
+        openTab(firstTab.id);
+      }
+      
+      // Manejo del menú móvil
+      const mobileMenuButton = document.getElementById('mobile-menu-button');
+      const sidebarOverlay = document.getElementById('sidebar-overlay');
+      
+      function openMobileMenu() {
+        sidebar?.classList.add('mobile-open');
+        sidebarOverlay?.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      }
+      
+      function closeMobileMenu() {
+        sidebar?.classList.remove('mobile-open');
+        sidebarOverlay?.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+      
+      mobileMenuButton?.addEventListener('click', openMobileMenu);
+      sidebarOverlay?.addEventListener('click', closeMobileMenu);
+      
+      // Cerrar menú al hacer click en un enlace (móvil)
+      if (window.innerWidth <= 768) {
+        document.querySelectorAll('aside nav a').forEach(link => {
+          link.addEventListener('click', () => {
+            setTimeout(closeMobileMenu, 100);
+          });
+        });
+      }
+      
+      // Cerrar menú al redimensionar a desktop
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+          closeMobileMenu();
+        }
+      });
+    });
+    
+  </script>
+  
+  <!-- Script para suprimir errores de extensiones del navegador -->
+  <script src="/js/error-handler.js"></script>
+</body>
+</html>
+
+
+
+

@@ -1,0 +1,277 @@
+// src/core/flags/feature-flags.js
+// Sistema de Feature Flags V4 para AuriPortal
+// Control de ejecución de código según entorno (dev | beta | prod)
+//
+// FILOSOFÍA:
+// - Fuente de verdad única en código (objeto FEATURE_FLAGS)
+// - Decisión de activación SOLO por APP_ENV (sin base de datos, sin admin)
+// - Sistema reversible y auditable
+// - Integrado con observabilidad para trazabilidad
+//
+// ESTADOS:
+// - "on"   → activo en dev, beta y prod
+// - "beta" → activo SOLO en dev y beta (bloqueado en prod)
+// - "off"  → nunca activo (en ningún entorno)
+//
+// USO:
+//   import { isFeatureEnabled } from '../core/flags/feature-flags.js';
+//   
+//   if (isFeatureEnabled('progress_v4', { student })) {
+//     // Código de la feature
+//   }
+//
+// POR QUÉ NO DEPENDE DEL ADMIN AÚN:
+// - El admin tiene UI visual pero NO funcional
+// - Este sistema es la base para cuando el admin sea funcional
+// - Por ahora, cambios de flags requieren deploy (seguro y auditable)
+
+import { logInfo, logWarn } from '../observability/logger.js';
+import { getRequestId } from '../observability/request-context.js';
+
+/**
+ * Fuente de verdad única de Feature Flags
+ * 
+ * Cada flag tiene un estado: "on" | "beta" | "off"
+ * 
+ * - "on"   → activo en todos los entornos (dev, beta, prod)
+ * - "beta" → activo solo en dev y beta (bloqueado en prod)
+ * - "off"  → nunca activo (en ningún entorno)
+ * 
+ * IMPORTANTE: Por defecto, todos los flags están en "off" para no romper nada existente.
+ * Activar flags requiere cambio de código y deploy (seguro y auditable).
+ */
+const FEATURE_FLAGS = {
+  // Features de ejemplo (NO activar nada por defecto)
+  progress_v4: 'off',
+  admin_redesign_v4: 'off',
+  observability_extended: 'on', // Ya está en uso, mantener activo
+  
+  // Feature flag para cálculo de días activos (v2)
+  // Propósito: Permitir evolución segura del cálculo de días activos sin deploy completo
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá implementar nueva lógica de cálculo sin riesgo
+  dias_activos_v2: 'off',
+  
+  // Feature flag para cálculo automático de niveles (v2)
+  // Propósito: Proteger la función actualizarNivelSiCorresponde() que modifica nivel_actual en PostgreSQL
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá implementar nueva lógica de cálculo de niveles sin riesgo
+  // Afecta: progresión de alumnos, acceso a contenido y negocio
+  nivel_calculo_v2: 'off',
+  
+  // Feature flag para cálculo de racha diaria (v2)
+  // Propósito: Proteger la función checkDailyStreak() que modifica streak y fecha_ultima_practica en PostgreSQL
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá implementar nueva lógica de cálculo de racha sin riesgo
+  // Afecta: gamificación, motivación del alumno y creación de prácticas
+  streak_calculo_v2: 'off',
+  
+  // Feature flag para control de suscripción (v2)
+  // Propósito: Proteger las funciones críticas de suscripción:
+  //   - puedePracticarHoy() - bloquea o permite práctica según estado de suscripción
+  //   - gestionarEstadoSuscripcion() - gestiona pausa/reactivación de suscripciones
+  //   - creación/cierre de pausas - modifica estado_suscripcion del alumno
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá implementar nueva lógica de control de suscripción sin riesgo
+  // Afecta: acceso a prácticas, estado de suscripción, pausas y reactivaciones
+  suscripcion_control_v2: 'off',
+  
+  // Agregar nuevos flags aquí siguiendo el mismo patrón
+  // ejemplo_nuevo_flag: 'off',
+};
+
+/**
+ * Obtiene el entorno actual de la aplicación
+ * 
+ * @returns {string} Entorno actual: 'dev' | 'beta' | 'prod'
+ */
+function getCurrentEnv() {
+  const env = process.env.APP_ENV || 'prod';
+  
+  // Validar que sea un entorno válido
+  if (!['dev', 'beta', 'prod'].includes(env)) {
+    console.warn(`⚠️  APP_ENV inválido: ${env}, usando 'prod' por defecto`);
+    return 'prod';
+  }
+  
+  return env;
+}
+
+/**
+ * Determina si un flag está activo según su estado y el entorno actual
+ * 
+ * Reglas:
+ * - "on"   → activo en dev, beta y prod
+ * - "beta" → activo SOLO en dev y beta
+ * - "off"  → nunca activo
+ * 
+ * @param {string} flagState - Estado del flag: "on" | "beta" | "off"
+ * @param {string} env - Entorno actual: "dev" | "beta" | "prod"
+ * @returns {boolean} true si el flag está activo, false en caso contrario
+ */
+function isFlagActive(flagState, env) {
+  if (flagState === 'on') {
+    return true; // Activo en todos los entornos
+  }
+  
+  if (flagState === 'beta') {
+    return env === 'dev' || env === 'beta'; // Solo en dev y beta
+  }
+  
+  // flagState === 'off' o cualquier otro valor
+  return false; // Nunca activo
+}
+
+/**
+ * Extrae metadatos del contexto para logging
+ * 
+ * @param {Object} ctx - Contexto opcional (puede contener student, request_id, etc.)
+ * @returns {Object} Metadatos extraídos del contexto
+ */
+function extractContextMeta(ctx) {
+  if (!ctx) return {};
+  
+  const meta = {};
+  
+  // Request ID (si existe en el contexto o en AsyncLocalStorage)
+  const requestId = ctx.request_id || getRequestId();
+  if (requestId) {
+    meta.request_id = requestId;
+  }
+  
+  // Información del alumno (si existe)
+  if (ctx.student) {
+    if (ctx.student.id) {
+      meta.alumno_id = ctx.student.id;
+    }
+    if (ctx.student.email) {
+      meta.email = ctx.student.email;
+    }
+  }
+  
+  // Cualquier otro campo del contexto
+  if (ctx.alumno_id) meta.alumno_id = ctx.alumno_id;
+  if (ctx.email) meta.email = ctx.email;
+  
+  return meta;
+}
+
+/**
+ * Verifica si una feature está habilitada según su estado y el entorno actual
+ * 
+ * Esta es la función principal que debe usarse en el código para verificar
+ * si una feature está activa antes de ejecutar su código.
+ * 
+ * @param {string} flagName - Nombre del flag a verificar
+ * @param {Object} ctx - Contexto opcional para logging (puede contener student, request_id, etc.)
+ * @returns {boolean} true si la feature está habilitada, false en caso contrario
+ * 
+ * @example
+ * // Uso básico
+ * if (isFeatureEnabled('progress_v4')) {
+ *   // Código de la feature
+ * }
+ * 
+ * @example
+ * // Con contexto para logging
+ * if (isFeatureEnabled('progress_v4', { student })) {
+ *   // Código de la feature
+ * }
+ */
+export function isFeatureEnabled(flagName, ctx = null) {
+  // Validar que el flag existe
+  if (!(flagName in FEATURE_FLAGS)) {
+    const env = getCurrentEnv();
+    logWarn('feature_flags', `Flag desconocido consultado: ${flagName}`, {
+      flag: flagName,
+      env,
+      ...extractContextMeta(ctx)
+    });
+    return false; // Flag desconocido = no habilitado (seguro por defecto)
+  }
+  
+  const flagState = FEATURE_FLAGS[flagName];
+  const env = getCurrentEnv();
+  const isActive = isFlagActive(flagState, env);
+  
+  // Extraer metadatos del contexto para logging
+  const meta = {
+    flag: flagName,
+    estado: flagState,
+    env,
+    activo: isActive,
+    ...extractContextMeta(ctx)
+  };
+  
+  // Logging según el resultado
+  if (!isActive) {
+    // Feature bloqueada: log WARN para trazabilidad
+    logWarn('feature_flags', `Feature bloqueada: ${flagName}`, meta);
+  } else if (flagState === 'beta') {
+    // Feature beta activa: log INFO para confirmar que se permite en dev/beta
+    logInfo('feature_flags', `Feature beta activa: ${flagName}`, meta, true);
+  }
+  // Si está "on" y activa, no logueamos (evitar ruido en logs)
+  
+  return isActive;
+}
+
+/**
+ * Obtiene el estado actual de un flag
+ * 
+ * Útil para debugging o para mostrar el estado en el admin panel.
+ * 
+ * @param {string} flagName - Nombre del flag
+ * @returns {Object|null} Objeto con el estado del flag o null si no existe
+ * 
+ * @example
+ * const state = getFeatureState('progress_v4');
+ * // { estado: 'off', activo: false, env: 'prod' }
+ */
+export function getFeatureState(flagName) {
+  // Validar que el flag existe
+  if (!(flagName in FEATURE_FLAGS)) {
+    return null;
+  }
+  
+  const flagState = FEATURE_FLAGS[flagName];
+  const env = getCurrentEnv();
+  const isActive = isFlagActive(flagState, env);
+  
+  return {
+    estado: flagState,
+    activo: isActive,
+    env
+  };
+}
+
+/**
+ * Obtiene todos los flags y sus estados
+ * 
+ * Útil para debugging o para mostrar en el admin panel.
+ * 
+ * @returns {Object} Objeto con todos los flags y sus estados
+ * 
+ * @example
+ * const allFlags = getAllFeatureFlags();
+ * // { progress_v4: { estado: 'off', activo: false, env: 'prod' }, ... }
+ */
+export function getAllFeatureFlags() {
+  const env = getCurrentEnv();
+  const result = {};
+  
+  for (const flagName in FEATURE_FLAGS) {
+    const flagState = FEATURE_FLAGS[flagName];
+    const isActive = isFlagActive(flagState, env);
+    
+    result[flagName] = {
+      estado: flagState,
+      activo: isActive,
+      env
+    };
+  }
+  
+  return result;
+}
+
+

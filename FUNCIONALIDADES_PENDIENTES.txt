@@ -1,0 +1,222 @@
+================================================================================
+FUNCIONALIDADES PENDIENTES DE IMPLEMENTAR
+================================================================================
+Fecha: $(date)
+
+Después de la refactorización exitosa del panel admin de recursos técnicos,
+estas son las funcionalidades que el usuario solicitó originalmente y que
+aún NO están implementadas:
+
+================================================================================
+1. RELOJ DE MEDITACIÓN (Cliente) - PRIORIDAD ALTA
+================================================================================
+
+❌ NO IMPLEMENTADO
+
+DESCRIPCIÓN:
+Componente interactivo que aparece en las páginas del cliente cuando está
+activado en el admin. Permite al usuario meditar con un temporizador y música.
+
+UBICACIÓN:
+- Página: preparacion-practica.html
+- Página: tecnica-post-practica.html
+- Aparece DESPUÉS del contenido de preparación/técnicas
+- Solo se muestra si activar_reloj = true en la BD
+
+CARACTERÍSTICAS REQUERIDAS:
+
+A. CONFIGURACIÓN INICIAL (antes de iniciar):
+   - Selector de tiempo: hasta 120 minutos (configurable libremente)
+   - Checkbox: "Reproducir música de meditación" (sí/no)
+   - Una vez iniciado, NO se puede cambiar el tiempo
+   - Solo se puede: Pausar, Reanudar, Reiniciar
+
+B. DISPLAY DEL RELOJ:
+   - Formato: Digital
+   - Mostrar: Tiempo transcurrido Y tiempo restante
+   - Animaciones: Mínimas (solo transiciones suaves)
+   - Diseño: Moderno y minimalista
+
+C. MÚSICA DE MEDITACIÓN:
+   - Música por defecto: Configurada por admin en cada ítem
+     (campo musica_meditacion_id en preparaciones_practica/tecnicas_post_practica)
+   - El usuario NO puede cambiar la música durante la meditación
+   - Loop automático: Si la música es más corta que el tiempo configurado,
+     debe repetirse automáticamente
+   - Reproducción en background: Debe sonar incluso con el teléfono bloqueado
+     (requiere Web Audio API o similar)
+
+D. TONO AL FINALIZAR:
+   - Se reproduce un tono cuando el contador llega a 0
+   - Tono por defecto: Configurado en el sistema
+   - Tono personalizado: El usuario puede configurar su tono preferido en
+     su perfil personal (ver punto 3)
+   - Se reproduce UNA VEZ
+   - NO hay botón para detener el tono
+
+E. PERSISTENCIA:
+   - El reloj continúa funcionando si el usuario:
+     * Cambia de pestaña
+     * Minimiza el navegador
+     * Bloquea el teléfono (música debe seguir sonando)
+   - Guardar configuración en localStorage:
+     * Tiempo configurado
+     * Música seleccionada
+   - Permitir reiniciar la meditación
+
+F. CONTROLES:
+   - Botón: Iniciar (solo visible antes de iniciar)
+   - Botón: Pausar (durante meditación)
+   - Botón: Reanudar (cuando está pausado)
+   - Botón: Reiniciar (vuelve a 0 y permite reconfigurar)
+   - NO hay botón para cambiar tiempo durante meditación
+
+ARCHIVOS A MODIFICAR/CREAR:
+- src/core/html/preparacion-practica.html (agregar componente reloj)
+- src/core/html/tecnica-post-practica.html (agregar componente reloj)
+- public/js/reloj-meditacion.js (nuevo - lógica del reloj)
+- public/css/reloj-meditacion.css (nuevo - estilos del reloj)
+
+================================================================================
+2. INTEGRACIÓN EN ADMIN PANELS - PRIORIDAD ALTA
+================================================================================
+
+❌ NO IMPLEMENTADO
+
+DESCRIPCIÓN:
+Agregar campos en los admin panels de "Preparación para la práctica" y
+"Técnicas Post-práctica" para activar el reloj y seleccionar música.
+
+UBICACIÓN:
+- src/endpoints/admin-preparaciones-practica.js
+- src/endpoints/admin-tecnicas-post-practica.js
+
+CAMPOS A AGREGAR:
+
+A. CHECKBOX "Activar reloj de meditación"
+   - Campo: activar_reloj (BOOLEAN)
+   - Si está marcado, el reloj aparece en la página del cliente
+   - Si no está marcado, el reloj NO aparece
+
+B. DROPDOWN "Música de meditación por defecto"
+   - Campo: musica_meditacion_id (INTEGER, foreign key)
+   - Muestra lista de músicas disponibles (de musicas_meditacion)
+   - Permite seleccionar una música por defecto para ese ítem
+   - Si no se selecciona, no hay música por defecto
+
+FUNCIONALIDAD:
+- Los servicios ya están actualizados para guardar estos campos
+- Solo falta agregar los campos en los formularios HTML del admin
+- Los campos deben guardarse al crear/actualizar preparaciones/técnicas
+
+ARCHIVOS A MODIFICAR:
+- src/endpoints/admin-preparaciones-practica.js
+  * Agregar checkbox activar_reloj
+  * Agregar dropdown musica_meditacion_id
+  * Cargar lista de músicas disponibles
+  
+- src/endpoints/admin-tecnicas-post-practica.js
+  * Agregar checkbox activar_reloj
+  * Agregar dropdown musica_meditacion_id
+  * Cargar lista de músicas disponibles
+
+================================================================================
+3. CONFIGURACIÓN DE TONOS EN PERFIL DE ALUMNO - PRIORIDAD MEDIA
+================================================================================
+
+❌ NO IMPLEMENTADO
+
+DESCRIPCIÓN:
+Permitir que cada alumno configure su tono personalizado de meditación
+en su perfil personal.
+
+UBICACIÓN:
+- Perfil de alumno (página de perfil personal)
+- Nuevo tab/sección: "Configuración de Meditación" o similar
+
+CARACTERÍSTICAS:
+- Selector de tono: Dropdown con tonos disponibles (de tonos_meditacion)
+- Guardar preferencia: En tabla de estudiantes o tabla separada
+- Usar tono personalizado: Si el usuario tiene uno configurado, usarlo
+  en lugar del tono por defecto del sistema
+
+ARCHIVOS A MODIFICAR/CREAR:
+- Página de perfil del alumno (identificar dónde está)
+- Agregar tab/sección de configuración
+- Crear endpoint para guardar preferencia de tono
+- Modificar reloj de meditación para usar tono personalizado
+
+================================================================================
+4. CÁLCULO DE DURACIÓN DE AUDIO - PRIORIDAD BAJA
+================================================================================
+
+❌ NO IMPLEMENTADO
+
+DESCRIPCIÓN:
+Calcular automáticamente la duración de los archivos de audio subidos
+en lugar de requerir que el usuario la ingrese manualmente.
+
+UBICACIÓN:
+- src/endpoints/musicas-tonos-upload.js
+
+FUNCIONALIDAD:
+- Al subir un archivo de audio, leer sus metadatos
+- Extraer la duración en segundos
+- Actualizar automáticamente el campo duracion_segundos
+- Si no se puede calcular, dejar el campo vacío para ingreso manual
+
+TECNOLOGÍA REQUERIDA:
+- Librería para leer metadatos de audio (node-ffmpeg, music-metadata, etc.)
+- Instalar dependencia: npm install music-metadata (o similar)
+
+ARCHIVOS A MODIFICAR:
+- src/endpoints/musicas-tonos-upload.js
+  * Agregar lectura de metadatos después de subir archivo
+  * Actualizar duracion_segundos automáticamente
+
+================================================================================
+5. RESUMEN DE ESTADO
+================================================================================
+
+✅ COMPLETADO:
+- Panel admin de recursos técnicos (músicas y tonos)
+- Base de datos (tablas y campos)
+- Servicios (CRUD de músicas y tonos)
+- API endpoints (CRUD y upload)
+- Refactorización completa del código
+
+❌ PENDIENTE:
+1. Reloj de meditación (componente cliente)
+2. Integración en admin panels (campos activar_reloj y musica_meditacion_id)
+3. Configuración de tonos en perfil de alumno
+4. Cálculo automático de duración de audio
+
+================================================================================
+6. PRIORIDADES SUGERIDAS
+================================================================================
+
+PRIORIDAD 1 (CRÍTICO):
+- Integración en admin panels (punto 2)
+  Razón: Sin esto, no se puede activar el reloj desde el admin
+
+PRIORIDAD 2 (ALTA):
+- Reloj de meditación (punto 1)
+  Razón: Funcionalidad principal solicitada por el usuario
+
+PRIORIDAD 3 (MEDIA):
+- Configuración de tonos en perfil (punto 3)
+  Razón: Mejora la experiencia pero no es esencial
+
+PRIORIDAD 4 (BAJA):
+- Cálculo automático de duración (punto 4)
+  Razón: Conveniencia, pero se puede hacer manualmente
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
+
+
+
+
+
+

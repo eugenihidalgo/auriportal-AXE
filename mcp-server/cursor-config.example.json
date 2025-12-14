@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": ["/var/www/aurelinportal/mcp-server/google-workspace.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+

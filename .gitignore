@@ -1,0 +1,111 @@
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+*.cert
+secrets/
+*.secret
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Bases de datos
+*.db
+*.sqlite
+*.sqlite3
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Archivos temporales y cache
+.cache/
+*.tmp
+*.temp
+.tmp/
+.temp/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Archivos compilados
+*.class
+*.o
+*.a
+*.lib
+*.dll
+*.exe
+
+# IDEs y editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.cursor/
+*.code-workspace
+
+# PM2
+.pm2/
+ecosystem.config.js
+
+# SSL y certificados
+*.crt
+*.key
+*.pem
+ssl/
+certs/
+
+# Archivos de sistema
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+public/css/tailwind.css
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Misc
+*.bak
+*.backup
+*.old
+*.orig

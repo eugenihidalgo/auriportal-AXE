@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Técnicas Post-práctica con Aurelín" />
+<title>AuriPortal — Técnicas Post-práctica</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<!-- Preconnect para acelerar carga de YouTube -->
+<link rel="preconnect" href="https://www.youtube.com">
+<link rel="preconnect" href="https://i.ytimg.com">
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+
+  .aura-circle {
+    width: 150px;
+    height: 150px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(8px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 80px;
+    position: absolute;
+    top: 35px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    color: var(--text-accent);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .tecnicas-container {
+    background: var(--bg-card);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    margin-bottom: 20px;
+    color: var(--text-primary);
+  }
+
+  .tecnica-item {
+    margin-bottom: 25px;
+    padding-bottom: 25px;
+    border-bottom: 1px solid var(--border-soft);
+    text-align: left;
+  }
+
+  .tecnica-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .tecnica-nombre {
+    font-size: 1.3rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .tecnica-descripcion {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+
+  .tecnica-nivel {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 15px;
+  }
+
+  .boton-ver-video {
+    padding: 12px 24px;
+    background: var(--gradient-error);
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--button-text-color);
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 10px var(--shadow-md);
+    margin-top: 10px;
+  }
+
+  .boton-ver-video:hover {
+    background: linear-gradient(135deg, #cc0000, #990000);
+    transform: scale(1.05);
+    box-shadow: 0 6px 15px var(--shadow-lg);
+  }
+
+  .boton-ver-video:active {
+    transform: scale(0.98);
+  }
+
+  .boton-ver-video.oculto {
+    display: none;
+  }
+
+  .video-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    margin-top: 15px;
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+  }
+
+  .video-container.mostrar {
+    opacity: 1;
+  }
+
+  .video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .boton-continuar {
+    padding: 15px 30px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 4px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    margin-top: 20px;
+    display: inline-block;
+  }
+
+  .boton-continuar:hover {
+    background: var(--gradient-hover);
+    transform: scale(1.03);
+    box-shadow: 0 6px 15px var(--shadow-lg);
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .tecnicas-container {
+      padding: 15px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+    }
+
+    .tecnica-nombre {
+      font-size: 1.1rem;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="aura-container">
+        <div class="aura-circle"></div>
+        <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín">
+      </div>
+      <h1>🎯 Técnicas Post-práctica</h1>
+    </div>
+
+    <div class="tecnicas-container">
+      {{TECNICAS_HTML}}
+    </div>
+
+    <button class="boton-continuar" onclick="location.href='{{URL_CONTINUAR}}'">
+      Continuar →
+    </button>
+    
+    <!-- Reloj de meditación único al final -->
+    {{RELOJ_HTML}}
+  </div>
+
+  <script>
+    // Suprimir errores de extensiones del navegador (debe ir antes de cualquier otro código)
+    window.addEventListener('error', function(e) {
+      if (e.message && (
+        e.message.includes('message channel closed') ||
+        e.message.includes('asynchronous response') ||
+        e.message.includes('Extension context invalidated')
+      )) {
+        e.preventDefault();
+        return true;
+      }
+    });
+    
+    window.addEventListener('unhandledrejection', function(e) {
+      if (e.reason && (
+        (typeof e.reason === 'string' && (
+          e.reason.includes('message channel closed') ||
+          e.reason.includes('asynchronous response') ||
+          e.reason.includes('Extension context invalidated')
+        )) ||
+        (e.reason && e.reason.message && (
+          e.reason.message.includes('message channel closed') ||
+          e.reason.message.includes('asynchronous response') ||
+          e.reason.message.includes('Extension context invalidated')
+        ))
+      )) {
+        e.preventDefault();
+        return true;
+      }
+    });
+
+    /**
+     * Extrae el videoId de una URL de YouTube o código embed
+     */
+    function extraerVideoId(url) {
+      if (!url || !url.trim()) return null;
+      
+      // Si ya es un videoId simple
+      if (/^[a-zA-Z0-9_-]{11}$/.test(url.trim())) {
+        return url.trim();
+      }
+      
+      // Patrones comunes de YouTube
+      const patrones = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+        /src=["']https?:\/\/(?:www\.)?(?:youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+      ];
+      
+      for (const patron of patrones) {
+        const match = url.match(patron);
+        if (match && match[1]) {
+          return match[1];
+        }
+      }
+      
+      return null;
+    }
+
+    /**
+     * Muestra el video de YouTube en el contenedor
+     */
+    function mostrarVideo(videoId, boton) {
+      if (!videoId) return;
+      
+      // Sanitizar videoId (solo permitir caracteres alfanuméricos, guiones y guiones bajos)
+      const sanitizedVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
+      if (sanitizedVideoId.length !== 11) {
+        console.error('VideoId inválido:', videoId);
+        return;
+      }
+      
+      // Encontrar el contenedor de video correspondiente
+      const container = document.querySelector(`.video-container[data-video-id="${sanitizedVideoId}"]`);
+      if (!container) return;
+      
+      // Construir URL del embed con parámetros optimizados para móviles
+      // mute=1 ayuda con autoplay en móviles (muchos navegadores requieren video silenciado para autoplay)
+      // playsinline=1 es necesario para iOS
+      const embedUrl = `https://www.youtube.com/embed/${sanitizedVideoId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1&showinfo=0`;
+      
+      // Crear iframe
+      const iframe = document.createElement('iframe');
+      iframe.src = embedUrl;
+      // Incluir 'playsinline' en allow para iOS
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; playsinline';
+      iframe.allowFullscreen = true;
+      iframe.loading = 'lazy';
+      // Atributo playsinline para iOS
+      iframe.setAttribute('playsinline', '1');
+      
+      // Mostrar contenedor y agregar iframe
+      container.style.display = 'block';
+      container.appendChild(iframe);
+      
+      // Aplicar fade-in
+      setTimeout(() => {
+        container.classList.add('mostrar');
+      }, 10);
+      
+      // Ocultar botón
+      if (boton) {
+        boton.classList.add('oculto');
+      }
+    }
+
+    // Hacer disponible globalmente
+    window.mostrarVideo = mostrarVideo;
+  </script>
+
+  <!-- Script para suprimir errores de extensiones del navegador -->
+  <script src="/js/error-handler.js"></script>
+  
+  <!-- Estilos y scripts del reloj de meditación -->
+  <link rel="stylesheet" href="/css/reloj-meditacion.css">
+  <script src="/js/reloj-meditacion.js"></script>
+  <script>
+    // Inicializar reloj de meditación único después de cargar el DOM
+    document.addEventListener('DOMContentLoaded', function() {
+      const relojEl = document.getElementById('reloj-meditacion-unico');
+      if (relojEl) {
+        const configStr = relojEl.getAttribute('data-reloj-config');
+        if (configStr) {
+          try {
+            const config = JSON.parse(configStr.replace(/&quot;/g, '"'));
+            console.log('Config del reloj:', config);
+            console.log('Músicas disponibles:', config.musicasDisponibles);
+            window.relojMeditacionActual = new RelojMeditacion('reloj-meditacion-unico', config);
+          } catch (error) {
+            console.error('Error inicializando reloj:', error);
+          }
+        } else {
+          console.error('No se encontró data-reloj-config en el elemento');
+        }
+      } else {
+        console.error('No se encontró el elemento reloj-meditacion-unico');
+      }
+    });
+  </script>
+</body>
+</html>
+

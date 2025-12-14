@@ -1,0 +1,4 @@
+# Dependencias del servidor MCP para AuriPortal
+# No se requieren dependencias externas adicionales
+# El servidor usa solo la biblioteca estándar de Python 3.8+
+

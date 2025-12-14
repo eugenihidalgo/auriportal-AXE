@@ -1,0 +1,36 @@
+LISTA COMPLETA DE ARCHIVOS PARA COPIAR A GOOGLE APPS SCRIPT
+================================================================
+
+Todos los archivos están en: /var/www/aurelinportal/google-worker/
+
+Copia cada archivo creando un nuevo Script en Google Apps Script
+usando el nombre exacto (incluyendo carpetas con formato carpeta/archivo)
+
+ARCHIVOS PRINCIPALES:
+- Code.gs
+- router.gs
+
+ARCHIVOS EN CARPETA utils/:
+- utils/response.gs
+- utils/validation.gs
+
+ARCHIVOS EN CARPETA actions/:
+- actions/drive.gs
+- actions/docs.gs
+- actions/email.gs
+- actions/calendar.gs
+- actions/aurielin.gs
+- actions/logs.gs
+
+TOTAL: 10 archivos
+
+IMPORTANTE: 
+- Para archivos en carpetas, usa el formato: carpeta/archivo.gs como nombre
+- Ejemplo: Para crear utils/response.gs, el nombre del archivo debe ser: utils/response.gs
+- Google Apps Script creará automáticamente la estructura de carpetas
+
+
+
+
+
+

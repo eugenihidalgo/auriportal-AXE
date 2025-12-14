@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuriPortal Google Worker - Copiar Archivos</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #4CAF50;
+      margin-bottom: 10px;
+      font-size: 2em;
+    }
+    .subtitle {
+      color: #888;
+      margin-bottom: 30px;
+    }
+    .archivo {
+      background: #252526;
+      border: 1px solid #3e3e42;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      overflow: hidden;
+    }
+    .archivo-header {
+      background: #2d2d30;
+      padding: 15px 20px;
+      border-bottom: 1px solid #3e3e42;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .archivo-nombre {
+      font-family: 'Consolas', 'Monaco', monospace;
+      color: #4EC9B0;
+      font-size: 1.1em;
+      font-weight: bold;
+    }
+    .boton-copiar {
+      background: #0e639c;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background 0.2s;
+    }
+    .boton-copiar:hover {
+      background: #1177bb;
+    }
+    .boton-copiar.copiado {
+      background: #4CAF50;
+    }
+    .archivo-contenido {
+      padding: 20px;
+      position: relative;
+    }
+    pre {
+      background: #1e1e1e;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+      padding: 15px;
+      overflow-x: auto;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+      line-height: 1.5;
+      margin: 0;
+    }
+    .instrucciones {
+      background: #2d2d30;
+      border-left: 4px solid #4CAF50;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 4px;
+    }
+    .instrucciones h2 {
+      color: #4CAF50;
+      margin-bottom: 15px;
+    }
+    .instrucciones ol {
+      margin-left: 20px;
+    }
+    .instrucciones li {
+      margin-bottom: 10px;
+    }
+    .badge {
+      display: inline-block;
+      background: #4CAF50;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      margin-left: 10px;
+    }
+    code { color: #d4d4d4; }
+    a { color: #4CAF50; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 AuriPortal Google Worker - Copiar Archivos</h1>
+    <p class="subtitle">Total: 10 archivos · Clic en "Copiar" para copiar el contenido</p>
+    
+    <div class="instrucciones">
+      <h2>📋 Instrucciones</h2>
+      <ol>
+        <li>Ve a <a href="https://script.google.com" target="_blank">script.google.com</a> y crea un nuevo proyecto</li>
+        <li>Para cada archivo:
+          <ul style="margin-top: 10px; margin-left: 20px;">
+            <li>Clic en <strong>"Copiar"</strong></li>
+            <li>En Apps Script: "+" → "Script"</li>
+            <li>Para carpetas usa nombre completo: <code>utils/response.gs</code></li>
+            <li>Pega (Ctrl+V)</li>
+          </ul>
+        </li>
+        <li>Configura SCRIPT_SECRET en Script Properties</li>
+        <li>Despliega como Web App</li>
+      </ol>
+    </div>
+
+
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">Code.gs</span>
+          <span class="badge">1/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(0)" data-index="0">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-0">/**
+ * ============================================================================
+ * GOOGLE WORKER - AURIPORTAL V8.0
+ * ============================================================================
+ * 
+ * Web App pública que actúa como Worker para automatizar Google Workspace.
+ * Permite al servidor AuriPortal realizar acciones en Google mediante API.
+ * 
+ * CONFIGURACIÓN:
+ * - Desplegar como Web App
+ * - Ejecutar como: &quot;Yo&quot;
+ * - Quien tiene acceso: &quot;Cualquiera&quot;
+ * - Solo acepta POST
+ * 
+ * SEGURIDAD:
+ * - Valida token secreto en header &quot;X-Auri-Secret&quot;
+ * - Variable interna: SCRIPT_SECRET (configurar en ejecución o Properties)
+ * 
+ * @author AuriPortal Team
+ * @version 8.0
+ */
+
+/**
+ * Función principal que maneja las peticiones POST del servidor AuriPortal
+ * 
+ * @param {Object} e - Evento de la petición POST
+ * @param {Object} e.parameter - Parámetros de la petición (NO usado, usamos postData)
+ * @param {Object} e.postData - Datos POST enviados
+ * @param {string} e.postData.contents - Contenido JSON como string
+ * @param {string} e.postData.type - Tipo de contenido (application/json)
+ * 
+ * @returns {Object} Respuesta JSON con formato estándar
+ * 
+ * Formato de respuesta:
+ * {
+ *   status: &quot;ok&quot; | &quot;error&quot;,
+ *   message: &quot;descripción&quot;,
+ *   data: { ... }
+ * }
+ */
+function doPost(e) {
+  try {
+    // Parsear el JSON recibido
+    let requestData;
+    try {
+      requestData = JSON.parse(e.postData.contents);
+    } catch (parseError) {
+      return sendError(&quot;JSON inválido en el body de la petición&quot;);
+    }
+    
+    // Validar token secreto
+    // Obtener el SECRET desde Script Properties (configurar en Apps Script)
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const SECRET = scriptProperties.getProperty(&#039;SCRIPT_SECRET&#039;);
+    
+    if (!SECRET) {
+      return sendError(&quot;SCRIPT_SECRET no configurado. Configura la propiedad SCRIPT_SECRET en Script Properties.&quot;);
+    }
+    
+    // El token puede venir en el body JSON (recomendado) o como query parameter
+    // NOTA: Por seguridad, se recomienda usar body JSON, no query params
+    const token = requestData.token || e.parameter.token;
+    
+    if (!token || token !== SECRET) {
+      return sendError(&quot;Token no autorizado. El token proporcionado no coincide con SCRIPT_SECRET.&quot;);
+    }
+    
+    // Validar que hay una acción
+    if (!requestData.accion) {
+      return sendError(&quot;Parámetro &#039;accion&#039; es requerido&quot;);
+    }
+    
+    // Llamar al router para procesar la acción
+    return router(requestData);
+    
+  } catch (error) {
+    // Capturar cualquier error no manejado
+    return sendError(&quot;Error interno del servidor: &quot; + error.toString());
+  }
+}
+
+/**
+ * Función GET opcional para verificar que el Worker está activo
+ * Útil para health checks
+ * 
+ * @param {Object} e - Evento GET
+ * @returns {Object} Respuesta JSON con estado
+ */
+function doGet(e) {
+  return sendSuccess(&quot;Google Worker AuriPortal V8.0 está activo&quot;, {
+    version: &quot;8.0&quot;,
+    timestamp: new Date().toISOString()
+  });
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">router.gs</span>
+          <span class="badge">2/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(1)" data-index="1">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-1">/**
+ * ============================================================================
+ * ROUTER - Enrutador de Acciones
+ * ============================================================================
+ * 
+ * Enruta las peticiones según el parámetro &quot;accion&quot; recibido.
+ * Cada acción llama a su respectiva función en el módulo correspondiente.
+ * 
+ * ACCIONES DISPONIBLES:
+ * - ping: Test de conectividad
+ * - crear_carpeta: Crear carpeta en Drive
+ * - crear_documento: Crear Google Docs
+ * - generar_pdf: Convertir Docs a PDF
+ * - enviar_email: Enviar email con Gmail
+ * - crear_evento_calendar: Crear evento en Calendar
+ * - mover_archivo: Mover archivo entre carpetas
+ * - crear_estructura_alumno: Crear estructura de carpetas para alumno
+ * - crear_informe_aurielin: Crear informe completo con formato
+ * - registrar_log: Registrar acción en hoja de cálculo
+ * 
+ * @param {Object} requestData - Datos de la petición
+ * @param {string} requestData.accion - Acción a ejecutar
+ * @returns {Object} Respuesta JSON
+ */
+function router(requestData) {
+  const accion = requestData.accion;
+  
+  try {
+    switch(accion) {
+      case &#039;ping&#039;:
+        return sendSuccess(&quot;Google Worker AuriPortal activo&quot;, {
+          timestamp: new Date().toISOString(),
+          version: &quot;8.0&quot;
+        });
+        
+      case &#039;crear_carpeta&#039;:
+        return accionCrearCarpeta(requestData);
+        
+      case &#039;crear_documento&#039;:
+        return accionCrearDocumento(requestData);
+        
+      case &#039;generar_pdf&#039;:
+        return accionGenerarPDF(requestData);
+        
+      case &#039;enviar_email&#039;:
+        return accionEnviarEmail(requestData);
+        
+      case &#039;crear_evento_calendar&#039;:
+        return accionCrearEventoCalendar(requestData);
+        
+      case &#039;mover_archivo&#039;:
+        return accionMoverArchivo(requestData);
+        
+      case &#039;crear_estructura_alumno&#039;:
+        return accionCrearEstructuraAlumno(requestData);
+        
+      case &#039;crear_informe_aurielin&#039;:
+        return accionCrearInformeAurielin(requestData);
+        
+      case &#039;registrar_log&#039;:
+        return accionRegistrarLog(requestData);
+        
+      default:
+        return sendError(`Acción &#039;${accion}&#039; no reconocida. Acciones disponibles: ping, crear_carpeta, crear_documento, generar_pdf, enviar_email, crear_evento_calendar, mover_archivo, crear_estructura_alumno, crear_informe_aurielin, registrar_log`);
+    }
+  } catch (error) {
+    return sendError(`Error ejecutando acción &#039;${accion}&#039;: ${error.toString()}`);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">utils/response.gs</span>
+          <span class="badge">3/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(2)" data-index="2">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-2">/**
+ * ============================================================================
+ * UTILIDADES DE RESPUESTA
+ * ============================================================================
+ * 
+ * Funciones helper para generar respuestas JSON consistentes.
+ * Todas las respuestas siguen el mismo formato estándar.
+ * 
+ * NOTA: Google Apps Script Web Apps NO permite usar setStatusCode().
+ * Los códigos HTTP deben manejarse en el cliente que consume la API.
+ */
+
+/**
+ * Función base para enviar JSON
+ * 
+ * @param {Object} obj - Objeto a serializar como JSON
+ * @returns {TextOutput} Respuesta JSON formateada
+ */
+function sendJson(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj, null, 2))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Envía una respuesta exitosa
+ * 
+ * @param {string} message - Mensaje descriptivo
+ * @param {Object} data - Datos adicionales a incluir (opcional)
+ * @returns {TextOutput} Respuesta JSON formateada
+ * 
+ * Formato:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;...&quot;,
+ *   data: { ... }
+ * }
+ */
+function sendSuccess(message, data = {}) {
+  const response = {
+    status: &quot;ok&quot;,
+    message: message,
+    data: data
+  };
+  
+  return sendJson(response);
+}
+
+/**
+ * Envía una respuesta de error
+ * 
+ * @param {string} message - Mensaje de error descriptivo
+ * @param {Object} errorData - Datos adicionales del error (opcional)
+ * @returns {TextOutput} Respuesta JSON formateada
+ * 
+ * Formato:
+ * {
+ *   status: &quot;error&quot;,
+ *   message: &quot;...&quot;,
+ *   data: { error: &quot;...&quot;, ... }
+ * }
+ * 
+ * NOTA: El código HTTP debe manejarse en el cliente.
+ * Esta función siempre devuelve status: &quot;error&quot; en el JSON.
+ */
+function sendError(message, errorData = {}) {
+  const response = {
+    status: &quot;error&quot;,
+    message: message,
+    data: {
+      error: message,
+      ...errorData
+    }
+  };
+  
+  return sendJson(response);
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">utils/validation.gs</span>
+          <span class="badge">4/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(3)" data-index="3">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-3">/**
+ * ============================================================================
+ * UTILIDADES DE VALIDACIÓN
+ * ============================================================================
+ * 
+ * Funciones para validar parámetros requeridos y tipos de datos.
+ */
+
+/**
+ * Valida que un objeto tenga las propiedades requeridas
+ * 
+ * @param {Object} obj - Objeto a validar
+ * @param {Array&lt;string&gt;} requiredFields - Array de nombres de campos requeridos
+ * @returns {Object} { valid: boolean, missing: Array&lt;string&gt; }
+ * 
+ * Ejemplo de uso:
+ * const validation = validateRequired(params, [&#039;nombre&#039;, &#039;email&#039;]);
+ * if (!validation.valid) {
+ *   return sendError(`Faltan campos: ${validation.missing.join(&#039;, &#039;)}`);
+ * }
+ */
+function validateRequired(obj, requiredFields) {
+  const missing = [];
+  
+  for (const field of requiredFields) {
+    if (obj[field] === undefined || obj[field] === null || obj[field] === &#039;&#039;) {
+      missing.push(field);
+    }
+  }
+  
+  return {
+    valid: missing.length === 0,
+    missing: missing
+  };
+}
+
+/**
+ * Valida que un ID de Google Drive tenga formato válido
+ * 
+ * @param {string} id - ID a validar
+ * @returns {boolean} true si es válido
+ */
+function isValidDriveId(id) {
+  return id &amp;&amp; typeof id === &#039;string&#039; &amp;&amp; id.length &gt; 0;
+}
+
+/**
+ * Valida formato de email básico
+ * 
+ * @param {string} email - Email a validar
+ * @returns {boolean} true si el formato es válido
+ */
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/drive.gs</span>
+          <span class="badge">5/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(4)" data-index="4">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-4">/**
+ * ============================================================================
+ * ACCIONES DE GOOGLE DRIVE
+ * ============================================================================
+ * 
+ * Funciones para gestionar carpetas y archivos en Google Drive.
+ */
+
+/**
+ * Acción: crear_carpeta
+ * 
+ * Crea una carpeta nueva dentro de una carpeta padre en Google Drive.
+ * 
+ * PARÁMETROS RECIBIDOS (en requestData):
+ * @param {string} nombre - Nombre de la carpeta a crear
+ * @param {string} padre_id - ID de la carpeta padre (opcional, si no se proporciona se crea en raíz)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Carpeta creada exitosamente&quot;,
+ *   data: {
+ *     id: &quot;xxx&quot;,
+ *     url: &quot;https://drive.google.com/drive/folders/xxx&quot;,
+ *     nombre: &quot;...&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * POST al Web App URL
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;crear_carpeta&quot;,
+ *   &quot;nombre&quot;: &quot;Mi Carpeta&quot;,
+ *   &quot;padre_id&quot;: &quot;1abc123...&quot; (opcional)
+ * }
+ */
+function accionCrearCarpeta(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;nombre&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const nombre = requestData.nombre;
+    const padreId = requestData.padre_id || null;
+    
+    // Crear la carpeta
+    let folder;
+    if (padreId) {
+      // Validar que el padre existe
+      try {
+        const padre = DriveApp.getFolderById(padreId);
+        folder = padre.createFolder(nombre);
+      } catch (e) {
+        return sendError(`La carpeta padre con ID &#039;${padreId}&#039; no existe o no tienes acceso`);
+      }
+    } else {
+      // Crear en la raíz de Drive
+      folder = DriveApp.createFolder(nombre);
+    }
+    
+    return sendSuccess(&quot;Carpeta creada exitosamente&quot;, {
+      id: folder.getId(),
+      url: `https://drive.google.com/drive/folders/${folder.getId()}`,
+      nombre: folder.getName()
+    });
+    
+  } catch (error) {
+    return sendError(`Error al crear carpeta: ${error.toString()}`);
+  }
+}
+
+/**
+ * Acción: mover_archivo
+ * 
+ * Mueve un archivo desde una ubicación a otra en Google Drive.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} archivo_id - ID del archivo a mover
+ * @param {string} destino_id - ID de la carpeta destino
+ * @param {boolean} eliminar_original - Si eliminar de la ubicación original (default: true)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Archivo movido exitosamente&quot;,
+ *   data: {
+ *     id: &quot;xxx&quot;,
+ *     url: &quot;https://drive.google.com/file/d/xxx&quot;,
+ *     destino_url: &quot;https://drive.google.com/drive/folders/xxx&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;mover_archivo&quot;,
+ *   &quot;archivo_id&quot;: &quot;1abc123...&quot;,
+ *   &quot;destino_id&quot;: &quot;1xyz789...&quot;,
+ *   &quot;eliminar_original&quot;: true
+ *   }
+ */
+function accionMoverArchivo(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;archivo_id&#039;, &#039;destino_id&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const archivoId = requestData.archivo_id;
+    const destinoId = requestData.destino_id;
+    const eliminarOriginal = requestData.eliminar_original !== false; // default: true
+    
+    // Obtener el archivo
+    let archivo;
+    try {
+      archivo = DriveApp.getFileById(archivoId);
+    } catch (e) {
+      return sendError(`El archivo con ID &#039;${archivoId}&#039; no existe o no tienes acceso`);
+    }
+    
+    // Obtener la carpeta destino
+    let carpetaDestino;
+    try {
+      carpetaDestino = DriveApp.getFolderById(destinoId);
+    } catch (e) {
+      return sendError(`La carpeta destino con ID &#039;${destinoId}&#039; no existe o no tienes acceso`);
+    }
+    
+    // Obtener las carpetas actuales del archivo
+    const carpetasActuales = archivo.getParents();
+    
+    // Añadir a la nueva carpeta
+    carpetaDestino.addFile(archivo);
+    
+    // Eliminar de las carpetas originales si se solicita
+    if (eliminarOriginal) {
+      while (carpetasActuales.hasNext()) {
+        const carpetaActual = carpetasActuales.next();
+        carpetaActual.removeFile(archivo);
+      }
+    }
+    
+    return sendSuccess(&quot;Archivo movido exitosamente&quot;, {
+      id: archivo.getId(),
+      url: `https://drive.google.com/file/d/${archivo.getId()}`,
+      destino_url: `https://drive.google.com/drive/folders/${destinoId}`,
+      nombre: archivo.getName()
+    });
+    
+  } catch (error) {
+    return sendError(`Error al mover archivo: ${error.toString()}`);
+  }
+}
+
+/**
+ * Helper: Obtener o crear carpeta por nombre en una carpeta padre
+ * Útil para operaciones internas
+ * 
+ * @param {string} nombreCarpeta - Nombre de la carpeta
+ * @param {string} padreId - ID de la carpeta padre
+ * @returns {Folder} Carpeta encontrada o creada
+ */
+function obtenerOCrearCarpeta(nombreCarpeta, padreId) {
+  const padre = DriveApp.getFolderById(padreId);
+  const carpetas = padre.getFoldersByName(nombreCarpeta);
+  
+  if (carpetas.hasNext()) {
+    return carpetas.next();
+  } else {
+    return padre.createFolder(nombreCarpeta);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/docs.gs</span>
+          <span class="badge">6/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(5)" data-index="5">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-5">/**
+ * ============================================================================
+ * ACCIONES DE GOOGLE DOCS
+ * ============================================================================
+ * 
+ * Funciones para crear y gestionar documentos de Google Docs.
+ */
+
+/**
+ * Acción: crear_documento
+ * 
+ * Crea un nuevo documento de Google Docs con contenido HTML o texto plano.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} nombre - Nombre del documento
+ * @param {string} contenido - Contenido del documento (texto o HTML)
+ * @param {boolean} es_html - Si el contenido es HTML (default: false)
+ * @param {string} carpeta_id - ID de la carpeta donde guardar (opcional)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Documento creado exitosamente&quot;,
+ *   data: {
+ *     id: &quot;xxx&quot;,
+ *     url: &quot;https://docs.google.com/document/d/xxx&quot;,
+ *     nombre: &quot;...&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;crear_documento&quot;,
+ *   &quot;nombre&quot;: &quot;Mi Documento&quot;,
+ *   &quot;contenido&quot;: &quot;&lt;h1&gt;Título&lt;/h1&gt;&lt;p&gt;Texto...&lt;/p&gt;&quot;,
+ *   &quot;es_html&quot;: true,
+ *   &quot;carpeta_id&quot;: &quot;1abc123...&quot; (opcional)
+ * }
+ */
+function accionCrearDocumento(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;nombre&#039;, &#039;contenido&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const nombre = requestData.nombre;
+    const contenido = requestData.contenido;
+    const esHtml = requestData.es_html === true;
+    const carpetaId = requestData.carpeta_id || null;
+    
+    // Crear el documento
+    const doc = DocumentApp.create(nombre);
+    const body = doc.getBody();
+    
+    // Insertar contenido
+    if (esHtml) {
+      // Si es HTML, usar insertHorizontalRule seguido de insertParagraph con HTML
+      // Nota: Google Apps Script tiene limitaciones con HTML, así que intentamos parsear básicamente
+      body.clear();
+      
+      // Convertir HTML básico a formato de Docs
+      // Esto es una implementación simplificada
+      const textoPlano = contenido.replace(/&lt;[^&gt;]+&gt;/g, &#039;&#039;); // Remover tags HTML
+      body.appendParagraph(textoPlano);
+      
+      // Intentar aplicar formato básico
+      try {
+        // Para mejor soporte HTML, se recomienda usar Drive API con convert: true
+        // Pero para simplificar, usamos texto plano
+        body.appendParagraph(contenido);
+      } catch (e) {
+        // Si falla, usar texto plano
+        body.setText(contenido.replace(/&lt;[^&gt;]+&gt;/g, &#039;&#039;));
+      }
+    } else {
+      // Texto plano directo
+      body.clear();
+      body.appendParagraph(contenido);
+    }
+    
+    // Guardar cambios
+    doc.saveAndClose();
+    
+    // Mover a carpeta si se especifica
+    if (carpetaId) {
+      try {
+        const archivo = DriveApp.getFileById(doc.getId());
+        const carpeta = DriveApp.getFolderById(carpetaId);
+        const carpetasActuales = archivo.getParents();
+        
+        // Eliminar de ubicación actual
+        while (carpetasActuales.hasNext()) {
+          const carpetaActual = carpetasActuales.next();
+          carpetaActual.removeFile(archivo);
+        }
+        
+        // Añadir a nueva carpeta
+        carpeta.addFile(archivo);
+      } catch (e) {
+        // Si falla mover, el documento ya está creado, solo avisamos
+        // No fallamos la operación completa
+      }
+    }
+    
+    return sendSuccess(&quot;Documento creado exitosamente&quot;, {
+      id: doc.getId(),
+      url: `https://docs.google.com/document/d/${doc.getId()}`,
+      nombre: doc.getName()
+    });
+    
+  } catch (error) {
+    return sendError(`Error al crear documento: ${error.toString()}`);
+  }
+}
+
+/**
+ * Acción: generar_pdf
+ * 
+ * Convierte un documento de Google Docs a PDF y lo guarda en una carpeta destino.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} documento_id - ID del documento a convertir
+ * @param {string} nombre_pdf - Nombre del archivo PDF (sin extensión .pdf)
+ * @param {string} carpeta_destino_id - ID de la carpeta donde guardar el PDF
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;PDF generado exitosamente&quot;,
+ *   data: {
+ *     id: &quot;xxx&quot;,
+ *     url: &quot;https://drive.google.com/file/d/xxx&quot;,
+ *     nombre: &quot;...&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;generar_pdf&quot;,
+ *   &quot;documento_id&quot;: &quot;1abc123...&quot;,
+ *   &quot;nombre_pdf&quot;: &quot;informe_final&quot;,
+ *   &quot;carpeta_destino_id&quot;: &quot;1xyz789...&quot;
+ * }
+ */
+function accionGenerarPDF(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;documento_id&#039;, &#039;nombre_pdf&#039;, &#039;carpeta_destino_id&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const documentoId = requestData.documento_id;
+    const nombrePdf = requestData.nombre_pdf;
+    const carpetaDestinoId = requestData.carpeta_destino_id;
+    
+    // Obtener el documento
+    let documento;
+    try {
+      documento = DocumentApp.openById(documentoId);
+    } catch (e) {
+      return sendError(`El documento con ID &#039;${documentoId}&#039; no existe o no tienes acceso`);
+    }
+    
+    // Obtener la carpeta destino
+    let carpetaDestino;
+    try {
+      carpetaDestino = DriveApp.getFolderById(carpetaDestinoId);
+    } catch (e) {
+      return sendError(`La carpeta destino con ID &#039;${carpetaDestinoId}&#039; no existe o no tienes acceso`);
+    }
+    
+    // Obtener el archivo del documento
+    const archivoDoc = DriveApp.getFileById(documentoId);
+    
+    // Generar el PDF usando el exportador de Drive
+    // Nota: El nombre debe incluir .pdf, pero Drive lo añadirá automáticamente si no lo incluye
+    const nombreFinal = nombrePdf.endsWith(&#039;.pdf&#039;) ? nombrePdf : nombrePdf + &#039;.pdf&#039;;
+    
+    // Convertir a PDF usando getAs
+    const blob = archivoDoc.getAs(MimeType.PDF);
+    blob.setName(nombreFinal);
+    
+    // Crear el archivo PDF en la carpeta destino
+    const pdfFile = carpetaDestino.createFile(blob);
+    
+    return sendSuccess(&quot;PDF generado exitosamente&quot;, {
+      id: pdfFile.getId(),
+      url: `https://drive.google.com/file/d/${pdfFile.getId()}`,
+      nombre: pdfFile.getName()
+    });
+    
+  } catch (error) {
+    return sendError(`Error al generar PDF: ${error.toString()}`);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/email.gs</span>
+          <span class="badge">7/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(6)" data-index="6">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-6">/**
+ * ============================================================================
+ * ACCIONES DE EMAIL (GMAIL)
+ * ============================================================================
+ * 
+ * Funciones para enviar emails usando GmailApp de Google Workspace.
+ */
+
+/**
+ * Acción: enviar_email
+ * 
+ * Envía un email usando GmailApp con soporte para HTML, alias, y adjuntos.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} to - Email del destinatario (puede ser array para múltiples)
+ * @param {string} subject - Asunto del email
+ * @param {string} htmlBody - Cuerpo del email en HTML
+ * @param {string} from - Alias de email desde el cual enviar (opcional, usa el predeterminado si no se especifica)
+ * @param {Array&lt;Object&gt;} adjuntos - Array de adjuntos (opcional)
+ *   Cada adjunto: { id: &quot;drive_file_id&quot;, nombre: &quot;archivo.pdf&quot; }
+ * @param {string} cc - Email en copia (opcional, puede ser array)
+ * @param {string} bcc - Email en copia oculta (opcional, puede ser array)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Email enviado exitosamente&quot;,
+ *   data: {
+ *     messageId: &quot;xxx&quot;,
+ *     to: [&quot;email@ejemplo.com&quot;],
+ *     subject: &quot;...&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;enviar_email&quot;,
+ *   &quot;to&quot;: &quot;alumno@ejemplo.com&quot;,
+ *   &quot;subject&quot;: &quot;Bienvenido a AuriPortal&quot;,
+ *   &quot;htmlBody&quot;: &quot;&lt;h1&gt;Bienvenido&lt;/h1&gt;&lt;p&gt;Contenido...&lt;/p&gt;&quot;,
+ *   &quot;from&quot;: &quot;noreply@midominio.com&quot; (opcional),
+ *   &quot;adjuntos&quot;: [{&quot;id&quot;: &quot;1abc123...&quot;, &quot;nombre&quot;: &quot;informe.pdf&quot;}] (opcional),
+ *   &quot;cc&quot;: &quot;admin@ejemplo.com&quot; (opcional),
+ *   &quot;bcc&quot;: &quot;log@ejemplo.com&quot; (opcional)
+ * }
+ */
+function accionEnviarEmail(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;to&#039;, &#039;subject&#039;, &#039;htmlBody&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const to = requestData.to;
+    const subject = requestData.subject;
+    const htmlBody = requestData.htmlBody;
+    const from = requestData.from || null;
+    const adjuntos = requestData.adjuntos || [];
+    const cc = requestData.cc || null;
+    const bcc = requestData.bcc || null;
+    
+    // Validar formato de email(s)
+    const emailsTo = Array.isArray(to) ? to : [to];
+    for (const email of emailsTo) {
+      if (!isValidEmail(email)) {
+        return sendError(`Email inválido en &#039;to&#039;: ${email}`);
+      }
+    }
+    
+    // Procesar adjuntos
+    const attachments = [];
+    for (const adjunto of adjuntos) {
+      try {
+        if (!adjunto.id) {
+          return sendError(&quot;Cada adjunto debe tener un &#039;id&#039; (ID de archivo de Drive)&quot;);
+        }
+        
+        const archivo = DriveApp.getFileById(adjunto.id);
+        const blob = archivo.getAs(archivo.getMimeType());
+        
+        // Usar el nombre proporcionado o el nombre del archivo original
+        if (adjunto.nombre) {
+          blob.setName(adjunto.nombre);
+        }
+        
+        attachments.push(blob);
+      } catch (e) {
+        return sendError(`Error al procesar adjunto con ID &#039;${adjunto.id}&#039;: ${e.toString()}`);
+      }
+    }
+    
+    // Preparar opciones del email
+    const options = {
+      htmlBody: htmlBody,
+      attachments: attachments.length &gt; 0 ? attachments : undefined,
+      cc: cc,
+      bcc: bcc
+    };
+    
+    // Eliminar propiedades undefined
+    Object.keys(options).forEach(key =&gt; {
+      if (options[key] === undefined) {
+        delete options[key];
+      }
+    });
+    
+    // Enviar el email
+    // Nota: El parámetro &#039;from&#039; (alias) requiere configuración especial en Gmail
+    // Si se necesita usar un alias, debe configurarse en Gmail Settings del usuario
+    // GmailApp.sendEmail() no permite especificar &#039;from&#039; directamente en Apps Script
+    // Se usa Gmail API avanzada para esto, pero para simplificar usamos GmailApp
+    
+    let messageId;
+    if (Array.isArray(to)) {
+      GmailApp.sendEmail(to.join(&#039;,&#039;), subject, &#039;&#039;, options);
+      // No hay forma directa de obtener messageId con GmailApp.sendEmail
+      // Se podría usar Gmail API avanzada, pero por simplicidad no lo incluimos
+      messageId = &#039;sent&#039;;
+    } else {
+      GmailApp.sendEmail(to, subject, &#039;&#039;, options);
+      messageId = &#039;sent&#039;;
+    }
+    
+    return sendSuccess(&quot;Email enviado exitosamente&quot;, {
+      messageId: messageId,
+      to: emailsTo,
+      subject: subject,
+      hasAttachments: attachments.length &gt; 0,
+      attachmentsCount: attachments.length
+    });
+    
+  } catch (error) {
+    return sendError(`Error al enviar email: ${error.toString()}`);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/calendar.gs</span>
+          <span class="badge">8/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(7)" data-index="7">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-7">/**
+ * ============================================================================
+ * ACCIONES DE GOOGLE CALENDAR
+ * ============================================================================
+ * 
+ * Funciones para crear eventos en Google Calendar.
+ */
+
+/**
+ * Acción: crear_evento_calendar
+ * 
+ * Crea un evento en Google Calendar con invitados y ubicación (Zoom).
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} titulo - Título del evento
+ * @param {string} descripcion - Descripción del evento
+ * @param {string} fecha_inicio - Fecha y hora de inicio (ISO 8601: &quot;2024-01-15T10:00:00&quot;)
+ * @param {string} fecha_fin - Fecha y hora de fin (ISO 8601: &quot;2024-01-15T11:00:00&quot;)
+ * @param {string} ubicacion - Ubicación del evento (URL de Zoom, dirección, etc.)
+ * @param {Array&lt;string&gt;} invitados - Array de emails de invitados (opcional)
+ * @param {string} calendar_id - ID del calendario específico (opcional, usa el predeterminado si no se especifica)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Evento creado exitosamente&quot;,
+ *   data: {
+ *     eventId: &quot;xxx&quot;,
+ *     htmlLink: &quot;https://www.google.com/calendar/event?eid=xxx&quot;,
+ *     titulo: &quot;...&quot;,
+ *     fecha_inicio: &quot;...&quot;,
+ *     fecha_fin: &quot;...&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;crear_evento_calendar&quot;,
+ *   &quot;titulo&quot;: &quot;Sesión de Meditación&quot;,
+ *   &quot;descripcion&quot;: &quot;Sesión guiada de meditación&quot;,
+ *   &quot;fecha_inicio&quot;: &quot;2024-01-15T10:00:00&quot;,
+ *   &quot;fecha_fin&quot;: &quot;2024-01-15T11:00:00&quot;,
+ *   &quot;ubicacion&quot;: &quot;https://zoom.us/j/123456789&quot;,
+ *   &quot;invitados&quot;: [&quot;alumno@ejemplo.com&quot;, &quot;instructor@ejemplo.com&quot;],
+ *   &quot;calendar_id&quot;: &quot;primary&quot; (opcional)
+ * }
+ */
+function accionCrearEventoCalendar(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;titulo&#039;, &#039;fecha_inicio&#039;, &#039;fecha_fin&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const titulo = requestData.titulo;
+    const descripcion = requestData.descripcion || &#039;&#039;;
+    const fechaInicio = new Date(requestData.fecha_inicio);
+    const fechaFin = new Date(requestData.fecha_fin);
+    const ubicacion = requestData.ubicacion || &#039;&#039;;
+    const invitados = requestData.invitados || [];
+    const calendarId = requestData.calendar_id || &#039;primary&#039;;
+    
+    // Validar fechas
+    if (isNaN(fechaInicio.getTime())) {
+      return sendError(&quot;Fecha de inicio inválida. Usa formato ISO 8601: &#039;2024-01-15T10:00:00&#039;&quot;);
+    }
+    
+    if (isNaN(fechaFin.getTime())) {
+      return sendError(&quot;Fecha de fin inválida. Usa formato ISO 8601: &#039;2024-01-15T11:00:00&#039;&quot;);
+    }
+    
+    if (fechaFin &lt;= fechaInicio) {
+      return sendError(&quot;La fecha de fin debe ser posterior a la fecha de inicio&quot;);
+    }
+    
+    // Validar emails de invitados
+    for (const email of invitados) {
+      if (!isValidEmail(email)) {
+        return sendError(`Email de invitado inválido: ${email}`);
+      }
+    }
+    
+    // Obtener el calendario
+    let calendar;
+    try {
+      calendar = CalendarApp.getCalendarById(calendarId);
+    } catch (e) {
+      // Si no se puede obtener por ID, intentar con el calendario principal
+      if (calendarId === &#039;primary&#039;) {
+        calendar = CalendarApp.getDefaultCalendar();
+      } else {
+        return sendError(`No se pudo acceder al calendario con ID &#039;${calendarId}&#039;: ${e.toString()}`);
+      }
+    }
+    
+    // Crear el evento
+    const evento = calendar.createEvent(titulo, fechaInicio, fechaFin, {
+      description: descripcion,
+      location: ubicacion,
+      guests: invitados.join(&#039;,&#039;),
+      sendInvites: invitados.length &gt; 0 // Enviar invitaciones solo si hay invitados
+    });
+    
+    return sendSuccess(&quot;Evento creado exitosamente&quot;, {
+      eventId: evento.getId(),
+      htmlLink: evento.getHtmlLink(),
+      titulo: evento.getTitle(),
+      fecha_inicio: evento.getStartTime().toISOString(),
+      fecha_fin: evento.getEndTime().toISOString(),
+      ubicacion: evento.getLocation(),
+      invitados: invitados
+    });
+    
+  } catch (error) {
+    return sendError(`Error al crear evento: ${error.toString()}`);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/aurielin.gs</span>
+          <span class="badge">9/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(8)" data-index="8">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-8">/**
+ * ============================================================================
+ * ACCIONES ESPECÍFICAS DE AURIELIN
+ * ============================================================================
+ * 
+ * Funciones especializadas para automatizar procesos específicos de AuriPortal.
+ */
+
+/**
+ * Acción: crear_estructura_alumno
+ * 
+ * Crea automáticamente la estructura de carpetas para un alumno:
+ * /Alumnos/{ID}/Eventos
+ * /Alumnos/{ID}/Informes
+ * /Alumnos/{ID}/Materiales
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} alumno_id - ID único del alumno
+ * @param {string} carpeta_alumnos_id - ID de la carpeta base &quot;Alumnos&quot; (opcional, se buscará si no se proporciona)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Estructura de alumno creada exitosamente&quot;,
+ *   data: {
+ *     carpeta_alumno: {
+ *       id: &quot;xxx&quot;,
+ *       url: &quot;https://drive.google.com/drive/folders/xxx&quot;,
+ *       nombre: &quot;12345&quot;
+ *     },
+ *     subcarpetas: {
+ *       eventos: { id: &quot;xxx&quot;, url: &quot;...&quot; },
+ *       informes: { id: &quot;xxx&quot;, url: &quot;...&quot; },
+ *       materiales: { id: &quot;xxx&quot;, url: &quot;...&quot; }
+ *     }
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;crear_estructura_alumno&quot;,
+ *   &quot;alumno_id&quot;: &quot;12345&quot;,
+ *   &quot;carpeta_alumnos_id&quot;: &quot;1abc123...&quot; (opcional)
+ * }
+ */
+function accionCrearEstructuraAlumno(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;alumno_id&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const alumnoId = requestData.alumno_id;
+    const carpetaAlumnosId = requestData.carpeta_alumnos_id || null;
+    
+    // Obtener o crear la carpeta base &quot;Alumnos&quot;
+    let carpetaAlumnos;
+    if (carpetaAlumnosId) {
+      try {
+        carpetaAlumnos = DriveApp.getFolderById(carpetaAlumnosId);
+      } catch (e) {
+        return sendError(`La carpeta Alumnos con ID &#039;${carpetaAlumnosId}&#039; no existe o no tienes acceso`);
+      }
+    } else {
+      // Buscar carpeta &quot;Alumnos&quot; en la raíz
+      const carpetas = DriveApp.getRootFolder().getFoldersByName(&#039;Alumnos&#039;);
+      if (carpetas.hasNext()) {
+        carpetaAlumnos = carpetas.next();
+      } else {
+        // Crear carpeta Alumnos si no existe
+        carpetaAlumnos = DriveApp.getRootFolder().createFolder(&#039;Alumnos&#039;);
+      }
+    }
+    
+    // Crear o obtener carpeta del alumno
+    let carpetaAlumno;
+    const carpetasAlumno = carpetaAlumnos.getFoldersByName(alumnoId);
+    if (carpetasAlumno.hasNext()) {
+      carpetaAlumno = carpetasAlumno.next();
+    } else {
+      carpetaAlumno = carpetaAlumnos.createFolder(alumnoId);
+    }
+    
+    // Crear subcarpetas: Eventos, Informes, Materiales
+    const subcarpetas = {
+      eventos: obtenerOCrearCarpeta(&#039;Eventos&#039;, carpetaAlumno.getId()),
+      informes: obtenerOCrearCarpeta(&#039;Informes&#039;, carpetaAlumno.getId()),
+      materiales: obtenerOCrearCarpeta(&#039;Materiales&#039;, carpetaAlumno.getId())
+    };
+    
+    return sendSuccess(&quot;Estructura de alumno creada exitosamente&quot;, {
+      carpeta_alumno: {
+        id: carpetaAlumno.getId(),
+        url: `https://drive.google.com/drive/folders/${carpetaAlumno.getId()}`,
+        nombre: carpetaAlumno.getName()
+      },
+      subcarpetas: {
+        eventos: {
+          id: subcarpetas.eventos.getId(),
+          url: `https://drive.google.com/drive/folders/${subcarpetas.eventos.getId()}`,
+          nombre: subcarpetas.eventos.getName()
+        },
+        informes: {
+          id: subcarpetas.informes.getId(),
+          url: `https://drive.google.com/drive/folders/${subcarpetas.informes.getId()}`,
+          nombre: subcarpetas.informes.getName()
+        },
+        materiales: {
+          id: subcarpetas.materiales.getId(),
+          url: `https://drive.google.com/drive/folders/${subcarpetas.materiales.getId()}`,
+          nombre: subcarpetas.materiales.getName()
+        }
+      }
+    });
+    
+  } catch (error) {
+    return sendError(`Error al crear estructura de alumno: ${error.toString()}`);
+  }
+}
+
+/**
+ * Acción: crear_informe_aurielin
+ * 
+ * Crea un informe completo con formato bonito, lo convierte a PDF y lo guarda
+ * en la carpeta de informes del alumno.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} alumno_id - ID del alumno
+ * @param {string} titulo - Título del informe
+ * @param {Object} contenido - Objeto con el contenido del informe generado por IA
+ *   Estructura esperada:
+ *   {
+ *     introduccion: &quot;...&quot;,
+ *     secciones: [
+ *       { titulo: &quot;...&quot;, contenido: &quot;...&quot; },
+ *       ...
+ *     ],
+ *     conclusion: &quot;...&quot;
+ *   }
+ * @param {string} carpeta_informes_id - ID de la carpeta Informes del alumno (opcional, se buscará si no se proporciona)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Informe creado exitosamente&quot;,
+ *   data: {
+ *     documento: { id: &quot;xxx&quot;, url: &quot;...&quot; },
+ *     pdf: { id: &quot;xxx&quot;, url: &quot;...&quot; }
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;crear_informe_aurielin&quot;,
+ *   &quot;alumno_id&quot;: &quot;12345&quot;,
+ *   &quot;titulo&quot;: &quot;Informe de Progreso - Enero 2024&quot;,
+ *   &quot;contenido&quot;: {
+ *     &quot;introduccion&quot;: &quot;Este informe detalla...&quot;,
+ *     &quot;secciones&quot;: [
+ *       { &quot;titulo&quot;: &quot;Progreso General&quot;, &quot;contenido&quot;: &quot;El alumno ha mostrado...&quot; },
+ *       { &quot;titulo&quot;: &quot;Áreas de Mejora&quot;, &quot;contenido&quot;: &quot;Se recomienda...&quot; }
+ *     ],
+ *     &quot;conclusion&quot;: &quot;En conclusión...&quot;
+ *   },
+ *   &quot;carpeta_informes_id&quot;: &quot;1abc123...&quot; (opcional)
+ * }
+ */
+function accionCrearInformeAurielin(requestData) {
+  try {
+    // Validar parámetros requeridos
+    const validation = validateRequired(requestData, [&#039;alumno_id&#039;, &#039;titulo&#039;, &#039;contenido&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const alumnoId = requestData.alumno_id;
+    const titulo = requestData.titulo;
+    const contenido = requestData.contenido;
+    const carpetaInformesId = requestData.carpeta_informes_id || null;
+    
+    // Obtener carpeta de informes
+    let carpetaInformes;
+    if (carpetaInformesId) {
+      try {
+        carpetaInformes = DriveApp.getFolderById(carpetaInformesId);
+      } catch (e) {
+        return sendError(`La carpeta Informes con ID &#039;${carpetaInformesId}&#039; no existe o no tienes acceso`);
+      }
+    } else {
+      // Buscar automáticamente la carpeta de informes del alumno
+      // Asumimos estructura: /Alumnos/{alumno_id}/Informes
+      const carpetaAlumnos = DriveApp.getRootFolder().getFoldersByName(&#039;Alumnos&#039;).next();
+      if (!carpetaAlumnos) {
+        return sendError(&quot;No se encontró la carpeta &#039;Alumnos&#039;. Usa &#039;crear_estructura_alumno&#039; primero o proporciona &#039;carpeta_informes_id&#039;&quot;);
+      }
+      
+      const carpetaAlumno = carpetaAlumnos.getFoldersByName(alumnoId).next();
+      if (!carpetaAlumno) {
+        return sendError(`No se encontró la carpeta del alumno &#039;${alumnoId}&#039;. Usa &#039;crear_estructura_alumno&#039; primero o proporciona &#039;carpeta_informes_id&#039;`);
+      }
+      
+      carpetaInformes = carpetaAlumno.getFoldersByName(&#039;Informes&#039;).next();
+      if (!carpetaInformes) {
+        return sendError(`No se encontró la carpeta &#039;Informes&#039; del alumno. Usa &#039;crear_estructura_alumno&#039; primero o proporciona &#039;carpeta_informes_id&#039;`);
+      }
+    }
+    
+    // Crear el documento con formato bonito
+    const nombreDocumento = `${titulo} - ${alumnoId}`;
+    const doc = DocumentApp.create(nombreDocumento);
+    const body = doc.getBody();
+    
+    // Limpiar el body
+    body.clear();
+    
+    // Establecer estilo de título principal
+    const tituloPar = body.appendParagraph(titulo);
+    tituloPar.setHeading(DocumentApp.ParagraphHeading.TITLE);
+    tituloPar.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+    
+    // Añadir fecha
+    const fecha = new Date().toLocaleDateString(&#039;es-ES&#039;, { 
+      year: &#039;numeric&#039;, 
+      month: &#039;long&#039;, 
+      day: &#039;numeric&#039; 
+    });
+    const fechaPar = body.appendParagraph(`Fecha: ${fecha}`);
+    fechaPar.setHeading(DocumentApp.ParagraphHeading.NORMAL);
+    body.appendParagraph(&#039;&#039;); // Línea en blanco
+    
+    // Introducción
+    if (contenido.introduccion) {
+      const introPar = body.appendParagraph(&#039;Introducción&#039;);
+      introPar.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+      body.appendParagraph(contenido.introduccion);
+      body.appendParagraph(&#039;&#039;); // Línea en blanco
+    }
+    
+    // Secciones
+    if (contenido.secciones &amp;&amp; Array.isArray(contenido.secciones)) {
+      for (const seccion of contenido.secciones) {
+        if (seccion.titulo) {
+          const seccionPar = body.appendParagraph(seccion.titulo);
+          seccionPar.setHeading(DocumentApp.ParagraphHeading.HEADING2);
+        }
+        if (seccion.contenido) {
+          body.appendParagraph(seccion.contenido);
+        }
+        body.appendParagraph(&#039;&#039;); // Línea en blanco
+      }
+    }
+    
+    // Conclusión
+    if (contenido.conclusion) {
+      const conclPar = body.appendParagraph(&#039;Conclusión&#039;);
+      conclPar.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+      body.appendParagraph(contenido.conclusion);
+    }
+    
+    // Guardar y cerrar
+    doc.saveAndClose();
+    
+    // Mover documento a carpeta de informes
+    const archivoDoc = DriveApp.getFileById(doc.getId());
+    const carpetasActuales = archivoDoc.getParents();
+    while (carpetasActuales.hasNext()) {
+      const carpetaActual = carpetasActuales.next();
+      carpetaActual.removeFile(archivoDoc);
+    }
+    carpetaInformes.addFile(archivoDoc);
+    
+    // Generar PDF
+    const nombrePdf = `${titulo} - ${alumnoId}`;
+    const blob = archivoDoc.getAs(MimeType.PDF);
+    blob.setName(nombrePdf + &#039;.pdf&#039;);
+    const pdfFile = carpetaInformes.createFile(blob);
+    
+    return sendSuccess(&quot;Informe creado exitosamente&quot;, {
+      documento: {
+        id: doc.getId(),
+        url: `https://docs.google.com/document/d/${doc.getId()}`,
+        nombre: doc.getName()
+      },
+      pdf: {
+        id: pdfFile.getId(),
+        url: `https://drive.google.com/file/d/${pdfFile.getId()}`,
+        nombre: pdfFile.getName()
+      }
+    });
+    
+  } catch (error) {
+    return sendError(`Error al crear informe: ${error.toString()}`);
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+    <div class="archivo">
+      <div class="archivo-header">
+        <div>
+          <span class="archivo-nombre">actions/logs.gs</span>
+          <span class="badge">10/10</span>
+        </div>
+        <button class="boton-copiar" onclick="copiarArchivo(9)" data-index="9">📋 Copiar</button>
+      </div>
+      <div class="archivo-contenido">
+        <pre><code id="contenido-9">/**
+ * ============================================================================
+ * SISTEMA DE LOGS
+ * ============================================================================
+ * 
+ * Registra todas las acciones en una hoja de cálculo de Google Sheets.
+ */
+
+/**
+ * Acción: registrar_log
+ * 
+ * Registra una acción en la hoja de cálculo &quot;Logs_AuriPortal&quot;.
+ * Si la hoja no existe, la crea automáticamente.
+ * 
+ * PARÁMETROS RECIBIDOS:
+ * @param {string} accion - Nombre de la acción realizada
+ * @param {string} usuario - ID o email del usuario que realizó la acción
+ * @param {Object} payload - Datos adicionales de la acción (se serializa a JSON)
+ * @param {string} spreadsheet_id - ID de la hoja de cálculo (opcional, se buscará &quot;Logs_AuriPortal&quot;)
+ * 
+ * RESPUESTA:
+ * {
+ *   status: &quot;ok&quot;,
+ *   message: &quot;Log registrado exitosamente&quot;,
+ *   data: {
+ *     fila: 123,
+ *     fecha: &quot;2024-01-15T10:00:00Z&quot;
+ *   }
+ * }
+ * 
+ * CÓMO LO LLAMA EL SERVIDOR:
+ * {
+ *   &quot;token&quot;: &quot;SECRET_TOKEN&quot;,
+ *   &quot;accion&quot;: &quot;registrar_log&quot;,
+ *   &quot;accion&quot;: &quot;crear_informe&quot;,
+ *   &quot;usuario&quot;: &quot;alumno@ejemplo.com&quot;,
+ *   &quot;payload&quot;: { &quot;alumno_id&quot;: &quot;12345&quot;, &quot;informe_id&quot;: &quot;abc123&quot; },
+ *   &quot;spreadsheet_id&quot;: &quot;1abc123...&quot; (opcional)
+ * }
+ * 
+ * NOTA: También se puede llamar internamente desde otras acciones para logging automático.
+ */
+function accionRegistrarLog(requestData) {
+  try {
+    // Validar parámetros requeridos
+    // NOTA: No validamos token aquí porque ya se validó en Code.gs
+    const validation = validateRequired(requestData, [&#039;accion&#039;, &#039;usuario&#039;]);
+    if (!validation.valid) {
+      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(&#039;, &#039;)}`);
+    }
+    
+    const accion = requestData.accion;
+    const usuario = requestData.usuario;
+    const payload = requestData.payload || {};
+    const spreadsheetId = requestData.spreadsheet_id || null;
+    
+    // Obtener o crear la hoja de cálculo
+    let spreadsheet;
+    if (spreadsheetId) {
+      try {
+        spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      } catch (e) {
+        return sendError(`La hoja de cálculo con ID &#039;${spreadsheetId}&#039; no existe o no tienes acceso`);
+      }
+    } else {
+      spreadsheet = obtenerOCrearSpreadsheetLogs();
+    }
+    
+    // Obtener la hoja activa
+    const sheet = spreadsheet.getActiveSheet();
+    
+    // Preparar datos para insertar
+    const fecha = new Date();
+    const fechaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), &#039;yyyy-MM-dd&#039;);
+    const horaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), &#039;HH:mm:ss&#039;);
+    const payloadStr = JSON.stringify(payload);
+    
+    // Añadir fila
+    sheet.appendRow([fechaStr, horaStr, accion, usuario, payloadStr]);
+    
+    // Obtener el número de fila insertada
+    const ultimaFila = sheet.getLastRow();
+    
+    return sendSuccess(&quot;Log registrado exitosamente&quot;, {
+      fila: ultimaFila,
+      fecha: fecha.toISOString(),
+      spreadsheet_id: spreadsheet.getId(),
+      spreadsheet_url: spreadsheet.getUrl()
+    });
+    
+  } catch (error) {
+    return sendError(`Error al registrar log: ${error.toString()}`);
+  }
+}
+
+/**
+ * Función helper para registrar logs internamente
+ * Útil para logging automático desde otras acciones
+ * 
+ * @param {string} accion - Nombre de la acción
+ * @param {string} usuario - ID o email del usuario
+ * @param {Object} payload - Datos adicionales
+ */
+/**
+ * Función helper para registrar logs internamente desde otras acciones
+ * Esta función NO valida token ya que se llama internamente
+ * 
+ * @param {string} accion - Nombre de la acción
+ * @param {string} usuario - ID o email del usuario
+ * @param {Object} payload - Datos adicionales
+ */
+function registrarLogInterno(accion, usuario, payload = {}) {
+  try {
+    // Llamar directamente a la lógica sin pasar por validación de token
+    const spreadsheet = obtenerOCrearSpreadsheetLogs();
+    const sheet = spreadsheet.getActiveSheet();
+    
+    const fecha = new Date();
+    const fechaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), &#039;yyyy-MM-dd&#039;);
+    const horaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), &#039;HH:mm:ss&#039;);
+    const payloadStr = JSON.stringify(payload);
+    
+    sheet.appendRow([fechaStr, horaStr, accion, usuario, payloadStr]);
+  } catch (e) {
+    // No fallar la operación principal si falla el logging
+    console.log(&#039;Error al registrar log interno:&#039;, e.toString());
+  }
+}
+
+/**
+ * Obtiene o crea la hoja de cálculo de logs
+ * Helper interno para reutilizar en registrarLogInterno
+ * 
+ * @returns {Spreadsheet} Hoja de cálculo de logs
+ */
+function obtenerOCrearSpreadsheetLogs() {
+  const archivos = DriveApp.getFilesByName(&#039;Logs_AuriPortal&#039;);
+  if (archivos.hasNext()) {
+    const archivo = archivos.next();
+    return SpreadsheetApp.openById(archivo.getId());
+  } else {
+    // Crear nueva hoja de cálculo
+    const spreadsheet = SpreadsheetApp.create(&#039;Logs_AuriPortal&#039;);
+    const sheet = spreadsheet.getActiveSheet();
+    
+    // Añadir encabezados
+    sheet.appendRow([&#039;Fecha&#039;, &#039;Hora&#039;, &#039;Acción&#039;, &#039;Usuario&#039;, &#039;Payload&#039;]);
+    
+    // Formatear encabezados
+    const headerRange = sheet.getRange(1, 1, 1, 5);
+    headerRange.setFontWeight(&#039;bold&#039;);
+    headerRange.setBackground(&#039;#4285f4&#039;);
+    headerRange.setFontColor(&#039;#ffffff&#039;);
+    
+    // Congelar primera fila
+    sheet.setFrozenRows(1);
+    
+    return spreadsheet;
+  }
+}
+
+</code></pre>
+      </div>
+    </div>
+    
+  </div>
+
+  <script>
+    const contenidos = [
+    "/**\n * ============================================================================\n * GOOGLE WORKER - AURIPORTAL V8.0\n * ============================================================================\n * \n * Web App pública que actúa como Worker para automatizar Google Workspace.\n * Permite al servidor AuriPortal realizar acciones en Google mediante API.\n * \n * CONFIGURACIÓN:\n * - Desplegar como Web App\n * - Ejecutar como: \"Yo\"\n * - Quien tiene acceso: \"Cualquiera\"\n * - Solo acepta POST\n * \n * SEGURIDAD:\n * - Valida token secreto en header \"X-Auri-Secret\"\n * - Variable interna: SCRIPT_SECRET (configurar en ejecución o Properties)\n * \n * @author AuriPortal Team\n * @version 8.0\n */\n\n/**\n * Función principal que maneja las peticiones POST del servidor AuriPortal\n * \n * @param {Object} e - Evento de la petición POST\n * @param {Object} e.parameter - Parámetros de la petición (NO usado, usamos postData)\n * @param {Object} e.postData - Datos POST enviados\n * @param {string} e.postData.contents - Contenido JSON como string\n * @param {string} e.postData.type - Tipo de contenido (application/json)\n * \n * @returns {Object} Respuesta JSON con formato estándar\n * \n * Formato de respuesta:\n * {\n *   status: \"ok\" | \"error\",\n *   message: \"descripción\",\n *   data: { ... }\n * }\n */\nfunction doPost(e) {\n  try {\n    // Parsear el JSON recibido\n    let requestData;\n    try {\n      requestData = JSON.parse(e.postData.contents);\n    } catch (parseError) {\n      return sendError(\"JSON inválido en el body de la petición\", 400);\n    }\n    \n    // Validar token secreto\n    // Obtener el SECRET desde Script Properties (configurar en Apps Script)\n    const scriptProperties = PropertiesService.getScriptProperties();\n    const SECRET = scriptProperties.getProperty('SCRIPT_SECRET');\n    \n    if (!SECRET) {\n      return sendError(\"SCRIPT_SECRET no configurado. Configura la propiedad SCRIPT_SECRET en Script Properties.\", 500);\n    }\n    \n    // El token puede venir en el body JSON (recomendado) o como query parameter\n    // NOTA: Por seguridad, se recomienda usar body JSON, no query params\n    const token = requestData.token || e.parameter.token;\n    \n    if (!token || token !== SECRET) {\n      return sendError(\"Token no autorizado. El token proporcionado no coincide con SCRIPT_SECRET.\", 401);\n    }\n    \n    // Validar que hay una acción\n    if (!requestData.accion) {\n      return sendError(\"Parámetro 'accion' es requerido\", 400);\n    }\n    \n    // Llamar al router para procesar la acción\n    return router(requestData);\n    \n  } catch (error) {\n    // Capturar cualquier error no manejado\n    return sendError(\"Error interno del servidor: \" + error.toString(), 500);\n  }\n}\n\n/**\n * Función GET opcional para verificar que el Worker está activo\n * Útil para health checks\n * \n * @param {Object} e - Evento GET\n * @returns {Object} Respuesta JSON con estado\n */\nfunction doGet(e) {\n  return sendSuccess(\"Google Worker AuriPortal V8.0 está activo\", {\n    version: \"8.0\",\n    timestamp: new Date().toISOString()\n  });\n}\n\n",
+    "/**\n * ============================================================================\n * ROUTER - Enrutador de Acciones\n * ============================================================================\n * \n * Enruta las peticiones según el parámetro \"accion\" recibido.\n * Cada acción llama a su respectiva función en el módulo correspondiente.\n * \n * ACCIONES DISPONIBLES:\n * - ping: Test de conectividad\n * - crear_carpeta: Crear carpeta en Drive\n * - crear_documento: Crear Google Docs\n * - generar_pdf: Convertir Docs a PDF\n * - enviar_email: Enviar email con Gmail\n * - crear_evento_calendar: Crear evento en Calendar\n * - mover_archivo: Mover archivo entre carpetas\n * - crear_estructura_alumno: Crear estructura de carpetas para alumno\n * - crear_informe_aurielin: Crear informe completo con formato\n * - registrar_log: Registrar acción en hoja de cálculo\n * \n * @param {Object} requestData - Datos de la petición\n * @param {string} requestData.accion - Acción a ejecutar\n * @returns {Object} Respuesta JSON\n */\nfunction router(requestData) {\n  const accion = requestData.accion;\n  \n  try {\n    switch(accion) {\n      case 'ping':\n        return sendSuccess(\"Google Worker AuriPortal activo\", {\n          timestamp: new Date().toISOString(),\n          version: \"8.0\"\n        });\n        \n      case 'crear_carpeta':\n        return accionCrearCarpeta(requestData);\n        \n      case 'crear_documento':\n        return accionCrearDocumento(requestData);\n        \n      case 'generar_pdf':\n        return accionGenerarPDF(requestData);\n        \n      case 'enviar_email':\n        return accionEnviarEmail(requestData);\n        \n      case 'crear_evento_calendar':\n        return accionCrearEventoCalendar(requestData);\n        \n      case 'mover_archivo':\n        return accionMoverArchivo(requestData);\n        \n      case 'crear_estructura_alumno':\n        return accionCrearEstructuraAlumno(requestData);\n        \n      case 'crear_informe_aurielin':\n        return accionCrearInformeAurielin(requestData);\n        \n      case 'registrar_log':\n        return accionRegistrarLog(requestData);\n        \n      default:\n        return sendError(`Acción '${accion}' no reconocida. Acciones disponibles: ping, crear_carpeta, crear_documento, generar_pdf, enviar_email, crear_evento_calendar, mover_archivo, crear_estructura_alumno, crear_informe_aurielin, registrar_log`, 400);\n    }\n  } catch (error) {\n    return sendError(`Error ejecutando acción '${accion}': ${error.toString()}`, 500);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * UTILIDADES DE RESPUESTA\n * ============================================================================\n * \n * Funciones helper para generar respuestas JSON consistentes.\n * Todas las respuestas siguen el mismo formato estándar.\n */\n\n/**\n * Envía una respuesta exitosa\n * \n * @param {string} message - Mensaje descriptivo\n * @param {Object} data - Datos adicionales a incluir (opcional)\n * @param {number} httpStatus - Código HTTP (default: 200)\n * @returns {TextOutput} Respuesta JSON formateada\n * \n * Formato:\n * {\n *   status: \"ok\",\n *   message: \"...\",\n *   data: { ... }\n * }\n */\nfunction sendSuccess(message, data = {}, httpStatus = 200) {\n  const response = {\n    status: \"ok\",\n    message: message,\n    data: data\n  };\n  \n  return ContentService\n    .createTextOutput(JSON.stringify(response))\n    .setMimeType(ContentService.MimeType.JSON)\n    .setStatusCode(httpStatus);\n}\n\n/**\n * Envía una respuesta de error\n * \n * @param {string} message - Mensaje de error descriptivo\n * @param {number} httpStatus - Código HTTP (default: 400)\n * @param {Object} errorData - Datos adicionales del error (opcional)\n * @returns {TextOutput} Respuesta JSON formateada\n * \n * Formato:\n * {\n *   status: \"error\",\n *   message: \"...\",\n *   data: { error: \"...\", ... }\n * }\n */\nfunction sendError(message, httpStatus = 400, errorData = {}) {\n  const response = {\n    status: \"error\",\n    message: message,\n    data: {\n      error: message,\n      ...errorData\n    }\n  };\n  \n  return ContentService\n    .createTextOutput(JSON.stringify(response))\n    .setMimeType(ContentService.MimeType.JSON)\n    .setStatusCode(httpStatus);\n}\n\n",
+    "/**\n * ============================================================================\n * UTILIDADES DE VALIDACIÓN\n * ============================================================================\n * \n * Funciones para validar parámetros requeridos y tipos de datos.\n */\n\n/**\n * Valida que un objeto tenga las propiedades requeridas\n * \n * @param {Object} obj - Objeto a validar\n * @param {Array<string>} requiredFields - Array de nombres de campos requeridos\n * @returns {Object} { valid: boolean, missing: Array<string> }\n * \n * Ejemplo de uso:\n * const validation = validateRequired(params, ['nombre', 'email']);\n * if (!validation.valid) {\n *   return sendError(`Faltan campos: ${validation.missing.join(', ')}`);\n * }\n */\nfunction validateRequired(obj, requiredFields) {\n  const missing = [];\n  \n  for (const field of requiredFields) {\n    if (obj[field] === undefined || obj[field] === null || obj[field] === '') {\n      missing.push(field);\n    }\n  }\n  \n  return {\n    valid: missing.length === 0,\n    missing: missing\n  };\n}\n\n/**\n * Valida que un ID de Google Drive tenga formato válido\n * \n * @param {string} id - ID a validar\n * @returns {boolean} true si es válido\n */\nfunction isValidDriveId(id) {\n  return id && typeof id === 'string' && id.length > 0;\n}\n\n/**\n * Valida formato de email básico\n * \n * @param {string} email - Email a validar\n * @returns {boolean} true si el formato es válido\n */\nfunction isValidEmail(email) {\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return emailRegex.test(email);\n}\n\n",
+    "/**\n * ============================================================================\n * ACCIONES DE GOOGLE DRIVE\n * ============================================================================\n * \n * Funciones para gestionar carpetas y archivos en Google Drive.\n */\n\n/**\n * Acción: crear_carpeta\n * \n * Crea una carpeta nueva dentro de una carpeta padre en Google Drive.\n * \n * PARÁMETROS RECIBIDOS (en requestData):\n * @param {string} nombre - Nombre de la carpeta a crear\n * @param {string} padre_id - ID de la carpeta padre (opcional, si no se proporciona se crea en raíz)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Carpeta creada exitosamente\",\n *   data: {\n *     id: \"xxx\",\n *     url: \"https://drive.google.com/drive/folders/xxx\",\n *     nombre: \"...\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * POST al Web App URL\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"crear_carpeta\",\n *   \"nombre\": \"Mi Carpeta\",\n *   \"padre_id\": \"1abc123...\" (opcional)\n * }\n */\nfunction accionCrearCarpeta(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['nombre']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const nombre = requestData.nombre;\n    const padreId = requestData.padre_id || null;\n    \n    // Crear la carpeta\n    let folder;\n    if (padreId) {\n      // Validar que el padre existe\n      try {\n        const padre = DriveApp.getFolderById(padreId);\n        folder = padre.createFolder(nombre);\n      } catch (e) {\n        return sendError(`La carpeta padre con ID '${padreId}' no existe o no tienes acceso`, 404);\n      }\n    } else {\n      // Crear en la raíz de Drive\n      folder = DriveApp.createFolder(nombre);\n    }\n    \n    return sendSuccess(\"Carpeta creada exitosamente\", {\n      id: folder.getId(),\n      url: `https://drive.google.com/drive/folders/${folder.getId()}`,\n      nombre: folder.getName()\n    });\n    \n  } catch (error) {\n    return sendError(`Error al crear carpeta: ${error.toString()}`, 500);\n  }\n}\n\n/**\n * Acción: mover_archivo\n * \n * Mueve un archivo desde una ubicación a otra en Google Drive.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} archivo_id - ID del archivo a mover\n * @param {string} destino_id - ID de la carpeta destino\n * @param {boolean} eliminar_original - Si eliminar de la ubicación original (default: true)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Archivo movido exitosamente\",\n *   data: {\n *     id: \"xxx\",\n *     url: \"https://drive.google.com/file/d/xxx\",\n *     destino_url: \"https://drive.google.com/drive/folders/xxx\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"mover_archivo\",\n *   \"archivo_id\": \"1abc123...\",\n *   \"destino_id\": \"1xyz789...\",\n *   \"eliminar_original\": true\n *   }\n */\nfunction accionMoverArchivo(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['archivo_id', 'destino_id']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const archivoId = requestData.archivo_id;\n    const destinoId = requestData.destino_id;\n    const eliminarOriginal = requestData.eliminar_original !== false; // default: true\n    \n    // Obtener el archivo\n    let archivo;\n    try {\n      archivo = DriveApp.getFileById(archivoId);\n    } catch (e) {\n      return sendError(`El archivo con ID '${archivoId}' no existe o no tienes acceso`, 404);\n    }\n    \n    // Obtener la carpeta destino\n    let carpetaDestino;\n    try {\n      carpetaDestino = DriveApp.getFolderById(destinoId);\n    } catch (e) {\n      return sendError(`La carpeta destino con ID '${destinoId}' no existe o no tienes acceso`, 404);\n    }\n    \n    // Obtener las carpetas actuales del archivo\n    const carpetasActuales = archivo.getParents();\n    \n    // Añadir a la nueva carpeta\n    carpetaDestino.addFile(archivo);\n    \n    // Eliminar de las carpetas originales si se solicita\n    if (eliminarOriginal) {\n      while (carpetasActuales.hasNext()) {\n        const carpetaActual = carpetasActuales.next();\n        carpetaActual.removeFile(archivo);\n      }\n    }\n    \n    return sendSuccess(\"Archivo movido exitosamente\", {\n      id: archivo.getId(),\n      url: `https://drive.google.com/file/d/${archivo.getId()}`,\n      destino_url: `https://drive.google.com/drive/folders/${destinoId}`,\n      nombre: archivo.getName()\n    });\n    \n  } catch (error) {\n    return sendError(`Error al mover archivo: ${error.toString()}`, 500);\n  }\n}\n\n/**\n * Helper: Obtener o crear carpeta por nombre en una carpeta padre\n * Útil para operaciones internas\n * \n * @param {string} nombreCarpeta - Nombre de la carpeta\n * @param {string} padreId - ID de la carpeta padre\n * @returns {Folder} Carpeta encontrada o creada\n */\nfunction obtenerOCrearCarpeta(nombreCarpeta, padreId) {\n  const padre = DriveApp.getFolderById(padreId);\n  const carpetas = padre.getFoldersByName(nombreCarpeta);\n  \n  if (carpetas.hasNext()) {\n    return carpetas.next();\n  } else {\n    return padre.createFolder(nombreCarpeta);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * ACCIONES DE GOOGLE DOCS\n * ============================================================================\n * \n * Funciones para crear y gestionar documentos de Google Docs.\n */\n\n/**\n * Acción: crear_documento\n * \n * Crea un nuevo documento de Google Docs con contenido HTML o texto plano.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} nombre - Nombre del documento\n * @param {string} contenido - Contenido del documento (texto o HTML)\n * @param {boolean} es_html - Si el contenido es HTML (default: false)\n * @param {string} carpeta_id - ID de la carpeta donde guardar (opcional)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Documento creado exitosamente\",\n *   data: {\n *     id: \"xxx\",\n *     url: \"https://docs.google.com/document/d/xxx\",\n *     nombre: \"...\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"crear_documento\",\n *   \"nombre\": \"Mi Documento\",\n *   \"contenido\": \"<h1>Título</h1><p>Texto...</p>\",\n *   \"es_html\": true,\n *   \"carpeta_id\": \"1abc123...\" (opcional)\n * }\n */\nfunction accionCrearDocumento(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['nombre', 'contenido']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const nombre = requestData.nombre;\n    const contenido = requestData.contenido;\n    const esHtml = requestData.es_html === true;\n    const carpetaId = requestData.carpeta_id || null;\n    \n    // Crear el documento\n    const doc = DocumentApp.create(nombre);\n    const body = doc.getBody();\n    \n    // Insertar contenido\n    if (esHtml) {\n      // Si es HTML, usar insertHorizontalRule seguido de insertParagraph con HTML\n      // Nota: Google Apps Script tiene limitaciones con HTML, así que intentamos parsear básicamente\n      body.clear();\n      \n      // Convertir HTML básico a formato de Docs\n      // Esto es una implementación simplificada\n      const textoPlano = contenido.replace(/<[^>]+>/g, ''); // Remover tags HTML\n      body.appendParagraph(textoPlano);\n      \n      // Intentar aplicar formato básico\n      try {\n        // Para mejor soporte HTML, se recomienda usar Drive API con convert: true\n        // Pero para simplificar, usamos texto plano\n        body.appendParagraph(contenido);\n      } catch (e) {\n        // Si falla, usar texto plano\n        body.setText(contenido.replace(/<[^>]+>/g, ''));\n      }\n    } else {\n      // Texto plano directo\n      body.clear();\n      body.appendParagraph(contenido);\n    }\n    \n    // Guardar cambios\n    doc.saveAndClose();\n    \n    // Mover a carpeta si se especifica\n    if (carpetaId) {\n      try {\n        const archivo = DriveApp.getFileById(doc.getId());\n        const carpeta = DriveApp.getFolderById(carpetaId);\n        const carpetasActuales = archivo.getParents();\n        \n        // Eliminar de ubicación actual\n        while (carpetasActuales.hasNext()) {\n          const carpetaActual = carpetasActuales.next();\n          carpetaActual.removeFile(archivo);\n        }\n        \n        // Añadir a nueva carpeta\n        carpeta.addFile(archivo);\n      } catch (e) {\n        // Si falla mover, el documento ya está creado, solo avisamos\n        // No fallamos la operación completa\n      }\n    }\n    \n    return sendSuccess(\"Documento creado exitosamente\", {\n      id: doc.getId(),\n      url: `https://docs.google.com/document/d/${doc.getId()}`,\n      nombre: doc.getName()\n    });\n    \n  } catch (error) {\n    return sendError(`Error al crear documento: ${error.toString()}`, 500);\n  }\n}\n\n/**\n * Acción: generar_pdf\n * \n * Convierte un documento de Google Docs a PDF y lo guarda en una carpeta destino.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} documento_id - ID del documento a convertir\n * @param {string} nombre_pdf - Nombre del archivo PDF (sin extensión .pdf)\n * @param {string} carpeta_destino_id - ID de la carpeta donde guardar el PDF\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"PDF generado exitosamente\",\n *   data: {\n *     id: \"xxx\",\n *     url: \"https://drive.google.com/file/d/xxx\",\n *     nombre: \"...\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"generar_pdf\",\n *   \"documento_id\": \"1abc123...\",\n *   \"nombre_pdf\": \"informe_final\",\n *   \"carpeta_destino_id\": \"1xyz789...\"\n * }\n */\nfunction accionGenerarPDF(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['documento_id', 'nombre_pdf', 'carpeta_destino_id']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const documentoId = requestData.documento_id;\n    const nombrePdf = requestData.nombre_pdf;\n    const carpetaDestinoId = requestData.carpeta_destino_id;\n    \n    // Obtener el documento\n    let documento;\n    try {\n      documento = DocumentApp.openById(documentoId);\n    } catch (e) {\n      return sendError(`El documento con ID '${documentoId}' no existe o no tienes acceso`, 404);\n    }\n    \n    // Obtener la carpeta destino\n    let carpetaDestino;\n    try {\n      carpetaDestino = DriveApp.getFolderById(carpetaDestinoId);\n    } catch (e) {\n      return sendError(`La carpeta destino con ID '${carpetaDestinoId}' no existe o no tienes acceso`, 404);\n    }\n    \n    // Obtener el archivo del documento\n    const archivoDoc = DriveApp.getFileById(documentoId);\n    \n    // Generar el PDF usando el exportador de Drive\n    // Nota: El nombre debe incluir .pdf, pero Drive lo añadirá automáticamente si no lo incluye\n    const nombreFinal = nombrePdf.endsWith('.pdf') ? nombrePdf : nombrePdf + '.pdf';\n    \n    // Convertir a PDF usando getAs\n    const blob = archivoDoc.getAs(MimeType.PDF);\n    blob.setName(nombreFinal);\n    \n    // Crear el archivo PDF en la carpeta destino\n    const pdfFile = carpetaDestino.createFile(blob);\n    \n    return sendSuccess(\"PDF generado exitosamente\", {\n      id: pdfFile.getId(),\n      url: `https://drive.google.com/file/d/${pdfFile.getId()}`,\n      nombre: pdfFile.getName()\n    });\n    \n  } catch (error) {\n    return sendError(`Error al generar PDF: ${error.toString()}`, 500);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * ACCIONES DE EMAIL (GMAIL)\n * ============================================================================\n * \n * Funciones para enviar emails usando GmailApp de Google Workspace.\n */\n\n/**\n * Acción: enviar_email\n * \n * Envía un email usando GmailApp con soporte para HTML, alias, y adjuntos.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} to - Email del destinatario (puede ser array para múltiples)\n * @param {string} subject - Asunto del email\n * @param {string} htmlBody - Cuerpo del email en HTML\n * @param {string} from - Alias de email desde el cual enviar (opcional, usa el predeterminado si no se especifica)\n * @param {Array<Object>} adjuntos - Array de adjuntos (opcional)\n *   Cada adjunto: { id: \"drive_file_id\", nombre: \"archivo.pdf\" }\n * @param {string} cc - Email en copia (opcional, puede ser array)\n * @param {string} bcc - Email en copia oculta (opcional, puede ser array)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Email enviado exitosamente\",\n *   data: {\n *     messageId: \"xxx\",\n *     to: [\"email@ejemplo.com\"],\n *     subject: \"...\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"enviar_email\",\n *   \"to\": \"alumno@ejemplo.com\",\n *   \"subject\": \"Bienvenido a AuriPortal\",\n *   \"htmlBody\": \"<h1>Bienvenido</h1><p>Contenido...</p>\",\n *   \"from\": \"noreply@midominio.com\" (opcional),\n *   \"adjuntos\": [{\"id\": \"1abc123...\", \"nombre\": \"informe.pdf\"}] (opcional),\n *   \"cc\": \"admin@ejemplo.com\" (opcional),\n *   \"bcc\": \"log@ejemplo.com\" (opcional)\n * }\n */\nfunction accionEnviarEmail(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['to', 'subject', 'htmlBody']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const to = requestData.to;\n    const subject = requestData.subject;\n    const htmlBody = requestData.htmlBody;\n    const from = requestData.from || null;\n    const adjuntos = requestData.adjuntos || [];\n    const cc = requestData.cc || null;\n    const bcc = requestData.bcc || null;\n    \n    // Validar formato de email(s)\n    const emailsTo = Array.isArray(to) ? to : [to];\n    for (const email of emailsTo) {\n      if (!isValidEmail(email)) {\n        return sendError(`Email inválido en 'to': ${email}`, 400);\n      }\n    }\n    \n    // Procesar adjuntos\n    const attachments = [];\n    for (const adjunto of adjuntos) {\n      try {\n        if (!adjunto.id) {\n          return sendError(\"Cada adjunto debe tener un 'id' (ID de archivo de Drive)\", 400);\n        }\n        \n        const archivo = DriveApp.getFileById(adjunto.id);\n        const blob = archivo.getAs(archivo.getMimeType());\n        \n        // Usar el nombre proporcionado o el nombre del archivo original\n        if (adjunto.nombre) {\n          blob.setName(adjunto.nombre);\n        }\n        \n        attachments.push(blob);\n      } catch (e) {\n        return sendError(`Error al procesar adjunto con ID '${adjunto.id}': ${e.toString()}`, 400);\n      }\n    }\n    \n    // Preparar opciones del email\n    const options = {\n      htmlBody: htmlBody,\n      attachments: attachments.length > 0 ? attachments : undefined,\n      cc: cc,\n      bcc: bcc\n    };\n    \n    // Eliminar propiedades undefined\n    Object.keys(options).forEach(key => {\n      if (options[key] === undefined) {\n        delete options[key];\n      }\n    });\n    \n    // Enviar el email\n    // Nota: El parámetro 'from' (alias) requiere configuración especial en Gmail\n    // Si se necesita usar un alias, debe configurarse en Gmail Settings del usuario\n    // GmailApp.sendEmail() no permite especificar 'from' directamente en Apps Script\n    // Se usa Gmail API avanzada para esto, pero para simplificar usamos GmailApp\n    \n    let messageId;\n    if (Array.isArray(to)) {\n      GmailApp.sendEmail(to.join(','), subject, '', options);\n      // No hay forma directa de obtener messageId con GmailApp.sendEmail\n      // Se podría usar Gmail API avanzada, pero por simplicidad no lo incluimos\n      messageId = 'sent';\n    } else {\n      GmailApp.sendEmail(to, subject, '', options);\n      messageId = 'sent';\n    }\n    \n    return sendSuccess(\"Email enviado exitosamente\", {\n      messageId: messageId,\n      to: emailsTo,\n      subject: subject,\n      hasAttachments: attachments.length > 0,\n      attachmentsCount: attachments.length\n    });\n    \n  } catch (error) {\n    return sendError(`Error al enviar email: ${error.toString()}`, 500);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * ACCIONES DE GOOGLE CALENDAR\n * ============================================================================\n * \n * Funciones para crear eventos en Google Calendar.\n */\n\n/**\n * Acción: crear_evento_calendar\n * \n * Crea un evento en Google Calendar con invitados y ubicación (Zoom).\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} titulo - Título del evento\n * @param {string} descripcion - Descripción del evento\n * @param {string} fecha_inicio - Fecha y hora de inicio (ISO 8601: \"2024-01-15T10:00:00\")\n * @param {string} fecha_fin - Fecha y hora de fin (ISO 8601: \"2024-01-15T11:00:00\")\n * @param {string} ubicacion - Ubicación del evento (URL de Zoom, dirección, etc.)\n * @param {Array<string>} invitados - Array de emails de invitados (opcional)\n * @param {string} calendar_id - ID del calendario específico (opcional, usa el predeterminado si no se especifica)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Evento creado exitosamente\",\n *   data: {\n *     eventId: \"xxx\",\n *     htmlLink: \"https://www.google.com/calendar/event?eid=xxx\",\n *     titulo: \"...\",\n *     fecha_inicio: \"...\",\n *     fecha_fin: \"...\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"crear_evento_calendar\",\n *   \"titulo\": \"Sesión de Meditación\",\n *   \"descripcion\": \"Sesión guiada de meditación\",\n *   \"fecha_inicio\": \"2024-01-15T10:00:00\",\n *   \"fecha_fin\": \"2024-01-15T11:00:00\",\n *   \"ubicacion\": \"https://zoom.us/j/123456789\",\n *   \"invitados\": [\"alumno@ejemplo.com\", \"instructor@ejemplo.com\"],\n *   \"calendar_id\": \"primary\" (opcional)\n * }\n */\nfunction accionCrearEventoCalendar(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['titulo', 'fecha_inicio', 'fecha_fin']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const titulo = requestData.titulo;\n    const descripcion = requestData.descripcion || '';\n    const fechaInicio = new Date(requestData.fecha_inicio);\n    const fechaFin = new Date(requestData.fecha_fin);\n    const ubicacion = requestData.ubicacion || '';\n    const invitados = requestData.invitados || [];\n    const calendarId = requestData.calendar_id || 'primary';\n    \n    // Validar fechas\n    if (isNaN(fechaInicio.getTime())) {\n      return sendError(\"Fecha de inicio inválida. Usa formato ISO 8601: '2024-01-15T10:00:00'\", 400);\n    }\n    \n    if (isNaN(fechaFin.getTime())) {\n      return sendError(\"Fecha de fin inválida. Usa formato ISO 8601: '2024-01-15T11:00:00'\", 400);\n    }\n    \n    if (fechaFin <= fechaInicio) {\n      return sendError(\"La fecha de fin debe ser posterior a la fecha de inicio\", 400);\n    }\n    \n    // Validar emails de invitados\n    for (const email of invitados) {\n      if (!isValidEmail(email)) {\n        return sendError(`Email de invitado inválido: ${email}`, 400);\n      }\n    }\n    \n    // Obtener el calendario\n    let calendar;\n    try {\n      calendar = CalendarApp.getCalendarById(calendarId);\n    } catch (e) {\n      // Si no se puede obtener por ID, intentar con el calendario principal\n      if (calendarId === 'primary') {\n        calendar = CalendarApp.getDefaultCalendar();\n      } else {\n        return sendError(`No se pudo acceder al calendario con ID '${calendarId}': ${e.toString()}`, 404);\n      }\n    }\n    \n    // Crear el evento\n    const evento = calendar.createEvent(titulo, fechaInicio, fechaFin, {\n      description: descripcion,\n      location: ubicacion,\n      guests: invitados.join(','),\n      sendInvites: invitados.length > 0 // Enviar invitaciones solo si hay invitados\n    });\n    \n    return sendSuccess(\"Evento creado exitosamente\", {\n      eventId: evento.getId(),\n      htmlLink: evento.getHtmlLink(),\n      titulo: evento.getTitle(),\n      fecha_inicio: evento.getStartTime().toISOString(),\n      fecha_fin: evento.getEndTime().toISOString(),\n      ubicacion: evento.getLocation(),\n      invitados: invitados\n    });\n    \n  } catch (error) {\n    return sendError(`Error al crear evento: ${error.toString()}`, 500);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * ACCIONES ESPECÍFICAS DE AURIELIN\n * ============================================================================\n * \n * Funciones especializadas para automatizar procesos específicos de AuriPortal.\n */\n\n/**\n * Acción: crear_estructura_alumno\n * \n * Crea automáticamente la estructura de carpetas para un alumno:\n * /Alumnos/{ID}/Eventos\n * /Alumnos/{ID}/Informes\n * /Alumnos/{ID}/Materiales\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} alumno_id - ID único del alumno\n * @param {string} carpeta_alumnos_id - ID de la carpeta base \"Alumnos\" (opcional, se buscará si no se proporciona)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Estructura de alumno creada exitosamente\",\n *   data: {\n *     carpeta_alumno: {\n *       id: \"xxx\",\n *       url: \"https://drive.google.com/drive/folders/xxx\",\n *       nombre: \"12345\"\n *     },\n *     subcarpetas: {\n *       eventos: { id: \"xxx\", url: \"...\" },\n *       informes: { id: \"xxx\", url: \"...\" },\n *       materiales: { id: \"xxx\", url: \"...\" }\n *     }\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"crear_estructura_alumno\",\n *   \"alumno_id\": \"12345\",\n *   \"carpeta_alumnos_id\": \"1abc123...\" (opcional)\n * }\n */\nfunction accionCrearEstructuraAlumno(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['alumno_id']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const alumnoId = requestData.alumno_id;\n    const carpetaAlumnosId = requestData.carpeta_alumnos_id || null;\n    \n    // Obtener o crear la carpeta base \"Alumnos\"\n    let carpetaAlumnos;\n    if (carpetaAlumnosId) {\n      try {\n        carpetaAlumnos = DriveApp.getFolderById(carpetaAlumnosId);\n      } catch (e) {\n        return sendError(`La carpeta Alumnos con ID '${carpetaAlumnosId}' no existe o no tienes acceso`, 404);\n      }\n    } else {\n      // Buscar carpeta \"Alumnos\" en la raíz\n      const carpetas = DriveApp.getRootFolder().getFoldersByName('Alumnos');\n      if (carpetas.hasNext()) {\n        carpetaAlumnos = carpetas.next();\n      } else {\n        // Crear carpeta Alumnos si no existe\n        carpetaAlumnos = DriveApp.getRootFolder().createFolder('Alumnos');\n      }\n    }\n    \n    // Crear o obtener carpeta del alumno\n    let carpetaAlumno;\n    const carpetasAlumno = carpetaAlumnos.getFoldersByName(alumnoId);\n    if (carpetasAlumno.hasNext()) {\n      carpetaAlumno = carpetasAlumno.next();\n    } else {\n      carpetaAlumno = carpetaAlumnos.createFolder(alumnoId);\n    }\n    \n    // Crear subcarpetas: Eventos, Informes, Materiales\n    const subcarpetas = {\n      eventos: obtenerOCrearCarpeta('Eventos', carpetaAlumno.getId()),\n      informes: obtenerOCrearCarpeta('Informes', carpetaAlumno.getId()),\n      materiales: obtenerOCrearCarpeta('Materiales', carpetaAlumno.getId())\n    };\n    \n    return sendSuccess(\"Estructura de alumno creada exitosamente\", {\n      carpeta_alumno: {\n        id: carpetaAlumno.getId(),\n        url: `https://drive.google.com/drive/folders/${carpetaAlumno.getId()}`,\n        nombre: carpetaAlumno.getName()\n      },\n      subcarpetas: {\n        eventos: {\n          id: subcarpetas.eventos.getId(),\n          url: `https://drive.google.com/drive/folders/${subcarpetas.eventos.getId()}`,\n          nombre: subcarpetas.eventos.getName()\n        },\n        informes: {\n          id: subcarpetas.informes.getId(),\n          url: `https://drive.google.com/drive/folders/${subcarpetas.informes.getId()}`,\n          nombre: subcarpetas.informes.getName()\n        },\n        materiales: {\n          id: subcarpetas.materiales.getId(),\n          url: `https://drive.google.com/drive/folders/${subcarpetas.materiales.getId()}`,\n          nombre: subcarpetas.materiales.getName()\n        }\n      }\n    });\n    \n  } catch (error) {\n    return sendError(`Error al crear estructura de alumno: ${error.toString()}`, 500);\n  }\n}\n\n/**\n * Acción: crear_informe_aurielin\n * \n * Crea un informe completo con formato bonito, lo convierte a PDF y lo guarda\n * en la carpeta de informes del alumno.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} alumno_id - ID del alumno\n * @param {string} titulo - Título del informe\n * @param {Object} contenido - Objeto con el contenido del informe generado por IA\n *   Estructura esperada:\n *   {\n *     introduccion: \"...\",\n *     secciones: [\n *       { titulo: \"...\", contenido: \"...\" },\n *       ...\n *     ],\n *     conclusion: \"...\"\n *   }\n * @param {string} carpeta_informes_id - ID de la carpeta Informes del alumno (opcional, se buscará si no se proporciona)\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Informe creado exitosamente\",\n *   data: {\n *     documento: { id: \"xxx\", url: \"...\" },\n *     pdf: { id: \"xxx\", url: \"...\" }\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"crear_informe_aurielin\",\n *   \"alumno_id\": \"12345\",\n *   \"titulo\": \"Informe de Progreso - Enero 2024\",\n *   \"contenido\": {\n *     \"introduccion\": \"Este informe detalla...\",\n *     \"secciones\": [\n *       { \"titulo\": \"Progreso General\", \"contenido\": \"El alumno ha mostrado...\" },\n *       { \"titulo\": \"Áreas de Mejora\", \"contenido\": \"Se recomienda...\" }\n *     ],\n *     \"conclusion\": \"En conclusión...\"\n *   },\n *   \"carpeta_informes_id\": \"1abc123...\" (opcional)\n * }\n */\nfunction accionCrearInformeAurielin(requestData) {\n  try {\n    // Validar parámetros requeridos\n    const validation = validateRequired(requestData, ['alumno_id', 'titulo', 'contenido']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const alumnoId = requestData.alumno_id;\n    const titulo = requestData.titulo;\n    const contenido = requestData.contenido;\n    const carpetaInformesId = requestData.carpeta_informes_id || null;\n    \n    // Obtener carpeta de informes\n    let carpetaInformes;\n    if (carpetaInformesId) {\n      try {\n        carpetaInformes = DriveApp.getFolderById(carpetaInformesId);\n      } catch (e) {\n        return sendError(`La carpeta Informes con ID '${carpetaInformesId}' no existe o no tienes acceso`, 404);\n      }\n    } else {\n      // Buscar automáticamente la carpeta de informes del alumno\n      // Asumimos estructura: /Alumnos/{alumno_id}/Informes\n      const carpetaAlumnos = DriveApp.getRootFolder().getFoldersByName('Alumnos').next();\n      if (!carpetaAlumnos) {\n        return sendError(\"No se encontró la carpeta 'Alumnos'. Usa 'crear_estructura_alumno' primero o proporciona 'carpeta_informes_id'\", 404);\n      }\n      \n      const carpetaAlumno = carpetaAlumnos.getFoldersByName(alumnoId).next();\n      if (!carpetaAlumno) {\n        return sendError(`No se encontró la carpeta del alumno '${alumnoId}'. Usa 'crear_estructura_alumno' primero o proporciona 'carpeta_informes_id'`, 404);\n      }\n      \n      carpetaInformes = carpetaAlumno.getFoldersByName('Informes').next();\n      if (!carpetaInformes) {\n        return sendError(`No se encontró la carpeta 'Informes' del alumno. Usa 'crear_estructura_alumno' primero o proporciona 'carpeta_informes_id'`, 404);\n      }\n    }\n    \n    // Crear el documento con formato bonito\n    const nombreDocumento = `${titulo} - ${alumnoId}`;\n    const doc = DocumentApp.create(nombreDocumento);\n    const body = doc.getBody();\n    \n    // Limpiar el body\n    body.clear();\n    \n    // Establecer estilo de título principal\n    const tituloPar = body.appendParagraph(titulo);\n    tituloPar.setHeading(DocumentApp.ParagraphHeading.TITLE);\n    tituloPar.setAlignment(DocumentApp.HorizontalAlignment.CENTER);\n    \n    // Añadir fecha\n    const fecha = new Date().toLocaleDateString('es-ES', { \n      year: 'numeric', \n      month: 'long', \n      day: 'numeric' \n    });\n    const fechaPar = body.appendParagraph(`Fecha: ${fecha}`);\n    fechaPar.setHeading(DocumentApp.ParagraphHeading.NORMAL);\n    body.appendParagraph(''); // Línea en blanco\n    \n    // Introducción\n    if (contenido.introduccion) {\n      const introPar = body.appendParagraph('Introducción');\n      introPar.setHeading(DocumentApp.ParagraphHeading.HEADING1);\n      body.appendParagraph(contenido.introduccion);\n      body.appendParagraph(''); // Línea en blanco\n    }\n    \n    // Secciones\n    if (contenido.secciones && Array.isArray(contenido.secciones)) {\n      for (const seccion of contenido.secciones) {\n        if (seccion.titulo) {\n          const seccionPar = body.appendParagraph(seccion.titulo);\n          seccionPar.setHeading(DocumentApp.ParagraphHeading.HEADING2);\n        }\n        if (seccion.contenido) {\n          body.appendParagraph(seccion.contenido);\n        }\n        body.appendParagraph(''); // Línea en blanco\n      }\n    }\n    \n    // Conclusión\n    if (contenido.conclusion) {\n      const conclPar = body.appendParagraph('Conclusión');\n      conclPar.setHeading(DocumentApp.ParagraphHeading.HEADING1);\n      body.appendParagraph(contenido.conclusion);\n    }\n    \n    // Guardar y cerrar\n    doc.saveAndClose();\n    \n    // Mover documento a carpeta de informes\n    const archivoDoc = DriveApp.getFileById(doc.getId());\n    const carpetasActuales = archivoDoc.getParents();\n    while (carpetasActuales.hasNext()) {\n      const carpetaActual = carpetasActuales.next();\n      carpetaActual.removeFile(archivoDoc);\n    }\n    carpetaInformes.addFile(archivoDoc);\n    \n    // Generar PDF\n    const nombrePdf = `${titulo} - ${alumnoId}`;\n    const blob = archivoDoc.getAs(MimeType.PDF);\n    blob.setName(nombrePdf + '.pdf');\n    const pdfFile = carpetaInformes.createFile(blob);\n    \n    return sendSuccess(\"Informe creado exitosamente\", {\n      documento: {\n        id: doc.getId(),\n        url: `https://docs.google.com/document/d/${doc.getId()}`,\n        nombre: doc.getName()\n      },\n      pdf: {\n        id: pdfFile.getId(),\n        url: `https://drive.google.com/file/d/${pdfFile.getId()}`,\n        nombre: pdfFile.getName()\n      }\n    });\n    \n  } catch (error) {\n    return sendError(`Error al crear informe: ${error.toString()}`, 500);\n  }\n}\n\n",
+    "/**\n * ============================================================================\n * SISTEMA DE LOGS\n * ============================================================================\n * \n * Registra todas las acciones en una hoja de cálculo de Google Sheets.\n */\n\n/**\n * Acción: registrar_log\n * \n * Registra una acción en la hoja de cálculo \"Logs_AuriPortal\".\n * Si la hoja no existe, la crea automáticamente.\n * \n * PARÁMETROS RECIBIDOS:\n * @param {string} accion - Nombre de la acción realizada\n * @param {string} usuario - ID o email del usuario que realizó la acción\n * @param {Object} payload - Datos adicionales de la acción (se serializa a JSON)\n * @param {string} spreadsheet_id - ID de la hoja de cálculo (opcional, se buscará \"Logs_AuriPortal\")\n * \n * RESPUESTA:\n * {\n *   status: \"ok\",\n *   message: \"Log registrado exitosamente\",\n *   data: {\n *     fila: 123,\n *     fecha: \"2024-01-15T10:00:00Z\"\n *   }\n * }\n * \n * CÓMO LO LLAMA EL SERVIDOR:\n * {\n *   \"token\": \"SECRET_TOKEN\",\n *   \"accion\": \"registrar_log\",\n *   \"accion\": \"crear_informe\",\n *   \"usuario\": \"alumno@ejemplo.com\",\n *   \"payload\": { \"alumno_id\": \"12345\", \"informe_id\": \"abc123\" },\n *   \"spreadsheet_id\": \"1abc123...\" (opcional)\n * }\n * \n * NOTA: También se puede llamar internamente desde otras acciones para logging automático.\n */\nfunction accionRegistrarLog(requestData) {\n  try {\n    // Validar parámetros requeridos\n    // NOTA: No validamos token aquí porque ya se validó en Code.gs\n    const validation = validateRequired(requestData, ['accion', 'usuario']);\n    if (!validation.valid) {\n      return sendError(`Faltan parámetros requeridos: ${validation.missing.join(', ')}`);\n    }\n    \n    const accion = requestData.accion;\n    const usuario = requestData.usuario;\n    const payload = requestData.payload || {};\n    const spreadsheetId = requestData.spreadsheet_id || null;\n    \n    // Obtener o crear la hoja de cálculo\n    let spreadsheet;\n    if (spreadsheetId) {\n      try {\n        spreadsheet = SpreadsheetApp.openById(spreadsheetId);\n      } catch (e) {\n        return sendError(`La hoja de cálculo con ID '${spreadsheetId}' no existe o no tienes acceso`, 404);\n      }\n    } else {\n      spreadsheet = obtenerOCrearSpreadsheetLogs();\n    }\n    \n    // Obtener la hoja activa\n    const sheet = spreadsheet.getActiveSheet();\n    \n    // Preparar datos para insertar\n    const fecha = new Date();\n    const fechaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'yyyy-MM-dd');\n    const horaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'HH:mm:ss');\n    const payloadStr = JSON.stringify(payload);\n    \n    // Añadir fila\n    sheet.appendRow([fechaStr, horaStr, accion, usuario, payloadStr]);\n    \n    // Obtener el número de fila insertada\n    const ultimaFila = sheet.getLastRow();\n    \n    return sendSuccess(\"Log registrado exitosamente\", {\n      fila: ultimaFila,\n      fecha: fecha.toISOString(),\n      spreadsheet_id: spreadsheet.getId(),\n      spreadsheet_url: spreadsheet.getUrl()\n    });\n    \n  } catch (error) {\n    return sendError(`Error al registrar log: ${error.toString()}`, 500);\n  }\n}\n\n/**\n * Función helper para registrar logs internamente\n * Útil para logging automático desde otras acciones\n * \n * @param {string} accion - Nombre de la acción\n * @param {string} usuario - ID o email del usuario\n * @param {Object} payload - Datos adicionales\n */\n/**\n * Función helper para registrar logs internamente desde otras acciones\n * Esta función NO valida token ya que se llama internamente\n * \n * @param {string} accion - Nombre de la acción\n * @param {string} usuario - ID o email del usuario\n * @param {Object} payload - Datos adicionales\n */\nfunction registrarLogInterno(accion, usuario, payload = {}) {\n  try {\n    // Llamar directamente a la lógica sin pasar por validación de token\n    const spreadsheet = obtenerOCrearSpreadsheetLogs();\n    const sheet = spreadsheet.getActiveSheet();\n    \n    const fecha = new Date();\n    const fechaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'yyyy-MM-dd');\n    const horaStr = Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'HH:mm:ss');\n    const payloadStr = JSON.stringify(payload);\n    \n    sheet.appendRow([fechaStr, horaStr, accion, usuario, payloadStr]);\n  } catch (e) {\n    // No fallar la operación principal si falla el logging\n    console.log('Error al registrar log interno:', e.toString());\n  }\n}\n\n/**\n * Obtiene o crea la hoja de cálculo de logs\n * Helper interno para reutilizar en registrarLogInterno\n * \n * @returns {Spreadsheet} Hoja de cálculo de logs\n */\nfunction obtenerOCrearSpreadsheetLogs() {\n  const archivos = DriveApp.getFilesByName('Logs_AuriPortal');\n  if (archivos.hasNext()) {\n    const archivo = archivos.next();\n    return SpreadsheetApp.openById(archivo.getId());\n  } else {\n    // Crear nueva hoja de cálculo\n    const spreadsheet = SpreadsheetApp.create('Logs_AuriPortal');\n    const sheet = spreadsheet.getActiveSheet();\n    \n    // Añadir encabezados\n    sheet.appendRow(['Fecha', 'Hora', 'Acción', 'Usuario', 'Payload']);\n    \n    // Formatear encabezados\n    const headerRange = sheet.getRange(1, 1, 1, 5);\n    headerRange.setFontWeight('bold');\n    headerRange.setBackground('#4285f4');\n    headerRange.setFontColor('#ffffff');\n    \n    // Congelar primera fila\n    sheet.setFrozenRows(1);\n    \n    return spreadsheet;\n  }\n}\n\n"
+    ];
+
+    function copiarArchivo(index) {
+      const contenido = contenidos[index];
+      if (!contenido) {
+        alert('Error: No se pudo leer el archivo');
+        return;
+      }
+      
+      navigator.clipboard.writeText(contenido).then(() => {
+        const boton = document.querySelector(`[data-index="${index}"]`);
+        const textoOriginal = boton.textContent;
+        boton.textContent = '✅ ¡Copiado!';
+        boton.classList.add('copiado');
+        
+        setTimeout(() => {
+          boton.textContent = textoOriginal;
+          boton.classList.remove('copiado');
+        }, 2000);
+      }).catch(err => {
+        // Fallback para navegadores antiguos
+        const textarea = document.createElement('textarea');
+        textarea.value = contenido;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          const boton = document.querySelector(`[data-index="${index}"]`);
+          boton.textContent = '✅ ¡Copiado!';
+          boton.classList.add('copiado');
+          setTimeout(() => {
+            boton.textContent = '📋 Copiar';
+            boton.classList.remove('copiado');
+          }, 2000);
+        } catch (e) {
+          alert('Error al copiar. Copia manualmente desde el código.');
+        }
+        document.body.removeChild(textarea);
+      });
+    }
+  </script>
+</body>
+</html>

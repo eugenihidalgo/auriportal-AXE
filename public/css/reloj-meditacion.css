@@ -1,0 +1,470 @@
+/* public/css/reloj-meditacion.css */
+/* Estilos para el reloj de meditación - SOLUCIÓN DEFINITIVA */
+/* Usa variables CSS del sistema para compatibilidad con modo oscuro */
+/* REGLA ABSOLUTA: En modo oscuro TODO debe ser oscuro - NO fondos claros */
+
+.reloj-meditacion-container {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg, 20px);
+  padding: 24px;
+  margin: 30px 0;
+  box-shadow: 0 4px 15px var(--shadow-md);
+  border: 2px solid var(--border-accent);
+  color: var(--text-primary);
+}
+
+.reloj-titulo {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-accent);
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.reloj-configuracion {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reloj-control-tiempo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reloj-label {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.reloj-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.reloj-btn-control {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border-accent);
+  background: var(--input-bg);
+  border-radius: var(--radius-sm, 12px);
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--text-accent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reloj-btn-control:hover {
+  background: var(--accent-primary);
+  color: var(--button-text-color);
+  transform: scale(1.1);
+}
+
+.reloj-input-tiempo {
+  width: 80px;
+  height: 40px;
+  border: 2px solid var(--border-accent);
+  border-radius: var(--radius-sm, 12px);
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-align: center;
+  color: var(--text-accent);
+  background: var(--input-bg);
+}
+
+.reloj-input-tiempo:focus {
+  outline: none;
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 3px var(--shadow-sm);
+}
+
+.reloj-control-musica {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reloj-select-musica {
+  width: 100%;
+  padding: 0.5rem;
+  background-color: var(--input-bg);
+  border: 2px solid var(--border-accent);
+  border-radius: var(--radius-sm, 12px);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.reloj-select-musica:focus {
+  outline: none;
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 3px var(--shadow-sm);
+}
+
+.reloj-select-musica option {
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.reloj-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.reloj-checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.reloj-btn-iniciar {
+  padding: 15px 30px;
+  background: var(--gradient-success) !important; /* VERDE para iniciar meditación */
+  border: none;
+  border-radius: var(--radius-md, 16px);
+  font-size: 1.2rem;
+  font-weight: 700 !important; /* VERDE = font-weight 700 */
+  color: #ffffff !important;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.reloj-btn-iniciar:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  transform: scale(1.03);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5) !important;
+}
+
+.reloj-en-ejecucion {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reloj-display {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: var(--bg-panel);
+  padding: 20px;
+  border-radius: var(--radius-md, 16px);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+  color: var(--text-primary);
+}
+
+.reloj-tiempo-transcurrido,
+.reloj-tiempo-restante {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+}
+
+.reloj-tiempo-label {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.reloj-tiempo-valor {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--text-accent);
+  font-family: 'Courier New', monospace;
+}
+
+.reloj-controles {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.reloj-btn-pausar,
+.reloj-btn-reanudar,
+.reloj-btn-reiniciar {
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-md, 16px);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.reloj-btn-pausar {
+  background: linear-gradient(135deg, var(--accent-warning), #ff8c00);
+  color: var(--button-text-color);
+}
+
+.reloj-btn-reanudar {
+  background: var(--gradient-success) !important; /* VERDE para reanudar */
+  color: #ffffff !important;
+  font-weight: 700 !important; /* VERDE = font-weight 700 */
+}
+
+.reloj-btn-reiniciar {
+  background: linear-gradient(135deg, var(--accent-error), #ee5a5a);
+  color: var(--button-text-color);
+}
+
+.reloj-btn-pausar:hover,
+.reloj-btn-reanudar:hover,
+.reloj-btn-reiniciar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .reloj-meditacion-container {
+    padding: 20px;
+    margin: 20px 0;
+  }
+  
+  .reloj-titulo {
+    font-size: 1.3rem;
+  }
+  
+  .reloj-tiempo-valor {
+    font-size: 1.5rem;
+  }
+  
+  .reloj-controles {
+    flex-direction: column;
+  }
+  
+  .reloj-btn-pausar,
+  .reloj-btn-reanudar,
+  .reloj-btn-reiniciar {
+    width: 100%;
+  }
+}
+
+/* Mensaje inline de finalización dentro del reloj - NO overlay flotante */
+.reloj-finalizado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 30px 20px;
+  animation: fadeIn 0.5s ease;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg, 20px);
+  border: 2px solid var(--border-accent);
+  color: var(--text-primary);
+}
+
+.reloj-finalizado-icono {
+  font-size: 3.5rem;
+  margin-bottom: 20px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.reloj-finalizado-titulo {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--text-accent);
+  margin-bottom: 15px;
+  margin-top: 0;
+}
+
+.reloj-finalizado-mensaje {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 30px;
+  max-width: 400px;
+}
+
+.reloj-finalizado-boton {
+  padding: 15px 40px;
+  background: var(--gradient-success) !important; /* VERDE para finalizado */
+  border: none;
+  border-radius: var(--radius-md, 16px);
+  font-size: 1.1rem;
+  font-weight: 700 !important; /* VERDE = font-weight 700 */
+  color: #ffffff !important;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 250px;
+}
+
+.reloj-finalizado-boton:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Mensajes de error y confirmación internos - SOLUCIÓN DEFINITIVA */
+.reloj-mensaje-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-error);
+  color: var(--button-text-color);
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+  max-width: 90%;
+  font-weight: 600;
+}
+
+.reloj-mensaje-error.mostrar {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.reloj-confirmacion-reinicio {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-card);
+  padding: 30px;
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 4px 20px var(--shadow-lg);
+  border: 2px solid var(--border-accent);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  max-width: 90%;
+  color: var(--text-primary);
+}
+
+.reloj-confirmacion-reinicio.mostrar {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.reloj-confirmacion-content p {
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.reloj-confirmacion-botones {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.reloj-confirmacion-si,
+.reloj-confirmacion-no {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-sm, 12px);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reloj-confirmacion-si {
+  background: linear-gradient(135deg, var(--accent-error), #ee5a5a);
+  color: var(--button-text-color);
+}
+
+.reloj-confirmacion-no {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 2px solid var(--border-soft);
+}
+
+.reloj-confirmacion-si:hover,
+.reloj-confirmacion-no:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px var(--shadow-md, rgba(0, 0, 0, 0.12));
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .reloj-overlay-content {
+    padding: 30px 20px;
+    max-width: 90%;
+  }
+  
+  .reloj-overlay-icono {
+    font-size: 3rem;
+    margin-bottom: 15px;
+  }
+  
+  .reloj-overlay-titulo {
+    font-size: 1.6rem;
+    margin-bottom: 12px;
+  }
+  
+  .reloj-overlay-mensaje {
+    font-size: 1rem;
+    margin-bottom: 25px;
+  }
+  
+  .reloj-overlay-boton {
+    padding: 12px 30px;
+    font-size: 1rem;
+  }
+  
+  .reloj-finalizado {
+    padding: 25px 15px;
+  }
+  
+  .reloj-finalizado-icono {
+    font-size: 3rem;
+    margin-bottom: 15px;
+  }
+  
+  .reloj-finalizado-mensaje {
+    font-size: 1rem;
+    margin-bottom: 25px;
+  }
+}
+

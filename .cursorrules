@@ -1,0 +1,92 @@
+# Configuración de Bugbot para AuriPortal
+
+## Alcance del Análisis
+
+Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
+
+### Archivos Principales
+- `server.js` - Servidor Node.js principal
+- `src/**/*.js` - Todo el código fuente (router, endpoints, modules, services, config)
+- `src/**/*.html` - Plantillas HTML
+- `scripts/**/*.js` - Scripts de utilidades
+- `mcp-server/**/*.js` - Servidores MCP
+- `database/**/*.js` - Código de base de datos
+
+### Tipos de Bugs a Detectar
+
+1. **Errores de Sintaxis**
+   - Errores de JavaScript/Node.js
+   - Problemas con imports/exports (ES modules)
+   - Errores de tipado implícito
+
+2. **Errores de Lógica**
+   - Variables no definidas
+   - Funciones no retornadas correctamente
+   - Promesas no manejadas (missing await/catch)
+   - Callbacks sin manejo de errores
+
+3. **Problemas de Seguridad**
+   - Inyección SQL potencial
+   - Exposición de tokens/secretos
+   - Manejo inseguro de cookies
+   - Validación de entrada faltante
+
+4. **Problemas de Rendimiento**
+   - Bucles infinitos potenciales
+   - Memory leaks
+   - Operaciones síncronas bloqueantes
+
+5. **Problemas de API**
+   - Llamadas a APIs sin manejo de errores
+   - Rate limiting no considerado
+   - Timeouts faltantes
+   - Headers incorrectos
+
+6. **Problemas de Async/Await**
+   - Promesas no esperadas
+   - Try/catch faltantes
+   - Race conditions
+
+7. **Problemas de Configuración**
+   - Variables de entorno no definidas
+   - Valores por defecto inseguros
+   - Configuraciones incorrectas
+
+### Archivos a Excluir del Análisis
+
+- `node_modules/**` - Dependencias externas
+- `**/*.db` - Bases de datos
+- `logs/**` - Archivos de log
+- `**/*.md` - Documentación (a menos que contenga código)
+
+### Reglas Específicas del Proyecto
+
+1. **Node.js ES Modules**: El proyecto usa `"type": "module"`, verificar imports correctos
+2. **Variables de Entorno**: Verificar que todas las variables requeridas estén en `.env`
+3. **Rutas**: Verificar que todas las rutas en `router.js` tengan handlers correspondientes
+4. **Base de Datos**: Verificar queries SQL y PostgreSQL
+5. **APIs Externas**: Verificar manejo de errores en llamadas a Kajabi, ClickUp, Typeform
+
+### Prioridad de Bugs
+
+- **Crítico**: Errores que rompen el servidor o comprometen seguridad
+- **Alto**: Errores de lógica que causan comportamiento incorrecto
+- **Medio**: Problemas de rendimiento o buenas prácticas
+- **Bajo**: Sugerencias de mejora de código
+
+### Lenguajes a Analizar
+
+- JavaScript (Node.js 18+)
+- HTML
+- SQL (PostgreSQL)
+- Shell scripts (.sh)
+- JSON (configuraciones)
+
+---
+
+**Bugbot activado para todo el servidor AuriPortal**
+
+
+
+
+

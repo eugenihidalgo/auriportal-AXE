@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="theme-color" content="#ffd86b" />
+  <meta name="description" content="Selecciona las preparaciones para tu práctica" />
+  <title>{{TITULO}} - AuriPortal</title>
+  <link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+  <link rel="stylesheet" href="/css/theme-variables.css" />
+  <link rel="stylesheet" href="/css/theme-overrides.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      padding: 20px;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      color: var(--text-accent);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .preparaciones-container {
+      background: var(--bg-card);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 6px 14px var(--shadow-sm);
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    .preparacion-item {
+      margin-bottom: 15px;
+      padding: 15px;
+      border: 2px solid var(--border-soft);
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .preparacion-item:hover {
+      border-color: var(--accent-primary);
+      background: var(--bg-card-active);
+    }
+
+    .preparacion-checkbox {
+      display: flex;
+      align-items: flex-start;
+      cursor: pointer;
+      gap: 12px;
+    }
+
+    .preparacion-checkbox input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .preparacion-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .preparacion-info strong {
+      font-size: 1.1rem;
+      color: var(--text-accent);
+    }
+
+    .preparacion-meta {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .obligatoria-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--badge-bg-obligatory);
+      color: var(--badge-text-obligatory);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-left: 5px;
+    }
+
+    .boton-continuar {
+      padding: 15px 30px;
+      background: var(--gradient-primary);
+      border: none;
+      border-radius: 12px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--button-text-color);
+      box-shadow: 0 4px 10px var(--shadow-md);
+      transition: all 0.2s ease;
+      margin-top: 20px;
+      display: block;
+      width: 100%;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .boton-continuar:hover {
+      background: var(--gradient-hover);
+      transform: scale(1.03);
+      box-shadow: 0 6px 15px var(--shadow-lg);
+    }
+
+    .boton-continuar:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 15px;
+      }
+
+      .preparaciones-container {
+        padding: 15px;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📚 {{TITULO}}</h1>
+      <p style="color: var(--text-secondary);">Selecciona las preparaciones que deseas realizar</p>
+    </div>
+
+    <form id="formPreparaciones" method="POST" action="/practica/{{PRACTICA_ID}}/ejecucion">
+      <div class="preparaciones-container">
+        {{PREPARACIONES_HTML}}
+      </div>
+
+      <button type="submit" class="boton-continuar" id="btnContinuar" disabled>
+        Continuar a Ejecución →
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // Habilitar botón solo si hay al menos una selección
+    const form = document.getElementById('formPreparaciones');
+    const btnContinuar = document.getElementById('btnContinuar');
+    const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+
+    function actualizarBoton() {
+      const seleccionados = Array.from(checkboxes).filter(cb => cb.checked);
+      btnContinuar.disabled = seleccionados.length === 0;
+    }
+
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', actualizarBoton);
+    });
+
+    // Inicializar estado del botón
+    actualizarBoton();
+  </script>
+
+  <script src="/js/error-handler.js"></script>
+</body>
+</html>

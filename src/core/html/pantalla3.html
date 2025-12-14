@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Trabaja un tema específico con Aurelín" />
+<title>AuriPortal — Tema</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    text-align: center;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+
+  .aura-circle {
+    width: 200px;
+    height: 200px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(12px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 110px;
+    position: absolute;
+    top: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--radius-md, 16px);
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  h2 {
+    margin-top: 12px;
+    font-size: 1.6rem;
+    color: var(--text-accent);
+    padding: 0 10px;
+    font-weight: 600;
+  }
+
+  .contador {
+    background: var(--bg-card-active);
+    border-radius: var(--radius-md, 16px);
+    padding: 14px 18px;
+    margin: 20px auto;
+    max-width: 100%;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    font-size: 1.15rem;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .boton {
+    width: 100%;
+    max-width: 400px;
+    padding: 14px 20px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md, 16px);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 3px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    margin: 15px auto;
+    display: block;
+    font-weight: 600;
+  }
+
+  .boton:hover {
+    background: var(--gradient-hover);
+    transform: scale(1.03);
+  }
+
+  .volver {
+    margin-top: 20px;
+    font-size: 1rem;
+    color: var(--text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .card {
+      padding: 25px 20px;
+    }
+
+    .aura-circle {
+      width: 180px;
+      height: 180px;
+    }
+
+    .auri-img {
+      width: 100px;
+      top: 40px;
+    }
+
+    h2 {
+      font-size: 1.4rem;
+    }
+
+    .contador {
+      font-size: 1rem;
+      padding: 12px 15px;
+    }
+
+    .boton {
+      font-size: 1.1rem;
+      padding: 12px 18px;
+    }
+  }
+
+  /* Escritorio grande */
+  @media (min-width: 1200px) {
+    .container {
+      max-width: 700px;
+    }
+
+    .card {
+      padding: 40px 35px;
+    }
+
+    .aura-circle {
+      width: 240px;
+      height: 240px;
+    }
+
+    .auri-img {
+      width: 130px;
+      top: 55px;
+    }
+
+    h2 {
+      font-size: 1.8rem;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="aura-container">
+        <div class="aura-circle"></div>
+        <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
+      </div>
+
+      <h2>{{NOMBRE_TEMA}}</h2>
+
+      <div class="contador">
+        Veces trabajado: {{CONTADOR_TEMA}} <br>
+        Objetivo recomendado: {{OBJETIVO_TEMA}}
+      </div>
+
+      <button class="boton" onclick="location.href='{{URL_TRABAJAR_TEMA}}'">
+        Voy a trabajar este tema
+      </button>
+
+      <div class="volver" onclick="location.href='/topics'">
+        ← Volver a Temas
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

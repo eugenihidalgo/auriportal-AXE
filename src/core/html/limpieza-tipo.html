@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+<title>AuriPortal — {{NOMBRE_LIMPIEZA}}</title>
+<link rel="icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: 18px;
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .header h1 {
+    font-weight: 600;
+  }
+
+  .progreso {
+    font-weight: 600;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+
+  .aura-circle {
+    width: 150px;
+    height: 150px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(8px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 80px;
+    position: absolute;
+    top: 35px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    color: var(--text-accent);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .progreso {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+
+  /* Tabs */
+  .tabs-container {
+    margin-bottom: 20px;
+  }
+
+  .tabs-header {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-soft);
+  }
+
+  .tab-button {
+    padding: 12px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -2px;
+  }
+
+  .tab-button:hover {
+    color: var(--text-primary);
+    background: rgba(124, 58, 237, 0.1);
+  }
+
+  body.theme-dark .tab-button:hover {
+    background: rgba(124, 58, 237, 0.15);
+  }
+
+  .tab-button.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-primary);
+    background: rgba(124, 58, 237, 0.15);
+  }
+
+  body.theme-dark .tab-button.active {
+    background: rgba(124, 58, 237, 0.2);
+  }
+
+  .tab-content {
+    display: none;
+  }
+
+  .tab-content.active {
+    display: block;
+  }
+
+  .aspectos-container {
+    background: var(--bg-card);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    margin-bottom: 20px;
+    color: var(--text-primary);
+  }
+
+  .aspecto-item {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .aspecto-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .aspecto-checkbox {
+    display: flex;
+    align-items: flex-start;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .aspecto-checkbox input[type="checkbox"] {
+    display: none;
+  }
+
+  .checkmark {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-accent);
+    border-radius: 6px;
+    margin-right: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .aspecto-checkbox input[type="checkbox"]:checked + .checkmark {
+    background: var(--gradient-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .aspecto-checkbox input[type="checkbox"]:checked + .checkmark::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--button-text-color);
+    font-weight: bold;
+    font-size: 14px;
+  }
+
+  .aspecto-content {
+    flex: 1;
+  }
+
+  .aspecto-nombre {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-accent);
+    margin-bottom: 4px;
+  }
+
+  .aspecto-descripcion {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+
+  .aspecto-info, .aspecto-progreso {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .boton-volver {
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border: 2px solid var(--border-soft);
+    border-radius: 10px;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    margin-right: 10px;
+  }
+
+  .boton-volver:hover {
+    background: var(--bg-card-active);
+    border-color: var(--border-accent);
+    transform: scale(1.02);
+  }
+
+  .mensaje-completado {
+    display: none;
+    background: var(--gradient-success);
+    color: #ffffff; /* Blanco para máximo contraste sobre verde */
+    padding: 20px;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 700; /* Peso alto para mensajes de éxito */
+    text-align: center;
+    margin-top: 20px;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+  }
+
+  /* Modo oscuro - verde más vibrante */
+  body.theme-dark .mensaje-completado {
+    background: var(--gradient-success);
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .mensaje-completado.mostrar {
+    display: block;
+    animation: aparecer 0.5s ease;
+  }
+
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Técnicas */
+  .tecnicas-container {
+    background: var(--bg-card);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    margin-bottom: 20px;
+    color: var(--text-primary);
+  }
+
+  .tecnicas-titulo {
+    font-size: 1.3rem;
+    color: var(--text-accent);
+    margin-bottom: 15px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .tecnicas-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+  }
+
+  .tecnica-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 15px;
+    color: var(--text-primary);
+  }
+
+  .tecnica-nombre {
+    font-weight: 600;
+    color: var(--text-accent);
+    margin-bottom: 5px;
+  }
+
+  .tecnica-descripcion {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+    line-height: 1.4;
+  }
+
+  .tecnica-nivel {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* Grupos de listas */
+  .lista-grupo {
+    margin-bottom: 30px;
+  }
+
+  .lista-grupo:last-child {
+    margin-bottom: 0;
+  }
+
+  .lista-titulo {
+    font-size: 1.2rem;
+    color: var(--text-accent);
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-accent);
+    font-weight: 600;
+  }
+
+  /* Estados */
+  .estado-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+
+  .estado-pasado {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--accent-success);
+    font-weight: 700 !important; /* Peso alto para estados positivos */
+  }
+
+  body.theme-dark .estado-pasado {
+    background: rgba(16, 185, 129, 0.25);
+    color: #34d399; /* Verde más claro para mejor contraste */
+    font-weight: 700 !important;
+  }
+
+  .estado-pendiente {
+    background: rgba(251, 191, 36, 0.2);
+    color: var(--accent-warning);
+    font-weight: 600 !important;
+  }
+
+  body.theme-dark .estado-pendiente {
+    background: rgba(251, 191, 36, 0.25);
+    color: #fbbf24; /* Amarillo más claro para mejor contraste */
+    font-weight: 600 !important;
+  }
+
+  /* Botón confirmar - VERDE para estados positivos */
+  .boton-confirmar {
+    padding: 14px 28px;
+    background: var(--gradient-success);
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 700; /* Peso alto para acciones positivas */
+    cursor: pointer;
+    color: #ffffff; /* Blanco para máximo contraste sobre verde */
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+  }
+
+  .boton-confirmar:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: scale(1.05);
+    box-shadow: 0 6px 15px rgba(16, 185, 129, 0.5);
+  }
+
+  /* Modo oscuro - verde más vibrante */
+  body.theme-dark .boton-confirmar {
+    background: var(--gradient-success);
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .boton-confirmar:active {
+    transform: scale(0.98);
+  }
+
+  .acciones-limpieza {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .boton-confirmar {
+    display: none;
+  }
+
+  .boton-confirmar.mostrar {
+    display: inline-block;
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .card {
+      padding: 25px 20px;
+    }
+
+    .aspectos-container {
+      padding: 15px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="aura-container">
+          <div class="aura-circle"></div>
+          <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín">
+        </div>
+        <h1>{{NOMBRE_LIMPIEZA}}</h1>
+        <div class="progreso">
+          <span id="contador-completados">0</span> / <span id="total-aspectos">{{TOTAL_INICIAL}}</span> aspectos completados
+        </div>
+      </div>
+
+      <!-- Contenido dinámico (con o sin tabs según configuración) -->
+      {{CONTENIDO_HTML}}
+
+      <div class="acciones-limpieza">
+        <button class="boton-volver" onclick="location.href='{{URL_VOLVER}}'">
+          ← Volver
+        </button>
+        <button class="boton-confirmar" id="boton-confirmar" onclick="confirmarLimpieza()">
+          ✅ Confirmar Práctica
+        </button>
+      </div>
+
+      <div class="mensaje-completado" id="mensaje-completado">
+        ¡{{NOMBRE_LIMPIEZA}} completada! ✨
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tipoLimpieza = '{{TIPO_LIMPIEZA}}';
+    const totalAspectosGenerales = {{TOTAL_ASPECTOS_GENERALES}};
+    const totalAspectosEnergiasIndeseables = {{TOTAL_ASPECTOS_ENERGIAS_INDESEABLES}};
+    const tieneEnergiasIndeseables = {{TIENE_ENERGIAS_INDESEABLES}};
+    const mostrarTabs = {{MOSTRAR_TABS}};
+    let aspectosCompletados = new Set();
+    const aspectoIds = [];
+    
+    // Función para cambiar tabs (solo si hay tabs)
+    function cambiarTab(tabName) {
+      if (!mostrarTabs) return;
+      
+      // Ocultar todos los tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Mostrar el tab seleccionado
+      document.getElementById('tab-' + tabName).classList.add('active');
+      document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+      
+      // Actualizar contadores según el tab activo
+      actualizarContador();
+    }
+
+    // Recopilar IDs de aspectos (de ambos tabs)
+    function recopilarAspectoIds() {
+      aspectoIds.length = 0;
+      document.querySelectorAll('.aspecto-item').forEach(item => {
+        const aspectoId = parseInt(item.dataset.aspectoId);
+        if (!aspectoIds.includes(aspectoId)) {
+          aspectoIds.push(aspectoId);
+        }
+      });
+    }
+    
+    recopilarAspectoIds();
+    
+    // Inicializar contador al cargar
+    actualizarContador();
+
+    // Manejar clicks en checkboxes
+    document.querySelectorAll('.checkbox-limpieza').forEach(checkbox => {
+      checkbox.addEventListener('change', async function() {
+        const aspectoId = parseInt(this.dataset.aspectoId);
+        
+        if (this.checked) {
+          // Marcar como limpio
+          try {
+            const response = await fetch('/limpieza/marcar', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                aspecto_id: aspectoId
+              })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+              aspectosCompletados.add(aspectoId);
+              actualizarContador();
+              verificarCompletada();
+              guardarCheckboxesMarcados();
+            } else {
+              // Si falla, desmarcar
+              this.checked = false;
+              alert('Error al marcar el aspecto: ' + (result.error || 'Error desconocido'));
+            }
+          } catch (error) {
+            this.checked = false;
+            alert('Error de conexión. Por favor, intenta de nuevo.');
+          }
+        } else {
+          // Desmarcar (no permitido por ahora, pero podemos implementarlo si es necesario)
+          aspectosCompletados.delete(aspectoId);
+          actualizarContador();
+        }
+      });
+    });
+
+    function actualizarContador() {
+      let totalAspectos = 0;
+      let aspectosCompletadosTab = new Set();
+      
+      if (mostrarTabs) {
+        // Con tabs: contar solo el tab activo
+        const tabActivo = document.querySelector('.tab-content.active');
+        if (tabActivo) {
+          const tabId = tabActivo.id;
+          if (tabId === 'tab-generales') {
+            totalAspectos = totalAspectosGenerales;
+          } else if (tabId === 'tab-energias-indeseables') {
+            totalAspectos = totalAspectosEnergiasIndeseables;
+          }
+          
+          // Contar solo los aspectos completados del tab activo
+          tabActivo.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+            aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+          });
+        }
+      } else {
+        // Sin tabs: contar todos (generales + energías indeseables)
+        totalAspectos = totalAspectosGenerales + totalAspectosEnergiasIndeseables;
+        document.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+          aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+        });
+      }
+      
+      document.getElementById('contador-completados').textContent = aspectosCompletadosTab.size;
+      document.getElementById('total-aspectos').textContent = totalAspectos;
+      
+      verificarCompletada();
+    }
+
+    function verificarCompletada() {
+      let totalAspectos = 0;
+      let aspectosCompletadosTab = new Set();
+      
+      if (mostrarTabs) {
+        // Con tabs: verificar solo el tab activo
+        const tabActivo = document.querySelector('.tab-content.active');
+        if (!tabActivo) return;
+        
+        const tabId = tabActivo.id;
+        if (tabId === 'tab-generales') {
+          totalAspectos = totalAspectosGenerales;
+        } else if (tabId === 'tab-energias-indeseables') {
+          totalAspectos = totalAspectosEnergiasIndeseables;
+        }
+        
+        tabActivo.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+          aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+        });
+      } else {
+        // Sin tabs: verificar todos
+        totalAspectos = totalAspectosGenerales + totalAspectosEnergiasIndeseables;
+        document.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+          aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+        });
+      }
+      
+      if (aspectosCompletadosTab.size >= totalAspectos && totalAspectos > 0) {
+        // Mostrar botón de confirmación
+        document.getElementById('boton-confirmar').classList.add('mostrar');
+      } else {
+        document.getElementById('boton-confirmar').classList.remove('mostrar');
+      }
+    }
+
+    async function confirmarLimpieza() {
+      let totalAspectos = 0;
+      let aspectosCompletadosTab = new Set();
+      
+      if (mostrarTabs) {
+        // Con tabs: verificar solo el tab activo
+        const tabActivo = document.querySelector('.tab-content.active');
+        if (!tabActivo) return;
+        
+        const tabId = tabActivo.id;
+        if (tabId === 'tab-generales') {
+          totalAspectos = totalAspectosGenerales;
+        } else if (tabId === 'tab-energias-indeseables') {
+          totalAspectos = totalAspectosEnergiasIndeseables;
+        }
+        
+        tabActivo.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+          aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+        });
+      } else {
+        // Sin tabs: verificar todos
+        totalAspectos = totalAspectosGenerales + totalAspectosEnergiasIndeseables;
+        document.querySelectorAll('.checkbox-limpieza:checked').forEach(checkbox => {
+          aspectosCompletadosTab.add(parseInt(checkbox.dataset.aspectoId));
+        });
+      }
+      
+      if (aspectosCompletadosTab.size < totalAspectos) {
+        alert('Debes marcar todos los aspectos como limpiados antes de confirmar.');
+        return;
+      }
+      
+      const boton = document.getElementById('boton-confirmar');
+      boton.disabled = true;
+      boton.textContent = 'Confirmando...';
+      
+      try {
+        const response = await fetch('/limpieza/verificar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            aspecto_ids: Array.from(aspectosCompletadosTab)
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          mostrarMensajeCompletado(result.mensaje || '¡Limpieza completada!');
+          boton.classList.remove('mostrar');
+          
+          // Redirigir a selección de post-práctica después de 2 segundos
+          setTimeout(() => {
+            window.location.href = '/practica/1/post-seleccion';
+          }, 2000);
+        } else {
+          alert(result.error || 'Error al confirmar la limpieza');
+          boton.disabled = false;
+          boton.textContent = '✅ Confirmar Práctica';
+        }
+      } catch (error) {
+        console.error('Error confirmando limpieza:', error);
+        alert('Error de conexión. Por favor, intenta de nuevo.');
+        boton.disabled = false;
+        boton.textContent = '✅ Confirmar Práctica';
+      }
+    }
+
+    function mostrarMensajeCompletado(mensaje) {
+      const mensajeEl = document.getElementById('mensaje-completado');
+      mensajeEl.textContent = mensaje || '¡Limpieza completada! ✨';
+      mensajeEl.classList.add('mostrar');
+      
+      // Scroll suave al mensaje
+      mensajeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    // Cargar checkboxes marcados desde localStorage
+    function cargarCheckboxesMarcados() {
+      const saved = localStorage.getItem(`limpieza_${tipoLimpieza}_marcados`);
+      if (saved) {
+        try {
+          const marcados = JSON.parse(saved);
+          marcados.forEach(aspectoId => {
+            const checkbox = document.querySelector(`.checkbox-limpieza[data-aspecto-id="${aspectoId}"]`);
+            if (checkbox) {
+              checkbox.checked = true;
+              aspectosCompletados.add(aspectoId);
+            }
+          });
+          actualizarContador();
+          verificarCompletada();
+        } catch (e) {
+          console.error('Error cargando checkboxes:', e);
+        }
+      }
+    }
+    
+    // Guardar checkboxes marcados en localStorage
+    function guardarCheckboxesMarcados() {
+      localStorage.setItem(`limpieza_${tipoLimpieza}_marcados`, JSON.stringify(Array.from(aspectosCompletados)));
+    }
+    
+    // Cargar al iniciar
+    cargarCheckboxesMarcados();
+  </script>
+
+  <!-- Script para suprimir errores de extensiones del navegador -->
+  <script src="/js/error-handler.js"></script>
+</body>
+</html>
+
+
+
+
+

@@ -1,0 +1,125 @@
+================================================================================
+VERIFICACIÓN TÉCNICA DE REGISTROS DMARC - eugenihidalgo.org
+Para: Kajabi Support
+Fecha: 11 de Diciembre, 2025
+================================================================================
+
+Se realizó una verificación específica de los dos registros TXT DMARC referenciados:
+
+1. _dmarc.kjbm
+2. _dmarc.y.kajabimail.net
+
+--------------------------------------------------------------------------------
+1. REGISTRO: _dmarc.kjbm
+--------------------------------------------------------------------------------
+
+✅ ESTADO: VÁLIDO Y FUNCIONAL
+
+- Existe en Cloudflare: SÍ
+- Nombre almacenado: _dmarc.kjbm.eugenihidalgo.org
+- ID del registro: 65653b6895085baf8133a026242c22fe
+- Resolución DNS: ✅ Resuelve correctamente
+- Validación Kajabi: ✅ PUEDE ser validado
+
+Contenido:
+v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:ce4b0f5c@dmarc.mailgun.org,mailto:1be13cfa@inbox.ondmarc.com; ruf=mailto:ce4b0f5c@dmarc.mailgun.org,mailto:1be13cfa@inbox.ondmarc.com
+
+Este registro está correctamente configurado y puede ser validado por Kajabi.
+
+--------------------------------------------------------------------------------
+2. REGISTRO: _dmarc.y.kajabimail.net
+--------------------------------------------------------------------------------
+
+❌ ESTADO: NO PUEDE VALIDARSE DESDE LA ZONA DEL CLIENTE
+
+PROBLEMA IDENTIFICADO:
+
+El registro existe en Cloudflare pero con un nombre incorrecto:
+- Nombre almacenado en Cloudflare: _dmarc.y.kajabimail.net.eugenihidalgo.org
+- Nombre esperado por Kajabi: _dmarc.y.kajabimail.net
+
+RAZÓN TÉCNICA:
+
+1. El hostname _dmarc.y.kajabimail.net pertenece a la zona DNS kajabimail.net,
+   no a eugenihidalgo.org.
+
+2. Cloudflare automáticamente reescribe el nombre cuando se intenta crear un
+   registro que no termina con el dominio de la zona. Esto es comportamiento
+   estándar de DNS y no puede desactivarse.
+
+3. Cuando Kajabi intenta validar _dmarc.y.kajabimail.net, busca el registro
+   en la zona DNS de kajabimail.net, no en eugenihidalgo.org.
+
+4. El registro creado en eugenihidalgo.org no puede ser encontrado por Kajabi
+   porque:
+   - Está en la zona incorrecta (eugenihidalgo.org)
+   - Tiene un nombre diferente (_dmarc.y.kajabimail.net.eugenihidalgo.org)
+
+CONFIRMACIÓN TÉCNICA:
+
+La resolución DNS de _dmarc.y.kajabimail.net muestra que ya existe un registro
+en la zona kajabimail.net (contenido diferente). Esto confirma que el registro
+debe estar en la zona kajabimail.net, no en eugenihidalgo.org.
+
+--------------------------------------------------------------------------------
+ACCIÓN REQUERIDA POR KAJABI
+--------------------------------------------------------------------------------
+
+El registro _dmarc.y.kajabimail.net NO puede crearse correctamente en la zona
+DNS de eugenihidalgo.org debido a limitaciones arquitecturales de DNS.
+
+SOLUCIÓN REQUERIDA:
+
+Opción A (Recomendada):
+- Kajabi debe crear el registro _dmarc.y.kajabimail.net en su propia zona DNS
+  interna (kajabimail.net).
+- Este es el enfoque correcto desde el punto de vista de DNS.
+
+Opción B (Alternativa):
+- Kajabi puede proporcionar acceso a la zona DNS kajabimail.net para que el
+  cliente cree el registro.
+- Requiere que el cliente tenga acceso a la zona kajabimail.net en Cloudflare.
+
+NOTA: El registro actual _dmarc.y.kajabimail.net.eugenihidalgo.org en la zona
+del cliente no sirve para la validación de Kajabi y puede eliminarse.
+
+--------------------------------------------------------------------------------
+VERIFICACIÓN DE OTROS REGISTROS
+--------------------------------------------------------------------------------
+
+Se verificó que todos los demás registros DNS relacionados con Kajabi/Mailgun
+permanecen intactos:
+- Registros MX para kjbm.eugenihidalgo.org
+- Registros CNAME (email.eugenihidalgo.org)
+- Registros SPF
+- Registros DKIM
+- Otros registros DMARC
+
+Total: 16 registros relacionados verificados - Todos intactos ✅
+
+--------------------------------------------------------------------------------
+RESUMEN
+--------------------------------------------------------------------------------
+
+✅ _dmarc.kjbm.eugenihidalgo.org: VÁLIDO Y FUNCIONAL
+   - Existe, se resuelve correctamente, puede ser validado por Kajabi
+
+❌ _dmarc.y.kajabimail.net: NO PUEDE VALIDARSE
+   - El hostname pertenece a la zona kajabimail.net
+   - No puede crearse en eugenihidalgo.org sin que el nombre sea reescrito
+   - Kajabi debe crear este registro en su zona DNS interna
+
+================================================================================
+Información Técnica:
+- Dominio: eugenihidalgo.org
+- DNS Provider: Cloudflare
+- Zone ID: 5830a7764a9b0e14c109c52e36013146
+- Fecha de verificación: 11 de Diciembre, 2025
+================================================================================
+
+
+
+
+
+
+

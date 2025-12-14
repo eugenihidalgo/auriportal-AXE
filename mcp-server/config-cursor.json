@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "aurelinportal-server": {
+      "command": "ssh",
+      "args": [
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "TU_USUARIO@TU_IP",
+        "-p", "22",
+        "cd /var/www/aurelinportal/mcp-server && source venv/bin/activate && python3 server.py"
+      ],
+      "description": "Servidor MCP para gestionar recursos de AuriPortal (archivos, servicios, PM2, Nginx)"
+    }
+  }
+}
+

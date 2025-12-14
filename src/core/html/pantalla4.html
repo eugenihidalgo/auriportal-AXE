@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Explora todos los temas disponibles con Aurelín" />
+<title>AuriPortal — Temas</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .header-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+
+  .aura-circle {
+    width: 200px;
+    height: 200px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(12px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 110px;
+    position: absolute;
+    top: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--radius-md, 16px);
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  h2 {
+    margin-top: 10px;
+    font-size: 1.5rem;
+    color: var(--text-accent);
+    padding: 0 10px;
+    font-weight: 600;
+  }
+
+  .temas-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 0 10px;
+  }
+
+  .tema-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 18px 20px;
+    text-align: left;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .tema-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px var(--shadow-md);
+  }
+
+  .tema-title {
+    font-size: 1.25rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .tema-info {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+  }
+
+  .boton {
+    width: 100%;
+    padding: 10px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md, 16px);
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 3px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    font-weight: 600;
+  }
+
+  .boton:hover {
+    background: var(--gradient-hover);
+    transform: scale(1.03);
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .header-card {
+      padding: 25px 20px;
+    }
+
+    .temas-container {
+      grid-template-columns: 1fr;
+      gap: 15px;
+      padding: 0;
+    }
+
+    .aura-circle {
+      width: 180px;
+      height: 180px;
+    }
+
+    .auri-img {
+      width: 100px;
+      top: 40px;
+    }
+
+    h2 {
+      font-size: 1.3rem;
+    }
+
+    .tema-card {
+      padding: 15px 18px;
+    }
+
+    .tema-title {
+      font-size: 1.1rem;
+    }
+  }
+
+  /* Escritorio grande */
+  @media (min-width: 1200px) {
+    .container {
+      max-width: 1000px;
+    }
+
+    .temas-container {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 25px;
+    }
+
+    .aura-circle {
+      width: 240px;
+      height: 240px;
+    }
+
+    .auri-img {
+      width: 130px;
+      top: 55px;
+    }
+
+    h2 {
+      font-size: 1.7rem;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header-card">
+      <div class="aura-container">
+        <div class="aura-circle"></div>
+        <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
+      </div>
+
+      <h2>Temas Disponibles</h2>
+    </div>
+
+    <div class="temas-container">
+      {{BLOQUE_TEMAS}}
+    </div>
+  </div>
+
+</body>
+</html>

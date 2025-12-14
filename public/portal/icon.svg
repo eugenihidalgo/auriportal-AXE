@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+     viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Fondo con gradiente dorado -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd86b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffcd4a;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- ClipPath para mostrar solo cabeza y hombros (forma ovalada) -->
+    <!-- Centrado ligeramente hacia arriba para enfocar en la cabeza -->
+    <clipPath id="headShouldersClip">
+      <ellipse cx="256" cy="280" rx="200" ry="220" />
+    </clipPath>
+  </defs>
+  
+  <!-- Fondo con gradiente dorado -->
+  <rect width="512" height="512" fill="url(#bgGrad)" rx="80"/>
+  
+  <!-- Imagen de Aurelín recortada (solo cabeza y hombros) -->
+  <!-- preserveAspectRatio="xMidYTop slice" enfoca en la parte superior -->
+  <image 
+    xlink:href="https://images.typeform.com/images/tXs4JibWTbvb" 
+    x="56" 
+    y="60" 
+    width="400" 
+    height="440"
+    clip-path="url(#headShouldersClip)"
+    preserveAspectRatio="xMidYTop slice"
+  />
+  
+  <!-- Borde decorativo sutil -->
+  <ellipse 
+    cx="256" 
+    cy="280" 
+    rx="200" 
+    ry="220" 
+    fill="none" 
+    stroke="rgba(74, 44, 0, 0.1)" 
+    stroke-width="3"
+  />
+</svg>

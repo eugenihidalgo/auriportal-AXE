@@ -1,0 +1,211 @@
+/* ============================================================================
+   SISTEMA DE TEMAS AURIPORTAL
+   Design System para Modo Claro y Oscuro
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   TEMA CLARO (Default) - Mantener identidad original
+   ---------------------------------------------------------------------------- */
+:root {
+  /* Fondos - Compatibilidad con nombres existentes */
+  --bg-main: #faf7f2;                    /* Fondo principal cálido */
+  --bg-primary: #faf7f2;                 /* Alias para compatibilidad */
+  --bg-panel: #ffffff;                   /* Paneles y contenedores */
+  --bg-card: #ffffff;                    /* Cards */
+  --bg-card-active: #fff9e6;             /* Cards activas/hover */
+  --bg-secondary: #ffffff;               /* Fondos secundarios */
+  --bg-elevated: #fffef8;                 /* Fondos elevados (accordions, etc) */
+  --bg-section: #ffffff;                 /* Fondos de secciones */
+  
+  /* Textos */
+  --text-primary: #333333;               /* Texto principal */
+  --text-secondary: #666666;             /* Texto secundario */
+  --text-muted: #8a6b00;                 /* Texto muted (dorado suave) */
+  --text-accent: #5a3c00;                /* Títulos y acentos */
+  --text-streak: #c49000;                /* Racha y números destacados */
+  --text-danger: #dc2626;                /* Texto de error */
+  --text-success: #10b981;               /* Texto de éxito */
+  
+  /* Bordes - Compatibilidad */
+  --border-soft: #e3d2b8;                /* Bordes suaves */
+  --border-strong: #d4c4a8;              /* Bordes más visibles */
+  --border-color: #e3d2b8;               /* Alias para compatibilidad */
+  --border-accent: #ffd86b;              /* Bordes de acento */
+  --border-focus: #ffcd4a;               /* Bordes en focus */
+  
+  /* Acentos y colores de acción */
+  --accent-primary: #ffd86b;             /* Dorado principal AuriPortal */
+  --accent-secondary: #ffcd4a;           /* Dorado secundario */
+  --accent-hover: #ffe395;               /* Hover suave */
+  --accent-warning: #f59e0b;             /* Ámbar para warnings */
+  --accent-error: #dc2626;               /* Rojo para errores */
+  --accent-success: #10b981;             /* Verde para éxito */
+  --accent-danger: #dc2626;               /* Alias para errores */
+  
+  /* Sombras */
+  --shadow-sm: rgba(0, 0, 0, 0.08);
+  --shadow-md: rgba(0, 0, 0, 0.12);
+  --shadow-lg: rgba(0, 0, 0, 0.15);
+  --shadow-xl: rgba(0, 0, 0, 0.2);
+  
+  /* Gradientes */
+  --gradient-primary: linear-gradient(135deg, #ffd86b, #ffcd4a);
+  --gradient-hover: linear-gradient(135deg, #ffe395, #ffda5a);
+  --gradient-header: linear-gradient(135deg, #ffd86b, #ffcd4a);
+  --header-bg: linear-gradient(135deg, #ffd86b, #ffcd4a);
+  --aura-gradient: radial-gradient(circle, #ffe9a8 0%, #f8d56d 40%, transparent 70%);
+  --gradient-accordion: linear-gradient(135deg, #fff8e1, #fff3c4);
+  --gradient-accordion-hover: linear-gradient(135deg, #fff3c4, #ffd86b);
+  --gradient-success: linear-gradient(135deg, #22c55e, #16a34a);
+  --gradient-error: linear-gradient(135deg, #ff0000, #cc0000);
+  
+  /* Badges y estados */
+  --badge-bg-active: #ffd86b;
+  --badge-text-active: #5a3c00;
+  --badge-bg-pending: #fef3c7;
+  --badge-text-pending: #92400e;
+  --badge-bg-obligatory: #fbbf24;
+  --badge-text-obligatory: #78350f;
+  
+  /* Inputs */
+  --input-bg: #ffffff;
+  --input-border: #e3d2b8;
+  --input-text: #333333;
+  --input-focus-border: #ffd86b;
+  
+  /* Button text (para modo claro) */
+  --button-text-color: #333333;
+  
+  /* Card backgrounds (compatibilidad) */
+  --card-bg: #fff9e6;
+  --card-bg-active: #fff5d6;
+}
+
+/* ----------------------------------------------------------------------------
+   TEMA OSCURO - Experiencia Nocturna Premium
+   Paleta: Violeta profundo + Dorados suaves (inspirado en AuriPortal Admin)
+   REGLA ABSOLUTA: TODO debe ser oscuro - NO fondos claros, NO amarillos, NO beige
+   ---------------------------------------------------------------------------- */
+body.theme-dark {
+  /* Fondos - Continuos y elegantes, apenas diferenciados */
+  --bg-main: #0a0e1a;                    /* Fondo principal - muy oscuro profundo */
+  --bg-primary: #0a0e1a;                 /* Alias para compatibilidad */
+  --bg-panel: #0f1422;                   /* Paneles - apenas más claro que fondo */
+  --bg-card: #141827;                    /* Cards - oscuro pero diferenciado */
+  --bg-card-active: #1a1f2e;             /* Cards activas - sutilmente más claro */
+  --bg-secondary: #0f1422;               /* Fondos secundarios */
+  --bg-elevated: #141827;                /* Fondos elevados - OSCURO continuo */
+  --bg-section: #0f1422;                 /* Fondos de secciones - OSCURO continuo */
+  
+  /* Textos - Alta legibilidad con mejor contraste */
+  --text-primary: #f1f5f9;               /* Texto principal - blanco más nítido */
+  --text-secondary: #cbd5e1;             /* Texto secundario - gris claro visible */
+  --text-muted: #94a3b8;                 /* Texto muted - gris medio legible */
+  --text-accent: #a78bfa;                /* Títulos - violeta claro (font-weight 700) */
+  --text-streak: #8b5cf6;                /* Racha - violeta medio bien contrastado */
+  --text-danger: #f87171;                /* Rojo legible para errores */
+  --text-success: #10b981;               /* VERDE para éxito/activo/completado */
+  
+  /* Bordes - Casi invisibles para efecto continuo */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* Bordes muy sutiles - casi invisibles */
+  --border-strong: rgba(255, 255, 255, 0.08); /* Bordes ligeramente más visibles */
+  --border-color: rgba(255, 255, 255, 0.05);  /* Alias para compatibilidad */
+  --border-accent: rgba(124, 58, 237, 0.4);   /* Bordes de acento - violeta sutil */
+  --border-focus: #6366f1;               /* Bordes en focus - índigo (Admin) */
+  --border-subtle: rgba(255, 255, 255, 0.03); /* Bordes extremadamente sutiles */
+  
+  /* Acentos - Violeta/Índigo principal - SIN AMARILLOS/BEIGES */
+  --accent-primary: #7c3aed;             /* Violeta principal (Admin) */
+  --accent-secondary: #6366f1;           /* Índigo secundario (Admin) */
+  --accent-hover: #8b5cf6;               /* Hover - violeta más claro */
+  --accent-warning: #f59e0b;             /* Ámbar oscuro para warnings (NO amarillo claro) */
+  --accent-error: #f87171;               /* Rojo legible (no rojo puro) */
+  --accent-success: #10b981;             /* VERDE para éxito/activo/completado */
+  --accent-danger: #f87171;              /* Alias para errores */
+  
+  /* Sombras - Suaves y profundas para integración */
+  --shadow-sm: rgba(0, 0, 0, 0.4);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+  --shadow-lg: rgba(0, 0, 0, 0.6);
+  --shadow-xl: rgba(0, 0, 0, 0.7);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.5);  /* Sombra suave integrada */
+  
+  /* Gradientes - Violeta/Índigo principal - NO DORADO PARA FONDOS */
+  --gradient-primary: linear-gradient(135deg, #7c3aed, #6366f1);  /* Violeta-índigo */
+  --gradient-hover: linear-gradient(135deg, #8b5cf6, #7c3aed);    /* Hover violeta */
+  --gradient-header: linear-gradient(135deg, #7c3aed, #5b21b6);  /* Violeta profundo */
+  --header-bg: linear-gradient(135deg, #7c3aed, #5b21b6);          /* Header violeta */
+  --aura-gradient: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(99, 102, 241, 0.1) 40%, transparent 70%);
+  --gradient-accordion: linear-gradient(135deg, #141827, #1a1f2e);  /* OSCURO continuo */
+  --gradient-accordion-hover: linear-gradient(135deg, #1a1f2e, #202635);  /* OSCURO */
+  --gradient-success: linear-gradient(135deg, #10b981, #059669);  /* VERDE para éxito/activo */
+  --gradient-error: linear-gradient(135deg, #f87171, #ef4444);    /* Rojo oscuro */
+  
+  /* Badges y estados - VERDE para activo/completado/correcto */
+  --badge-bg-active: #10b981;            /* VERDE para activo/completado/correcto */
+  --badge-text-active: #ffffff;          /* Texto blanco sobre verde (alto contraste) */
+  --badge-bg-pending: #7c3aed;          /* Violeta para pendientes */
+  --badge-text-pending: #f1f5f9;        /* Texto claro sobre violeta */
+  --badge-bg-obligatory: #f59e0b;       /* Ámbar oscuro para obligatorio (NO amarillo claro) */
+  --badge-text-obligatory: #ffffff;     /* Texto blanco sobre ámbar oscuro */
+  
+  /* Inputs - Integrados y visibles */
+  --input-bg: #141827;
+  --input-border: rgba(255, 255, 255, 0.08);
+  --input-text: #f1f5f9;
+  --input-focus-border: #6366f1;
+  
+  /* Button text (para modo oscuro) */
+  --button-text-color: #ffffff;
+  
+  /* Card backgrounds (compatibilidad) - TODO OSCURO continuo */
+  --card-bg: #141827;
+  --card-bg-active: #1a1f2e;
+}
+
+/* ----------------------------------------------------------------------------
+   Fondos degradados especiales para modo oscuro (Admin style)
+   TODO debe ser oscuro - gradientes suaves entre tonos oscuros
+   ---------------------------------------------------------------------------- */
+body.theme-dark {
+  background: radial-gradient(ellipse at top, #0a0e1a, #0f1422) !important;
+}
+
+/* Asegurar que TODOS los fondos sean oscuros y continuos en modo oscuro */
+body.theme-dark .preparaciones-container,
+body.theme-dark .aspectos-container,
+body.theme-dark .tecnicas-container,
+body.theme-dark .elementos-container,
+body.theme-dark .total-minutos,
+body.theme-dark .accordion-header,
+body.theme-dark .accordion-content,
+body.theme-dark .tema-card,
+body.theme-dark .lista-grupo {
+  background: var(--bg-card) !important;
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* ----------------------------------------------------------------------------
+   Border Radius - Sistema unificado amplio y redondeado
+   ---------------------------------------------------------------------------- */
+:root {
+  --radius-sm: 12px;                      /* Elementos pequeños */
+  --radius-md: 16px;                      /* Cards, botones estándar */
+  --radius-lg: 20px;                      /* Cards grandes, contenedores */
+  --radius-xl: 24px;                     /* Cards principales, modales */
+  --radius-full: 9999px;                  /* Elementos circulares */
+}
+
+/* ----------------------------------------------------------------------------
+   Transiciones suaves para cambios de tema
+   ---------------------------------------------------------------------------- */
+* {
+  transition: background-color 0.3s ease, 
+              color 0.3s ease, 
+              border-color 0.3s ease,
+              box-shadow 0.3s ease,
+              border-radius 0.3s ease;
+}

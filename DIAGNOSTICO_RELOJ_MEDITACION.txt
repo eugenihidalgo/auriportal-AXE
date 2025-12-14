@@ -1,0 +1,444 @@
+================================================================================
+DIAGNÓSTICO COMPLETO: RELOJ DE MEDITACIÓN Y RECURSOS TÉCNICOS
+================================================================================
+Fecha: $(date)
+Estado: ERROR DE SINTAXIS - Servidor no inicia
+
+================================================================================
+1. OBJETIVO DEL PROYECTO
+================================================================================
+
+Implementar un sistema de "Reloj de Meditación" con las siguientes características:
+
+A. RELOJ DE MEDITACIÓN (Cliente)
+   - Aparece en las páginas de "Preparación para la práctica" y "Técnicas Post-práctica"
+   - Solo se muestra si está activado en el admin para ese ítem específico
+   - Configuración:
+     * Tiempo configurable hasta 120 minutos (solo antes de iniciar)
+     * Opción de reproducir música de meditación (sí/no)
+     * Música por defecto configurada por admin en cada ítem
+     * La música debe hacer loop automático si es más corta que el tiempo configurado
+     * La música debe sonar incluso con el teléfono bloqueado
+   - Funcionalidades:
+     * Mostrar tiempo transcurrido y tiempo restante
+     * Botones: Pausar, Reanudar, Reiniciar (pero NO cambiar tiempo durante meditación)
+     * Al finalizar: reproducir un tono característico
+     * El tono se reproduce una vez (no se puede detener)
+     * Persistencia: el reloj continúa funcionando si se cambia de pestaña o minimiza
+     * Guardar configuración (tiempo, música seleccionada) para próxima sesión
+   - Tono final:
+     * Hay un tono por defecto
+     * El usuario puede configurar tonos personalizados en su perfil de alumno (tab personal)
+
+B. RECURSOS TÉCNICOS (Admin)
+   - Nueva sección en admin: "Recursos técnicos para las prácticas"
+   - Dos subsecciones:
+     1. "Músicas de meditación" - Banco de músicas disponibles para todo el servidor
+     2. "Tonos de meditación" - Banco de tonos disponibles para todo el servidor
+   - Funcionalidades:
+     * Subida de archivos (MP3, WAV, OGG, todos los formatos posibles)
+     * URLs externas como alternativa a archivos
+     * Sin límite de tamaño de archivo
+     * Campos: nombre, descripción, categoría, archivo/URL, duración (segundos), peso (MB)
+     * Para tonos: campo adicional "es_por_defecto" (checkbox)
+     * Edición inline en tablas
+     * Creación rápida
+     * Eliminación
+
+C. INTEGRACIÓN CON PREPARACIONES Y TÉCNICAS POST-PRÁCTICA
+   - En los admin panels de "Preparación para la práctica" y "Técnicas Post-práctica":
+     * Nuevo campo: "Activar reloj de meditación" (checkbox)
+     * Nuevo campo: "Música de meditación por defecto" (dropdown con músicas disponibles)
+
+================================================================================
+2. ARCHIVOS CREADOS/MODIFICADOS
+================================================================================
+
+A. BASE DE DATOS
+   Archivo: database/pg.js
+   Cambios:
+   - Agregadas columnas a tabla `preparaciones_practica`:
+     * activar_reloj (BOOLEAN, default false)
+     * musica_meditacion_id (INTEGER, foreign key a musicas_meditacion)
+   - Agregadas columnas a tabla `tecnicas_post_practica`:
+     * activar_reloj (BOOLEAN, default false)
+     * musica_meditacion_id (INTEGER, foreign key a musicas_meditacion)
+   - Creada tabla `musicas_meditacion`:
+     * id (SERIAL PRIMARY KEY)
+     * nombre (VARCHAR(255) NOT NULL)
+     * descripcion (TEXT)
+     * categoria (VARCHAR(100))
+     * archivo_path (VARCHAR(500))
+     * url_externa (VARCHAR(500))
+     * duracion_segundos (INTEGER)
+     * peso_mb (DECIMAL(10,2))
+     * es_por_defecto (BOOLEAN, default false) - NO SE USA, solo para tonos
+     * activo (BOOLEAN, default true)
+     * created_at (TIMESTAMP)
+     * updated_at (TIMESTAMP)
+   - Creada tabla `tonos_meditacion`:
+     * id (SERIAL PRIMARY KEY)
+     * nombre (VARCHAR(255) NOT NULL)
+     * descripcion (TEXT)
+     * categoria (VARCHAR(100))
+     * archivo_path (VARCHAR(500))
+     * url_externa (VARCHAR(500))
+     * duracion_segundos (INTEGER)
+     * peso_mb (DECIMAL(10,2))
+     * es_por_defecto (BOOLEAN, default false) - IMPORTANTE: solo uno puede ser true
+     * activo (BOOLEAN, default true)
+     * created_at (TIMESTAMP)
+     * updated_at (TIMESTAMP)
+
+B. SERVICIOS (Services Layer)
+   Archivos creados:
+   1. src/services/musicas-meditacion.js
+      - listarMusicas()
+      - obtenerMusica(id)
+      - crearMusica(datos)
+      - actualizarMusica(id, datos)
+      - eliminarMusica(id)
+   
+   2. src/services/tonos-meditacion.js
+      - listarTonos()
+      - obtenerTono(id)
+      - crearTono(datos)
+      - actualizarTono(id, datos)
+      - eliminarTono(id)
+   
+   Archivos modificados:
+   3. src/services/preparaciones-practica.js
+      - Actualizado crearPreparacion() para incluir activar_reloj y musica_meditacion_id
+      - Actualizado actualizarPreparacion() para incluir activar_reloj y musica_meditacion_id
+   
+   4. src/services/tecnicas-post-practica.js
+      - Actualizado crearTecnicaPostPractica() para incluir activar_reloj y musica_meditacion_id
+      - Actualizado actualizarTecnicaPostPractica() para incluir activar_reloj y musica_meditacion_id
+
+C. API ENDPOINTS
+   Archivos creados:
+   1. src/endpoints/musicas-meditacion-api.js
+      - GET /api/musicas-meditacion (listar todas)
+      - GET /api/musicas-meditacion/:id (obtener una)
+      - POST /api/musicas-meditacion (crear)
+      - PUT /api/musicas-meditacion/:id (actualizar)
+      - DELETE /api/musicas-meditacion/:id (eliminar)
+   
+   2. src/endpoints/tonos-meditacion-api.js
+      - GET /api/tonos-meditacion (listar todas)
+      - GET /api/tonos-meditacion/:id (obtener una)
+      - POST /api/tonos-meditacion (crear)
+      - PUT /api/tonos-meditacion/:id (actualizar)
+      - DELETE /api/tonos-meditacion/:id (eliminar)
+   
+   3. src/endpoints/musicas-tonos-upload.js
+      - POST /api/musicas-meditacion/upload (subir archivo de música)
+      - POST /api/tonos-meditacion/upload (subir archivo de tono)
+      - Usa busboy para parsear multipart/form-data
+      - Guarda archivos en /public/uploads/
+      - Retorna: archivo_path (URL pública), duracion_segundos, peso_mb
+      - NOTA: La duración se calcula usando una librería de audio (pendiente de implementar)
+   
+   4. src/endpoints/admin-recursos-tecnicos.js ⚠️ PROBLEMA AQUÍ
+      - GET /admin/recursos-tecnicos/musicas (panel admin músicas)
+      - GET /admin/recursos-tecnicos/tonos (panel admin tonos)
+      - Renderiza HTML con tablas inline editables
+      - Incluye JavaScript para:
+        * Creación rápida
+        * Edición inline (onblur)
+        * Subida de archivos
+        * Eliminación
+      - ⚠️ ERROR: SyntaxError: Invalid or unexpected token
+      - ⚠️ CAUSA: Uso de &quot; (entidad HTML) dentro de template literals de JavaScript
+      - ⚠️ ESTADO: Servidor no inicia debido a este error
+
+D. ROUTING
+   Archivo modificado: src/router.js
+   Cambios:
+   - Agregadas rutas para APIs de músicas y tonos
+   - Agregadas rutas para upload de archivos
+   - Agregada ruta para admin-recursos-tecnicos.js
+
+   Archivo modificado: src/endpoints/admin-panel-v4.js
+   Cambios:
+   - Agregada importación de admin-recursos-tecnicos.js
+   - Agregada ruta /admin/recursos-tecnicos/*
+
+E. MENÚ ADMIN
+   Archivo modificado: src/core/html/admin/base.html
+   Cambios:
+   - Agregado ítem de menú "Recursos técnicos para las prácticas"
+   - Ubicado bajo "Contenido PDE"
+   - Link: /admin/recursos-tecnicos/musicas
+
+F. SCRIPTS SQL
+   Archivo creado: scripts/crear-tablas-musicas-tonos.sql
+   - Script manual para crear tablas si es necesario
+   - Incluye índices
+
+================================================================================
+3. ERRORES ENCONTRADOS Y CORRECCIONES INTENTADAS
+================================================================================
+
+ERROR PRINCIPAL: SyntaxError: Invalid or unexpected token
+Archivo: src/endpoints/admin-recursos-tecnicos.js
+
+PROBLEMA:
+El archivo usa template literals de JavaScript (backticks `) para generar HTML.
+Dentro de estos template literals, hay atributos HTML que contienen JavaScript inline
+(como onclick, onchange, onblur, onkeydown).
+
+El problema es que se usó la entidad HTML &quot; en lugar de comillas simples o dobles
+directas. Node.js no interpreta &quot; como una comilla, causando errores de sintaxis.
+
+LÍNEAS PROBLEMÁTICAS IDENTIFICADAS Y CORREGIDAS:
+- Línea 89-95: onkeydown con comillas simples corregidas
+- Línea 99: onchange con &quot; corregido a comillas simples
+- Línea 100: onclick con &quot; corregido a comillas simples
+- Línea 101: onkeydown corregido
+- Línea 118-136: onblur con &quot; corregidos a comillas simples
+- Línea 130: onchange corregido
+- Línea 131: onclick corregido
+- Línea 182-194: onkeydown y onchange corregidos
+- Línea 211-232: onchange y onblur corregidos
+- Línea 226-227: onchange y onclick corregidos
+- Línea 366-367: getElementById con comillas corregidas
+- Línea 378: alert con comillas corregidas
+- Línea 396-401: getElementById con comillas corregidas
+- Línea 413: alert corregido
+- Línea 423: subirArchivo corregido
+- Línea 458: getElementById corregido
+- Línea 471: alert corregido
+- Línea 505: alert corregido
+- Línea 532: alert corregido (había comilla simple mal cerrada)
+- Línea 555: alert corregido
+- Línea 583: alert corregido (había comilla simple mal cerrada)
+- Línea 585: comparación de string corregida
+- Línea 604: alert corregido
+- Línea 621: alert corregido
+
+CORRECCIONES APLICADAS:
+1. Reemplazo de &quot; por comillas simples (') en atributos HTML
+2. Cambio de onkeydown='if(event.key === "Enter")' a onkeydown="if(event.key === 'Enter')"
+3. Cambio de document.getElementById(&quot;...&quot;) a document.getElementById('...')
+4. Corrección de alert("Error: ' + ...) a alert("Error: " + ...)
+5. Corrección de template literals anidados usando concatenación de strings
+
+ESTADO ACTUAL:
+- A pesar de todas las correcciones, el error persiste
+- node --check no muestra errores (exit code 0)
+- Pero node --input-type=module muestra "Invalid or unexpected token"
+- El servidor PM2 no inicia correctamente
+- HTTP Status: 000 (no hay respuesta del servidor)
+
+POSIBLES CAUSAS PENDIENTES:
+1. Caracteres especiales invisibles (UTF-8 BOM, espacios no-breaking, etc.)
+2. Template literals anidados que no se detectaron
+3. Comillas mal balanceadas en alguna parte del archivo
+4. Problemas con emojis (🔗, 🌐, 📁, etc.) dentro de strings
+5. Backticks escapados incorrectamente
+
+================================================================================
+4. FUNCIONALIDADES PENDIENTES DE IMPLEMENTAR
+================================================================================
+
+A. RELOJ DE MEDITACIÓN (Cliente)
+   ❌ NO IMPLEMENTADO
+   - Componente HTML/JavaScript para el reloj
+   - Lógica de temporizador con persistencia
+   - Integración con Web Audio API para música en background
+   - Loop automático de música
+   - Reproducción de tono al finalizar
+   - Guardado de configuración en localStorage
+   - Persistencia cuando se cambia de pestaña
+
+B. INTEGRACIÓN EN PREPARACIONES Y TÉCNICAS POST-PRÁCTICA
+   ❌ NO IMPLEMENTADO
+   - Campos en admin panels para activar_reloj y musica_meditacion_id
+   - Dropdown para seleccionar música de meditación
+   - Lógica en páginas del cliente para mostrar el reloj si está activado
+
+C. CONFIGURACIÓN DE TONOS EN PERFIL DE ALUMNO
+   ❌ NO IMPLEMENTADO
+   - Tab personal en perfil de alumno
+   - Selector de tono personalizado
+   - Guardado de preferencia de tono
+
+D. CÁLCULO DE DURACIÓN DE AUDIO
+   ❌ NO IMPLEMENTADO
+   - La subida de archivos no calcula la duración real
+   - Necesita librería como node-ffmpeg o similar
+   - Actualmente duracion_segundos debe ingresarse manualmente
+
+================================================================================
+5. ESTRUCTURA DEL ARCHIVO PROBLEMÁTICO
+================================================================================
+
+Archivo: src/endpoints/admin-recursos-tecnicos.js
+Líneas totales: ~642
+
+ESTRUCTURA:
+1. Imports (líneas 1-13)
+2. Función replace() (líneas 15-23)
+3. Función principal adminRecursosTecnicosHandler() (líneas 25-639)
+   a. Autenticación (líneas 26-30)
+   b. Determinación de sección (líneas 32-36)
+   c. Carga de datos (líneas 38-49)
+   d. Template literal principal `content` (líneas 51-628)
+      - HTML estático (líneas 52-63)
+      - Template literal condicional ${seccion === "musicas" ? `...` : `...`}
+        * Sección músicas (líneas 65-153)
+        * Sección tonos (líneas 154-250)
+      - JavaScript inline (líneas 253-627)
+        * Variables y funciones para músicas
+        * Variables y funciones para tonos
+   e. Return Response (líneas 630-638)
+
+PROBLEMA ESPECÍFICO:
+El template literal principal (línea 51) contiene:
+- HTML con atributos que tienen JavaScript inline
+- Template literals anidados (líneas 65, 115, 208)
+- Strings JavaScript dentro de atributos HTML
+
+EJEMPLO DE CÓDIGO PROBLEMÁTICO (ANTES):
+```
+<input onchange="handleFileSelect(&quot;musica&quot;, this)">
+```
+
+EJEMPLO DE CÓDIGO CORREGIDO (DESPUÉS):
+```
+<input onchange="handleFileSelect('musica', this)">
+```
+
+PERO EL ERROR PERSISTE, lo que sugiere:
+1. Hay más instancias de &quot; que no se encontraron
+2. Hay problemas con template literals anidados
+3. Hay caracteres especiales que causan problemas
+
+================================================================================
+6. COMANDOS ÚTILES PARA DIAGNÓSTICO
+================================================================================
+
+# Verificar sintaxis
+node --check src/endpoints/admin-recursos-tecnicos.js
+
+# Intentar importar el módulo
+node --input-type=module -e "import('./src/endpoints/admin-recursos-tecnicos.js').then(() => console.log('OK')).catch(e => console.error('Error:', e.message))"
+
+# Buscar todas las instancias de &quot;
+grep -n '&quot;' src/endpoints/admin-recursos-tecnicos.js
+
+# Buscar template literals anidados
+grep -n '\${.*`.*`' src/endpoints/admin-recursos-tecnicos.js
+
+# Ver logs del servidor
+pm2 logs aurelinportal --lines 20
+
+# Reiniciar servidor
+pm2 restart aurelinportal --update-env
+
+# Verificar estado
+pm2 status
+
+# Probar endpoint
+curl -I http://localhost:3000/admin/recursos-tecnicos/musicas
+
+================================================================================
+7. RECOMENDACIONES PARA SOLUCIONAR EL ERROR
+================================================================================
+
+OPCIÓN 1: Revisar manualmente el archivo
+- Abrir src/endpoints/admin-recursos-tecnicos.js
+- Buscar todas las instancias de &quot; y reemplazarlas
+- Verificar que todas las comillas estén balanceadas
+- Verificar que no haya template literals mal formados
+
+OPCIÓN 2: Usar un linter/formatter
+- Instalar ESLint o Prettier
+- Ejecutar sobre el archivo para detectar errores
+- Aplicar correcciones automáticas
+
+OPCIÓN 3: Reescribir el archivo
+- Separar el HTML del JavaScript
+- Usar funciones para generar HTML en lugar de template literals
+- Usar un sistema de templates más robusto
+
+OPCIÓN 4: Usar un enfoque diferente
+- Generar el HTML usando un template engine (EJS, Handlebars, etc.)
+- Separar el JavaScript en un archivo externo
+- Cargar el JavaScript desde un archivo .js separado
+
+================================================================================
+8. ARCHIVOS RELACIONADOS QUE FUNCIONAN CORRECTAMENTE
+================================================================================
+
+✅ database/pg.js - Sin errores aparentes
+✅ src/services/musicas-meditacion.js - Sin errores
+✅ src/services/tonos-meditacion.js - Sin errores
+✅ src/services/preparaciones-practica.js - Sin errores
+✅ src/services/tecnicas-post-practica.js - Sin errores
+✅ src/endpoints/musicas-meditacion-api.js - Sin errores
+✅ src/endpoints/tonos-meditacion-api.js - Sin errores
+✅ src/endpoints/musicas-tonos-upload.js - Sin errores
+✅ src/router.js - Sin errores
+✅ src/endpoints/admin-panel-v4.js - Sin errores
+✅ src/core/html/admin/base.html - Sin errores
+
+❌ src/endpoints/admin-recursos-tecnicos.js - ERROR DE SINTAXIS
+
+================================================================================
+9. PRÓXIMOS PASOS SUGERIDOS
+================================================================================
+
+1. SOLUCIONAR EL ERROR DE SINTAXIS (PRIORIDAD ALTA)
+   - Sin esto, el servidor no puede iniciar
+   - El panel admin de recursos técnicos no es accesible
+   - Bloquea todo el desarrollo posterior
+
+2. IMPLEMENTAR CÁLCULO DE DURACIÓN DE AUDIO
+   - Instalar librería para leer metadatos de audio
+   - Integrar en el endpoint de upload
+   - Actualizar automáticamente duracion_segundos
+
+3. IMPLEMENTAR CAMPOS EN ADMIN DE PREPARACIONES Y TÉCNICAS
+   - Agregar checkbox "Activar reloj"
+   - Agregar dropdown "Música por defecto"
+   - Actualizar servicios para guardar estos campos
+
+4. IMPLEMENTAR RELOJ DE MEDITACIÓN EN CLIENTE
+   - Crear componente HTML/CSS/JS
+   - Integrar con Web Audio API
+   - Implementar persistencia
+   - Implementar loop de música
+   - Implementar reproducción de tono
+
+5. IMPLEMENTAR CONFIGURACIÓN DE TONOS EN PERFIL
+   - Crear tab en perfil de alumno
+   - Selector de tono personalizado
+   - Guardar preferencia en base de datos
+
+================================================================================
+10. NOTAS ADICIONALES
+================================================================================
+
+- El proyecto usa ES Modules (type: "module" en package.json)
+- El servidor usa Node.js 18+
+- Se usa PM2 para gestión de procesos
+- El servidor corre en el puerto 3000
+- Nginx actúa como proxy reverso
+- La base de datos es PostgreSQL
+- Los archivos se guardan en /public/uploads/
+
+- El error de sintaxis es crítico porque impide que el servidor inicie
+- Una vez solucionado, se podrá acceder a /admin/recursos-tecnicos/musicas
+- El resto de la funcionalidad depende de que este panel funcione
+
+================================================================================
+FIN DEL DIAGNÓSTICO
+================================================================================
+
+
+
+
+
+

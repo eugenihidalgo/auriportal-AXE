@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+  <meta charset="utf-8" />
+  <title>Portal de Aurelín</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="theme-color" content="#ffd86b" />
+  <meta name="description" content="Tu portal personal de práctica diaria con Aurelín" />
+  <link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+  <link rel="stylesheet" href="/css/theme-variables.css" />
+  <link rel="stylesheet" href="/css/theme-overrides.css" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: calc(100vh - 40px);
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl, 24px);
+      box-shadow: 0 18px 45px var(--shadow-lg);
+      padding: 32px 28px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .auri-img {
+      width: 100px;
+      border-radius: var(--radius-md, 16px);
+      display: block;
+      margin: 0 auto 16px;
+      box-shadow: 0 4px 14px var(--shadow-md);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 4px;
+      color: var(--text-accent);
+      font-weight: 600;
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 24px;
+      color: var(--text-primary);
+      font-size: 1.05rem;
+    }
+
+    .texto-link {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: -15px;
+    }
+
+    .texto-link a {
+      color: var(--text-streak);
+      text-decoration: underline;
+    }
+
+    input[type="email"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: var(--radius-md, 16px);
+      border: 1px solid var(--border-color);
+      margin-bottom: 18px;
+      font-size: 1rem;
+      color: var(--text-primary);
+      background: var(--input-bg);
+    }
+
+    input[type="email"]:focus {
+      outline: none;
+      border-color: var(--input-focus-border);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+    }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-bottom: 18px;
+      cursor: pointer;
+    }
+
+    .remember-me input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      margin-right: 8px;
+      cursor: pointer;
+      accent-color: var(--accent-primary);
+    }
+
+    .remember-me label {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      cursor: pointer;
+      margin: 0;
+      user-select: none;
+      font-weight: 600;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: var(--radius-md, 16px);
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      background: var(--gradient-primary);
+      color: var(--button-text-color);
+      box-shadow: 0 4px 10px var(--shadow-md);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: var(--gradient-hover);
+      transform: scale(1.03);
+    }
+
+    /* Móvil */
+    @media (max-width: 768px) {
+      body {
+        padding: 15px;
+      }
+
+      .container {
+        min-height: calc(100vh - 30px);
+      }
+
+      .card {
+        padding: 24px 20px;
+        border-radius: 20px;
+      }
+
+      .auri-img {
+        width: 90px;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      p {
+        font-size: 0.95rem;
+        margin-bottom: 20px;
+      }
+
+      input[type="email"] {
+        font-size: 0.95rem;
+        padding: 11px 12px;
+      }
+
+      button {
+        font-size: 0.95rem;
+        padding: 11px 16px;
+      }
+    }
+
+    /* Escritorio grande */
+    @media (min-width: 1200px) {
+      .container {
+        max-width: 550px;
+      }
+
+      .card {
+        padding: 40px 35px;
+      }
+
+      .auri-img {
+        width: 110px;
+      }
+
+      h1 {
+        font-size: 1.8rem;
+      }
+
+      p {
+        font-size: 1.1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <img src="https://images.typeform.com/images/tXs4JibWTbvb" class="auri-img" alt="Aurelín" />
+
+      <h1>Hola de nuevo ✨</h1>
+      <p>Recupera tu sesión con tu e-mail</p>
+      <p class="texto-link">
+        ¿Primera vez? Empieza aquí: 
+        <a href="https://pdeeugenihidalgo.typeform.com/to/GR5IErrl" onclick="openTypeformInApp(event, 'https://pdeeugenihidalgo.typeform.com/to/GR5IErrl'); return false;">Mundo de Aurelín</a>
+      </p>
+
+      <form method="POST" action="/enter">
+        <input type="email" name="email" placeholder="tu-email@ejemplo.com" required />
+        <div class="remember-me">
+          <input type="checkbox" id="remember_me" name="remember_me" checked />
+          <label for="remember_me">Recuérdame en este dispositivo</label>
+        </div>
+        <button type="submit">Recuperar sesión</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Script para suprimir errores de extensiones del navegador -->
+  <script src="/js/error-handler.js"></script>
+  
+  <!-- Abridor de Typeforms -->
+  <script src="/js/typeform-opener.js"></script>
+</body>
+</html>

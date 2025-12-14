@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Practica con Aurelín" />
+<title>AuriPortal — Practicar con Aurelín</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 30px;
+  }
+
+  .aura-circle {
+    width: 200px;
+    height: 200px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(10px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 110px;
+    position: absolute;
+    top: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 16px;
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  .boton {
+    padding: 15px 30px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 4px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    margin: 15px 0;
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .boton:hover {
+    background: var(--gradient-hover);
+    transform: scale(1.03);
+    box-shadow: 0 6px 15px var(--shadow-lg);
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .aura-circle {
+      width: 180px;
+      height: 180px;
+    }
+
+    .auri-img {
+      width: 100px;
+      top: 40px;
+    }
+
+    .boton {
+      font-size: 1.1rem;
+      padding: 14px 25px;
+    }
+  }
+
+  /* Escritorio grande */
+  @media (min-width: 1200px) {
+    .container {
+      max-width: 700px;
+    }
+
+    .aura-circle {
+      width: 240px;
+      height: 240px;
+    }
+
+    .auri-img {
+      width: 130px;
+      top: 55px;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="aura-container">
+      <div class="aura-circle"></div>
+      <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
+    </div>
+
+    <a href="{{URL_FUEGOS_SAGRADOS}}" class="boton" style="text-decoration: none;" onclick="openTypeformInApp(event, '{{URL_FUEGOS_SAGRADOS}}'); return false;">
+      Gestionar emociones con los fuegos sagrados
+    </a>
+
+    <button class="boton" onclick="location.href='{{URL_LIMPIARSE}}'">
+      Limpiarme energéticamente
+    </button>
+  </div>
+
+</body>
+</html>
+

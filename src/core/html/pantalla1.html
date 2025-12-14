@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Tu ritual diario de práctica con Aurelín" />
+<title>AuriPortal — Ritual Diario</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    text-align: center;
+  }
+
+  .aura-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 30px;
+  }
+
+  .aura-circle {
+    width: 200px;
+    height: 200px;
+    background: var(--aura-gradient);
+    border-radius: 50%;
+    filter: blur(10px);
+    margin: 0 auto;
+  }
+
+  .auri-img {
+    width: 110px;
+    position: absolute;
+    top: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--radius-md, 16px);
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  .streak {
+    font-size: 1.3rem;
+    color: var(--text-streak);
+    font-weight: 600;
+    margin-top: -20px;
+    margin-bottom: 20px;
+  }
+
+  .frase {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: 40px;
+    color: var(--text-primary);
+    padding: 0 10px;
+  }
+
+  .nivel-info {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-top: -10px;
+    margin-bottom: 20px;
+    font-weight: 600;
+  }
+
+  .boton-practico {
+    padding: 15px 30px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md, 16px);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 4px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 400px;
+    margin: 10px auto;
+    display: block;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .boton-practico:hover {
+    background: var(--gradient-hover);
+    transform: scale(1.03);
+  }
+
+  /* Móvil */
+  @media (max-width: 768px) {
+    body {
+      padding: 15px;
+    }
+
+    .card {
+      padding: 25px 20px;
+    }
+
+    .aura-circle {
+      width: 180px;
+      height: 180px;
+    }
+
+    .auri-img {
+      width: 100px;
+      top: 40px;
+    }
+
+    .streak {
+      font-size: 1.1rem;
+      margin-top: -15px;
+      margin-bottom: 15px;
+    }
+
+    .frase {
+      font-size: 1.2rem;
+      margin-top: 15px;
+      margin-bottom: 30px;
+      padding: 0 5px;
+    }
+
+    .nivel-info {
+      font-size: 0.9rem;
+      margin-top: -8px;
+      margin-bottom: 15px;
+    }
+
+    .boton-practico {
+      font-size: 1.1rem;
+      padding: 14px 25px;
+      margin-top: 15px;
+    }
+  }
+
+  /* Escritorio grande */
+  @media (min-width: 1200px) {
+    .container {
+      max-width: 700px;
+    }
+
+    .card {
+      padding: 40px 35px;
+    }
+
+    .aura-circle {
+      width: 240px;
+      height: 240px;
+    }
+
+    .auri-img {
+      width: 130px;
+      top: 55px;
+    }
+
+    .frase {
+      font-size: 1.6rem;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="aura-container">
+        <div class="aura-circle"></div>
+        <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
+      </div>
+
+      <div class="streak">
+        Racha actual: {{STREAK}} días
+      </div>
+
+      <div class="frase">
+        {{FRASE_MOTIVACIONAL}}
+      </div>
+      
+      <div class="nivel-info">
+        Nivel {{NIVEL}} - {{FASE}}
+      </div>
+
+      <button class="boton-practico" onclick="location.href='{{URL_SI_PRACTICO}}'">
+        Sí, hoy practico
+      </button>
+
+      <a href="{{URL_FUEGOS_SAGRADOS}}" class="boton-practico" onclick="openTypeformInApp(event, '{{URL_FUEGOS_SAGRADOS}}'); return false;">
+        Gestionar emociones con los fuegos sagrados
+      </a>
+
+      <button class="boton-practico" onclick="location.href='/perfil-personal'">
+        Quiero visitar mi universo personal
+      </button>
+    </div>
+  </div>
+
+  <!-- Script para suprimir errores de extensiones del navegador -->
+  <script src="/js/error-handler.js"></script>
+  
+  <!-- Abridor de Typeforms -->
+  <script src="/js/typeform-opener.js"></script>
+  
+  <script>
+    // Función para abrir Typeforms
+    function openTypeformInApp(event, url) {
+      event.preventDefault();
+      window.location.href = url;
+    }
+    
+    // Hacer función global
+    window.openTypeformInApp = openTypeformInApp;
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - AuriPortal Admin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>" type="image/svg+xml">
+  <link href="/css/tailwind.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen">
+  <div class="max-w-md w-full space-y-8 p-8">
+    <div>
+      <div class="flex justify-center mb-4">
+        <div class="relative">
+          <div class="absolute inset-0 bg-gradient-to-r from-yellow-200 to-yellow-300 rounded-full blur-xl opacity-50"></div>
+          <img src="https://images.typeform.com/images/tXs4JibWTbvb" 
+               alt="Aurelín" 
+               class="relative w-24 h-24 rounded-2xl shadow-lg object-cover">
+        </div>
+      </div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        AuriPortal Admin
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600">
+        Acceso restringido
+      </p>
+    </div>
+    <form class="mt-8 space-y-6" method="POST" action="/admin/login">
+      {{ERROR_MESSAGE}}
+      <div class="rounded-md shadow-sm -space-y-px">
+        <div>
+          <label for="username" class="sr-only">Usuario</label>
+          <input id="username" name="username" type="text" required autocomplete="username"
+                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" 
+                 placeholder="Usuario">
+        </div>
+        <div>
+          <label for="password" class="sr-only">Contraseña</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password"
+                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" 
+                 placeholder="Contraseña">
+        </div>
+      </div>
+
+      <div class="flex items-center">
+        <input id="remember_me" name="remember_me" type="checkbox" 
+               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+        <label for="remember_me" class="ml-2 block text-sm text-gray-900">
+          Recordarme en este dispositivo
+        </label>
+      </div>
+
+      <div>
+        <button type="submit" 
+                class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Entrar
+        </button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
+
