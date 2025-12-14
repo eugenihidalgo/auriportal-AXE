@@ -6,8 +6,8 @@ Tu Google Apps Script está desplegado y listo para usar.
 
 ### 📋 Información del Despliegue
 
-- **URL del Web App:** https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzUvuOn_CVsSeCXRm8DhE-SASZ1bSWCJ2vCYLpk0qMIvXK2ztcgWz2B1i9-5L2xO1bF/exec
-- **ID de Implementación:** AKfycbzUvuOn_CVsSeCXRm8DhE-SASZ1bSWCJ2vCYLpk0qMIvXK2ztcgWz2B1i9-5L2xO1bF
+- **URL del Web App:** `<GOOGLE_WORKER_URL>` (obtén la URL real desde Google Apps Script)
+- **ID de Implementación:** `<GOOGLE_WORKER_SCRIPT_ID>` (obtén el ID después de desplegar)
 
 ---
 
@@ -32,9 +32,9 @@ openssl rand -hex 32
 Una vez tengas el `SCRIPT_SECRET` configurado, prueba con:
 
 ```bash
-curl -X POST 'https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzUvuOn_CVsSeCXRm8DhE-SASZ1bSWCJ2vCYLpk0qMIvXK2ztcgWz2B1i9-5L2xO1bF/exec' \
+curl -X POST '<GOOGLE_WORKER_URL>' \
   -H 'Content-Type: application/json' \
-  -d '{"token":"TU_SCRIPT_SECRET_AQUI","accion":"ping"}'
+  -d '{"token":"<GOOGLE_WORKER_SECRET>","accion":"ping"}'
 ```
 
 Deberías recibir:
@@ -57,9 +57,13 @@ Añade estas variables a tu archivo `.env`:
 
 ```env
 # Google Apps Script Worker
-GOOGLE_WORKER_URL=https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzUvuOn_CVsSeCXRm8DhE-SASZ1bSWCJ2vCYLpk0qMIvXK2ztcgWz2B1i9-5L2xO1bF/exec
-GOOGLE_WORKER_SECRET=tu_script_secret_aqui
+GOOGLE_WORKER_URL=<GOOGLE_WORKER_URL>
+GOOGLE_WORKER_SECRET=<GOOGLE_WORKER_SECRET>
 ```
+
+> **⚠️ IMPORTANTE:** 
+> - `GOOGLE_WORKER_URL`: Obtén la URL real desde Google Apps Script después de desplegar como Web App
+> - `GOOGLE_WORKER_SECRET`: Genera un secreto seguro con `openssl rand -hex 32` y configúralo en Script Properties
 
 ---
 

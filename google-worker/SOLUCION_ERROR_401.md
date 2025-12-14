@@ -12,8 +12,10 @@ Google Apps Script requiere que ejecutes la Web App **una vez manualmente desde 
 
 1. **Abre esta URL en tu navegador:**
    ```
-   https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec
+   <GOOGLE_WORKER_URL>
    ```
+   
+   > **⚠️ IMPORTANTE:** Obtén la URL real desde Google Apps Script después de desplegar el proyecto.
 
 2. **Google pedirá autorización:**
    - Haz clic en "Permitir" o "Allow"
@@ -32,15 +34,17 @@ Puedes usar las herramientas de desarrollo del navegador:
 2. Ejecuta:
 
 ```javascript
-fetch('https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec', {
+fetch('<GOOGLE_WORKER_URL>', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    token: 'a6fd6f09f54ee98189acb4037b818e7cd4fe39f9b4c8fc317786d72eac17468d',
+    token: '<GOOGLE_WORKER_SECRET>',
     accion: 'ping'
   })
 }).then(r => r.json()).then(console.log);
 ```
+
+> **⚠️ IMPORTANTE:** Reemplaza `<GOOGLE_WORKER_URL>` y `<GOOGLE_WORKER_SECRET>` con tus valores reales desde `.env`.
 
 ### Paso 3: Verificar en Apps Script
 

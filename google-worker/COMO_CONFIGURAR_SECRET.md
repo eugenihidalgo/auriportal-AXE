@@ -78,10 +78,12 @@ Usa ese valor como tu SCRIPT_SECRET.
 Después de configurar, prueba con:
 
 ```bash
-curl -X POST 'https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzUvuOn_CVsSeCXRm8DhE-SASZ1bSWCJ2vCYLpk0qMIvXK2ztcgWz2B1i9-5L2xO1bF/exec' \
+curl -X POST '<GOOGLE_WORKER_URL>' \
   -H 'Content-Type: application/json' \
-  -d '{"token":"TU_SECRET_AQUI","accion":"ping"}'
+  -d '{"token":"<GOOGLE_WORKER_SECRET>","accion":"ping"}'
 ```
+
+> **⚠️ IMPORTANTE:** Reemplaza `<GOOGLE_WORKER_URL>` y `<GOOGLE_WORKER_SECRET>` con tus valores reales desde `.env`.
 
 Si funciona, deberías recibir una respuesta con `"status": "ok"`.
 

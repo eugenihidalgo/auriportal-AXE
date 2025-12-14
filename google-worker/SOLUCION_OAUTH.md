@@ -11,7 +11,7 @@ Tu dominio `pdeeugenihidalgo.org` no está verificado en Google Cloud Console, p
 1. Ve a [Google Cloud Console](https://console.cloud.google.com)
 2. Selecciona tu proyecto
 3. Ve a **APIs & Services** → **Credentials**
-4. Haz clic en tu OAuth Client ID (`79274918274-hnn9dup01e6h48dickoi1shf7n4t5dlq...`)
+4. Haz clic en tu OAuth Client ID (el que empieza con `<GOOGLE_CLIENT_ID>`)
 5. En **Authorized redirect URIs**, añade:
    ```
    http://localhost:8080/oauth/callback

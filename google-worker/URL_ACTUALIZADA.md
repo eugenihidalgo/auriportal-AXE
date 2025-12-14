@@ -4,13 +4,15 @@
 
 ### URL del Web App:
 ```
-https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec
+<GOOGLE_WORKER_URL>
 ```
 
 ### ID de Implementación:
 ```
-AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7
+<GOOGLE_WORKER_SCRIPT_ID>
 ```
+
+> **⚠️ IMPORTANTE:** Obtén la URL real desde Google Apps Script después de desplegar el proyecto. Ver [README.md](./README.md) para instrucciones.
 
 ---
 
@@ -19,9 +21,13 @@ AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7
 Añade o actualiza estas líneas en tu archivo `.env`:
 
 ```env
-GOOGLE_WORKER_URL=https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec
-GOOGLE_WORKER_SECRET=a6fd6f09f54ee98189acb4037b818e7cd4fe39f9b4c8fc317786d72eac17468d
+GOOGLE_WORKER_URL=<GOOGLE_WORKER_URL>
+GOOGLE_WORKER_SECRET=<GOOGLE_WORKER_SECRET>
 ```
+
+> **⚠️ IMPORTANTE:** 
+> - `GOOGLE_WORKER_URL`: Obtén la URL real desde Google Apps Script después de desplegar como Web App
+> - `GOOGLE_WORKER_SECRET`: Genera un secreto seguro con `openssl rand -hex 32` y configúralo en Script Properties
 
 ---
 
@@ -30,9 +36,9 @@ GOOGLE_WORKER_SECRET=a6fd6f09f54ee98189acb4037b818e7cd4fe39f9b4c8fc317786d72eac1
 Una vez configurado el SCRIPT_SECRET en Script Properties, prueba con:
 
 ```bash
-curl -X POST 'https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec' \
+curl -X POST '<GOOGLE_WORKER_URL>' \
   -H 'Content-Type: application/json' \
-  -d '{"token":"a6fd6f09f54ee98189acb4037b818e7cd4fe39f9b4c8fc317786d72eac17468d","accion":"ping"}'
+  -d '{"token":"<GOOGLE_WORKER_SECRET>","accion":"ping"}'
 ```
 
 Deberías recibir:

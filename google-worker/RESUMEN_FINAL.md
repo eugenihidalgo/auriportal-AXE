@@ -34,13 +34,15 @@
 
 ### URL del Web App:
 ```
-https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec
+<GOOGLE_WORKER_URL>
 ```
 
 ### ID de Implementación:
 ```
-AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7
+<GOOGLE_WORKER_SCRIPT_ID>
 ```
+
+> **⚠️ IMPORTANTE:** Obtén estos valores reales desde Google Apps Script después de desplegar el proyecto.
 
 ---
 

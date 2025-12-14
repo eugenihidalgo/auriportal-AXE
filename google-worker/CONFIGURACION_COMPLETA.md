@@ -8,7 +8,7 @@
 - [x] SCRIPT_SECRET configurado en Script Properties
 - [x] Web App desplegada
 - [x] Variables añadidas a `.env`
-- [x] URL configurada: `https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec`
+- [x] URL configurada: `<GOOGLE_WORKER_URL>`
 
 ---
 
@@ -17,9 +17,11 @@
 En tu archivo `.env`:
 
 ```env
-GOOGLE_WORKER_URL=https://script.google.com/a/macros/eugenihidalgo.org/s/AKfycbzLaclkdXAn8La4GugLmkJYY26FDyHOYPEL8_iCwT6eRcOWOIWBaVXgrNRuv7FFEfp7/exec
-GOOGLE_WORKER_SECRET=a6fd6f09f54ee98189acb4037b818e7cd4fe39f9b4c8fc317786d72eac17468d
+GOOGLE_WORKER_URL=<GOOGLE_WORKER_URL>
+GOOGLE_WORKER_SECRET=<GOOGLE_WORKER_SECRET>
 ```
+
+> **⚠️ IMPORTANTE:** Configura estos valores reales en tu archivo `.env` del servidor. Ver [README.md](./README.md) para instrucciones.
 
 ---
 

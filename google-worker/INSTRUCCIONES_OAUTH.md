@@ -16,8 +16,10 @@ Esto te mostrará una URL. Ábrela en tu navegador y autoriza.
 1. Abre esta URL en tu navegador (reemplaza con tus credenciales si cambian):
 
 ```
-https://accounts.google.com/o/oauth2/v2/auth?client_id=79274918274-hnn9dup01e6h48dickoi1shf7n4t5dlq.apps.googleusercontent.com&redirect_uri=https://pdeeugenihidalgo.org/oauth/callback&response_type=code&scope=https://www.googleapis.com/auth/script.projects&access_type=offline&prompt=consent
+https://accounts.google.com/o/oauth2/v2/auth?client_id=<GOOGLE_CLIENT_ID>&redirect_uri=<GOOGLE_REDIRECT_URI>&response_type=code&scope=https://www.googleapis.com/auth/script.projects&access_type=offline&prompt=consent
 ```
+
+> **⚠️ IMPORTANTE:** Reemplaza `<GOOGLE_CLIENT_ID>` y `<GOOGLE_REDIRECT_URI>` con tus valores reales desde Google Cloud Console.
 
 2. Autoriza la aplicación
 3. Serás redirigido a tu servidor: `https://pdeeugenihidalgo.org/oauth/callback?code=CODIGO_AQUI&scope=...`

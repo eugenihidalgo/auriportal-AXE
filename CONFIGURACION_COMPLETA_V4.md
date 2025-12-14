@@ -42,11 +42,13 @@ Todos los subdominios están configurados en Cloudflare para `pdeeugenihidalgo.o
 
 **Variables de entorno (.env):**
 ```env
-CLICKUP_API_TOKEN=pk_43724253_WFDCGWI31SV4JJLMS9USKEO14EDN7RY4
-CLICKUP_FOLDER_ID=90128582162
-CLICKUP_TEAM_ID=9012227922
-CLICKUP_SPACE_ID=901214375878
+CLICKUP_API_TOKEN=<CLICKUP_API_TOKEN>
+CLICKUP_FOLDER_ID=<CLICKUP_FOLDER_ID>
+CLICKUP_TEAM_ID=<CLICKUP_TEAM_ID>
+CLICKUP_SPACE_ID=<CLICKUP_SPACE_ID>
 ```
+
+> **⚠️ IMPORTANTE:** Los valores reales deben configurarse en el archivo `.env` del servidor. Ver [CONFIGURACION_TOKENS.md](./CONFIGURACION_TOKENS.md) para obtener los tokens.
 
 ### 🗄️ PostgreSQL
 

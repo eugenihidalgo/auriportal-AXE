@@ -287,6 +287,77 @@ Antes de poner en producción, verifica:
 
 ---
 
+---
+
+## 🔒 Gestión de Secretos y Variables de Entorno
+
+### Archivo .env.example
+
+El proyecto incluye un archivo `.env.example` con todas las variables de entorno necesarias usando placeholders seguros. Este archivo es seguro para versionar en Git.
+
+**Para configurar tu entorno:**
+
+1. Copia el archivo de ejemplo:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edita `.env` con tus valores reales:
+   ```bash
+   nano .env
+   ```
+
+3. **IMPORTANTE:** El archivo `.env` está en `.gitignore` y NO debe committearse nunca.
+
+### Protección contra Fugas de Secretos
+
+El proyecto incluye un script de detección de secretos que escanea el repositorio en busca de valores sensibles:
+
+```bash
+# Ejecutar detección de secretos
+node scripts/detectar-secretos.js
+```
+
+**El script detecta:**
+- Tokens de APIs (ClickUp, Cloudflare, etc.)
+- Secrets hexadecimales largos
+- Passwords en variables de entorno
+- URLs con tokens en query params
+- Database URLs con passwords
+- Y otros patrones comunes de secretos
+
+**Recomendaciones:**
+- Ejecuta el script antes de cada commit
+- Reemplaza valores reales con placeholders (`<VARIABLE_NAME>`) en documentación
+- Nunca incluyas valores reales en archivos `.md` o código
+- Usa el archivo `.env` del servidor para valores reales
+
+### Buenas Prácticas de Seguridad
+
+1. **Separación de Entornos:**
+   - Usa valores diferentes para desarrollo, beta y producción
+   - Los archivos `env.dev.example` y `env.beta.example` están disponibles como referencia
+
+2. **Rotación de Tokens:**
+   - Rota los tokens periódicamente
+   - Especialmente si sospechas que fueron comprometidos
+
+3. **Permisos Mínimos:**
+   - Usa permisos mínimos necesarios en cada servicio
+   - No uses tokens con permisos de administrador si no es necesario
+
+4. **Almacenamiento Seguro:**
+   - Guarda los tokens en un gestor de contraseñas
+   - No compartas tokens por email o chat
+   - Usa variables de entorno del servidor en producción
+
+5. **Verificación Regular:**
+   - Ejecuta `node scripts/detectar-secretos.js` regularmente
+   - Revisa el historial de Git antes de hacer push público
+   - Usa herramientas como `git-secrets` o `truffleHog` para auditorías profundas
+
+---
+
 ## 📞 Soporte
 
 Si tienes problemas configurando los tokens:

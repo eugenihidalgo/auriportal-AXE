@@ -11,8 +11,10 @@
 ### Paso 1: Abre esta URL en tu navegador:
 
 ```
-https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fscript.projects&prompt=consent&response_type=code&client_id=79274918274-hnn9dup01e6h48dickoi1shf7n4t5dlq.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fpdeeugenihidalgo.org%2Foauth%2Fcallback
+https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fscript.projects&prompt=consent&response_type=code&client_id=<GOOGLE_CLIENT_ID>&redirect_uri=<GOOGLE_REDIRECT_URI>
 ```
+
+> **⚠️ IMPORTANTE:** Reemplaza `<GOOGLE_CLIENT_ID>` y `<GOOGLE_REDIRECT_URI>` con tus valores reales desde Google Cloud Console.
 
 ### Paso 2: Autoriza la aplicación
 
