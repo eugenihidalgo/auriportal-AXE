@@ -37,6 +37,7 @@ database/*.sqlite3
 .cache/
 *.tmp
 *.temp
+tmp/
 .tmp/
 .temp/
 *.swp
