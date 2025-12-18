@@ -1,0 +1,425 @@
+<div class="p-6">
+  <div class="mb-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-white mb-2">🧠 {{MOTOR_ID === 'nuevo' ? 'Nuevo Motor' : 'Editar Motor'}}</h1>
+        <p class="text-slate-400">Define la estructura reutilizable que generará este motor.</p>
+      </div>
+      <div>
+        <a href="/admin/motors" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
+          ← Volver al Listado
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="save-status" class="mb-4 hidden"></div>
+
+  <!-- Tabs Navigation -->
+  <div class="bg-slate-800 rounded-t-lg border-b border-slate-700">
+    <div class="flex gap-2 px-4">
+      <button onclick="openTab('tab-identidad')" id="tab-btn-identidad" class="tab-button bg-indigo-600 text-white px-4 py-2 rounded-t-lg hover:bg-indigo-700 transition-colors">
+        1. Identidad
+      </button>
+      <button onclick="openTab('tab-inputs')" id="tab-btn-inputs" class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors">
+        2. Inputs
+      </button>
+      <button onclick="openTab('tab-rules')" id="tab-btn-rules" class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors">
+        3. Reglas
+      </button>
+      <button onclick="openTab('tab-outputs')" id="tab-btn-outputs" class="tab-button bg-slate-700 text-slate-300 px-4 py-2 rounded-t-lg hover:bg-slate-600 transition-colors">
+        4. Output Estructural
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Content Container -->
+  <div class="bg-slate-800 rounded-b-lg p-6">
+    
+    <!-- Tab 1: Identidad -->
+    <div id="tab-identidad" class="tab-content">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Motor Key (canónico, único)</label>
+          <input type="text" id="motor_key" value="{{MOTOR_KEY}}" {{MOTOR_KEY_READONLY}} class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="motor_preparacion_practica">
+          <p class="mt-1 text-xs text-slate-500">Clave única e inmutable. Solo se puede cambiar al crear.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Nombre</label>
+          <input type="text" id="name" value="{{NAME}}" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Motor de Preparación para la Práctica">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Descripción</label>
+          <textarea id="description" rows="3" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Descripción del motor...">{{DESCRIPTION}}</textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Categoría</label>
+          <input type="text" id="category" value="{{CATEGORY}}" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="preparacion">
+        </div>
+
+        <div class="flex items-center gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Versión</label>
+            <input type="number" id="version" value="{{VERSION}}" readonly class="w-24 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" disabled>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Estado</label>
+            <select id="status" class="px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="draft" {{STATUS === 'draft' ? 'selected' : ''}}>Borrador</option>
+              <option value="published" {{STATUS === 'published' ? 'selected' : ''}}>Publicado</option>
+              <option value="archived" {{STATUS === 'archived' ? 'selected' : ''}}>Archivado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Inputs -->
+    <div id="tab-inputs" class="tab-content hidden">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-white">Inputs del Motor</h3>
+          <button onclick="agregarInput()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">
+            ➕ Agregar Input
+          </button>
+        </div>
+        <div id="inputs-container" class="space-y-3">
+          <!-- Los inputs se cargarán dinámicamente -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Reglas -->
+    <div id="tab-rules" class="tab-content hidden">
+      <div class="space-y-4">
+        <div class="mb-4">
+          <h3 class="text-lg font-semibold text-white mb-2">Reglas Internas del Motor</h3>
+          <p class="text-sm text-slate-400">Define la lógica declarativa que procesa los inputs y genera la estructura.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">JSON de Reglas</label>
+          <textarea id="rules-json" rows="15" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder='{"description": "Reglas internas del motor", "logic": {}}'></textarea>
+          <p class="mt-1 text-xs text-slate-500">Solo lógica declarativa. No UI, no temas.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Output Estructural -->
+    <div id="tab-outputs" class="tab-content hidden">
+      <div class="space-y-4">
+        <div class="mb-4">
+          <h3 class="text-lg font-semibold text-white mb-2">Output Estructural AXE</h3>
+          <p class="text-sm text-slate-400">Define qué estructura AXE genera este motor (steps, edges, captures).</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Steps</label>
+            <textarea id="outputs-steps" rows="10" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder='[]'></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Edges</label>
+            <textarea id="outputs-edges" rows="10" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder='[]'></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Captures</label>
+            <textarea id="outputs-captures" rows="10" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder='[]'></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botones de acción -->
+    <div class="mt-6 pt-6 border-t border-slate-700 flex gap-4">
+      <button onclick="guardarMotor()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
+        💾 Guardar Motor
+      </button>
+      <button onclick="validarMotor()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+        ✓ Validar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const motorId = '{{MOTOR_ID}}';
+const isReadonly = {{IS_READONLY}} === true;
+let currentDefinition = null;
+
+// Inicializar definición desde el template
+try {
+  currentDefinition = JSON.parse(`{{DEFINITION}}`.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
+} catch (e) {
+  currentDefinition = { inputs: [], rules: {}, outputs: { steps: [], edges: [], captures: [] } };
+}
+
+// Inicializar primera pestaña
+openTab('tab-identidad');
+
+// Cargar inputs en la pestaña 2
+cargarInputs();
+
+// Cargar reglas en la pestaña 3
+if (currentDefinition.rules) {
+  document.getElementById('rules-json').value = JSON.stringify(currentDefinition.rules, null, 2);
+}
+
+// Cargar outputs en la pestaña 4
+if (currentDefinition.outputs) {
+  document.getElementById('outputs-steps').value = JSON.stringify(currentDefinition.outputs.steps || [], null, 2);
+  document.getElementById('outputs-edges').value = JSON.stringify(currentDefinition.outputs.edges || [], null, 2);
+  document.getElementById('outputs-captures').value = JSON.stringify(currentDefinition.outputs.captures || [], null, 2);
+}
+
+function openTab(tabId) {
+  // Ocultar todos los tabs
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.add('hidden');
+  });
+  document.querySelectorAll('.tab-button').forEach(btn => {
+    btn.classList.remove('bg-indigo-600', 'text-white');
+    btn.classList.add('bg-slate-700', 'text-slate-300');
+  });
+
+  // Mostrar el tab seleccionado
+  document.getElementById(tabId).classList.remove('hidden');
+  const btnId = 'tab-btn-' + tabId.replace('tab-', '');
+  const btn = document.getElementById(btnId);
+  if (btn) {
+    btn.classList.remove('bg-slate-700', 'text-slate-300');
+    btn.classList.add('bg-indigo-600', 'text-white');
+  }
+}
+
+function cargarInputs() {
+  const container = document.getElementById('inputs-container');
+  container.innerHTML = '';
+
+  if (!currentDefinition.inputs || currentDefinition.inputs.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-sm">No hay inputs definidos. Agrega uno para comenzar.</p>';
+    return;
+  }
+
+  currentDefinition.inputs.forEach((input, index) => {
+    const inputHtml = `
+      <div class="bg-slate-900 p-4 rounded-lg border border-slate-700">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Key</label>
+            <input type="text" data-input-index="${index}" data-field="key" value="${input.key || ''}" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm" placeholder="cleaning_type">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Tipo</label>
+            <select data-input-index="${index}" data-field="type" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm">
+              <option value="enum" ${input.type === 'enum' ? 'selected' : ''}>enum</option>
+              <option value="number" ${input.type === 'number' ? 'selected' : ''}>number</option>
+              <option value="string" ${input.type === 'string' ? 'selected' : ''}>string</option>
+              <option value="boolean" ${input.type === 'boolean' ? 'selected' : ''}>boolean</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Requerido</label>
+            <input type="checkbox" data-input-index="${index}" data-field="required" ${input.required ? 'checked' : ''} class="w-5 h-5">
+          </div>
+          <div>
+            <button onclick="eliminarInput(${index})" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors">Eliminar</button>
+          </div>
+        </div>
+        ${input.type === 'enum' ? `
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Opciones (separadas por comas)</label>
+            <input type="text" data-input-index="${index}" data-field="options" value="${(input.options || []).join(', ')}" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm" placeholder="rapida, basica, profunda">
+          </div>
+        ` : ''}
+      </div>
+    `;
+    container.innerHTML += inputHtml;
+  });
+
+  // Agregar event listeners
+  container.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('change', actualizarInput);
+  });
+}
+
+function agregarInput() {
+  if (!currentDefinition.inputs) {
+    currentDefinition.inputs = [];
+  }
+  currentDefinition.inputs.push({
+    key: '',
+    type: 'string',
+    required: false
+  });
+  cargarInputs();
+}
+
+function eliminarInput(index) {
+  if (confirm('¿Eliminar este input?')) {
+    currentDefinition.inputs.splice(index, 1);
+    cargarInputs();
+  }
+}
+
+function actualizarInput(e) {
+  const index = parseInt(e.target.dataset.inputIndex);
+  const field = e.target.dataset.field;
+  const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+
+  if (field === 'options') {
+    currentDefinition.inputs[index].options = value.split(',').map(s => s.trim()).filter(s => s);
+  } else {
+    currentDefinition.inputs[index][field] = value;
+  }
+}
+
+async function guardarMotor() {
+  if (isReadonly) {
+    alert('No se puede editar un motor publicado. Usa "Duplicar" para crear una nueva versión.');
+    return;
+  }
+
+  // Recopilar datos de todas las pestañas
+  const motorData = {
+    motor_key: document.getElementById('motor_key').value,
+    name: document.getElementById('name').value,
+    description: document.getElementById('description').value,
+    category: document.getElementById('category').value,
+    status: document.getElementById('status').value
+  };
+
+  // Recopilar inputs
+  const inputs = [];
+  document.querySelectorAll('[data-input-index]').forEach(el => {
+    const index = parseInt(el.dataset.inputIndex);
+    if (!inputs[index]) {
+      inputs[index] = {};
+    }
+    const field = el.dataset.field;
+    if (field === 'options') {
+      inputs[index].options = el.value.split(',').map(s => s.trim()).filter(s => s);
+    } else if (field === 'required') {
+      inputs[index].required = el.checked;
+    } else {
+      inputs[index][field] = el.value;
+    }
+  });
+  currentDefinition.inputs = inputs.filter(i => i.key);
+
+  // Recopilar rules
+  try {
+    currentDefinition.rules = JSON.parse(document.getElementById('rules-json').value);
+  } catch (e) {
+    alert('Error en el JSON de reglas: ' + e.message);
+    return;
+  }
+
+  // Recopilar outputs
+  try {
+    currentDefinition.outputs = {
+      steps: JSON.parse(document.getElementById('outputs-steps').value || '[]'),
+      edges: JSON.parse(document.getElementById('outputs-edges').value || '[]'),
+      captures: JSON.parse(document.getElementById('outputs-captures').value || '[]')
+    };
+  } catch (e) {
+    alert('Error en el JSON de outputs: ' + e.message);
+    return;
+  }
+
+  motorData.definition = currentDefinition;
+
+  try {
+    const url = motorId === 'nuevo' ? '/admin/pde/motors' : `/admin/pde/motors/${motorId}`;
+    const method = motorId === 'nuevo' ? 'POST' : 'PUT';
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(motorData)
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      mostrarEstado('Motor guardado correctamente', 'success');
+      if (motorId === 'nuevo') {
+        setTimeout(() => {
+          window.location.href = `/admin/motors/editar/${data.motor.id}`;
+        }, 1000);
+      }
+    } else {
+      mostrarEstado('Error: ' + (data.error || 'Error desconocido'), 'error');
+    }
+  } catch (error) {
+    console.error('Error al guardar motor:', error);
+    mostrarEstado('Error al guardar motor: ' + error.message, 'error');
+  }
+}
+
+function validarMotor() {
+  // Validar definición
+  const validation = {
+    valid: true,
+    errors: []
+  };
+
+  if (!currentDefinition.inputs || currentDefinition.inputs.length === 0) {
+    validation.errors.push('Debe haber al menos un input');
+    validation.valid = false;
+  }
+
+  currentDefinition.inputs.forEach((input, index) => {
+    if (!input.key) {
+      validation.errors.push(`Input ${index + 1}: falta "key"`);
+      validation.valid = false;
+    }
+    if (!input.type) {
+      validation.errors.push(`Input ${index + 1}: falta "type"`);
+      validation.valid = false;
+    }
+    if (input.type === 'enum' && (!input.options || input.options.length === 0)) {
+      validation.errors.push(`Input ${index + 1}: los enum deben tener opciones`);
+      validation.valid = false;
+    }
+  });
+
+  if (!currentDefinition.outputs) {
+    validation.errors.push('Faltan outputs');
+    validation.valid = false;
+  } else {
+    if (!Array.isArray(currentDefinition.outputs.steps)) {
+      validation.errors.push('outputs.steps debe ser un array');
+      validation.valid = false;
+    }
+    if (!Array.isArray(currentDefinition.outputs.edges)) {
+      validation.errors.push('outputs.edges debe ser un array');
+      validation.valid = false;
+    }
+    if (!Array.isArray(currentDefinition.outputs.captures)) {
+      validation.errors.push('outputs.captures debe ser un array');
+      validation.valid = false;
+    }
+  }
+
+  if (validation.valid) {
+    alert('✓ Motor válido');
+  } else {
+    alert('✗ Errores de validación:\n' + validation.errors.join('\n'));
+  }
+}
+
+function mostrarEstado(mensaje, tipo) {
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = mensaje;
+  statusEl.className = `mb-4 p-3 rounded ${tipo === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`;
+  statusEl.classList.remove('hidden');
+  setTimeout(() => {
+    statusEl.classList.add('hidden');
+  }, 3000);
+}
+</script>
+

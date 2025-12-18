@@ -462,13 +462,17 @@ async function routerFunction(request, env, ctx) {
         return handleEnergyIlluminate(request, env, ctx);
       }
       
-      // UI del editor de temas
+      // UI del editor de temas (DEPRECATED - redirigir a Theme Studio v2)
       if (path === "/admin/themes/ui" || path === "/admin/apariencia/temas") {
-        // #region agent log
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:433',message:'Router: ruta /admin/themes/ui detectada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        const adminThemesUIHandler = (await import("./endpoints/admin-themes-ui.js")).default;
-        return adminThemesUIHandler(request, env, ctx);
+        // Redirigir a Theme Studio v2
+        const studioUrl = new URL('/admin/themes/studio', request.url);
+        return Response.redirect(studioUrl.toString(), 302);
+      }
+      
+      // Theme Studio v2 - Nueva UI de temas
+      if (path === "/admin/themes/studio") {
+        const adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+        return adminThemesStudioUIHandler(request, env, ctx);
       }
       
       // Endpoints API de temas (antes de delegar a admin-panel-v4)
@@ -784,6 +788,19 @@ async function routerFunction(request, env, ctx) {
     return googleApiManagerHandler(request, env, ctx);
   }
 
+  // UI del editor de temas (DEPRECATED - redirigir a Theme Studio v2)
+  if (path === "/admin/themes/ui" || path === "/admin/apariencia/temas") {
+    // Redirigir a Theme Studio v2
+    const studioUrl = new URL('/admin/themes/studio', request.url);
+    return Response.redirect(studioUrl.toString(), 302);
+  }
+  
+  // Theme Studio v2 - Nueva UI de temas
+  if (path === "/admin/themes/studio") {
+    const adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+    return adminThemesStudioUIHandler(request, env, ctx);
+  }
+  
   // Endpoints API de temas (antes de delegar a admin-panel-v4)
   if (path.startsWith("/admin/themes")) {
     const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;

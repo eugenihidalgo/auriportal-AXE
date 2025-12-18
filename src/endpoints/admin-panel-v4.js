@@ -39,6 +39,13 @@ import {
 import { createOrUpdateStudent } from '../modules/student-v4.js';
 import { actualizarNivelSiCorresponde } from '../modules/nivel-v4.js';
 import { sincronizarFrasesClickUpAPostgreSQL } from '../services/sync-frases-clickup.js';
+import { 
+  listFrasesPersonalizadas, 
+  getFrasesPersonalizadasById,
+  createFrasesPersonalizadas,
+  updateFrasesPersonalizadas,
+  softDeleteFrasesPersonalizadas
+} from '../services/pde-frases-personalizadas.js';
 import { findStudentByEmail } from '../modules/student-v4.js';
 import { getPausaActiva } from '../modules/pausa-v4.js';
 import { getDefaultSubscriptionRepo } from '../infra/repos/subscription-repo-pg.js';
@@ -561,12 +568,7 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderAuditoria(request, env);
   }
 
-  // Ruta para sincronizar frases (POST)
-  if (path === '/admin/frases' && request.method === 'POST' && url.searchParams.get('action') === 'sync') {
-    return await handleSyncFrases(env, request);
-  }
-
-  // Ruta para listar frases (GET)
+  // Ruta para frases personalizadas PDE (GET y POST)
   if (path === '/admin/frases') {
     return await renderFrases(request, env);
   }
@@ -1387,7 +1389,24 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderEditarDecreto(request, env, decretoId);
   }
 
-  // API de Decretos
+  // Diseñador de Motores
+  if (path === '/admin/motors') {
+    const { renderListadoMotors } = await import('./admin-motors.js');
+    return await renderListadoMotors(request, env);
+  }
+  if (path.startsWith('/admin/motors/editar/')) {
+    const motorId = path.split('/').pop();
+    const { renderEditarMotor } = await import('./admin-motors.js');
+    return await renderEditarMotor(request, env, motorId);
+  }
+  
+  // API de Motores
+  if (path.startsWith('/admin/pde/motors')) {
+    const adminMotorsApiHandler = (await import('./admin-motors-api.js')).default;
+    return await adminMotorsApiHandler(request, env, ctx);
+  }
+
+  // API de Decretos (legacy - mantener compatibilidad)
   if (path === '/api/decretos/crear' && request.method === 'POST') {
     const { apiCrearDecreto } = await import('./admin-decretos.js');
     return await apiCrearDecreto(request, env);
@@ -1403,6 +1422,36 @@ export default async function adminPanelHandler(request, env, ctx) {
   if (path === '/api/decretos/sync' && request.method === 'POST') {
     const { apiSincronizarDecretos } = await import('./admin-decretos.js');
     return await apiSincronizarDecretos(request, env);
+  }
+  
+  // API RESTful de Decretos: /api/pde/decretos/*
+  if (path === '/api/pde/decretos' && request.method === 'GET') {
+    const { apiListarDecretos } = await import('./admin-decretos.js');
+    return await apiListarDecretos(request, env);
+  }
+  if (path === '/api/pde/decretos' && request.method === 'POST') {
+    const { apiCrearDecretoREST } = await import('./admin-decretos.js');
+    return await apiCrearDecretoREST(request, env);
+  }
+  if (path.startsWith('/api/pde/decretos/') && path.endsWith('/restore') && request.method === 'POST') {
+    const decretoId = path.split('/api/pde/decretos/')[1].replace('/restore', '');
+    const { apiRestaurarDecreto } = await import('./admin-decretos.js');
+    return await apiRestaurarDecreto(request, env, decretoId);
+  }
+  if (path.startsWith('/api/pde/decretos/') && request.method === 'GET') {
+    const decretoId = path.split('/api/pde/decretos/')[1];
+    const { apiObtenerDecreto } = await import('./admin-decretos.js');
+    return await apiObtenerDecreto(request, env, decretoId);
+  }
+  if (path.startsWith('/api/pde/decretos/') && request.method === 'PUT') {
+    const decretoId = path.split('/api/pde/decretos/')[1];
+    const { apiActualizarDecretoREST } = await import('./admin-decretos.js');
+    return await apiActualizarDecretoREST(request, env, decretoId);
+  }
+  if (path.startsWith('/api/pde/decretos/') && request.method === 'DELETE') {
+    const decretoId = path.split('/api/pde/decretos/')[1];
+    const { apiEliminarDecretoREST } = await import('./admin-decretos.js');
+    return await apiEliminarDecretoREST(request, env, decretoId);
   }
 
   // Recursos Técnicos (Músicas y Tonos)
@@ -2779,98 +2828,106 @@ async function renderPracticas(request, env) {
 }
 
 /**
- * Renderiza lista de frases
+ * Renderiza editor PDE de frases personalizadas
+ * Editor completo para gestionar recursos PDE de frases por nivel
  */
 async function renderFrases(request, env) {
   try {
     const url = new URL(request.url);
-    const filters = {
-      nivel: url.searchParams.get('nivel') || null,
-      search: url.searchParams.get('search') || null,
-      sortBy: url.searchParams.get('sortBy') || 'nivel',
-      sortOrder: url.searchParams.get('sortOrder') || 'asc'
-    };
-
-    const frasesList = await getFrasesList(filters);
-
+    const action = url.searchParams.get('action');
+    const id = url.searchParams.get('id');
+    
+    // Manejar acciones POST
+    if (request.method === 'POST') {
+      if (action === 'create' || action === 'update') {
+        return await handleSaveFrases(request, env, action === 'update' ? parseInt(id) : null);
+      } else if (action === 'delete' && id) {
+        return await handleDeleteFrases(request, env, parseInt(id));
+      }
+    }
+    
+    // Mostrar formulario de edición/creación
+    if (action === 'edit' && id) {
+      return await renderEditFrases(request, env, parseInt(id));
+    }
+    if (action === 'new') {
+      return await renderEditFrases(request, env, null);
+    }
+    
+    // Listar recursos PDE de frases personalizadas
+    const recursos = await listFrasesPersonalizadas();
+    
     const content = `
       <div class="px-4 py-5 sm:p-6">
         <div class="flex justify-between items-center mb-6">
-          <h2 class="text-2xl font-bold text-white">Frases</h2>
-          <form method="POST" action="/admin/frases?action=sync" class="inline">
-            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
-              Sincronizar desde ClickUp
-            </button>
-          </form>
+          <div>
+            <h2 class="text-2xl font-bold text-white">Frases Personalizadas por Nivel Mínimo (PDE)</h2>
+            <p class="text-sm text-slate-400 mt-1">Recurso PDE canónico global disponible en recorridos, screen templates, AXE y navegación</p>
+          </div>
+          <a href="/admin/frases?action=new" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+            + Nuevo Recurso
+          </a>
         </div>
 
-        <!-- Filtros -->
-        <div class="bg-slate-800 shadow-xl rounded border border-slate-700-lg p-4 mb-6">
-          <form method="GET" action="/admin/frases" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <input type="number" name="nivel" placeholder="Nivel" value="${filters.nivel || ''}" 
-                   class="px-3 py-2 border border-slate-600 rounded-md">
-            <input type="text" name="search" placeholder="Buscar en frase" value="${filters.search || ''}" 
-                   class="px-3 py-2 border border-slate-600 rounded-md">
-            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
-              Filtrar
-            </button>
-          </form>
-        </div>
-
-        <!-- Tabla de frases -->
+        <!-- Lista de recursos -->
         <div class="bg-slate-800 shadow-xl rounded border border-slate-700-lg overflow-hidden">
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-700">
               <thead class="bg-slate-750">
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">ID</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">
-                    <a href="/admin/frases?${(() => { const p = new URLSearchParams(); if (filters.nivel) p.set('nivel', filters.nivel); if (filters.search) p.set('search', filters.search); p.set('sortBy', 'nivel'); p.set('sortOrder', filters.sortBy === 'nivel' && filters.sortOrder === 'asc' ? 'desc' : 'asc'); return p.toString(); })()}" class="hover:text-indigo-600">
-                      Nivel ${filters.sortBy === 'nivel' ? (filters.sortOrder === 'asc' ? '↑' : '↓') : ''}
-                    </a>
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">
-                    <a href="/admin/frases?${(() => { const p = new URLSearchParams(); if (filters.nivel) p.set('nivel', filters.nivel); if (filters.search) p.set('search', filters.search); p.set('sortBy', 'frase'); p.set('sortOrder', filters.sortBy === 'frase' && filters.sortOrder === 'asc' ? 'desc' : 'asc'); return p.toString(); })()}" class="hover:text-indigo-600">
-                      Frase ${filters.sortBy === 'frase' ? (filters.sortOrder === 'asc' ? '↑' : '↓') : ''}
-                    </a>
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Origen</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">
-                    <a href="/admin/frases?${(() => { const p = new URLSearchParams(); if (filters.nivel) p.set('nivel', filters.nivel); if (filters.search) p.set('search', filters.search); p.set('sortBy', 'created_at'); p.set('sortOrder', filters.sortBy === 'created_at' && filters.sortOrder === 'asc' ? 'desc' : 'asc'); return p.toString(); })()}" class="hover:text-indigo-600">
-                      Creada ${filters.sortBy === 'created_at' ? (filters.sortOrder === 'asc' ? '↑' : '↓') : ''}
-                    </a>
-                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Nombre</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Descripción</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Niveles con Frases</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Total Frases</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">Acciones</th>
                 </tr>
               </thead>
               <tbody class="bg-slate-800 divide-y divide-slate-700">
-                ${frasesList.length === 0 ? `
+                ${recursos.length === 0 ? `
                   <tr>
-                    <td colspan="5" class="px-6 py-8 text-center text-sm text-slate-400">
-                      No hay frases sincronizadas. <a href="/admin/frases?action=sync" class="text-indigo-600 hover:text-indigo-900">Sincronizar desde ClickUp</a>
+                    <td colspan="6" class="px-6 py-8 text-center text-sm text-slate-400">
+                      No hay recursos de frases personalizadas. <a href="/admin/frases?action=new" class="text-indigo-600 hover:text-indigo-900">Crear el primero</a>
                     </td>
                   </tr>
-                ` : frasesList.map(f => `
-                  <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${f.id}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${f.nivel}</td>
-                    <td class="px-6 py-4 text-sm text-slate-400">${f.frase ? f.frase.substring(0, 100) + (f.frase.length > 100 ? '...' : '') : '-'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${f.origen || 'clickup'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${f.created_at ? new Date(f.created_at).toLocaleDateString('es-ES') : '-'}</td>
-                  </tr>
-                `).join('')}
+                ` : recursos.map(r => {
+                  const niveles = Object.keys(r.frases_por_nivel || {}).filter(n => {
+                    const frases = r.frases_por_nivel[n];
+                    return Array.isArray(frases) && frases.length > 0;
+                  });
+                  const totalFrases = Object.values(r.frases_por_nivel || {}).reduce((sum, arr) => {
+                    return sum + (Array.isArray(arr) ? arr.length : 0);
+                  }, 0);
+                  
+                  return `
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${r.id}</td>
+                      <td class="px-6 py-4 text-sm text-white font-medium">${r.nombre || '-'}</td>
+                      <td class="px-6 py-4 text-sm text-slate-400">${r.descripcion ? (r.descripcion.substring(0, 50) + (r.descripcion.length > 50 ? '...' : '')) : '-'}</td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${niveles.join(', ') || 'Ninguno'}</td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${totalFrases}</td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <a href="/admin/frases?action=edit&id=${r.id}" class="text-indigo-400 hover:text-indigo-300 mr-3">Editar</a>
+                        <form method="POST" action="/admin/frases?action=delete&id=${r.id}" class="inline" onsubmit="return confirm('¿Eliminar este recurso?');">
+                          <button type="submit" class="text-red-400 hover:text-red-300">Eliminar</button>
+                        </form>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>
         </div>
 
         <div class="mt-4 text-sm text-slate-400">
-          Total: ${frasesList.length} frases
+          Total: ${recursos.length} recursos de frases personalizadas
         </div>
       </div>
     `;
 
     const html = replace(baseTemplate, {
-      TITLE: 'Frases',
+      TITLE: 'Frases Personalizadas (PDE)',
       CONTENT: content
     });
 
@@ -2884,23 +2941,244 @@ async function renderFrases(request, env) {
 }
 
 /**
- * Maneja sincronización de frases
+ * Renderiza formulario de edición/creación de recurso de frases
  */
-async function handleSyncFrases(env, request) {
+async function renderEditFrases(request, env, id) {
   try {
-    await sincronizarFrasesClickUpAPostgreSQL(env);
-    return new Response('', {
-      status: 302,
-      headers: { 'Location': getAbsoluteUrl(request, '/admin/frases?sync=success') }
+    let recurso = null;
+    if (id) {
+      recurso = await getFrasesPersonalizadasById(id);
+      if (!recurso) {
+        return new Response('Recurso no encontrado', { status: 404 });
+      }
+    }
+    
+    const frasesPorNivel = recurso?.frases_por_nivel || {};
+    const niveles = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    
+    const content = `
+      <div class="px-4 py-5 sm:p-6">
+        <div class="mb-6">
+          <a href="/admin/frases" class="text-indigo-400 hover:text-indigo-300 mb-4 inline-block">← Volver a la lista</a>
+          <h2 class="text-2xl font-bold text-white">${id ? 'Editar' : 'Nuevo'} Recurso de Frases Personalizadas</h2>
+        </div>
+
+        <form method="POST" action="/admin/frases?action=${id ? 'update&id=' + id : 'create'}" class="space-y-6">
+          <!-- Nombre -->
+          <div class="bg-slate-800 shadow-xl rounded border border-slate-700-lg p-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Nombre del Recurso *
+            </label>
+            <input type="text" name="nombre" value="${recurso?.nombre || ''}" required
+                   class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                   placeholder="Ej: Frases de Motivación">
+          </div>
+
+          <!-- Descripción -->
+          <div class="bg-slate-800 shadow-xl rounded border border-slate-700-lg p-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Descripción (opcional)
+            </label>
+            <textarea name="descripcion" rows="3"
+                      class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                      placeholder="Descripción del conjunto de frases">${recurso?.descripcion || ''}</textarea>
+          </div>
+
+          <!-- Frases por Nivel -->
+          <div class="bg-slate-800 shadow-xl rounded border border-slate-700-lg p-6">
+            <label class="block text-sm font-medium text-slate-300 mb-4">
+              Frases por nivel mínimo
+            </label>
+            <p class="text-sm text-slate-400 mb-4">
+              Cada frase tiene un nivel mínimo de aparición. Los alumnos verán una frase si su nivel es igual o superior al nivel indicado. El sistema seleccionará una frase aleatoria entre todas las disponibles para su nivel.
+            </p>
+            
+            ${niveles.map(nivel => {
+              const frasesDelNivel = frasesPorNivel[String(nivel)] || [];
+              return `
+                <div class="mb-6 pb-6 border-b border-slate-700 last:border-0">
+                  <label class="block text-sm font-medium text-slate-300 mb-2">
+                    Nivel mínimo ${nivel}
+                  </label>
+                  <div id="frases-nivel-${nivel}" class="space-y-2">
+                    ${frasesDelNivel.map((frase, idx) => `
+                      <div class="flex gap-2">
+                        <input type="text" name="frases_${nivel}_${idx}" value="${frase.replace(/"/g, '&quot;')}"
+                               class="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                               placeholder="Frase con nivel mínimo ${nivel}">
+                        <button type="button" onclick="removeFrase(${nivel}, ${idx})" 
+                                class="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                          Eliminar
+                        </button>
+                      </div>
+                    `).join('')}
+                    ${frasesDelNivel.length === 0 ? `
+                      <div class="flex gap-2">
+                        <input type="text" name="frases_${nivel}_0" value=""
+                               class="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                               placeholder="Frase con nivel mínimo ${nivel}">
+                        <button type="button" onclick="removeFrase(${nivel}, 0)" 
+                                class="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                          Eliminar
+                        </button>
+                      </div>
+                    ` : ''}
+                  </div>
+                  <button type="button" onclick="addFrase(${nivel})" 
+                          class="mt-2 px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm">
+                    + Agregar otra frase
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Botones -->
+          <div class="flex gap-4">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+              ${id ? 'Actualizar' : 'Crear'} Recurso
+            </button>
+            <a href="/admin/frases" class="px-6 py-2 bg-slate-600 text-white rounded-md hover:bg-slate-700">
+              Cancelar
+            </a>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        let fraseCounters = {
+          ${niveles.map(n => `${n}: ${(frasesPorNivel[String(n)] || []).length || 1}`).join(',\n          ')}
+        };
+
+        function addFrase(nivel) {
+          const container = document.getElementById('frases-nivel-' + nivel);
+          const counter = fraseCounters[nivel] || 0;
+          const newIndex = counter;
+          fraseCounters[nivel] = counter + 1;
+          
+          const div = document.createElement('div');
+          div.className = 'flex gap-2';
+          div.innerHTML = \`
+            <input type="text" name="frases_\${nivel}_\${newIndex}" value=""
+                   class="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                   placeholder="Frase con nivel mínimo \${nivel}">
+            <button type="button" onclick="this.parentElement.remove()" 
+                    class="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+              Eliminar
+            </button>
+          \`;
+          container.appendChild(div);
+        }
+
+        function removeFrase(nivel, idx) {
+          const input = document.querySelector(\`input[name="frases_\${nivel}_\${idx}"]\`);
+          if (input) {
+            input.parentElement.remove();
+          }
+        }
+      </script>
+    `;
+
+    const html = replace(baseTemplate, {
+      TITLE: id ? 'Editar Frases Personalizadas' : 'Nuevo Recurso de Frases',
+      CONTENT: content
+    });
+
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
     });
   } catch (error) {
-    console.error('Error sincronizando frases:', error);
-    return new Response('', {
-      status: 302,
-      headers: { 'Location': getAbsoluteUrl(request, '/admin/frases?sync=error') }
-    });
+    console.error('Error renderizando formulario de frases:', error);
+    return new Response(`Error: ${error.message}`, { status: 500 });
   }
 }
+
+/**
+ * Maneja guardado de recurso de frases (create/update)
+ */
+async function handleSaveFrases(request, env, id) {
+  try {
+    const formData = await request.formData();
+    const nombre = formData.get('nombre');
+    const descripcion = formData.get('descripcion') || null;
+    
+    // Construir frases_por_nivel desde los campos del formulario
+    const frasesPorNivel = {};
+    for (let nivel = 1; nivel <= 9; nivel++) {
+      const frasesDelNivel = [];
+      let idx = 0;
+      while (true) {
+        const frase = formData.get(`frases_${nivel}_${idx}`);
+        if (!frase) break;
+        const fraseTrimmed = frase.trim();
+        if (fraseTrimmed) {
+          frasesDelNivel.push(fraseTrimmed);
+        }
+        idx++;
+      }
+      if (frasesDelNivel.length > 0) {
+        frasesPorNivel[String(nivel)] = frasesDelNivel;
+      }
+    }
+    
+    let resultado;
+    if (id) {
+      resultado = await updateFrasesPersonalizadas(id, {
+        nombre,
+        descripcion,
+        frases_por_nivel: frasesPorNivel
+      });
+    } else {
+      resultado = await createFrasesPersonalizadas({
+        nombre,
+        descripcion,
+        frases_por_nivel: frasesPorNivel
+      });
+    }
+    
+    if (!resultado) {
+      return new Response('Error guardando recurso', { status: 500 });
+    }
+    
+    const url = new URL(request.url);
+    url.pathname = '/admin/frases';
+    url.search = '';
+    
+    return new Response('', {
+      status: 302,
+      headers: { 'Location': url.toString() }
+    });
+  } catch (error) {
+    console.error('Error guardando frases:', error);
+    return new Response(`Error: ${error.message}`, { status: 500 });
+  }
+}
+
+/**
+ * Maneja eliminación de recurso de frases (soft delete)
+ */
+async function handleDeleteFrases(request, env, id) {
+  try {
+    const resultado = await softDeleteFrasesPersonalizadas(id);
+    
+    if (!resultado) {
+      return new Response('Error eliminando recurso', { status: 500 });
+    }
+    
+    const url = new URL(request.url);
+    url.pathname = '/admin/frases';
+    url.search = '';
+    
+    return new Response('', {
+      status: 302,
+      headers: { 'Location': url.toString() }
+    });
+  } catch (error) {
+    console.error('Error eliminando frases:', error);
+    return new Response(`Error: ${error.message}`, { status: 500 });
+  }
+}
+
 
 /**
  * Renderiza página de logs
@@ -5924,6 +6202,7 @@ export const ADMIN_ROUTE_REGISTRY = [
   { path: '/admin/protecciones-energeticas', handler: 'renderProtecciones', description: 'Protecciones energéticas' },
   { path: '/admin/tecnicas-post-practica', handler: 'renderTecnicasPostPractica', description: 'Técnicas post-práctica' },
   { path: '/admin/decretos', handler: 'renderDecretos', description: 'Decretos' },
+  { path: '/admin/motors', handler: 'renderMotors', description: 'Diseñador de Motores' },
   { path: '/admin/recursos-tecnicos/*', handler: 'admin-recursos-tecnicos.js', description: 'Recursos técnicos' },
   
   // === COMUNICACIÓN ===

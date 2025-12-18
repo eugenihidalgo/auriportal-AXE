@@ -1,0 +1,107 @@
+<div class="p-6">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold text-white mb-2">🧠 Diseñador de Motores</h1>
+    <p class="text-slate-400">Gestiona los motores reutilizables que generan estructura AXE para recorridos.</p>
+  </div>
+
+  <div class="mb-4">
+    <a href="/admin/motors/editar/nuevo" class="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
+      ➕ Crear Nuevo Motor
+    </a>
+  </div>
+
+  <div class="bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-slate-900">
+        <tr>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Nombre</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Motor Key</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Categoría</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Versión</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Estado</th>
+          <th class="py-3 px-4 text-left text-sm font-semibold text-slate-300">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{MOTORS_ROWS}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function eliminarMotor(id) {
+  if (!confirm('¿Estás seguro de que quieres eliminar este motor?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/pde/motors/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      alert('Motor eliminado correctamente');
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error al eliminar motor:', error);
+    alert('Error al eliminar motor: ' + error.message);
+  }
+}
+
+async function duplicarMotor(id) {
+  try {
+    const response = await fetch(`/admin/pde/motors/${id}/duplicate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      alert('Motor duplicado correctamente');
+      window.location.href = `/admin/motors/editar/${data.motor.id}`;
+    } else {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error al duplicar motor:', error);
+    alert('Error al duplicar motor: ' + error.message);
+  }
+}
+
+async function publicarMotor(id) {
+  if (!confirm('¿Estás seguro de que quieres publicar este motor? Los motores publicados no se pueden editar.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/pde/motors/${id}/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      alert('Motor publicado correctamente');
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error al publicar motor:', error);
+    alert('Error al publicar motor: ' + error.message);
+  }
+}
+</script>
+
