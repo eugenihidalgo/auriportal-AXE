@@ -101,10 +101,7 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
   const path = url.pathname;
   const method = request.method;
 
-  // GET /admin/pde/catalog-registry - Lista de catálogos
-  if (path === '/admin/pde/catalog-registry' && method === 'GET') {
-    return await renderCatalogList(request, env);
-  }
+  console.log(`[CatalogRegistry] ${method} ${path}`);
 
   // GET /admin/pde/catalog-registry/:id - Obtener catálogo (API)
   if (path.match(/^\/admin\/pde\/catalog-registry\/([^\/]+)$/) && method === 'GET') {
@@ -184,7 +181,7 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
     }
   }
 
-  // GET /admin/pde/catalog-registry (API para dropdowns)
+  // GET /admin/pde/catalog-registry (API para dropdowns) - DEBE IR ANTES de la ruta HTML
   if (path === '/admin/pde/catalog-registry' && method === 'GET' && url.searchParams.get('format') === 'json') {
     const authCtx = await requireAdminContext(request, env);
     if (authCtx instanceof Response) {
@@ -208,6 +205,12 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+  }
+
+  // GET /admin/pde/catalog-registry - Lista de catálogos (HTML)
+  if (path === '/admin/pde/catalog-registry' && method === 'GET') {
+    console.log(`[CatalogRegistry] Rendering catalog list`);
+    return await renderCatalogList(request, env);
   }
 
   return new Response('Not Found', { status: 404 });
