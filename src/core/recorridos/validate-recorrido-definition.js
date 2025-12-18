@@ -22,9 +22,9 @@ addFormats(ajv);
  * @param {Object} definition - RecorridoDefinition a validar
  * @param {Object} options - Opciones de validación
  * @param {boolean} options.isPublish - Si es true, bloquea con errores (publish). Si es false, permite warnings (draft)
- * @returns {{ valid: boolean, errors: Array, warnings: Array }} Resultado de la validación
+ * @returns {Promise<{ valid: boolean, errors: Array, warnings: Array }>} Resultado de la validación
  */
-export function validateRecorridoDefinition(definition, options = {}) {
+export async function validateRecorridoDefinition(definition, options = {}) {
   const { isPublish = false } = options;
   const errors = [];
   const warnings = [];
@@ -41,7 +41,7 @@ export function validateRecorridoDefinition(definition, options = {}) {
   if (definition.steps) {
     for (const [stepId, step] of Object.entries(definition.steps)) {
       // Pasar isPublish para validación estricta de campos publish_required
-      const stepErrors = validateStep(stepId, step, isPublish);
+      const stepErrors = await validateStep(stepId, step, isPublish);
       errors.push(...stepErrors);
       
       const stepWarnings = validateStepWarnings(stepId, step);
@@ -140,8 +140,9 @@ function isValidSlug(str) {
  * @param {string} stepId - ID del step
  * @param {Object} step - Step a validar
  * @param {boolean} isPublish - Si es publicación, aplica validación estricta
+ * @returns {Promise<Array>} Array de errores
  */
-function validateStep(stepId, step, isPublish = false) {
+async function validateStep(stepId, step, isPublish = false) {
   const errors = [];
   
   if (!step || typeof step !== 'object') {
@@ -149,7 +150,53 @@ function validateStep(stepId, step, isPublish = false) {
     return errors;
   }
   
-  // Validar screen_template_id
+  // ============================================================================
+  // VALIDACIÓN ESPECÍFICA: Steps motor (type === "motor")
+  // ============================================================================
+  if (step.type === 'motor') {
+    // Validar motor_key (obligatorio)
+    if (!step.motor_key || typeof step.motor_key !== 'string' || step.motor_key.trim() === '') {
+      errors.push(`Step motor "${stepId}": debe tener un "motor_key" (string no vacío)`);
+    }
+    
+    // Validar motor_version (obligatorio, debe ser número)
+    if (step.motor_version === undefined || step.motor_version === null) {
+      errors.push(`Step motor "${stepId}": debe tener un "motor_version" (número)`);
+    } else if (typeof step.motor_version !== 'number' || step.motor_version < 1) {
+      errors.push(`Step motor "${stepId}": motor_version debe ser un número >= 1`);
+    }
+    
+    // Validar inputs (opcional pero debe ser objeto si existe)
+    if (step.inputs !== undefined && (typeof step.inputs !== 'object' || Array.isArray(step.inputs))) {
+      errors.push(`Step motor "${stepId}": inputs debe ser un objeto`);
+    }
+    
+    // En publish, verificar que el motor existe y está published
+    if (isPublish && step.motor_key) {
+      try {
+        const { getMotorByKey } = await import('../services/pde-motors-service.js');
+        const motor = await getMotorByKey(step.motor_key);
+        
+        if (!motor) {
+          errors.push(`Step motor "${stepId}": motor con key "${step.motor_key}" no existe`);
+        } else if (motor.status !== 'published') {
+          errors.push(`Step motor "${stepId}": motor "${step.motor_key}" no está published (status: ${motor.status}). Solo se pueden usar motores con status = "published"`);
+        } else if (step.motor_version && motor.version !== step.motor_version) {
+          // Warning: versión no coincide (pero no bloquea en draft)
+          // En publish, esto podría ser un warning, pero por ahora lo permitimos
+          // ya que usamos la versión actual del motor published
+        }
+      } catch (error) {
+        // Si hay error al verificar el motor, añadir error
+        errors.push(`Step motor "${stepId}": error verificando motor "${step.motor_key}": ${error.message}`);
+      }
+    }
+    
+    // Los steps motor no tienen screen_template_id, así que retornamos aquí
+    return errors;
+  }
+  
+  // Validar screen_template_id (para steps normales)
   if (!step.screen_template_id || typeof step.screen_template_id !== 'string') {
     errors.push(`Step "${stepId}": debe tener un "screen_template_id" (string)`);
   } else {

@@ -93,6 +93,18 @@ const STEP_TYPES = {
     extra_validations: {
       allows_summary: true
     }
+  },
+  motor: {
+    id: 'motor',
+    name: 'Motor PDE',
+    description: 'Paso que expande a múltiples steps usando un Motor PDE',
+    feature_flag: 'on',
+    compatible_templates: [], // Los motores no usan templates, se expanden en publish
+    extra_validations: {
+      requires_motor_key: true,
+      requires_motor_version: true,
+      allows_inputs: true
+    }
   }
 };
 

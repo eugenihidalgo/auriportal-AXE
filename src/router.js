@@ -1115,6 +1115,12 @@ async function routerFunction(request, env, ctx) {
   }
   // #endregion
 
+  // Endpoints API de Motores PDE (Admin)
+  if (path.startsWith("/admin/pde/motors")) {
+    const adminMotorsApiHandler = (await import("./endpoints/admin-motors-api.js")).default;
+    return adminMotorsApiHandler(request, env, ctx);
+  }
+
   // Panel de control administrativo
   // #region agent log
   if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {

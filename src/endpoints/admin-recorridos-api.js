@@ -504,7 +504,7 @@ async function handleValidateDraft(request, env, ctx, recorridoId) {
     }
 
     // Validar con isPublish:false (permite warnings)
-    const validation = validateRecorridoDefinition(definition_json, { isPublish: false });
+    const validation = await validateRecorridoDefinition(definition_json, { isPublish: false });
 
     const auditRepo = getDefaultRecorridoAuditRepo();
     const draftRepo = getDefaultRecorridoDraftRepo();
@@ -637,8 +637,31 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           });
         }
 
-        // Validar definition generada
-        const definitionValidation = validateRecorridoDefinition(definitionToPublish, { isPublish: true });
+        // EXPANDIR MOTORES: Convertir steps motor en steps reales
+        try {
+          const { expandMotorsInDefinition } = await import('../core/recorridos/expand-motors.js');
+          definitionToPublish = await expandMotorsInDefinition(definitionToPublish, {
+            // Contexto opcional para la expansión (puede incluir datos del estudiante en el futuro)
+          });
+          
+          logInfo('RecorridosPublish', 'Motores expandidos en definition desde canvas', {
+            recorrido_id: recorridoId,
+            version: nextVersion,
+            steps_after_expansion: Object.keys(definitionToPublish.steps || {}).length
+          });
+        } catch (motorError) {
+          await client.query('ROLLBACK');
+          logError('RecorridosPublish', 'Error expandiendo motores en definition desde canvas', {
+            recorrido_id: recorridoId,
+            error: motorError.message
+          });
+          return errorResponse(`Error expandiendo motores: ${motorError.message}`, 400, {
+            error: motorError.message
+          });
+        }
+
+        // Validar definition generada (después de expandir motores)
+        const definitionValidation = await validateRecorridoDefinition(definitionToPublish, { isPublish: true });
         if (!definitionValidation.valid) {
           await client.query('ROLLBACK');
           return errorResponse('No se puede publicar: la definition generada desde canvas tiene errores', 400, {
@@ -655,8 +678,32 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           version: nextVersion
         });
 
-        // Validar definition_json legacy
-        const validation = validateRecorridoDefinition(draft.definition_json, { isPublish: true });
+        // EXPANDIR MOTORES: Convertir steps motor en steps reales (legacy)
+        definitionToPublish = draft.definition_json;
+        try {
+          const { expandMotorsInDefinition } = await import('../core/recorridos/expand-motors.js');
+          definitionToPublish = await expandMotorsInDefinition(definitionToPublish, {
+            // Contexto opcional para la expansión
+          });
+          
+          logInfo('RecorridosPublish', 'Motores expandidos en definition legacy', {
+            recorrido_id: recorridoId,
+            version: nextVersion,
+            steps_after_expansion: Object.keys(definitionToPublish.steps || {}).length
+          });
+        } catch (motorError) {
+          await client.query('ROLLBACK');
+          logError('RecorridosPublish', 'Error expandiendo motores en definition legacy', {
+            recorrido_id: recorridoId,
+            error: motorError.message
+          });
+          return errorResponse(`Error expandiendo motores: ${motorError.message}`, 400, {
+            error: motorError.message
+          });
+        }
+
+        // Validar definition_json legacy (después de expandir motores)
+        const validation = await validateRecorridoDefinition(definitionToPublish, { isPublish: true });
         if (!validation.valid) {
           await client.query('ROLLBACK');
           
@@ -685,7 +732,6 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           });
         }
         
-        definitionToPublish = draft.definition_json;
         definitionWarnings = validation.warnings;
 
         // Opcionalmente derivar canvas desde definition para visualización
@@ -1697,7 +1743,7 @@ async function handleConvertCanvasToRecorrido(request, env, ctx, recorridoId) {
     const warnings = [];
 
     // Validar que el recorrido resultante es válido
-    const validation = validateRecorridoDefinition(recorridoDefinition, { isPublish: false });
+    const validation = await validateRecorridoDefinition(recorridoDefinition, { isPublish: false });
     if (!validation.valid) {
       warnings.push(...validation.errors.map(e => `Recorrido resultante: ${e}`));
     }
