@@ -101,8 +101,6 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
   const path = url.pathname;
   const method = request.method;
 
-  console.log(`[CatalogRegistry] ${method} ${path}`);
-
   // GET /admin/pde/catalog-registry/:id - Obtener catálogo (API)
   if (path.match(/^\/admin\/pde\/catalog-registry\/([^\/]+)$/) && method === 'GET') {
     const authCtx = await requireAdminContext(request, env);
@@ -209,7 +207,6 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
 
   // GET /admin/pde/catalog-registry - Lista de catálogos (HTML)
   if (path === '/admin/pde/catalog-registry' && method === 'GET') {
-    console.log(`[CatalogRegistry] Rendering catalog list`);
     return await renderCatalogList(request, env);
   }
 

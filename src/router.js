@@ -898,11 +898,8 @@ async function routerFunction(request, env, ctx) {
 
   // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
   if (path.startsWith("/admin/pde/catalog-registry")) {
-    console.log(`[Router] Catalog Registry: ${request.method} ${path}`);
     const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
-    const response = await adminCatalogRegistryHandler(request, env, ctx);
-    console.log(`[Router] Catalog Registry Response: ${response.status}`);
-    return response;
+    return adminCatalogRegistryHandler(request, env, ctx);
   }
 
   // Panel de control administrativo
