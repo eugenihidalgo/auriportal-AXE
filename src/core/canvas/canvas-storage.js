@@ -8,6 +8,7 @@
 import { recorridoToCanvas } from './recorrido-to-canvas.js';
 import { validateCanvasDefinition } from './validate-canvas-definition.js';
 import { normalizeCanvasDefinition } from './normalize-canvas-definition.js';
+import { repairUnreachableEndNodes } from './canvas-semantic-actions.js';
 import { getDefaultRecorridoDraftRepo } from '../../infra/repos/recorrido-draft-repo-pg.js';
 import { logInfo, logWarn } from '../observability/logger.js';
 
@@ -32,7 +33,7 @@ export function getEffectiveCanvasForDraft(draft) {
   if (draft.canvas_json) {
     return {
       canvas: normalizeCanvasDefinition(draft.canvas_json),
-      source: 'draft',
+      source: 'persisted',
       warnings: []
     };
   }
@@ -40,18 +41,34 @@ export function getEffectiveCanvasForDraft(draft) {
   // Si no hay canvas, derivar desde definition_json
   try {
     const derivedCanvas = recorridoToCanvas(draft.definition_json, { generatePositions: true });
+    // AXE v0.6.9: Validar con isPublish=false para GET (más permisivo)
+    const validation = validateCanvasDefinition(derivedCanvas, { isPublish: false });
+    
+    // Si hay errores críticos en validación, no normalizar (fallará más abajo)
+    if (validation.errors.length > 0) {
+      logWarn('CanvasStorage', 'Canvas derivado tiene errores de validación', {
+        recorrido_id: draft.recorrido_id,
+        draft_id: draft.draft_id,
+        errors_count: validation.errors.length,
+        errors: validation.errors
+      });
+      // Continuar intentando normalizar (puede que la normalización arregle algunos problemas)
+    }
+    
     const normalized = normalizeCanvasDefinition(derivedCanvas);
     
     logInfo('CanvasStorage', 'Canvas derivado desde definition_json', {
       recorrido_id: draft.recorrido_id,
-      draft_id: draft.draft_id
+      draft_id: draft.draft_id,
+      warnings_count: validation.warnings?.length || 0
     });
 
     return {
       canvas: normalized,
       source: 'derived',
       warnings: [
-        'Canvas no persistido todavía; se muestra derivado desde definition_json'
+        'Canvas no persistido todavía; se muestra derivado desde definition_json',
+        ...(validation.warnings || [])
       ]
     };
   } catch (error) {
@@ -61,30 +78,39 @@ export function getEffectiveCanvasForDraft(draft) {
       error: error.message
     });
 
-    // Fail-open: devolver canvas vacío en lugar de fallar
+    // Fail-open: devolver canvas mínimo válido en lugar de fallar
+    const fallbackCanvas = {
+      version: '1.0',
+      canvas_id: draft.recorrido_id || '',
+      name: 'Unnamed Canvas',
+      entry_node_id: 'start',
+      nodes: [
+        { id: 'start', type: 'start', label: 'Inicio', position: { x: 80, y: 80 }, props: {} },
+        { id: 'end', type: 'end', label: 'Fin', position: { x: 380, y: 80 }, props: {} }
+      ],
+      edges: [
+        { id: 'e_start_end', type: 'direct', from_node_id: 'start', to_node_id: 'end' }
+      ]
+    };
+    
     return {
-      canvas: normalizeCanvasDefinition({
-        version: '1.0',
-        canvas_id: draft.recorrido_id || '',
-        name: 'Unnamed Canvas',
-        entry_node_id: 'start',
-        nodes: [{ id: 'start', type: 'start', label: 'Inicio', position: { x: 0, y: 0 }, props: {} }],
-        edges: []
-      }),
-      source: 'derived',
+      canvas: normalizeCanvasDefinition(fallbackCanvas),
+      source: 'error-fallback',
       warnings: [
-        `Error derivando canvas: ${error.message}. Se muestra canvas vacío.`
+        `Error derivando canvas: ${error.message}. Se muestra canvas mínimo válido.`
       ]
     };
   }
 }
 
 /**
- * Valida, normaliza y guarda canvas en draft
+ * Valida, normaliza, repara y guarda canvas en draft
  * 
- * - Valida canvas con validateCanvasDefinition
- * - Si hay errors bloqueantes → retorna error (no guarda)
- * - Si ok → normaliza y guarda en draft.canvas_json + canvas_updated_at
+ * AXE v0.6.9+ - EDITOR MODE (fail-open):
+ * - SIEMPRE guarda el canvas aunque tenga errores de validación
+ * - Ejecuta repair de nodos inalcanzables antes de guardar
+ * - Normaliza el canvas antes de guardar
+ * - Devuelve errores y warnings en la respuesta (no bloquea)
  * 
  * @param {string} recorridoId - ID del recorrido
  * @param {Object} canvasInput - CanvasDefinition a guardar (puede no estar normalizado)
@@ -93,6 +119,10 @@ export function getEffectiveCanvasForDraft(draft) {
  * @param {string|null} options.updated_by - ID/email del admin (opcional)
  * @param {Object} options.client - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} { ok, canvas_normalized, errors, warnings }
+ *   - ok: true si no hay errores, false si hay errores (pero siempre guarda)
+ *   - canvas_normalized: Canvas normalizado y reparado (siempre presente)
+ *   - errors: Array de errores de validación (si los hay)
+ *   - warnings: Array de warnings (si los hay)
  */
 export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) {
   const { isPublish = false, updated_by = null, client = null } = options;
@@ -101,33 +131,22 @@ export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) 
     return {
       ok: false,
       errors: ['recorridoId y canvasInput son requeridos'],
-      warnings: []
-    };
-  }
-
-  // Validar canvas
-  const validation = validateCanvasDefinition(canvasInput, { isPublish });
-
-  // Si hay errors bloqueantes, no guardar
-  if (validation.errors.length > 0) {
-    logWarn('CanvasStorage', 'Guardado bloqueado: canvas inválido', {
-      recorrido_id: recorridoId,
-      errors_count: validation.errors.length,
-      is_publish: isPublish
-    });
-
-    return {
-      ok: false,
-      errors: validation.errors,
-      warnings: validation.warnings,
+      warnings: [],
       canvas_normalized: null
     };
   }
 
-  // Normalizar canvas (SIEMPRE se guarda normalizado)
-  const normalized = normalizeCanvasDefinition(canvasInput);
+  // Validar canvas (para obtener errores y warnings)
+  const validation = validateCanvasDefinition(canvasInput, { isPublish });
 
-  // Guardar en draft
+  // EDITOR MODE: SIEMPRE guardar aunque haya errores
+  // 1. Reparar nodos END inalcanzables
+  let repairedCanvas = repairUnreachableEndNodes(canvasInput);
+  
+  // 2. Normalizar canvas (SIEMPRE se guarda normalizado)
+  const normalized = normalizeCanvasDefinition(repairedCanvas);
+
+  // 3. Guardar en draft (incluso si hay errores)
   try {
     const draftRepo = getDefaultRecorridoDraftRepo();
     const draft = await draftRepo.getCurrentDraft(recorridoId, client);
@@ -136,35 +155,40 @@ export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) 
       return {
         ok: false,
         errors: ['No hay draft para este recorrido'],
-        warnings: []
+        warnings: validation.warnings || [],
+        canvas_normalized: normalized
       };
     }
 
     await draftRepo.updateCanvas(draft.draft_id, normalized, updated_by, client);
 
-    logInfo('CanvasStorage', 'Canvas guardado exitosamente', {
+    logInfo('CanvasStorage', '[AXE][PUT_CANVAS] Canvas guardado exitosamente (fail-open)', {
       recorrido_id: recorridoId,
       draft_id: draft.draft_id,
-      warnings_count: validation.warnings.length
+      errors_count: validation.errors.length,
+      warnings_count: validation.warnings?.length || 0,
+      saved: true
     });
 
     return {
-      ok: true,
+      ok: validation.errors.length === 0,
       canvas_normalized: normalized,
-      errors: [],
-      warnings: validation.warnings
+      errors: validation.errors || [],
+      warnings: validation.warnings || []
     };
   } catch (error) {
-    logWarn('CanvasStorage', 'Error guardando canvas', {
+    logWarn('CanvasStorage', '[AXE][PUT_CANVAS] Error guardando canvas', {
       recorrido_id: recorridoId,
       error: error.message
     });
 
     return {
       ok: false,
-      errors: [`Error guardando canvas: ${error.message}`],
-      warnings: validation.warnings
+      errors: [`Error guardando canvas: ${error.message}`, ...(validation.errors || [])],
+      warnings: validation.warnings || [],
+      canvas_normalized: normalized
     };
   }
 }
+
 

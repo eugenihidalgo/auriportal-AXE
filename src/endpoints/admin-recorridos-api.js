@@ -26,6 +26,26 @@ import { canvasToRecorrido } from '../core/canvas/canvas-to-recorrido.js';
 import { validateCanvasDefinition } from '../core/canvas/validate-canvas-definition.js';
 import { normalizeCanvasDefinition } from '../core/canvas/normalize-canvas-definition.js';
 import { recorridoToCanvas } from '../core/canvas/recorrido-to-canvas.js';
+import {
+  insertNodeAfter,
+  convertNodeToDecision,
+  markAsStart,
+  markAsEnd,
+  duplicateSubgraph
+} from '../core/canvas/canvas-semantic-actions.js';
+import {
+  insertStandardEnding,
+  createGuidedChoice,
+  createBranchingPath,
+  createLinearSequence,
+  listAvailableMacros
+} from '../core/canvas/canvas-semantic-macros.js';
+import {
+  listAvailablePresets,
+  getPresetById
+} from '../core/canvas/canvas-presets.js';
+import { analyzeCanvas } from '../core/canvas/canvas-semantic-analysis.js';
+import { generateSuggestions } from '../core/canvas/canvas-pedagogical-suggestions.js';
 
 /**
  * Helper para obtener el admin ID/email del contexto
@@ -558,34 +578,6 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
       return errorResponse('No hay draft para publicar', 404);
     }
 
-    // Validar con isPublish:true (bloquea si invalid)
-    const validation = validateRecorridoDefinition(draft.definition_json, { isPublish: true });
-    
-    if (!validation.valid) {
-      logWarn('RecorridosPublish', 'Publicación bloqueada: draft inválido', {
-        recorrido_id: recorridoId,
-        errors_count: validation.errors.length
-      });
-
-      // Audit log del intento fallido
-      await auditRepo.append(
-        recorridoId,
-        draft.draft_id,
-        'publish_version',
-        {
-          success: false,
-          errors: validation.errors,
-          warnings: validation.warnings
-        },
-        getAdminId(authCtx)
-      );
-
-      return errorResponse('No se puede publicar: el draft tiene errores', 400, {
-        errors: validation.errors,
-        warnings: validation.warnings
-      });
-    }
-
     // Usar transacción para publicar
     const pool = getPool();
     const client = await pool.connect();
@@ -596,12 +588,20 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
       const latestVersion = await versionRepo.getLatestVersion(recorridoId, client);
       const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
 
-      // Obtener canvas para publicar (AXE v0.6.3)
+      // AXE v0.6.3: Flujo de publicación consolidado
+      let definitionToPublish = null;
       let canvasToPublish = null;
       let canvasWarnings = [];
+      let definitionWarnings = [];
       
       if (draft.canvas_json) {
-        // Si hay canvas persistido, validarlo estrictamente y usarlo
+        // CASO 1: Canvas persistido → Generar definition vía canvasToRecorrido()
+        logInfo('RecorridosPublish', 'Canvas persistido encontrado, generando definition_json', {
+          recorrido_id: recorridoId,
+          version: nextVersion
+        });
+
+        // Validar canvas estrictamente
         const canvasValidation = validateCanvasDefinition(draft.canvas_json, { isPublish: true });
         if (!canvasValidation.ok) {
           await client.query('ROLLBACK');
@@ -610,10 +610,85 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
             warnings: canvasValidation.warnings
           });
         }
-        canvasToPublish = normalizeCanvasDefinition(draft.canvas_json);
+        
+        // Normalizar canvas
+        const normalizedCanvas = normalizeCanvasDefinition(draft.canvas_json);
+        canvasToPublish = normalizedCanvas;
         canvasWarnings = canvasValidation.warnings;
+
+        // Generar definition_json desde canvas
+        try {
+          definitionToPublish = canvasToRecorrido(normalizedCanvas);
+          
+          logInfo('RecorridosPublish', 'Definition generada desde canvas', {
+            recorrido_id: recorridoId,
+            version: nextVersion,
+            steps_count: Object.keys(definitionToPublish.steps || {}).length,
+            edges_count: (definitionToPublish.edges || []).length
+          });
+        } catch (error) {
+          await client.query('ROLLBACK');
+          logWarn('RecorridosPublish', 'Error generando definition desde canvas', {
+            recorrido_id: recorridoId,
+            error: error.message
+          });
+          return errorResponse('Error generando definition desde canvas', 500, {
+            error: error.message
+          });
+        }
+
+        // Validar definition generada
+        const definitionValidation = validateRecorridoDefinition(definitionToPublish, { isPublish: true });
+        if (!definitionValidation.valid) {
+          await client.query('ROLLBACK');
+          return errorResponse('No se puede publicar: la definition generada desde canvas tiene errores', 400, {
+            errors: definitionValidation.errors,
+            warnings: definitionValidation.warnings
+          });
+        }
+        definitionWarnings = definitionValidation.warnings;
+
       } else {
-        // Si no hay canvas, derivar desde definition_json
+        // CASO 2: No hay canvas → Usar definition_json legacy
+        logInfo('RecorridosPublish', 'Canvas no persistido, usando definition_json legacy', {
+          recorrido_id: recorridoId,
+          version: nextVersion
+        });
+
+        // Validar definition_json legacy
+        const validation = validateRecorridoDefinition(draft.definition_json, { isPublish: true });
+        if (!validation.valid) {
+          await client.query('ROLLBACK');
+          
+          logWarn('RecorridosPublish', 'Publicación bloqueada: draft inválido', {
+            recorrido_id: recorridoId,
+            errors_count: validation.errors.length
+          });
+
+          // Audit log del intento fallido
+          await auditRepo.append(
+            recorridoId,
+            draft.draft_id,
+            'publish_version',
+            {
+              success: false,
+              errors: validation.errors,
+              warnings: validation.warnings
+            },
+            getAdminId(authCtx),
+            client
+          );
+
+          return errorResponse('No se puede publicar: el draft tiene errores', 400, {
+            errors: validation.errors,
+            warnings: validation.warnings
+          });
+        }
+        
+        definitionToPublish = draft.definition_json;
+        definitionWarnings = validation.warnings;
+
+        // Opcionalmente derivar canvas desde definition para visualización
         try {
           const derivedCanvas = recorridoToCanvas(draft.definition_json, { generatePositions: true });
           canvasToPublish = normalizeCanvasDefinition(derivedCanvas);
@@ -633,12 +708,12 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
         }
       }
 
-      // Crear versión (INMUTABLE) con canvas
+      // Crear versión (INMUTABLE) con definition y canvas
       const version = await versionRepo.createVersion(
         recorridoId,
         nextVersion,
-        draft.definition_json, // INMUTABLE después de esto
-        canvasToPublish, // Canvas también INMUTABLE
+        definitionToPublish, // INMUTABLE después de esto (generada o legacy)
+        canvasToPublish, // Canvas también INMUTABLE (persistido o derivado)
         release_notes || null,
         getAdminId(authCtx),
         client
@@ -663,9 +738,11 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
         {
           success: true,
           version: nextVersion,
-          errors_count: validation.errors.length,
-          warnings_count: validation.warnings.length,
-          warnings: validation.warnings,
+          definition_from_canvas: draft.canvas_json !== null,
+          definition_legacy: draft.canvas_json === null,
+          errors_count: 0, // Ya validado antes
+          warnings_count: definitionWarnings.length + canvasWarnings.length,
+          definition_warnings: definitionWarnings,
           canvas_published: canvasToPublish !== null,
           canvas_derived: draft.canvas_json === null,
           canvas_warnings: canvasWarnings
@@ -679,9 +756,9 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
       logInfo('RecorridosPublish', 'Versión publicada exitosamente', {
         recorrido_id: recorridoId,
         version: nextVersion,
-        valid: validation.valid,
-        errors_count: validation.errors.length,
-        warnings_count: validation.warnings.length
+        definition_from_canvas: draft.canvas_json !== null,
+        definition_warnings_count: definitionWarnings.length,
+        canvas_warnings_count: canvasWarnings.length
       });
 
       return jsonResponse({
@@ -694,8 +771,9 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           created_at: version.created_at
         },
         validation: {
-          valid: validation.valid,
-          warnings: validation.warnings
+          valid: true,
+          definition_warnings: definitionWarnings,
+          canvas_warnings: canvasWarnings
         },
         canvas: {
           published: canvasToPublish !== null,
@@ -853,6 +931,230 @@ async function handleExportRecorrido(request, env, ctx, recorridoId) {
       stack: error.stack
     });
     return errorResponse('Error interno al exportar recorrido', 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/:id/preview
+ * Preview completo del recorrido como HTML navegable (sandbox, no runtime real)
+ * 
+ * AXE v0.6.9: Preview Harness para admin
+ * - Carga draft si existe; si no published
+ * - Construye HTML con renderHtml()
+ * - Aplica theme (dark-classic por defecto o del admin)
+ * - Muestra lista navegable de steps + botón "Start preview"
+ * - NO ejecuta runtime real (solo preview sandbox)
+ * 
+ * Response: HTML completo con preview harness
+ */
+async function handlePreviewRecorrido(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const draftRepo = getDefaultRecorridoDraftRepo();
+    const versionRepo = getDefaultRecorridoVersionRepo();
+
+    // Cargar draft si existe; si no published
+    let definition = null;
+    let source = 'unknown';
+
+    const draft = await draftRepo.getCurrentDraft(recorridoId);
+    if (draft && draft.definition_json) {
+      definition = draft.definition_json;
+      source = 'draft';
+    } else {
+      const published = await versionRepo.getLatestVersion(recorridoId);
+      if (published && published.definition_json) {
+        definition = published.definition_json;
+        source = 'published';
+      }
+    }
+
+    if (!definition || !definition.steps) {
+      return new Response('Recorrido no encontrado o sin steps', {
+        status: 404,
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+      });
+    }
+
+    // Construir lista de steps para navegación
+    const steps = Object.keys(definition.steps || {}).map(stepId => ({
+      id: stepId,
+      ...definition.steps[stepId]
+    }));
+
+    // Construir HTML del preview harness
+    const { renderHtml } = await import('../core/html-response.js');
+    const { applyTheme } = await import('../core/responses.js');
+
+    // Obtener tema del admin desde localStorage o usar dark-classic por defecto
+    const themeId = 'dark-classic'; // Por defecto, podría leerse de request param o cookie
+
+    const previewHTML = `
+<!DOCTYPE html>
+<html lang="es" data-theme="dark-classic">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview: ${recorridoId}</title>
+  <link rel="stylesheet" href="/css/theme-variables.css">
+  <link rel="stylesheet" href="/css/theme-overrides.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary, #0f172a);
+      color: var(--text-primary, #f1f5f9);
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .preview-header {
+      background: var(--bg-card, #1e293b);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .preview-header h1 {
+      margin: 0 0 8px 0;
+      color: var(--text-primary, #f1f5f9);
+    }
+    .preview-header p {
+      color: var(--text-muted, #94a3b8);
+      margin: 0;
+    }
+    .steps-list {
+      background: var(--bg-card, #1e293b);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .steps-list h2 {
+      margin: 0 0 16px 0;
+      color: var(--text-primary, #f1f5f9);
+    }
+    .step-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      background: var(--bg-secondary, #334155);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .step-item:hover {
+      background: var(--bg-hover, #475569);
+    }
+    .step-item.active {
+      background: var(--accent-primary, #3b82f6);
+    }
+    .step-preview-container {
+      background: var(--bg-card, #1e293b);
+      border-radius: 12px;
+      padding: 24px;
+      min-height: 400px;
+    }
+    .btn-start {
+      padding: 12px 24px;
+      background: var(--accent-primary, #3b82f6);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    .btn-start:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-header">
+    <h1>Preview: ${recorridoId}</h1>
+    <p>Source: ${source} | Steps: ${steps.length}</p>
+  </div>
+
+  <div class="steps-list">
+    <h2>Steps del Recorrido</h2>
+    ${steps.map((step, idx) => `
+      <div class="step-item" data-step-id="${step.id}" onclick="loadStep('${step.id}')">
+        <strong>${step.id}</strong> - ${step.screen_template_id || 'unknown'}
+      </div>
+    `).join('')}
+    <button class="btn-start" onclick="startPreview()">▶ Start Preview</button>
+  </div>
+
+  <div class="step-preview-container" id="step-preview">
+    <p style="color: var(--text-muted, #94a3b8);">Selecciona un step para ver su preview</p>
+  </div>
+
+  <script>
+    const steps = ${JSON.stringify(steps)};
+    const recorridoId = '${recorridoId}';
+
+    async function loadStep(stepId) {
+      // Resaltar step activo
+      document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
+      document.querySelector(\`[data-step-id="\${stepId}"]\`).classList.add('active');
+
+      try {
+        const response = await fetch(\`/admin/api/recorridos/\${recorridoId}/preview-step\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step_id: stepId })
+        });
+        const data = await response.json();
+        
+        const container = document.getElementById('step-preview');
+        if (data.html) {
+          container.innerHTML = data.html;
+        } else {
+          container.innerHTML = '<p style="color: var(--text-muted);">No hay HTML disponible para este step</p>';
+        }
+      } catch (error) {
+        console.error('Error cargando step:', error);
+        document.getElementById('step-preview').innerHTML = '<p style="color: red;">Error cargando step</p>';
+      }
+    }
+
+    function startPreview() {
+      if (steps.length > 0) {
+        const entryStepId = '${definition.entry_step_id || steps[0].id}';
+        loadStep(entryStepId);
+      }
+    }
+
+    // Cargar step inicial si existe
+    ${definition.entry_step_id ? `loadStep('${definition.entry_step_id}');` : ''}
+  </script>
+</body>
+</html>
+    `;
+
+    // Aplicar tema
+    const htmlWithTheme = applyTheme(previewHTML, null, themeId);
+
+    return new Response(htmlWithTheme, {
+      headers: {
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'no-store'
+      }
+    });
+
+  } catch (error) {
+    logError('RecorridosAPI', 'Error generando preview', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+
+    return new Response(`Error generando preview: ${error.message}`, {
+      status: 500,
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
   }
 }
 
@@ -1030,17 +1332,18 @@ async function handlePreviewStep(request, env, ctx, recorridoId) {
 }
 
 /**
- * GET /admin/api/recorridos/:id/canvas
- * Obtiene el canvas del recorrido (persistido o derivado)
+ * GET /admin/api/recorridos/:id/canvas/debug
+ * Endpoint de debug para diagnosticar problemas con canvas (AXE v0.6.9)
  * 
  * Response: {
- *   ok: true,
- *   source: "draft" | "derived",
- *   canvas: <CanvasDefinition normalizado>,
- *   warnings: []
+ *   draft_id: string | null,
+ *   definition_json_size: number (bytes),
+ *   canvas_json_size: number (bytes) | null,
+ *   validation_error: string | null,
+ *   has_canvas_json: boolean
  * }
  */
-async function handleGetCanvas(request, env, ctx, recorridoId) {
+async function handleDebugCanvas(request, env, ctx, recorridoId) {
   const authCtx = await requireAdminContext(request, env);
   if (authCtx instanceof Response) {
     return authCtx;
@@ -1051,39 +1354,227 @@ async function handleGetCanvas(request, env, ctx, recorridoId) {
     const draft = await draftRepo.getCurrentDraft(recorridoId);
 
     if (!draft) {
-      return errorResponse('No hay draft para este recorrido', 404);
+      return jsonResponse({
+        draft_id: null,
+        definition_json_size: 0,
+        canvas_json_size: null,
+        validation_error: 'No hay draft para este recorrido',
+        has_canvas_json: false
+      });
     }
 
-    const result = getEffectiveCanvasForDraft(draft);
+    const definitionSize = draft.definition_json 
+      ? JSON.stringify(draft.definition_json).length 
+      : 0;
+    
+    const canvasSize = draft.canvas_json 
+      ? JSON.stringify(draft.canvas_json).length 
+      : null;
+
+    let validationError = null;
+    try {
+      if (draft.canvas_json) {
+        const validation = validateCanvasDefinition(draft.canvas_json, { isPublish: false });
+        if (validation.errors.length > 0) {
+          validationError = validation.errors[0];
+        }
+      } else {
+        const result = getEffectiveCanvasForDraft(draft);
+        // Si source es error-fallback, hubo un error
+        if (result.source === 'error-fallback') {
+          validationError = result.warnings?.[0] || 'Error derivando canvas';
+        }
+      }
+    } catch (err) {
+      validationError = err.message;
+    }
 
     return jsonResponse({
-      ok: true,
-      source: result.source,
-      canvas: result.canvas,
-      warnings: result.warnings
+      draft_id: draft.draft_id,
+      definition_json_size: definitionSize,
+      canvas_json_size: canvasSize,
+      validation_error: validationError,
+      has_canvas_json: !!draft.canvas_json
     });
   } catch (error) {
-    logError('RecorridosCanvasAPI', 'Error obteniendo canvas', {
+    logError('RecorridosCanvasAPI', 'Error en debug canvas', {
       recorrido_id: recorridoId,
-      error: error.message,
-      stack: error.stack
+      error: error.message
     });
-    return errorResponse('Error interno al obtener canvas', 500);
+    return errorResponse('Error interno en debug canvas', 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/:id/canvas
+ * Obtiene el canvas del recorrido (persistido o derivado)
+ * 
+ * AXE v0.6.9: Fail-open - NUNCA devuelve 400 en GET. Si hay error, devuelve canvas mínimo válido.
+ * 
+ * Response: {
+ *   ok: true,
+ *   source: "draft" | "derived" | "error-fallback",
+ *   canvas: <CanvasDefinition normalizado>,
+ *   warnings: []
+ * }
+ */
+async function handleGetCanvas(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  let hasDraft = false;
+  let hasCanvasJson = false;
+  let source = 'unknown';
+
+  try {
+    const draftRepo = getDefaultRecorridoDraftRepo();
+    const draft = await draftRepo.getCurrentDraft(recorridoId);
+
+    hasDraft = !!draft;
+    hasCanvasJson = !!(draft && draft.canvas_json);
+
+    logInfo('RecorridosCanvasAPI', '[AXE][GET_CANVAS]', {
+      recorrido_id: recorridoId,
+      has_draft: hasDraft,
+      has_canvas_json: hasCanvasJson
+    });
+
+    if (!draft) {
+      logWarn('RecorridosCanvasAPI', '[AXE][GET_CANVAS] No hay draft, devolviendo canvas mínimo', {
+        recorrido_id: recorridoId
+      });
+      
+      // Fail-open: devolver canvas mínimo válido
+      const fallbackCanvas = {
+        version: "1.0",
+        canvas_id: recorridoId || 'fallback',
+        name: "Canvas Fallback",
+        entry_node_id: "start",
+        nodes: [
+          { id: "start", type: "start", label: "Start", position: { x: 80, y: 80 }, props: {} },
+          { id: "end", type: "end", label: "End", position: { x: 380, y: 80 }, props: {} }
+        ],
+        edges: [
+          { id: "e_start_end", type: "direct", from_node_id: "start", to_node_id: "end" }
+        ]
+      };
+
+      return jsonResponse({
+        canvas: fallbackCanvas,
+        source: "error-fallback",
+        warnings: ["No hay draft para este recorrido. Se muestra canvas mínimo válido."]
+      });
+    }
+
+    // Intentar obtener canvas efectivo (puede fallar en derivación/validación)
+    try {
+      const result = getEffectiveCanvasForDraft(draft);
+      source = result.source || 'unknown';
+
+      logInfo('RecorridosCanvasAPI', '[AXE][GET_CANVAS] Canvas obtenido exitosamente', {
+        recorrido_id: recorridoId,
+        source: source,
+        warnings_count: result.warnings?.length || 0
+      });
+
+      return jsonResponse({
+        canvas: result.canvas,
+        source: source,
+        warnings: result.warnings || []
+      });
+    } catch (canvasError) {
+      // Error derivando/validando canvas - fail-open con canvas mínimo
+      logError('RecorridosCanvasAPI', '[AXE][GET_CANVAS] Error obteniendo canvas efectivo', {
+        recorrido_id: recorridoId,
+        has_draft: hasDraft,
+        has_canvas_json: hasCanvasJson,
+        source: source,
+        error_message: canvasError.message,
+        error_stack: canvasError.stack
+      });
+
+      const fallbackCanvas = {
+        version: "1.0",
+        canvas_id: recorridoId || 'fallback',
+        name: "Canvas Fallback",
+        entry_node_id: "start",
+        nodes: [
+          { id: "start", type: "start", label: "Start", position: { x: 80, y: 80 }, props: {} },
+          { id: "end", type: "end", label: "End", position: { x: 380, y: 80 }, props: {} }
+        ],
+        edges: [
+          { id: "e_start_end", type: "direct", from_node_id: "start", to_node_id: "end" }
+        ]
+      };
+
+      return jsonResponse({
+        canvas: fallbackCanvas,
+        source: "error-fallback",
+        warnings: [
+          `Error procesando canvas: ${canvasError.message}. Se muestra canvas mínimo válido.`,
+          "El canvas puede tener errores de validación. Revisa los logs para más detalles."
+        ]
+      });
+    }
+  } catch (error) {
+    // Error crítico (DB, etc.) - aún así fail-open
+    logError('RecorridosCanvasAPI', '[AXE][GET_CANVAS] Error crítico obteniendo canvas', {
+      recorrido_id: recorridoId,
+      has_draft: hasDraft,
+      has_canvas_json: hasCanvasJson,
+      source: source,
+      error_message: error.message,
+      error_stack: error.stack
+    });
+
+    const fallbackCanvas = {
+      version: "1.0",
+      canvas_id: recorridoId || 'fallback',
+      name: "Canvas Fallback",
+      entry_node_id: "start",
+      nodes: [
+        { id: "start", type: "start", label: "Start", position: { x: 80, y: 80 }, props: {} },
+        { id: "end", type: "end", label: "End", position: { x: 380, y: 80 }, props: {} }
+      ],
+      edges: [
+        { id: "e_start_end", type: "direct", from_node_id: "start", to_node_id: "end" }
+      ]
+    };
+
+    return jsonResponse({
+      canvas: fallbackCanvas,
+      source: "error-fallback",
+      warnings: [
+        `Error crítico obteniendo canvas: ${error.message}. Se muestra canvas mínimo válido.`,
+        "Revisa los logs del servidor para más detalles."
+      ]
+    });
   }
 }
 
 /**
  * PUT /admin/api/recorridos/:id/canvas
- * Guarda canvas en draft (valida, normaliza y persiste)
+ * Guarda canvas en draft (valida, normaliza, repara y persiste)
+ * 
+ * AXE v0.6.9+ - EDITOR MODE (fail-open):
+ * - SIEMPRE devuelve 200 (nunca 400 por errores de validación)
+ * - SIEMPRE guarda el canvas aunque tenga errores estructurales
+ * - Ejecuta repair de nodos inalcanzables antes de guardar
+ * - Devuelve errores y warnings en la respuesta JSON
+ * - Los errores SOLO bloquean el endpoint de PUBLICACIÓN, no el guardado
  * 
  * Body: { canvas: <CanvasDefinition> }
  * Response: {
- *   ok: true,
- *   canvas_normalized: <CanvasDefinition normalizado>,
+ *   ok: boolean (true si no hay errores, false si hay errores pero se guardó),
+ *   saved: true,
+ *   mode: "editor",
+ *   source: "persisted",
+ *   canvas: <CanvasDefinition normalizado y reparado>,
+ *   errors: [],
  *   warnings: []
  * }
- * 
- * Si hay errors bloqueantes → 400 con { ok: false, errors, warnings }
  */
 async function handleSaveCanvas(request, env, ctx, recorridoId) {
   const authCtx = await requireAdminContext(request, env);
@@ -1104,20 +1595,26 @@ async function handleSaveCanvas(request, env, ctx, recorridoId) {
       updated_by: getAdminId(authCtx)
     });
 
-    if (!result.ok) {
-      return errorResponse('No se puede guardar canvas: tiene errores', 400, {
-        errors: result.errors,
-        warnings: result.warnings
-      });
-    }
+    // EDITOR MODE: SIEMPRE devolver 200, incluso si hay errores
+    // El canvas ya está guardado (fail-open)
+    logInfo('RecorridosCanvasAPI', '[AXE][PUT_CANVAS]', {
+      recorrido_id: recorridoId,
+      errors: result.errors?.length || 0,
+      warnings: result.warnings?.length || 0,
+      saved: true
+    });
 
     return jsonResponse({
-      ok: true,
-      canvas_normalized: result.canvas_normalized,
-      warnings: result.warnings
+      ok: result.ok,
+      saved: true,
+      mode: 'editor',
+      source: 'persisted',
+      canvas: result.canvas_normalized,
+      errors: result.errors || [],
+      warnings: result.warnings || []
     });
   } catch (error) {
-    logError('RecorridosCanvasAPI', 'Error guardando canvas', {
+    logError('RecorridosCanvasAPI', '[AXE][PUT_CANVAS] Error guardando canvas', {
       recorrido_id: recorridoId,
       error: error.message,
       stack: error.stack
@@ -1219,6 +1716,373 @@ async function handleConvertCanvasToRecorrido(request, env, ctx, recorridoId) {
       stack: error.stack
     });
     return errorResponse(`Error convirtiendo canvas: ${error.message}`, 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/:id/canvas/analyze
+ * Analiza el canvas del recorrido (desde draft) y devuelve diagnósticos semánticos
+ * 
+ * Response: {
+ *   ok: true,
+ *   warnings: Array<Diagnostic>,
+ *   infos: Array<Diagnostic>
+ * }
+ * 
+ * AXE v0.6.9 - Diagnóstico Semántico (READ-ONLY)
+ */
+async function handleAnalyzeCanvas(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const draftRepo = getDefaultRecorridoDraftRepo();
+    const draft = await draftRepo.getCurrentDraft(recorridoId);
+
+    if (!draft) {
+      return errorResponse('No hay draft para este recorrido', 404);
+    }
+
+    const result = getEffectiveCanvasForDraft(draft);
+    const analysis = analyzeCanvas(result.canvas);
+    const suggestions = generateSuggestions(result.canvas, analysis);
+
+    return jsonResponse({
+      ok: true,
+      warnings: analysis.warnings,
+      infos: analysis.infos,
+      suggestions: suggestions
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error analizando canvas', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al analizar canvas', 500);
+  }
+}
+
+/**
+ * POST /admin/api/recorridos/:id/canvas/analyze
+ * Analiza un canvas proporcionado en el body (sin persistir)
+ * 
+ * Body: { canvas: <CanvasDefinition> }
+ * Response: {
+ *   ok: true,
+ *   warnings: Array<Diagnostic>,
+ *   infos: Array<Diagnostic>
+ * }
+ * 
+ * AXE v0.6.9 - Diagnóstico Semántico (READ-ONLY)
+ */
+async function handleAnalyzeCanvasPost(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    const { canvas } = body;
+
+    if (!canvas) {
+      return errorResponse('Se requiere "canvas" en el body');
+    }
+
+    const analysis = analyzeCanvas(canvas);
+    const suggestions = generateSuggestions(canvas, analysis);
+
+    return jsonResponse({
+      ok: true,
+      warnings: analysis.warnings,
+      infos: analysis.infos,
+      suggestions: suggestions
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error analizando canvas', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al analizar canvas', 500);
+  }
+}
+
+/**
+ * POST /admin/api/recorridos/:id/canvas/action
+ * Ejecuta una acción semántica sobre el canvas (AXE v0.6.4+)
+ * 
+ * Soporta acciones simples y macros compuestas (AXE v0.6.6)
+ * 
+ * Body: {
+ *   canvas: <CanvasDefinition>,
+ *   action: <actionName> | <macroName>,
+ *   params: { ... } // Parámetros específicos de la acción/macro
+ * }
+ * 
+ * Acciones simples:
+ *   - 'insertNodeAfter'
+ *   - 'convertNodeToDecision'
+ *   - 'markAsStart'
+ *   - 'markAsEnd'
+ *   - 'duplicateSubgraph'
+ * 
+ * Macros compuestas (AXE v0.6.6):
+ *   - 'insertStandardEnding'
+ *   - 'createGuidedChoice'
+ *   - 'createBranchingPath'
+ *   - 'createLinearSequence'
+ * 
+ * Response: {
+ *   ok: true,
+ *   canvas: <CanvasDefinition normalizado y validado>,
+ *   warnings: [],
+ *   isMacro: boolean // Indica si fue una macro
+ * }
+ * 
+ * NO persiste el canvas (solo devuelve el resultado)
+ */
+async function handleCanvasAction(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    const { canvas, action, params } = body;
+
+    if (!canvas) {
+      return errorResponse('Se requiere "canvas" en el body');
+    }
+
+    if (!action || typeof action !== 'string') {
+      return errorResponse('Se requiere "action" en el body (string)');
+    }
+
+    if (!params || typeof params !== 'object') {
+      return errorResponse('Se requiere "params" en el body (objeto)');
+    }
+
+    let resultCanvas;
+    let isMacro = false;
+
+    try {
+      // Acciones simples (AXE v0.6.4)
+      switch (action) {
+        case 'insertNodeAfter':
+          if (!params.nodeId || !params.newNode) {
+            return errorResponse('insertNodeAfter requiere params.nodeId y params.newNode');
+          }
+          resultCanvas = insertNodeAfter(canvas, params.nodeId, params.newNode);
+          break;
+
+        case 'convertNodeToDecision':
+          if (!params.nodeId) {
+            return errorResponse('convertNodeToDecision requiere params.nodeId');
+          }
+          resultCanvas = convertNodeToDecision(canvas, params.nodeId);
+          break;
+
+        case 'markAsStart':
+          if (!params.nodeId) {
+            return errorResponse('markAsStart requiere params.nodeId');
+          }
+          resultCanvas = markAsStart(canvas, params.nodeId);
+          break;
+
+        case 'markAsEnd':
+          if (!params.nodeId) {
+            return errorResponse('markAsEnd requiere params.nodeId');
+          }
+          resultCanvas = markAsEnd(canvas, params.nodeId);
+          break;
+
+        case 'duplicateSubgraph':
+          if (!params.nodeId) {
+            return errorResponse('duplicateSubgraph requiere params.nodeId');
+          }
+          resultCanvas = duplicateSubgraph(canvas, params.nodeId);
+          break;
+
+        // Macros compuestas (AXE v0.6.6)
+        case 'insertStandardEnding':
+          if (!params.nodeId) {
+            return errorResponse('insertStandardEnding requiere params.nodeId');
+          }
+          isMacro = true;
+          resultCanvas = insertStandardEnding(canvas, params.nodeId, params.options || {});
+          break;
+
+        case 'createGuidedChoice':
+          if (!params.nodeId) {
+            return errorResponse('createGuidedChoice requiere params.nodeId');
+          }
+          isMacro = true;
+          resultCanvas = createGuidedChoice(canvas, params.nodeId, params.options || {});
+          break;
+
+        case 'createBranchingPath':
+          if (!params.nodeId) {
+            return errorResponse('createBranchingPath requiere params.nodeId');
+          }
+          isMacro = true;
+          resultCanvas = createBranchingPath(canvas, params.nodeId, params.options || {});
+          break;
+
+        case 'createLinearSequence':
+          if (!params.nodeId) {
+            return errorResponse('createLinearSequence requiere params.nodeId');
+          }
+          isMacro = true;
+          resultCanvas = createLinearSequence(canvas, params.nodeId, params.options || {});
+          break;
+
+        default:
+          return errorResponse(`Acción desconocida: ${action}`, 400);
+      }
+    } catch (error) {
+      logWarn('RecorridosCanvasAPI', 'Error ejecutando acción semántica', {
+        recorrido_id: recorridoId,
+        action,
+        error: error.message
+      });
+      return errorResponse(`Error ejecutando acción: ${error.message}`, 400);
+    }
+
+    // Validar el resultado (ya está normalizado por los helpers)
+    const validation = validateCanvasDefinition(resultCanvas, { isPublish: false });
+
+    return jsonResponse({
+      ok: true,
+      canvas: resultCanvas,
+      warnings: validation.warnings,
+      errors: validation.errors.length > 0 ? validation.errors : undefined,
+      isMacro // Indica si fue una macro compuesta
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error en acción semántica', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al ejecutar acción semántica', 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/canvas/macros
+ * Lista todas las macros semánticas disponibles (AXE v0.6.6)
+ * 
+ * Response: {
+ *   ok: true,
+ *   macros: Array<{ name, description, params }>
+ * }
+ */
+async function handleListMacros(request, env, ctx) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const macros = listAvailableMacros();
+    return jsonResponse({
+      ok: true,
+      macros
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error listando macros', {
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al listar macros', 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/canvas/presets
+ * Lista todos los presets pedagógicos disponibles (AXE v0.6.7)
+ * 
+ * Response: {
+ *   ok: true,
+ *   presets: Array<{ id, name, description }>
+ * }
+ */
+async function handleListPresets(request, env, ctx) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const presets = listAvailablePresets();
+    
+    // Formatear respuesta (sin la función generate)
+    const formattedPresets = presets.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description
+    }));
+    
+    return jsonResponse({
+      ok: true,
+      presets: formattedPresets
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error listando presets', {
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al listar presets', 500);
+  }
+}
+
+/**
+ * GET /admin/api/recorridos/canvas/presets/:presetId
+ * Obtiene un preset específico por ID (AXE v0.6.7)
+ * 
+ * Response: {
+ *   ok: true,
+ *   preset: { id, name, description, canvas: <CanvasDefinition> }
+ * }
+ */
+async function handleGetPreset(request, env, ctx, presetId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const presets = listAvailablePresets();
+    const preset = presets.find(p => p.id === presetId);
+    
+    if (!preset) {
+      return errorResponse(`Preset "${presetId}" no encontrado`, 404);
+    }
+
+    // Generar el canvas del preset
+    const canvas = preset.generate();
+    
+    return jsonResponse({
+      ok: true,
+      preset: {
+        id: preset.id,
+        name: preset.name,
+        description: preset.description,
+        canvas
+      }
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error obteniendo preset', {
+      preset_id: presetId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse(`Error generando preset: ${error.message}`, 500);
   }
 }
 
@@ -1461,9 +2325,17 @@ export default async function adminRecorridosApiHandler(request, env, ctx) {
     return handlePreviewStep(request, env, ctx, recorridoId);
   }
 
+  if (method === 'GET' && recorridoId && subPath === 'preview') {
+    return handlePreviewRecorrido(request, env, ctx, recorridoId);
+  }
+
   // Endpoints de Canvas (AXE v0.6.3)
   if (method === 'GET' && recorridoId && subPath === 'canvas') {
     return handleGetCanvas(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'GET' && recorridoId && subPath === 'canvas/debug') {
+    return handleDebugCanvas(request, env, ctx, recorridoId);
   }
 
   if (method === 'PUT' && recorridoId && subPath === 'canvas') {
@@ -1476,6 +2348,35 @@ export default async function adminRecorridosApiHandler(request, env, ctx) {
 
   if (method === 'POST' && recorridoId && subPath === 'canvas/convert-to-recorrido') {
     return handleConvertCanvasToRecorrido(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'POST' && recorridoId && subPath === 'canvas/action') {
+    return handleCanvasAction(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'GET' && recorridoId && subPath === 'canvas/analyze') {
+    return handleAnalyzeCanvas(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'POST' && recorridoId && subPath === 'canvas/analyze') {
+    return handleAnalyzeCanvasPost(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'GET' && path === '/admin/api/recorridos/canvas/macros') {
+    return handleListMacros(request, env, ctx);
+  }
+
+  // Endpoints de Presets (AXE v0.6.7)
+  if (method === 'GET' && path === '/admin/api/recorridos/canvas/presets') {
+    return handleListPresets(request, env, ctx);
+  }
+
+  if (method === 'GET' && path.startsWith('/admin/api/recorridos/canvas/presets/')) {
+    const presetIdMatch = path.match(/^\/admin\/api\/recorridos\/canvas\/presets\/(.+)$/);
+    if (presetIdMatch) {
+      const presetId = decodeURIComponent(presetIdMatch[1]);
+      return handleGetPreset(request, env, ctx, presetId);
+    }
   }
 
   if (method === 'DELETE' && recorridoId && !subPath) {
