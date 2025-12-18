@@ -127,6 +127,11 @@ export async function renderEditarMotor(request, env, motorId) {
     isReadonly: false
   };
 
+  // Generar subtítulo según el estado
+  const subtitle = motorId === 'nuevo' 
+    ? 'Creando nuevo motor' 
+    : `Editando motor: ${motorData.name || 'Sin nombre'}`;
+
   const content = replace(editarTemplate, {
     MOTOR_ID: motorData.id,
     MOTOR_KEY: motorData.motor_key,
@@ -137,7 +142,8 @@ export async function renderEditarMotor(request, env, motorId) {
     DEFINITION: motorData.definition,
     VERSION: motorData.version,
     STATUS: motorData.status,
-    IS_READONLY: motorData.isReadonly ? 'true' : 'false'
+    IS_READONLY: motorData.isReadonly ? 'true' : 'false',
+    SUBTITLE: subtitle
   });
 
   const html = replace(baseTemplate, {

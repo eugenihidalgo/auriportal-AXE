@@ -36,23 +36,27 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       // #endregion
       throw authError;
     }
-  
-  if (authCtx instanceof Response) {
-    // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
+    
+    if (authCtx instanceof Response) {
+      // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:36',message:'Returning auth response (login)',data:{status:authCtx?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return authCtx;
+    }
+    
+    // Si llegamos aquí, el usuario está autenticado como admin
+    // authCtx contiene: { user: { isAdmin: true }, isAdmin: true, isAuthenticated: true, request, requestId }
+
     // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:36',message:'Returning auth response (login)',data:{status:authCtx?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:44',message:'Before HTML construction',data:{authCtxType:typeof authCtx,isAdmin:authCtx?.isAdmin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
-    return authCtx;
-  }
-  
-  // Si llegamos aquí, el usuario está autenticado como admin
-  // authCtx contiene: { user: { isAdmin: true }, isAdmin: true, isAuthenticated: true, request, requestId }
 
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:44',message:'Before HTML construction',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:47',message:'Starting HTML template string',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
 
-  const html = `
+    const html = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1037,11 +1041,11 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       if (type === 'sm') {
         // Sombra suave: alpha suave (0-0.15)
         const alpha = (normalizedIntensity / 100) * 0.15; // 0-0.15
-        return \`rgba(0,0,0,\${alpha.toFixed(2)})\`;
+        return 'rgba(0,0,0,' + alpha.toFixed(2) + ')';
       } else {
         // Sombra media: alpha más profundo (0-0.25)
         const alpha = (normalizedIntensity / 100) * 0.25; // 0-0.25
-        return \`rgba(0,0,0,\${alpha.toFixed(2)})\`;
+        return 'rgba(0,0,0,' + alpha.toFixed(2) + ')';
       }
     }
 
@@ -1969,7 +1973,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         });
         
         if (!response.ok) {
-          throw new Error(`Error ${response.status} al cargar temas`);
+          throw new Error('Error ' + response.status + ' al cargar temas');
         }
         
         const data = await response.json();
@@ -1998,17 +2002,9 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         const isActive = theme.id === currentThemeId;
         const status = theme.current_published_version ? 'published' : 'draft';
         const statusLabel = status === 'published' ? '✅ Published' : '📝 Draft';
-        const versionText = theme.current_published_version ? `v${theme.current_published_version}` : '';
+        const versionText = theme.current_published_version ? 'v' + theme.current_published_version : '';
         
-        return \`
-          <li class="theme-item \${isActive ? 'active' : ''}" data-theme-id="\${theme.id}">
-            <div class="theme-item-name">\${theme.name || theme.id}</div>
-            <div class="theme-item-meta">
-              <span class="theme-status \${status}">\${statusLabel}</span>
-              \${versionText ? \`<span class="theme-version">\${versionText}</span>\` : ''}
-            </div>
-          </li>
-        \`;
+        return '\\n          <li class="theme-item ' + (isActive ? 'active' : '') + '" data-theme-id="' + theme.id + '">\\n            <div class="theme-item-name">' + (theme.name || theme.id) + '</div>\\n            <div class="theme-item-meta">\\n              <span class="theme-status ' + status + '">' + statusLabel + '</span>\\n              ' + (versionText ? '<span class="theme-version">' + versionText + '</span>' : '') + '\\n            </div>\\n          </li>\\n        ';
       }).join('');
       
       // Añadir event listeners a cada item
@@ -2292,16 +2288,16 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
   </script>
 </body>
 </html>
-  `;
+    `;
 
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2268',message:'After HTML construction',data:{htmlLength:html?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2268',message:'After HTML construction',data:{htmlLength:html?.length,htmlType:typeof html,htmlStart:html?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
 
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2271',message:'Before renderHtml',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
-  
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2271',message:'Before renderHtml',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     let response;
     try {
       response = renderHtml(html);
@@ -2316,13 +2312,23 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       throw renderError;
     }
     
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2319',message:'Returning response',data:{isResponse:response instanceof Response,status:response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     return response;
   } catch (err) {
     console.error('[ThemeStudio] render error:', err);
-    return new Response('Theme Studio error: ' + (err.message || 'Unknown error'), {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2321',message:'Catch block: error caught',data:{error:err?.message,stack:err?.stack,name:err?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    const errorResponse = new Response('Theme Studio error: ' + (err.message || 'Unknown error'), {
       status: 500,
       headers: { 'Content-Type': 'text/plain' }
     });
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2327',message:'Returning error response',data:{status:errorResponse?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    return errorResponse;
   }
 }
 

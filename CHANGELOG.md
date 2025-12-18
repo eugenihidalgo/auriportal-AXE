@@ -9,6 +9,34 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.13.0] - 2025-01-XX
+
+### Added
+- **Theme Studio v3**: Sistema soberano y desacoplado del runtime para edición de temas
+  - UI isla HTML autónoma sin dependencias legacy (NO renderHtml, NO iframe, NO postMessage)
+  - Preview Playground canónico con componentes genéricos inline
+  - Endpoints `/admin/api/themes-v3/*` (list, create, load, save-draft, publish, duplicate, archive, delete-draft)
+  - Estado canónico único (`window.themeState`)
+  - Validación ThemeDefinition v1 (schema_version, tokens con keys que empiezan por "--")
+  - Integración en admin sidebar como "Theme Studio (v3)"
+  - Tests mínimos críticos para validación v1
+
+### Technical Details
+- `src/endpoints/admin-themes-v3-api.js`: Endpoints API nuevos (reusan repos y validación existentes)
+- `src/endpoints/admin-themes-v3-ui.js`: Handler UI que sirve HTML/CSS/JS estáticos
+- `src/admin/theme-studio-v3/`: UI completa (index.html, theme-studio-v3.css, theme-studio-v3.js)
+- `src/router.js`: Rutas registradas para `/admin/api/themes-v3/*` y `/admin/themes/studio-v3`
+- `docs/THEME_STUDIO_V3_DIAGNOSTICO.md`: Diagnóstico completo del sistema legacy y justificación de v3
+- `tests/theme/theme-studio-v3.test.js`: Tests de validación ThemeDefinition v1
+
+### Notes
+- Theme Studio v3 NO toca runtime del alumno (no renderiza pantallas reales)
+- Reusa tablas PostgreSQL existentes (themes, theme_drafts, theme_versions)
+- Mantiene Theme Studio v2 (legacy) sin cambios
+- Preview inline sin iframe ni postMessage (CSS variables directas)
+
+---
+
 ## [4.8.0] - 2024-12-19
 
 ### Changed

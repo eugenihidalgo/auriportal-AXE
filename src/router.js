@@ -404,19 +404,47 @@ async function routerFunction(request, env, ctx) {
         return handleEnergyIlluminate(request, env, ctx);
       }
       
+      // Theme Studio v3 UI - ANTES de v2 (legacy)
+      if (path === "/admin/themes/studio-v3" || path.startsWith("/admin/themes/studio-v3/")) {
+        const adminThemesV3UIHandler = (await import("./endpoints/admin-themes-v3-ui.js")).default;
+        return adminThemesV3UIHandler(request, env, ctx);
+      }
+      
       // Theme Studio v2 - Nueva UI de temas (ANTES del catch-all /admin/themes)
       if (path === "/admin/themes/studio") {
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:408',message:'Router: /admin/themes/studio matched (portal block)',data:{path,host},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         let adminThemesStudioUIHandler;
         try {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:412',message:'Before import (portal block)',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:415',message:'After import (portal block)',data:{hasHandler:!!adminThemesStudioUIHandler,isFunction:typeof adminThemesStudioUIHandler === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
         } catch (importError) {
           console.error('[Router] Error importing admin-themes-studio-ui:', importError);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:419',message:'Import error (portal block)',data:{error:importError?.message,stack:importError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           throw importError;
         }
         try {
-          return await adminThemesStudioUIHandler(request, env, ctx);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:423',message:'Before calling handler (portal block)',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          const result = await adminThemesStudioUIHandler(request, env, ctx);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:426',message:'After calling handler (portal block)',data:{isResponse:result instanceof Response,status:result?.status,statusText:result?.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          return result;
         } catch (handlerError) {
           console.error('[Router] Error in adminThemesStudioUIHandler:', handlerError);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:431',message:'Handler error (portal block)',data:{error:handlerError?.message,stack:handlerError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           throw handlerError;
         }
       }
@@ -482,6 +510,15 @@ async function routerFunction(request, env, ctx) {
       if (path === "/health-check" || path === "/health" || path === "/status") {
         return healthCheckHandler(request, env, ctx);
       }
+      
+      // Endpoint de prueba para verificar routing básico
+      if (path === "/admin/test-html") {
+        return new Response('<h1>TEST OK</h1>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+      }
+      
       // Endpoints API de energía (antes de delegar a admin-panel-v4)
       if (path === "/admin/api/energy/clean" && request.method === "POST") {
         const { handleEnergyClean } = await import("./endpoints/admin-energy-api.js");
@@ -492,6 +529,12 @@ async function routerFunction(request, env, ctx) {
         return handleEnergyIlluminate(request, env, ctx);
       }
       
+      // Theme Studio v3 UI - ANTES de v2 (legacy)
+      if (path === "/admin/themes/studio-v3" || path.startsWith("/admin/themes/studio-v3/")) {
+        const adminThemesV3UIHandler = (await import("./endpoints/admin-themes-v3-ui.js")).default;
+        return adminThemesV3UIHandler(request, env, ctx);
+      }
+      
       // UI del editor de temas (DEPRECATED - redirigir a Theme Studio v2)
       if (path === "/admin/themes/ui" || path === "/admin/apariencia/temas") {
         // Redirigir a Theme Studio v2
@@ -499,7 +542,7 @@ async function routerFunction(request, env, ctx) {
         return Response.redirect(studioUrl.toString(), 302);
       }
       
-      // Theme Studio v2 - Nueva UI de temas
+      // Theme Studio v2 - Nueva UI de temas (ANTES del catch-all /admin/themes)
       if (path === "/admin/themes/studio") {
         // #region agent log
         fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:478',message:'Before importing admin-themes-studio-ui (admin host)',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -936,7 +979,24 @@ async function routerFunction(request, env, ctx) {
     }
   }
   
-  // Endpoints API de temas (antes de delegar a admin-panel-v4)
+  // Theme Studio v2 - Nueva UI de temas (ANTES del catch-all /admin/themes)
+  if (path === "/admin/themes/studio") {
+    let adminThemesStudioUIHandler;
+    try {
+      adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+    } catch (importError) {
+      console.error('[Router] Error importing admin-themes-studio-ui:', importError);
+      throw importError;
+    }
+    try {
+      return await adminThemesStudioUIHandler(request, env, ctx);
+    } catch (handlerError) {
+      console.error('[Router] Error in adminThemesStudioUIHandler:', handlerError);
+      throw handlerError;
+    }
+  }
+  
+  // Endpoints API de temas (después de rutas específicas)
   if (path.startsWith("/admin/themes")) {
     const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
     return adminThemesHandler(request, env, ctx);
@@ -974,6 +1034,12 @@ async function routerFunction(request, env, ctx) {
     return adminRecorridosApiHandler(request, env, ctx);
   }
 
+  // Endpoints API de Temas v3 (Admin) - ANTES del catch-all
+  if (path.startsWith("/admin/api/themes-v3")) {
+    const adminThemesV3ApiHandler = (await import("./endpoints/admin-themes-v3-api.js")).default;
+    return adminThemesV3ApiHandler(request, env, ctx);
+  }
+
   // Endpoints API de Temas (Admin)
   if (path.startsWith("/admin/api/themes")) {
     const adminThemesApiHandler = (await import("./endpoints/admin-themes-api.js")).default;
@@ -986,6 +1052,12 @@ async function routerFunction(request, env, ctx) {
   if (path.startsWith("/admin/recorridos")) {
     const adminRecorridosHandler = (await import("./endpoints/admin-recorridos.js")).default;
     return adminRecorridosHandler(request, env, ctx);
+  }
+
+  // Theme Studio v3 UI (Admin) - ANTES del catch-all
+  if (path === "/admin/themes/studio-v3" || path.startsWith("/admin/themes/studio-v3/")) {
+    const adminThemesV3UIHandler = (await import("./endpoints/admin-themes-v3-ui.js")).default;
+    return adminThemesV3UIHandler(request, env, ctx);
   }
 
   // Endpoints UI de Temas (Admin)

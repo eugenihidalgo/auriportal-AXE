@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Theme Studio v3 — AuriPortal Admin</title>
+  <style id="ap-theme-tokens"></style>
+  <link rel="stylesheet" href="/admin/themes/studio-v3/theme-studio-v3.css">
+</head>
+<body>
+  <div id="theme-studio-v3" class="theme-studio-container">
+    <!-- Header -->
+    <header class="studio-header">
+      <div class="header-content">
+        <h1>🎨 Theme Studio v3</h1>
+        <div class="header-actions">
+          <span id="status-badge" class="status-badge">Cargando...</span>
+          <button id="btn-save-draft" class="btn btn-secondary" disabled>💾 Guardar Draft</button>
+          <button id="btn-publish" class="btn btn-primary" disabled>🚀 Publicar</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Layout: 3 Columnas -->
+    <main class="studio-main">
+      <!-- Columna Izquierda: Librería de Temas (20-25%) -->
+      <aside class="studio-sidebar">
+        <div class="sidebar-section">
+          <h2>📚 Librería de Temas</h2>
+          <button id="btn-create-theme" class="btn btn-primary btn-block">+ Nuevo Tema</button>
+        </div>
+        <div class="sidebar-section">
+          <div id="themes-list" class="themes-list">
+            <p class="loading-text">Cargando temas...</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Columna Centro: Preview Playground (50-60%) -->
+      <section class="studio-preview">
+        <div class="preview-container">
+          <h2>👁️ Preview Playground</h2>
+          <div id="preview-playground" class="preview-playground">
+            <!-- Componentes genéricos canónicos -->
+            <div class="preview-bg-main">
+              <div class="preview-card">
+                <h3 class="preview-text-primary">Card Principal</h3>
+                <p class="preview-text-muted">Este es un texto secundario que usa --text-muted</p>
+                <button class="preview-button">Botón Primario</button>
+              </div>
+              <div class="preview-card preview-card-elevated">
+                <h3 class="preview-text-primary">Card Elevada</h3>
+                <p class="preview-text-muted">Esta card usa --shadow-md para mayor elevación</p>
+                <input type="text" class="preview-input" placeholder="Input de ejemplo" />
+              </div>
+              <div class="preview-placeholder-clock">
+                <div class="clock-icon">🕐</div>
+                <p>Reloj (placeholder visual)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Columna Derecha: Controles de Tokens (20-25%) -->
+      <aside class="studio-controls">
+        <div class="controls-section">
+          <h2>🎛️ Controles</h2>
+          <div id="token-controls" class="token-controls">
+            <p class="loading-text">Cargando controles...</p>
+          </div>
+        </div>
+        <div class="controls-section">
+          <h2>📦 Presets</h2>
+          <div class="presets-list">
+            <button class="preset-btn" data-preset="light">☀️ Light Classic</button>
+            <button class="preset-btn" data-preset="dark">🌙 Dark Classic</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/admin/themes/studio-v3/theme-studio-v3.js"></script>
+</body>
+</html>
+
