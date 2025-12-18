@@ -250,3 +250,12 @@ Si estos objetos también tienen lógica compleja, considerar:
 **Refactorización completada exitosamente** ✅
 
 
+
+
+
+
+
+
+
+
+

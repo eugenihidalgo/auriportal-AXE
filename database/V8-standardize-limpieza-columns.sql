@@ -138,3 +138,12 @@ SELECT '✅ Columnas estandarizadas correctamente' AS resultado;
 
 
 
+
+
+
+
+
+
+
+
+

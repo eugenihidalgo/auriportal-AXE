@@ -4,6 +4,8 @@
 import { query } from '../../database/pg.js';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { obtenerEstadoAspectoPorAlumnos } from '../services/ver-por-alumno.js';
+import { insertEnergyEvent } from '../core/energy/energy-events.js';
+import { getRequestId } from '../core/observability/request-context.js';
 
 /**
  * Limpia un aspecto para un alumno específico (Master)
@@ -132,6 +134,49 @@ export async function limpiarAspectoIndividual(request, env) {
     `, [alumno_id, tipo_aspecto, aspecto_id, aspecto.nombre, tipo_aspecto, ahora]).catch(err => {
       console.warn('Error registrando en historial:', err.message);
     });
+    
+    // ========================================================================
+    // EMITIR EVENTO EN PARALELO (fail-open: no rompe si falla)
+    // ========================================================================
+    try {
+      // Obtener estado antes (si existe)
+      const estadoAntes = await query(`
+        SELECT estado FROM ${tablaEstado}
+        WHERE alumno_id = $1 AND ${campoAspectoId} = $2
+      `, [alumno_id, aspecto_id]).catch(() => null);
+      
+      const wasCleanBefore = estadoAntes?.rows?.[0]?.estado === 'al_dia' || false;
+      
+      await insertEnergyEvent({
+        occurred_at: ahora,
+        event_type: 'cleaning',
+        actor_type: 'master',
+        actor_id: null, // Master no tiene ID específico en este contexto
+        alumno_id: alumno_id,
+        subject_type: tipo_aspecto,
+        subject_id: String(aspecto_id),
+        origin: 'admin_panel',
+        notes: `Limpieza de aspecto ${aspecto.nombre} (${tipo_aspecto})`,
+        metadata: {
+          legacy_table_updated: true,
+          tipo_aspecto: tipo_aspecto,
+          aspecto_id: aspecto_id,
+          aspecto_nombre: aspecto.nombre,
+          frecuencia_dias: aspecto.frecuencia_dias || null,
+          tipo_limpieza: tipoLimpieza,
+          veces_limpiar: aspecto.cantidad_minima || null
+        },
+        request_id: getRequestId(),
+        requires_clean_state: true,
+        was_clean_before: wasCleanBefore,
+        is_clean_after: true,
+        request: request,
+        ctx: { request_id: getRequestId() }
+      });
+    } catch (energyError) {
+      // FAIL-OPEN: No romper la limpieza legacy si falla el evento
+      console.error('[limpiarAspectoIndividual][EnergyEvent][FAIL]', energyError.message);
+    }
     
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
@@ -280,6 +325,63 @@ export async function limpiarAspectoGlobal(request, env) {
       console.warn('Error registrando en historial:', err.message);
     });
     
+    // ========================================================================
+    // EMITIR EVENTO EN PARALELO (fail-open: no rompe si falla)
+    // ========================================================================
+    // Para limpieza global, emitimos un evento por cada alumno limpiado
+    // (en background, no bloquea la respuesta)
+    const emitirEventosPromise = Promise.all(
+      alumnos.rows.map(async (alumno) => {
+        try {
+          // Obtener estado antes (si existe)
+          const estadoAntes = await query(`
+            SELECT estado FROM ${tablaEstado}
+            WHERE alumno_id = $1 AND ${campoAspectoId} = $2
+          `, [alumno.id, aspecto_id]).catch(() => null);
+          
+          const wasCleanBefore = estadoAntes?.rows?.[0]?.estado === 'al_dia' || false;
+          
+          await insertEnergyEvent({
+            occurred_at: ahora,
+            event_type: 'cleaning',
+            actor_type: 'master',
+            actor_id: null,
+            alumno_id: alumno.id,
+            subject_type: tipo_aspecto,
+            subject_id: String(aspecto_id),
+            origin: 'admin_panel',
+            notes: `Limpieza global de aspecto ${aspecto.nombre} (${tipo_aspecto})`,
+            metadata: {
+              legacy_table_updated: true,
+              tipo_aspecto: tipo_aspecto,
+              aspecto_id: aspecto_id,
+              aspecto_nombre: aspecto.nombre,
+              frecuencia_dias: aspecto.frecuencia_dias || null,
+              tipo_limpieza: tipoLimpieza,
+              veces_limpiar: aspecto.cantidad_minima || null,
+              global_cleaning: true
+            },
+            request_id: getRequestId(),
+            requires_clean_state: true,
+            was_clean_before: wasCleanBefore,
+            is_clean_after: true,
+            request: request,
+            ctx: { request_id: getRequestId() }
+          });
+        } catch (energyError) {
+          // FAIL-OPEN: Continuar con otros alumnos
+          console.error(`[limpiarAspectoGlobal][EnergyEvent][FAIL] alumno_id=${alumno.id}`, energyError.message);
+        }
+      })
+    ).catch(err => {
+      // FAIL-OPEN: No romper la respuesta si fallan los eventos
+      console.error('[limpiarAspectoGlobal][EnergyEvent][FAIL] Error general:', err.message);
+    });
+    
+    // No esperar a que terminen los eventos (fire-and-forget)
+    // La respuesta se envía inmediatamente
+    emitirEventosPromise.catch(() => {}); // Silenciar errores no manejados
+    
     return new Response(JSON.stringify({ 
       success: true, 
       total_limpiados: totalLimpios 
@@ -332,6 +434,9 @@ export async function obtenerEstadoAspecto(request, env) {
     });
   }
 }
+
+
+
 
 
 

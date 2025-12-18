@@ -271,6 +271,44 @@ export class StudentRepoPg {
     );
     return result.rows[0] || null;
   }
+
+  /**
+   * Actualiza el apodo de un alumno por email
+   * 
+   * @param {string} email - Email del alumno
+   * @param {string|null} apodo - Nuevo apodo (puede ser null para limpiarlo)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object|null>} Objeto alumno actualizado o null si no existe
+   */
+  async updateApodo(email, apodo, client = null) {
+    if (!email) return null;
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      'UPDATE alumnos SET apodo = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2 RETURNING *',
+      [apodo || null, email.toLowerCase().trim()]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Actualiza el apodo de un alumno por ID
+   * 
+   * @param {number} id - ID del alumno
+   * @param {string|null} apodo - Nuevo apodo (puede ser null para limpiarlo)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object|null>} Objeto alumno actualizado o null si no existe
+   */
+  async updateApodoById(id, apodo, client = null) {
+    if (!id) return null;
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      'UPDATE alumnos SET apodo = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [apodo || null, id]
+    );
+    return result.rows[0] || null;
+  }
 }
 
 // Exportar instancia singleton por defecto
@@ -291,5 +329,15 @@ export function getDefaultStudentRepo() {
 
 // Exportar también la clase para permitir crear instancias personalizadas
 export default getDefaultStudentRepo();
+
+
+
+
+
+
+
+
+
+
 
 

@@ -41,3 +41,12 @@ CREATE INDEX IF NOT EXISTS idx_tonos_meditacion_por_defecto ON tonos_meditacion(
 
 
 
+
+
+
+
+
+
+
+
+

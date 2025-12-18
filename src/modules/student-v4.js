@@ -6,11 +6,12 @@
 // El repositorio encapsula todas las queries de alumnos.
 // REFACTOR: Usa pausa-v4.js en lugar de importar directamente database/pg.js para pausas.
 
-import getDefaultStudentRepo from "../infra/repos/student-repo-pg.js";
+import { getDefaultStudentRepo } from "../infra/repos/student-repo-pg.js";
 import { getPausaActiva, calcularDiasPausados, calcularDiasPausadosHastaFecha } from "./pausa-v4.js";
 import { crearPractica } from "./practice-v4.js";
 import { logInfo, logWarn, extractStudentMeta } from "../core/observability/logger.js";
 import { isFeatureEnabled } from "../core/flags/feature-flags.js";
+import { getDefaultAuditRepo } from "../infra/repos/audit-repo-pg.js";
 
 /**
  * Repositorio de alumnos (inyectable para tests)
@@ -256,6 +257,77 @@ export async function updateStudentEstadoSuscripcion(email, estado, fechaReactiv
     estado_anterior: estadoAnterior,
     estado_nuevo: estado,
     fecha_reactivacion: fechaReactivacion ? new Date(fechaReactivacion).toISOString() : null
+  });
+  
+  return normalized;
+}
+
+/**
+ * Actualiza el apodo de un alumno
+ * 
+ * El apodo es el identificador humano principal del alumno en el sistema.
+ * NO se calcula, NO se versiona como snapshot, vive en la entidad alumno.
+ * 
+ * @param {string|number} identifier - Email o ID del alumno
+ * @param {string|null} nuevoApodo - Nuevo apodo (puede ser null para limpiarlo)
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object>} Alumno normalizado actualizado
+ */
+export async function updateStudentApodo(identifier, nuevoApodo, client = null) {
+  const repo = getStudentRepo();
+  const auditRepo = getDefaultAuditRepo();
+  
+  // Obtener alumno anterior para auditoría
+  const alumnoAnterior = typeof identifier === 'number' 
+    ? await repo.getById(identifier, client)
+    : await repo.getByEmail(identifier, client);
+  
+  if (!alumnoAnterior) {
+    throw new Error(`Alumno no encontrado: ${identifier}`);
+  }
+  
+  const apodoAnterior = alumnoAnterior.apodo || null;
+  const alumnoId = alumnoAnterior.id;
+  
+  // Actualizar apodo
+  const alumno = typeof identifier === 'number'
+    ? await repo.updateApodoById(identifier, nuevoApodo, client)
+    : await repo.updateApodo(identifier, nuevoApodo, client);
+  
+  if (!alumno) {
+    throw new Error(`Error al actualizar apodo para alumno: ${identifier}`);
+  }
+  
+  const normalized = normalizeAlumno(alumno);
+  
+  // Determinar tipo de evento de auditoría
+  const eventType = apodoAnterior === null ? 'APODO_SET' : 'APODO_UPDATED';
+  
+  // Registrar evento de auditoría
+  try {
+    await auditRepo.recordEvent({
+      eventType,
+      actorType: 'admin',
+      actorId: alumnoId.toString(),
+      severity: 'info',
+      data: {
+        alumno_id: alumnoId,
+        email: alumno.email,
+        apodo_anterior: apodoAnterior,
+        apodo_nuevo: nuevoApodo || null,
+        accion: apodoAnterior === null ? 'apodo_establecido' : 'apodo_actualizado'
+      }
+    }, client);
+  } catch (error) {
+    // No bloquear la operación si falla la auditoría
+    console.warn('⚠️ Error registrando auditoría de apodo (no crítico):', error.message);
+  }
+  
+  // Log de actualización de apodo
+  logInfo('student', 'Apodo actualizado', {
+    ...extractStudentMeta(normalized),
+    apodo_anterior: apodoAnterior,
+    apodo_nuevo: nuevoApodo || null
   });
   
   return normalized;

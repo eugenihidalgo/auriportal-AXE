@@ -34,11 +34,12 @@ import { applyTheme } from './responses.js';
  * });
  */
 export function renderHtml(html, options = {}) {
-  const { student = null, headers: additionalHeaders = {}, status = 200 } = options;
+  const { student = null, headers: additionalHeaders = {}, status = 200, theme_id = null } = options;
   
-  // Aplicar tema automáticamente si se proporciona un estudiante
-  if (student) {
-    html = applyTheme(html, student);
+  // Aplicar tema automáticamente si se proporciona un estudiante o theme_id
+  // SPRINT AXE v0.4: Acepta theme_id opcional para preview
+  if (student || theme_id) {
+    html = applyTheme(html, student, theme_id);
   }
   
   // Obtener headers anti-cache base
@@ -56,5 +57,15 @@ export function renderHtml(html, options = {}) {
     headers: finalHeaders
   });
 }
+
+
+
+
+
+
+
+
+
+
 
 

@@ -234,3 +234,12 @@ if (issues.some(i => i.severity === 'CRITICAL' || i.severity === 'HIGH')) {
 } else {
   process.exit(0);
 }
+
+
+
+
+
+
+
+
+

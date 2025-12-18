@@ -1,0 +1,294 @@
+<div class="p-6 bg-slate-900 min-h-screen">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-white">🧭 Navegaciones</h1>
+    <a href="/admin/navigation/new" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
+      ➕ Nueva navegación
+    </a>
+  </div>
+  
+  <div class="bg-slate-800 rounded-lg shadow-lg p-6 border border-slate-700">
+    <div class="mb-4">
+      <p class="text-slate-400 text-sm mb-4">Gestiona las estructuras de navegación que se mostrarán a los alumnos.</p>
+    </div>
+    
+    <div class="overflow-x-auto">
+      <table class="w-full text-left" id="navigations-table">
+        <thead>
+          <tr class="border-b border-slate-700">
+            <th class="pb-3 px-4 text-slate-300 font-semibold">ID</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Nombre</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Estado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Versión</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="navigations-tbody">
+          <tr>
+            <td colspan="5" class="py-8 text-center text-slate-400">Cargando navegaciones...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Cargar lista de navegaciones
+  async function cargarNavegaciones() {
+    const tbody = document.getElementById('navigations-tbody');
+    
+    try {
+      const response = await fetch('/admin/api/navigation', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data || !data.data.navigations) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      const navigations = data.data.navigations || [];
+      
+      if (navigations.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="py-8 text-center text-slate-400">No hay navegaciones creadas aún.</td>
+          </tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = navigations.map(nav => {
+        // Determinar estado
+        let estadoBadge = '<span class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">Sin draft</span>';
+        if (nav.has_draft && nav.current_published_version) {
+          estadoBadge = '<span class="px-2 py-1 bg-blue-900 text-blue-200 rounded text-xs">Draft + Publicado</span>';
+        } else if (nav.has_draft) {
+          estadoBadge = '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Draft</span>';
+        } else if (nav.current_published_version) {
+          estadoBadge = '<span class="px-2 py-1 bg-green-900 text-green-200 rounded text-xs">Publicado</span>';
+        }
+        
+        // Versión
+        const versionText = nav.current_published_version 
+          ? `v${nav.current_published_version}`
+          : '-';
+        
+        // Codificar ID para URLs
+        const encodedId = encodeURIComponent(nav.navigation_id);
+        // Escapar ID para usar en onclick (previene inyección)
+        const escapedId = (nav.navigation_id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        return `
+          <tr class="border-b border-slate-700 hover:bg-slate-700">
+            <td class="py-3 px-4 text-white font-mono text-sm">${(nav.navigation_id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4 text-white">${(nav.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4">${estadoBadge}</td>
+            <td class="py-3 px-4 text-slate-300 text-sm">${versionText}</td>
+            <td class="py-3 px-4">
+              <a href="/admin/navigation/${encodedId}/edit" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors inline-block mr-2">Editar</a>
+              <button onclick="duplicarNavegacion('${escapedId}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors mr-2">Duplicar</button>
+              <button onclick="exportarNavegacion('${escapedId}')" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors mr-2">Exportar</button>
+              <button onclick="borrarNavegacion('${escapedId}')" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors">🗑️ Borrar</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      
+    } catch (error) {
+      console.error('Error cargando navegaciones:', error);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-8 text-center text-red-400">
+            ❌ Error cargando navegaciones: ${error.message}
+          </td>
+        </tr>
+      `;
+    }
+  }
+  
+  // Duplicar navegación
+  async function duplicarNavegacion(navId) {
+    if (!confirm(`¿Duplicar la navegación "${navId}"?`)) {
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(navId);
+      
+      // Obtener navegación original (intentar obtener draft, si no existe, obtener published)
+      let response = await fetch(`/admin/api/navigation/${encodedId}/draft`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      let definition = null;
+      let name = navId;
+      let description = '';
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data && data.data.draft_json) {
+          definition = data.data.draft_json;
+          name = definition.name || navId;
+          description = definition.description || '';
+        }
+      }
+      
+      // Si no hay draft, intentar obtener published
+      if (!definition) {
+        response = await fetch(`/admin/api/navigation/${encodedId}/published`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && data.data && data.data.definition_json) {
+            definition = data.data.definition_json;
+            name = definition.name || navId;
+            description = definition.description || '';
+          }
+        }
+      }
+      
+      if (!definition) {
+        alert('No se puede duplicar: la navegación no tiene definición disponible');
+        return;
+      }
+      
+      // Crear nueva navegación con ID único
+      const nuevoId = `${navId}_copy_${Date.now()}`;
+      const nuevoNombre = `${name} (copia)`;
+      
+      // Actualizar navigation_id en la definición
+      definition.navigation_id = nuevoId;
+      definition.name = nuevoNombre;
+      
+      // Crear nueva navegación
+      const createResponse = await fetch('/admin/api/navigation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          navigation_id: nuevoId,
+          name: nuevoNombre,
+          description: description
+        })
+      });
+      
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Error ${createResponse.status}`);
+      }
+      
+      // Importar la definición como draft
+      const importResponse = await fetch(`/admin/api/navigation/${encodeURIComponent(nuevoId)}/import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(definition)
+      });
+      
+      if (!importResponse.ok) {
+        const errorData = await importResponse.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Error importando: ${importResponse.status}`);
+      }
+      
+      // Redirigir al editor
+      window.location.href = `/admin/navigation/${encodeURIComponent(nuevoId)}/edit`;
+      
+    } catch (error) {
+      console.error('Error duplicando navegación:', error);
+      alert(`Error al duplicar navegación: ${error.message}`);
+    }
+  }
+  
+  // Exportar navegación
+  async function exportarNavegacion(navId) {
+    try {
+      const encodedId = encodeURIComponent(navId);
+      
+      const response = await fetch(`/admin/api/navigation/${encodedId}/export`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      // Descargar como archivo JSON
+      const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `navigation-${navId}-v${data.data.version || 'draft'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Error exportando navegación:', error);
+      alert(`Error al exportar navegación: ${error.message}`);
+    }
+  }
+  
+  // Borrar navegación
+  async function borrarNavegacion(navId) {
+    if (!confirm(`¿Estás seguro de que quieres borrar la navegación "${navId}"?\n\nEsta acción marcará la navegación como inactiva (soft delete).`)) {
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(navId);
+      const response = await fetch(`/admin/api/navigation/${encodedId}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      alert('✅ Navegación borrada correctamente');
+      
+      // Recargar lista
+      cargarNavegaciones();
+      
+    } catch (error) {
+      console.error('Error borrando navegación:', error);
+      alert(`Error al borrar navegación: ${error.message}`);
+    }
+  }
+  
+  // Cargar navegaciones al iniciar
+  cargarNavegaciones();
+</script>
+

@@ -2,6 +2,8 @@
 // Servicio para gestionar transmutaciones energéticas
 
 import { query, getPool } from '../../database/pg.js';
+import { insertEnergyEvent } from '../core/energy/energy-events.js';
+import { getRequestId } from '../core/observability/request-context.js';
 
 /**
  * Calcula el estado de un ítem para un alumno
@@ -539,6 +541,51 @@ export async function limpiarItemParaTodos(itemId) {
           updated_at = CURRENT_TIMESTAMP
       `, [itemId, alumno.id, ahora]);
     }
+    
+    // ========================================================================
+    // EMITIR EVENTO EN PARALELO (fail-open: no rompe si falla)
+    // ========================================================================
+    try {
+      // Obtener estado antes (si existe)
+      const estadoAntes = await query(`
+        SELECT ultima_limpieza, veces_completadas 
+        FROM items_transmutaciones_alumnos
+        WHERE item_id = $1 AND alumno_id = $2
+      `, [itemId, alumno.id]).catch(() => null);
+      
+      const wasCleanBefore = estadoAntes?.rows?.[0]?.ultima_limpieza ? true : false;
+      
+      await insertEnergyEvent({
+        occurred_at: ahora,
+        event_type: 'cleaning',
+        actor_type: 'master',
+        actor_id: null,
+        alumno_id: alumno.id,
+        subject_type: 'transmutacion_item',
+        subject_id: String(itemId),
+        origin: 'admin_panel',
+        notes: `Limpieza global de item transmutación ${item.nombre}`,
+        metadata: {
+          legacy_table_updated: true,
+          item_id: itemId,
+          item_nombre: item.nombre,
+          lista_id: item.lista_id,
+          lista_nombre: lista.nombre,
+          tipo_lista: lista.tipo,
+          frecuencia_dias: item.frecuencia_dias || null,
+          veces_limpiar: item.veces_limpiar || null,
+          global_cleaning: true
+        },
+        request_id: getRequestId(),
+        requires_clean_state: true,
+        was_clean_before: wasCleanBefore,
+        is_clean_after: true,
+        ctx: { request_id: getRequestId() }
+      });
+    } catch (energyError) {
+      // FAIL-OPEN: Continuar con otros alumnos
+      console.error(`[limpiarItemParaTodos][EnergyEvent][FAIL] alumno_id=${alumno.id}`, energyError.message);
+    }
   }
   
   return { limpiado: alumnos.length };
@@ -601,7 +648,19 @@ export async function obtenerEstadoPorAlumnos(itemId) {
 export async function limpiarItemParaAlumno(itemId, alumnoId) {
   const ahora = new Date();
   const item = await obtenerItemPorId(itemId);
+  if (!item) {
+    throw new Error(`Item ${itemId} no encontrado`);
+  }
   const lista = await obtenerListaPorId(item.lista_id);
+  
+  // Obtener estado antes (si existe) - ANTES de actualizar
+  const estadoAntes = await query(`
+    SELECT ultima_limpieza, veces_completadas 
+    FROM items_transmutaciones_alumnos
+    WHERE item_id = $1 AND alumno_id = $2
+  `, [itemId, alumnoId]).catch(() => null);
+  
+  const wasCleanBefore = estadoAntes?.rows?.[0]?.ultima_limpieza ? true : false;
   
   if (lista.tipo === 'una_vez') {
     // Incrementar veces_completadas
@@ -622,6 +681,41 @@ export async function limpiarItemParaAlumno(itemId, alumnoId) {
         ultima_limpieza = $3,
         updated_at = CURRENT_TIMESTAMP
     `, [itemId, alumnoId, ahora]);
+  }
+  
+  // ========================================================================
+  // EMITIR EVENTO EN PARALELO (fail-open: no rompe si falla)
+  // ========================================================================
+  try {
+    await insertEnergyEvent({
+      occurred_at: ahora,
+      event_type: 'cleaning',
+      actor_type: 'master',
+      actor_id: null,
+      alumno_id: alumnoId,
+      subject_type: 'transmutacion_item',
+      subject_id: String(itemId),
+      origin: 'admin_panel',
+      notes: `Limpieza de item transmutación ${item.nombre}`,
+      metadata: {
+        legacy_table_updated: true,
+        item_id: itemId,
+        item_nombre: item.nombre,
+        lista_id: item.lista_id,
+        lista_nombre: lista.nombre,
+        tipo_lista: lista.tipo,
+        frecuencia_dias: item.frecuencia_dias || null,
+        veces_limpiar: item.veces_limpiar || null
+      },
+      request_id: getRequestId(),
+      requires_clean_state: true,
+      was_clean_before: wasCleanBefore,
+      is_clean_after: true,
+      ctx: { request_id: getRequestId() }
+    });
+  } catch (energyError) {
+    // FAIL-OPEN: No romper la limpieza legacy si falla el evento
+    console.error(`[limpiarItemParaAlumno][EnergyEvent][FAIL] alumno_id=${alumnoId}`, energyError.message);
   }
   
   return { success: true };
@@ -695,18 +789,28 @@ export async function obtenerItemsVerdesParaAlumno(alumnoId) {
 /**
  * Obtiene todos los ítems de transmutaciones para un alumno, clasificados por estado y agrupados por lista
  * Retorna un objeto con la estructura: { listas: [{ id, nombre, tipo, items: { limpio: [], pendiente: [], pasado: [] } }] }
+ * @param {number} alumnoId - ID del alumno
+ * @param {number} [nivelEfectivo] - Nivel efectivo del alumno (opcional, si no se proporciona se obtiene de la BD)
  */
-export async function obtenerTransmutacionesPorAlumno(alumnoId) {
-  // Obtener el nivel del alumno primero
-  const alumnoResult = await query(`
-    SELECT nivel_actual FROM alumnos WHERE id = $1
-  `, [alumnoId]);
-  
-  if (alumnoResult.rows.length === 0) {
-    return { listas: [] };
+export async function obtenerTransmutacionesPorAlumno(alumnoId, nivelEfectivo = null) {
+  // FASE 2A: Usar nivel_efectivo si se proporciona, sino obtener de BD (fallback)
+  let nivelAlumno;
+  if (nivelEfectivo !== null && nivelEfectivo !== undefined) {
+    nivelAlumno = nivelEfectivo;
+    console.log(`[Transmutaciones][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelAlumno} fuente=parametro`);
+  } else {
+    // Fallback: obtener desde BD
+    const alumnoResult = await query(`
+      SELECT nivel_actual FROM alumnos WHERE id = $1
+    `, [alumnoId]);
+    
+    if (alumnoResult.rows.length === 0) {
+      return { listas: [] };
+    }
+    
+    nivelAlumno = alumnoResult.rows[0].nivel_actual || 1;
+    console.log(`[Transmutaciones][LEVEL_FALLBACK] alumnoId=${alumnoId} nivel_actual=${nivelAlumno} fuente=bd`);
   }
-  
-  const nivelAlumno = alumnoResult.rows[0].nivel_actual || 1;
   
   // Obtener todas las listas activas
   const listasResult = await query(`

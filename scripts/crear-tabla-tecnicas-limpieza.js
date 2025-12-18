@@ -39,3 +39,12 @@ crearTablaTecnicas();
 
 
 
+
+
+
+
+
+
+
+
+

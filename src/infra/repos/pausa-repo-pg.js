@@ -72,14 +72,14 @@ export class PausaRepoPg {
    * @returns {Promise<Object>} Objeto pausa creado
    */
   async create(pausaData, client = null) {
-    const { alumno_id, inicio, fin } = pausaData;
+    const { alumno_id, inicio, fin, motivo } = pausaData;
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
-      INSERT INTO pausas (alumno_id, inicio, fin)
-      VALUES ($1, $2, $3)
+      INSERT INTO pausas (alumno_id, inicio, fin, motivo)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
-    `, [alumno_id, inicio || new Date(), fin || null]);
+    `, [alumno_id, inicio || new Date(), fin || null, motivo || null]);
 
     return result.rows[0];
   }
@@ -174,5 +174,15 @@ export function getDefaultPausaRepo() {
 
 // Exportar también la clase para permitir crear instancias personalizadas
 export default getDefaultPausaRepo();
+
+
+
+
+
+
+
+
+
+
 
 

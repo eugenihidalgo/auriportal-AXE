@@ -1,0 +1,152 @@
+{
+  "id": "main-navigation",
+  "version": "1.0.0",
+  "status": "published",
+  "metadata": {
+    "created_at": "2025-12-17T00:00:00Z",
+    "updated_at": "2025-12-17T00:00:00Z",
+    "description": "Navegación principal de AuriPortal v1"
+  },
+  "sections": [
+    {
+      "section_id": "home-actions",
+      "label": "Acciones Principales",
+      "order": 1,
+      "visibility_rules": [],
+      "items": [
+        {
+          "item_id": "practicar",
+          "type": "internal_route",
+          "label": "Practicar",
+          "icon": "meditation",
+          "target": "/practicar",
+          "order": 1,
+          "visibility_rules": []
+        },
+        {
+          "item_id": "aprender",
+          "type": "internal_route",
+          "label": "Aprender",
+          "icon": "book",
+          "target": "/aprender",
+          "order": 2,
+          "visibility_rules": []
+        },
+        {
+          "item_id": "limpieza",
+          "type": "internal_route",
+          "label": "Limpieza",
+          "icon": "sparkles",
+          "target": "/limpieza",
+          "order": 3,
+          "visibility_rules": []
+        },
+        {
+          "item_id": "perfil",
+          "type": "internal_route",
+          "label": "Mi Perfil",
+          "icon": "user",
+          "target": "/perfil-personal",
+          "order": 4,
+          "visibility_rules": []
+        }
+      ]
+    },
+    {
+      "section_id": "recorridos",
+      "label": "Recorridos",
+      "order": 2,
+      "visibility_rules": [
+        {
+          "rule_type": "user_level",
+          "operator": ">=",
+          "value": 2
+        }
+      ],
+      "items": [
+        {
+          "item_id": "recorrido-sanacion-basica",
+          "type": "internal_recorrido",
+          "label": "Sanación Básica",
+          "icon": "heart",
+          "target": "sanacion-basica",
+          "order": 1,
+          "visibility_rules": [
+            {
+              "rule_type": "user_level",
+              "operator": ">=",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "item_id": "recorrido-transmutacion",
+          "type": "internal_recorrido",
+          "label": "Transmutación Energética",
+          "icon": "flame",
+          "target": "transmutacion-energetica",
+          "order": 2,
+          "visibility_rules": [
+            {
+              "rule_type": "user_level",
+              "operator": ">=",
+              "value": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "section_id": "recursos-externos",
+      "label": "Recursos Externos",
+      "order": 3,
+      "visibility_rules": [
+        {
+          "rule_type": "feature_flag",
+          "flag_name": "external_resources_enabled"
+        }
+      ],
+      "items": [
+        {
+          "item_id": "kajabi-curso",
+          "type": "external_link",
+          "label": "Curso en Kajabi",
+          "icon": "external",
+          "target": "https://pdeeugenihidalgo.mykajabi.com/course",
+          "order": 1,
+          "visibility_rules": []
+        }
+      ]
+    },
+    {
+      "section_id": "beta-features",
+      "label": "Características Beta",
+      "order": 4,
+      "visibility_rules": [
+        {
+          "rule_type": "role",
+          "role": "beta_tester"
+        }
+      ],
+      "items": [
+        {
+          "item_id": "nueva-practica-guiada",
+          "type": "internal_route",
+          "label": "Nueva Práctica Guiada",
+          "icon": "star",
+          "target": "/practica-guiada-beta",
+          "order": 1,
+          "visibility_rules": [
+            {
+              "rule_type": "feature_flag",
+              "flag_name": "practica_guiada_v2"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+
+

@@ -1,0 +1,178 @@
+// src/core/pde/catalogs/preparations-resolver.js
+// Resolver determinista para catálogo de Preparaciones para la Práctica v1
+//
+// FUENTE: Tabla preparaciones_practica (PostgreSQL)
+// ADMIN: /admin/preparaciones-practica
+//
+// PRINCIPIOS:
+// - Determinista: mismos inputs → mismos outputs
+// - Filtrable por nivel del alumno
+// - Fail-open: errores devuelven bundle vacío
+// - NO modifica datos, solo lee
+
+import { logInfo, logWarn, logError } from '../../observability/logger.js';
+
+const DOMAIN = 'PreparationsResolver';
+
+/**
+ * Bundle vacío para fail-open
+ */
+export const EMPTY_PREPARATION_BUNDLE = {
+  catalog_id: 'preparations',
+  version: '1.0.0',
+  items: [],
+  meta: {
+    resolved_at: null,
+    student_level: null,
+    total_available: 0,
+    items_selected: 0,
+    reason: 'empty_bundle'
+  }
+};
+
+/**
+ * Crea un bundle vacío con razón específica
+ */
+function createEmptyBundle(reason, extraMeta = {}) {
+  return {
+    ...EMPTY_PREPARATION_BUNDLE,
+    meta: {
+      ...EMPTY_PREPARATION_BUNDLE.meta,
+      resolved_at: new Date().toISOString(),
+      reason,
+      ...extraMeta
+    }
+  };
+}
+
+/**
+ * Resuelve un bundle de preparaciones para un estudiante
+ * 
+ * @param {Object} studentCtx - Contexto del estudiante
+ * @param {Object} options - Opciones de filtrado
+ * @param {string} options.mode_id - Modo de limpieza (rapida/basica/profunda/maestro)
+ * @param {string} options.phase - Fase de la práctica (pre/post)
+ * @param {string} options.context - Contexto (limpieza/general)
+ * @param {boolean} options.filter_obligatorias - Solo obligatorias
+ * @param {string} options.posicion - Filtrar por posición (inicio/medio/fin)
+ * @returns {Promise<Object>} Bundle de preparaciones
+ */
+export async function resolvePreparationBundle(studentCtx, options = {}) {
+  const resolvedAt = new Date().toISOString();
+  
+  try {
+    // 1. Validar contexto
+    if (!studentCtx) {
+      logWarn(DOMAIN, 'studentCtx no proporcionado');
+      return createEmptyBundle('missing_student_context');
+    }
+    
+    // 2. Extraer nivel del estudiante
+    const studentLevel = studentCtx.nivelInfo?.nivel 
+      || studentCtx.nivelInfo?.nivel_efectivo 
+      || studentCtx.student?.nivel_actual 
+      || 1;
+    
+    logInfo(DOMAIN, 'Resolviendo bundle de preparaciones', {
+      student_level: studentLevel,
+      mode_id: options.mode_id,
+      context: options.context
+    }, true);
+    
+    // 3. Importar servicio dinámicamente para evitar dependencias circulares
+    const { obtenerPreparacionesPorNivel } = await import('../../../services/preparaciones-practica.js');
+    
+    // 4. Obtener preparaciones por nivel
+    const preparaciones = await obtenerPreparacionesPorNivel(studentLevel);
+    
+    if (!preparaciones || !Array.isArray(preparaciones)) {
+      logWarn(DOMAIN, 'No se pudieron obtener preparaciones');
+      return createEmptyBundle('no_data', { student_level: studentLevel });
+    }
+    
+    // 5. Aplicar filtros adicionales
+    let filtered = preparaciones;
+    
+    // Filtrar por posición si se especifica
+    if (options.posicion) {
+      filtered = filtered.filter(p => p.posicion === options.posicion);
+    }
+    
+    // Filtrar solo obligatorias si se solicita
+    if (options.filter_obligatorias) {
+      filtered = filtered.filter(p => {
+        if (p.obligatoria_global) return true;
+        if (p.obligatoria_por_nivel) {
+          const porNivel = typeof p.obligatoria_por_nivel === 'string'
+            ? JSON.parse(p.obligatoria_por_nivel)
+            : p.obligatoria_por_nivel;
+          return porNivel[studentLevel] === true;
+        }
+        return false;
+      });
+    }
+    
+    // 6. Ordenar por orden, luego por nombre
+    filtered.sort((a, b) => {
+      if (a.orden !== b.orden) return (a.orden || 0) - (b.orden || 0);
+      return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+    
+    // 7. Construir bundle
+    const bundle = {
+      catalog_id: 'preparations',
+      version: '1.0.0',
+      items: filtered.map(item => ({
+        id: item.id,
+        nombre: item.nombre,
+        descripcion: item.descripcion,
+        nivel: item.nivel,
+        video_url: item.video_url,
+        orden: item.orden,
+        activar_reloj: item.activar_reloj,
+        musica_id: item.musica_id,
+        tipo: item.tipo || 'consigna',
+        posicion: item.posicion || 'inicio',
+        obligatoria_global: item.obligatoria_global || false,
+        obligatoria_por_nivel: typeof item.obligatoria_por_nivel === 'string'
+          ? JSON.parse(item.obligatoria_por_nivel || '{}')
+          : (item.obligatoria_por_nivel || {}),
+        minutos: item.minutos,
+        tiene_video: item.tiene_video || false,
+        contenido_html: item.contenido_html
+      })),
+      meta: {
+        resolved_at: resolvedAt,
+        student_level: studentLevel,
+        total_available: preparaciones.length,
+        items_selected: filtered.length,
+        mode_id: options.mode_id,
+        context: options.context || 'general',
+        posicion_filter: options.posicion
+      }
+    };
+    
+    logInfo(DOMAIN, 'Bundle de preparaciones resuelto', {
+      student_level: studentLevel,
+      items_count: bundle.items.length
+    });
+    
+    return bundle;
+    
+  } catch (error) {
+    logError(DOMAIN, 'Error resolviendo bundle de preparaciones', {
+      error: error.message,
+      stack: error.stack
+    });
+    
+    return createEmptyBundle('error', { error: error.message });
+  }
+}
+
+export default {
+  resolvePreparationBundle,
+  EMPTY_PREPARATION_BUNDLE
+};
+
+
+

@@ -1,0 +1,407 @@
+<!--
+  Componente: Transmutation Checklist
+  
+  Template HTML mínimo para renderizar la checklist de transmutaciones energéticas
+  dentro del step "limpieza_energetica" del recorrido.
+  
+  DATOS ESPERADOS (inyectados por el runtime via renderSpec.props):
+  - transmutation_bundle: { mode, transmutations[], techniques[], meta }
+  - mode_id: string (rapida, basica, profunda, maestro)
+  - mode_label: string
+  - total_transmutations: number
+  - ui_hints: { show_checklist, show_counter, allow_partial_completion, show_techniques }
+  
+  USO:
+  El cliente (JavaScript en el navegador) debe:
+  1. Fetch GET /api/recorridos/runs/:run_id para obtener el renderSpec
+  2. Detectar props.ui_config.render_mode === "transmutation_checklist"
+  3. Renderizar este template con los datos de props.transmutation_bundle
+  4. Al pulsar "Hecho", POST /api/recorridos/runs/:run_id/steps/:step_id/submit
+-->
+
+<style>
+/* Estilos mínimos para la checklist */
+.transmutation-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  font-family: inherit;
+}
+
+.transmutation-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.transmutation-header h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.transmutation-header .subtitle {
+  color: var(--text-secondary, #666);
+  font-size: 0.9rem;
+}
+
+.transmutation-header .mode-badge {
+  display: inline-block;
+  background: var(--accent-color, #6366f1);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.transmutation-counter {
+  text-align: center;
+  padding: 1rem;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.transmutation-counter .count {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--accent-color, #6366f1);
+}
+
+.transmutation-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.transmutation-checklist li {
+  margin-bottom: 0.75rem;
+}
+
+.transmutation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.transmutation-item:hover {
+  border-color: var(--accent-color, #6366f1);
+}
+
+.transmutation-item.checked {
+  background: var(--bg-success, #f0fdf4);
+  border-color: var(--success-color, #22c55e);
+}
+
+.transmutation-item input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+  cursor: pointer;
+}
+
+.transmutation-content {
+  flex: 1;
+}
+
+.transmutation-name {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.transmutation-description {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+}
+
+.transmutation-category {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #999);
+  margin-top: 0.25rem;
+}
+
+.transmutation-actions {
+  text-align: center;
+  padding-top: 1rem;
+}
+
+.transmutation-btn {
+  display: inline-block;
+  padding: 0.875rem 2rem;
+  background: var(--accent-color, #6366f1);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.transmutation-btn:hover:not(:disabled) {
+  background: var(--accent-hover, #4f46e5);
+  transform: translateY(-1px);
+}
+
+.transmutation-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.transmutation-warning {
+  color: var(--warning-color, #f59e0b);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  display: none;
+}
+
+.transmutation-warning.visible {
+  display: block;
+}
+
+/* Fallback cuando no hay transmutaciones */
+.transmutation-fallback {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+/* Soporte tema oscuro */
+[data-theme="dark"] .transmutation-container {
+  --bg-secondary: #1f2937;
+  --bg-card: #111827;
+  --border-color: #374151;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --bg-success: #064e3b;
+}
+</style>
+
+<div class="transmutation-container" id="transmutation-step">
+  <div class="transmutation-header">
+    <h2 id="step-title">Limpieza energética</h2>
+    <p class="subtitle" id="step-subtitle">Marca las transmutaciones que desees trabajar hoy</p>
+    <span class="mode-badge" id="mode-badge">Modo básico</span>
+  </div>
+  
+  <!-- Contador de progreso -->
+  <div class="transmutation-counter">
+    <span>Has completado </span>
+    <span class="count" id="checked-count">0</span>
+    <span> / </span>
+    <span id="total-count">0</span>
+  </div>
+  
+  <!-- Checklist de transmutaciones -->
+  <ul class="transmutation-checklist" id="transmutation-list">
+    <!-- Renderizado dinámicamente por JS -->
+  </ul>
+  
+  <!-- Fallback si no hay transmutaciones -->
+  <div class="transmutation-fallback" id="transmutation-fallback" style="display: none;">
+    <p id="fallback-text">Dedica unos momentos a tu limpieza energética diaria.</p>
+  </div>
+  
+  <!-- Botón de acción -->
+  <div class="transmutation-actions">
+    <button type="button" class="transmutation-btn" id="submit-btn" disabled>
+      Hecho
+    </button>
+    <p class="transmutation-warning" id="warning-msg">
+      Marca al menos una transmutación para continuar
+    </p>
+  </div>
+</div>
+
+<script>
+/**
+ * Controlador para el step de transmutaciones energéticas
+ * 
+ * Este script espera que el cliente haya cargado el renderSpec con:
+ * - props.transmutation_bundle
+ * - props.ui_config
+ * - props.mode_id, props.mode_label
+ */
+(function() {
+  'use strict';
+  
+  // Estado local
+  let checkedIds = new Set();
+  let transmutations = [];
+  let config = {
+    allow_empty: false,
+    submit_button_text: 'Hecho',
+    empty_warning: 'Marca al menos una transmutación para continuar'
+  };
+  
+  // Referencias DOM
+  const stepTitle = document.getElementById('step-title');
+  const stepSubtitle = document.getElementById('step-subtitle');
+  const modeBadge = document.getElementById('mode-badge');
+  const checkedCount = document.getElementById('checked-count');
+  const totalCount = document.getElementById('total-count');
+  const transmutationList = document.getElementById('transmutation-list');
+  const fallbackDiv = document.getElementById('transmutation-fallback');
+  const fallbackText = document.getElementById('fallback-text');
+  const submitBtn = document.getElementById('submit-btn');
+  const warningMsg = document.getElementById('warning-msg');
+  
+  /**
+   * Inicializa el componente con los datos del renderSpec
+   * @param {Object} props - Props del step (de renderSpec.props)
+   */
+  window.initTransmutationChecklist = function(props) {
+    // Cargar configuración
+    if (props.ui_config) {
+      config = { ...config, ...props.ui_config };
+    }
+    
+    // Actualizar textos
+    if (props.title) stepTitle.textContent = props.title;
+    if (props.subtitle) stepSubtitle.textContent = props.subtitle;
+    if (props.mode_label) modeBadge.textContent = props.mode_label;
+    if (config.submit_button_text) submitBtn.textContent = config.submit_button_text;
+    if (config.empty_warning) warningMsg.textContent = config.empty_warning;
+    
+    // Cargar transmutaciones
+    const bundle = props.transmutation_bundle;
+    if (bundle && bundle.transmutations && bundle.transmutations.length > 0) {
+      transmutations = bundle.transmutations;
+      renderTransmutations();
+      fallbackDiv.style.display = 'none';
+      transmutationList.style.display = 'block';
+    } else {
+      // Fallback: no hay transmutaciones
+      transmutations = [];
+      if (props.fallback_body) {
+        fallbackText.textContent = props.fallback_body;
+      }
+      fallbackDiv.style.display = 'block';
+      transmutationList.style.display = 'none';
+      // En fallback, permitir continuar sin marcar
+      submitBtn.disabled = false;
+    }
+    
+    updateCounter();
+    updateSubmitState();
+  };
+  
+  /**
+   * Renderiza la lista de transmutaciones
+   */
+  function renderTransmutations() {
+    transmutationList.innerHTML = '';
+    
+    transmutations.forEach(trans => {
+      const li = document.createElement('li');
+      const label = document.createElement('label');
+      label.className = 'transmutation-item';
+      label.setAttribute('for', `trans-${trans.transmutation_id}`);
+      
+      label.innerHTML = `
+        <input type="checkbox" 
+               id="trans-${trans.transmutation_id}" 
+               data-id="${trans.transmutation_id}"
+               onchange="window.handleTransmutationChange(this)">
+        <div class="transmutation-content">
+          <div class="transmutation-name">${escapeHtml(trans.name)}</div>
+          <div class="transmutation-description">${escapeHtml(trans.description)}</div>
+          <span class="transmutation-category">${escapeHtml(trans.category || '')}</span>
+        </div>
+      `;
+      
+      li.appendChild(label);
+      transmutationList.appendChild(li);
+    });
+    
+    totalCount.textContent = transmutations.length;
+  }
+  
+  /**
+   * Maneja el cambio de un checkbox
+   * @param {HTMLInputElement} checkbox
+   */
+  window.handleTransmutationChange = function(checkbox) {
+    const id = checkbox.dataset.id;
+    const label = checkbox.closest('.transmutation-item');
+    
+    if (checkbox.checked) {
+      checkedIds.add(id);
+      label.classList.add('checked');
+    } else {
+      checkedIds.delete(id);
+      label.classList.remove('checked');
+    }
+    
+    updateCounter();
+    updateSubmitState();
+  };
+  
+  /**
+   * Actualiza el contador visual
+   */
+  function updateCounter() {
+    checkedCount.textContent = checkedIds.size;
+  }
+  
+  /**
+   * Actualiza el estado del botón submit
+   */
+  function updateSubmitState() {
+    const canSubmit = config.allow_empty || checkedIds.size > 0 || transmutations.length === 0;
+    submitBtn.disabled = !canSubmit;
+    warningMsg.classList.toggle('visible', !canSubmit && transmutations.length > 0);
+  }
+  
+  /**
+   * Obtiene los datos para enviar al submit
+   * @returns {Object} Input para POST /submit
+   */
+  window.getTransmutationInput = function() {
+    return {
+      limpieza_completada: checkedIds.size > 0 || transmutations.length === 0,
+      transmutations_done: Array.from(checkedIds),
+      mode_id: window._currentModeId || 'basica'
+    };
+  };
+  
+  /**
+   * Escapa HTML para prevenir XSS
+   * @param {string} str
+   * @returns {string}
+   */
+  function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  
+  // Event listener para el botón submit
+  submitBtn.addEventListener('click', function() {
+    if (submitBtn.disabled) return;
+    
+    // Emitir evento custom para que el cliente lo capture
+    const input = window.getTransmutationInput();
+    const event = new CustomEvent('transmutation-submit', { detail: input });
+    document.dispatchEvent(event);
+    
+    // También llamar a función global si existe (para integración legacy)
+    if (typeof window.onTransmutationSubmit === 'function') {
+      window.onTransmutationSubmit(input);
+    }
+  });
+})();
+</script>
+
+
+

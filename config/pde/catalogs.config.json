@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "description": "Configuración de Catálogos PDE v1 - AuriPortal",
+  "last_updated": "2025-12-17T00:00:00Z",
+  "catalogs": {
+    "preparations": {
+      "catalog_id": "preparations",
+      "label": "Preparaciones para la Práctica",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "preparaciones_practica",
+      "admin_path": "/admin/preparaciones-practica",
+      "resolver_path": "src/core/pde/catalogs/preparations-resolver.js",
+      "supports_level_filter": true,
+      "supports_mode_filter": false,
+      "runtime_integrated": true,
+      "notes": "Contenido pedagógico pre-práctica"
+    },
+    "post_practices": {
+      "catalog_id": "post_practices",
+      "label": "Técnicas Post-Práctica",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "tecnicas_post_practica",
+      "admin_path": "/admin/tecnicas-post-practica",
+      "resolver_path": "src/core/pde/catalogs/post-practices-resolver.js",
+      "supports_level_filter": true,
+      "supports_mode_filter": false,
+      "runtime_integrated": true,
+      "notes": "Contenido pedagógico post-práctica"
+    },
+    "protections": {
+      "catalog_id": "protections",
+      "label": "Protecciones Energéticas",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "protecciones_energeticas",
+      "admin_path": "/admin/protecciones-energeticas",
+      "resolver_path": "src/core/pde/catalogs/protections-resolver.js",
+      "supports_level_filter": false,
+      "supports_mode_filter": false,
+      "supports_moment_filter": true,
+      "runtime_integrated": true,
+      "notes": "Piezas de contenido PDE reutilizable"
+    },
+    "decrees": {
+      "catalog_id": "decrees",
+      "label": "Biblioteca de Decretos",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "decretos",
+      "admin_path": "/admin/decretos",
+      "resolver_path": "src/core/pde/catalogs/decrees-resolver.js",
+      "supports_level_filter": true,
+      "supports_mode_filter": false,
+      "runtime_integrated": true,
+      "is_source_of_truth": true,
+      "notes": "SOURCE OF TRUTH para contenido de decretos. Otros catálogos referencian por ID."
+    },
+    "places": {
+      "catalog_id": "places",
+      "label": "Lugares Activados",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "transmutaciones_lugares",
+      "state_table": "transmutaciones_lugares_estado",
+      "admin_path": "/admin/transmutaciones-lugares",
+      "resolver_path": "src/core/pde/catalogs/places-resolver.js",
+      "supports_level_filter": true,
+      "supports_estado_filter": true,
+      "supports_prioridad_filter": true,
+      "runtime_integrated": false,
+      "notes": "Formalizado para uso futuro en recorridos"
+    },
+    "projects": {
+      "catalog_id": "projects",
+      "label": "Proyectos Activados",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "transmutaciones_proyectos",
+      "state_table": "transmutaciones_proyectos_estado",
+      "admin_path": "/admin/transmutaciones-proyectos",
+      "resolver_path": "src/core/pde/catalogs/projects-resolver.js",
+      "supports_level_filter": true,
+      "supports_estado_filter": true,
+      "supports_prioridad_filter": true,
+      "runtime_integrated": false,
+      "notes": "Formalizado para uso futuro en recorridos"
+    },
+    "sponsors": {
+      "catalog_id": "sponsors",
+      "label": "Apadrinados",
+      "version": "1.0.0",
+      "source_type": "database",
+      "source_table": "transmutaciones_apadrinados",
+      "state_table": "transmutaciones_apadrinados_estado",
+      "admin_path": "/admin/apadrinados",
+      "resolver_path": "src/core/pde/catalogs/sponsors-resolver.js",
+      "supports_level_filter": true,
+      "supports_estado_filter": true,
+      "is_personal_only": true,
+      "runtime_integrated": false,
+      "notes": "Relaciones energéticas personales. Siempre requiere alumno_id."
+    },
+    "energy_transmutations": {
+      "catalog_id": "energy_transmutations",
+      "label": "Transmutaciones Energéticas",
+      "version": "1.0.0",
+      "source_type": "json",
+      "source_file": "config/energy/transmutations.catalog.v1.json",
+      "admin_path": null,
+      "resolver_path": "src/core/energy/transmutations/bundle-resolver.js",
+      "supports_level_filter": true,
+      "supports_mode_filter": true,
+      "runtime_integrated": true,
+      "feature_flag": "energy_transmutations_v1",
+      "notes": "Catálogo JSON canónico. Referencia de implementación v1."
+    }
+  },
+  "metadata": {
+    "created_by": "system",
+    "architecture_principles": [
+      "Los catálogos PDE son SOURCE OF TRUTH PEDAGÓGICO",
+      "Los recorridos SOLO orquestan catálogos",
+      "El runtime ejecuta, valida, calcula rachas",
+      "Los catálogos son declarativos y deterministas",
+      "FAIL-OPEN SIEMPRE"
+    ],
+    "mantra": "Los catálogos definen el QUÉ. Los recorridos definen el CUÁNDO. El runtime decide el SI. La navegación muestra el DÓNDE."
+  }
+}
+
+
+

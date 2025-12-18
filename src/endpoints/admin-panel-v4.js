@@ -2,6 +2,22 @@
 // Admin Panel AuriPortal v4 - Solo PostgreSQL
 //
 // REGLA: Los endpoints no gestionan autenticación; solo consumen contexto.
+//
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║ ⚠️  IMPORTANTE: REGISTRO DE RUTAS ADMIN                                      ║
+// ║                                                                              ║
+// ║ TODA ruta /admin/* DEBE estar registrada en ESTE archivo.                    ║
+// ║ Si creas un nuevo módulo admin con rutas propias:                            ║
+// ║                                                                              ║
+// ║ 1. Crea el handler en src/endpoints/admin-*.js                               ║
+// ║ 2. REGÍSTRALO AQUÍ antes del return 404 final (línea ~1470)                  ║
+// ║ 3. Usa el patrón: if (path.startsWith('/admin/tu-modulo')) { ... }           ║
+// ║                                                                              ║
+// ║ router.js DELEGA todo /admin/* a este archivo.                               ║
+// ║ Si no está aquí → 404 GARANTIZADO.                                           ║
+// ║                                                                              ║
+// ║ Ver ADMIN_ROUTE_REGISTRY al final de este archivo para inventario completo.  ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -24,6 +40,10 @@ import { createOrUpdateStudent } from '../modules/student-v4.js';
 import { actualizarNivelSiCorresponde } from '../modules/nivel-v4.js';
 import { sincronizarFrasesClickUpAPostgreSQL } from '../services/sync-frases-clickup.js';
 import { findStudentByEmail } from '../modules/student-v4.js';
+import { getPausaActiva } from '../modules/pausa-v4.js';
+import { getDefaultSubscriptionRepo } from '../infra/repos/subscription-repo-pg.js';
+import { getDefaultAuditRepo } from '../infra/repos/audit-repo-pg.js';
+import { getDefaultAnalyticsRepo } from '../infra/repos/analytics-repo-pg.js';
 import { runSimulation } from '../core/simulation/simulator.js';
 import { simulateNivelCambio } from '../modules/nivel-simulator-v4.js';
 import { simulateStreakCambio } from '../modules/streak-simulator-v4.js';
@@ -70,6 +90,13 @@ import { renderAurigraph } from './admin-panel-aurigraph.js';
 import { renderAudios } from './admin-panel-audios.js';
 import { renderModulos, handleModulos } from './admin-panel-modulos.js';
 import { generarFraseMotivadora } from '../services/frases-motivadoras.js';
+import { computeProgress } from '../core/progress-engine.js';
+import { buildProgressUX } from '../core/progress-ux-builder.js';
+import { getDefaultNivelOverrideRepo } from '../infra/repos/nivel-override-repo-pg.js';
+import { findStudentById } from '../modules/student-v4.js';
+import { generateProgressSnapshot } from '../core/progress-snapshot.js';
+import { getDefaultProgressSnapshotRepo } from '../infra/repos/progress-snapshot-repo-pg.js';
+import { getCurrentStreak } from '../modules/streak-v4.js';
 
 // Importar módulos V6
 import { renderAuribosses } from '../modules/auribosses/endpoints/admin-auribosses.js';
@@ -127,7 +154,11 @@ const __dirname = dirname(__filename);
 
 // Cargar templates (ruta desde endpoints/ hacia core/)
 // __dirname está en src/endpoints/, entonces ../core/ va a src/core/
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
+// #region agent log
+const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
+const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
+fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-panel-v4.js:138',message:'Template base.html cargado',data:{path:baseTemplatePath,hasDebugComment:baseTemplate.includes('DEBUG_ADMIN_BASE_RUNTIME'),hasProgresoV4Link:baseTemplate.includes('/admin/progreso-v4'),templateLength:baseTemplate.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+// #endregion
 const loginTemplate = readFileSync(join(__dirname, '../core/html/admin/login.html'), 'utf-8');
 
 /**
@@ -144,27 +175,100 @@ function replace(html, placeholders) {
 }
 
 /**
+ * FASE 2 - Detección robusta de HTTPS
+ * Detecta si la request es segura (HTTPS) considerando todos los casos posibles
+ * @param {Request} request - Request object
+ * @returns {boolean} true si la request es HTTPS
+ */
+function isRequestSecure(request) {
+  if (!request) {
+    return false;
+  }
+  
+  try {
+    const url = new URL(request.url);
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const forwardedSsl = request.headers.get('x-forwarded-ssl');
+    const cfVisitor = request.headers.get('cf-visitor');
+    
+    // Caso 1: URL directa con https://
+    if (url.protocol === 'https:') {
+      return true;
+    }
+    
+    // Caso 2: Header X-Forwarded-Proto (estándar para reverse proxies)
+    if (forwardedProto === 'https') {
+      return true;
+    }
+    
+    // Caso 3: Header X-Forwarded-Ssl (algunos proxies)
+    if (forwardedSsl === 'on') {
+      return true;
+    }
+    
+    // Caso 4: Cloudflare visitor header
+    if (cfVisitor) {
+      try {
+        const visitor = JSON.parse(cfVisitor);
+        if (visitor.scheme === 'https') {
+          return true;
+        }
+      } catch (e) {
+        // Ignorar error de parse
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn(`[AdminAuth] Error detectando HTTPS: ${error.message}`);
+    return false;
+  }
+}
+
+/**
  * Crea cookie de sesión
+ * FASE 2 y FASE 5 - Logs detallados y detección HTTPS robusta
  * @param {string} token - Token de sesión
  * @param {boolean} rememberMe - Si es true, la cookie dura 30 días, si no, 12 horas
+ * @param {Request} request - Request object para detectar HTTPS
  */
-function createSessionCookie(token, rememberMe = false) {
+function createSessionCookie(token, rememberMe = false, request = null) {
+  // LOG: Información del request
+  const requestUrl = request?.url || 'unknown';
+  const requestHost = request?.headers?.get('host') || 'unknown';
+  const forwardedProto = request?.headers?.get('x-forwarded-proto') || 'none';
+  const forwardedSsl = request?.headers?.get('x-forwarded-ssl') || 'none';
+  
+  console.log(`[AdminAuth] createSessionCookie() - URL: ${requestUrl}, Host: ${requestHost}, X-Forwarded-Proto: ${forwardedProto}, X-Forwarded-Ssl: ${forwardedSsl}`);
+  
   const duration = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
   const expires = new Date(Date.now() + duration).toUTCString();
-  // Cambiar SameSite=Strict a Lax para mejor compatibilidad
-  // Secure solo si es HTTPS (nginx manejará esto)
-  return `admin_session=${encodeURIComponent(token)}; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`;
+  
+  // FASE 2: Usar función robusta de detección HTTPS
+  const isHttps = isRequestSecure(request);
+  
+  console.log(`[AdminAuth] HTTPS detectado: ${isHttps}`);
+  
+  // Construir cookie con Secure solo si es HTTPS
+  // REGLAS OBLIGATORIAS: HttpOnly, SameSite=Lax, Path=/
+  let cookie = `admin_session=${encodeURIComponent(token)}; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`;
+  if (isHttps) {
+    cookie += '; Secure';
+  }
+  
+  // LOG FINAL OBLIGATORIO
+  console.log(`[AdminAuth] Cookie creada: Secure=${isHttps}, SameSite=Lax, Path=/`);
+  
+  return cookie;
 }
 
 /**
  * Helper para crear URLs absolutas para redirecciones
+ * Usa isRequestSecure() para consistencia
  */
 function getAbsoluteUrl(request, path) {
   const url = new URL(request.url);
-  // Detectar HTTPS desde headers de proxy (nginx) o del URL
-  const forwardedProto = request.headers.get('x-forwarded-proto');
-  const isHttps = forwardedProto === 'https' || url.protocol === 'https:' || 
-                   request.headers.get('x-forwarded-ssl') === 'on';
+  const isHttps = isRequestSecure(request);
   const protocol = isHttps ? 'https:' : 'http:';
   return `${protocol}//${url.host}${path}`;
 }
@@ -249,6 +353,12 @@ export default async function adminPanelHandler(request, env, ctx) {
   if (path.startsWith('/api/preparaciones-practica')) {
     const preparacionesPracticaApiHandler = (await import('./preparaciones-practica-api.js')).default;
     return await preparacionesPracticaApiHandler(request, env, ctx);
+  }
+
+  // API de Protecciones Energéticas
+  if (path.startsWith('/api/protecciones-energeticas')) {
+    const proteccionesEnergeticasApiHandler = (await import('./protecciones-energeticas-api.js')).default;
+    return await proteccionesEnergeticasApiHandler(request, env, ctx);
   }
 
   // API de Técnicas Post-práctica
@@ -446,6 +556,11 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderPracticas(request, env);
   }
 
+  // Ruta para auditoría (READ-ONLY)
+  if (path === '/admin/auditoria') {
+    return await renderAuditoria(request, env);
+  }
+
   // Ruta para sincronizar frases (POST)
   if (path === '/admin/frases' && request.method === 'POST' && url.searchParams.get('action') === 'sync') {
     return await handleSyncFrases(env, request);
@@ -524,6 +639,11 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderAnalytics(request, env);
   }
 
+  // Sección READ-ONLY de eventos de analytics (Analytics Spine v1)
+  if (path === '/admin/analytics/events' || path === '/admin/analytics-events') {
+    return await renderAnalyticsEvents(request, env);
+  }
+
   if (path === '/admin/misiones') {
     if (request.method === 'POST' || request.method === 'GET') {
       // El método GET puede ser para obtener una misión específica
@@ -597,6 +717,13 @@ export default async function adminPanelHandler(request, env, ctx) {
       const alumnoId = pathParts[2];
       const { handleMarcarLimpio } = await import('./admin-master.js');
       return await handleMarcarLimpio(request, env, alumnoId);
+    }
+    
+    // Si es /admin/master/:id/apodo
+    if (path.endsWith('/apodo') && pathParts.length >= 4 && request.method === 'POST') {
+      const alumnoId = pathParts[2];
+      const { handleApodo } = await import('./admin-master.js');
+      return await handleApodo(request, env, alumnoId);
     }
     
     // Si es /admin/master/:id/datos-nacimiento
@@ -683,6 +810,39 @@ export default async function adminPanelHandler(request, env, ctx) {
       return await handleEliminarProyecto(request, env, alumnoId);
     }
     
+    // FASE 3: Endpoints de pausas manuales
+    // Si es /admin/master/:id/pausas/crear
+    if (path.endsWith('/pausas/crear') && pathParts.length >= 4 && request.method === 'POST') {
+      const alumnoId = pathParts[2];
+      const { handleCrearPausa } = await import('./admin-master.js');
+      return await handleCrearPausa(request, env, alumnoId);
+    }
+    
+    // Si es /admin/master/:id/pausas/finalizar
+    if (path.endsWith('/pausas/finalizar') && pathParts.length >= 4 && request.method === 'POST') {
+      const alumnoId = pathParts[2];
+      const { handleFinalizarPausa } = await import('./admin-master.js');
+      return await handleFinalizarPausa(request, env, alumnoId);
+    }
+    
+    // ============================================
+    // ENDPOINTS PDE MASTER (Limpiezas masivas)
+    // ============================================
+    
+    // POST /admin/master/:id/marcar-todo-limpio - Marca todos los items de un tipo como limpios
+    if (path.endsWith('/marcar-todo-limpio') && pathParts.length >= 4 && request.method === 'POST') {
+      const alumnoId = parseInt(pathParts[2], 10);
+      const { handleMarcarTodoLimpio } = await import('./admin-pde-master-api.js');
+      return await handleMarcarTodoLimpio(request, alumnoId);
+    }
+    
+    // GET /admin/master/:id/resumen-pde - Resumen de limpiezas PDE del alumno
+    if (path.endsWith('/resumen-pde') && pathParts.length >= 4 && request.method === 'GET') {
+      const alumnoId = parseInt(pathParts[2], 10);
+      const { handleResumenPde } = await import('./admin-pde-master-api.js');
+      return await handleResumenPde(alumnoId);
+    }
+    
     // Vista principal /admin/master/:id
     if (pathParts.length >= 3) {
       const alumnoId = pathParts[2]; // El ID está en la posición 2
@@ -732,10 +892,206 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderAudios(env, request);
   }
 
+  // System Capabilities (Capability Registry v1 Explorer)
+  if (path.startsWith('/admin/system/capabilities')) {
+    const adminCapabilitiesHandler = (await import('./admin-capabilities.js')).default;
+    return await adminCapabilitiesHandler(request, env, ctx);
+  }
+
   if (path === '/admin/logs') {
     return await renderLogs(env);
   }
 
+  // ============================================
+  // MASTER INSIGHT
+  // ============================================
+  
+  // Importar módulo Master Insight
+  const { 
+    renderMasterInsightOverview,
+    renderMasterInsightPlaceholder,
+    getOverviewStats
+  } = await import('./admin-master-insight.js');
+  
+  // API endpoint para obtener estadísticas de overview
+  if (path === '/admin/api/master-insight/overview' && request.method === 'GET') {
+    try {
+      const stats = await getOverviewStats();
+      return new Response(JSON.stringify({ success: true, data: stats }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  if (path === '/admin/master-insight/overview') {
+    return await renderMasterInsightOverview(request, env);
+  }
+  
+  if (path === '/admin/master-insight/alertas') {
+    return await renderMasterInsightPlaceholder('alertas', 'Alertas Inteligentes');
+  }
+  
+  if (path === '/admin/master-insight/sugerencias') {
+    return await renderMasterInsightPlaceholder('sugerencias', 'Sugerencias del Sistema');
+  }
+  
+  if (path === '/admin/master-insight/salud-energetica') {
+    return await renderMasterInsightPlaceholder('salud-energetica', 'Salud Energética Global');
+  }
+  
+  if (path === '/admin/master-insight/patrones') {
+    return await renderMasterInsightPlaceholder('patrones', 'Patrones Emergentes');
+  }
+  
+  if (path === '/admin/master-insight/lugares') {
+    return await renderMasterInsightPlaceholder('lugares', 'Lugares (Insight)');
+  }
+  
+  if (path === '/admin/master-insight/proyectos') {
+    return await renderMasterInsightPlaceholder('proyectos', 'Proyectos (Insight)');
+  }
+  
+  if (path === '/admin/master-insight/apadrinados') {
+    return await renderMasterInsightPlaceholder('apadrinados', 'Apadrinados (Insight)');
+  }
+  
+  if (path === '/admin/master-insight/ritmos') {
+    return await renderMasterInsightPlaceholder('ritmos', 'Ritmos y Recurrencias');
+  }
+  
+  if (path === '/admin/master-insight/eventos-especiales') {
+    return await renderMasterInsightPlaceholder('eventos-especiales', 'Eventos Especiales');
+  }
+  
+  if (path === '/admin/master-insight/historial') {
+    return await renderMasterInsightPlaceholder('historial', 'Historial del Master');
+  }
+  
+  if (path === '/admin/master-insight/configuracion') {
+    return await renderMasterInsightPlaceholder('configuracion', 'Configuración de Criterios');
+  }
+
+  // ============================================
+  // AUTOMATIZACIONES
+  // ============================================
+  
+  // Importar módulo Automatizaciones
+  const { 
+    renderAutomationsOverview,
+    renderAutomationsPlaceholder,
+    getAutomations,
+    createAutomation,
+    updateAutomation,
+    simulateAutomation
+  } = await import('./admin-automations.js');
+  
+  // API endpoints para automatizaciones
+  if (path === '/admin/api/automations' && request.method === 'GET') {
+    const automations = await getAutomations();
+    return new Response(JSON.stringify({ success: true, data: automations }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  if (path === '/admin/api/automations' && request.method === 'POST') {
+    try {
+      const data = await request.json();
+      const automation = await createAutomation(data);
+      return new Response(JSON.stringify({ success: true, data: automation }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  if (path.startsWith('/admin/api/automations/') && request.method === 'PUT') {
+    try {
+      const pathParts = path.split('/').filter(p => p);
+      const id = pathParts[pathParts.length - 1];
+      const data = await request.json();
+      const automation = await updateAutomation(id, data);
+      
+      if (!automation) {
+        return new Response(JSON.stringify({ success: false, error: 'Automation not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      return new Response(JSON.stringify({ success: true, data: automation }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  if (path.startsWith('/admin/api/automations/') && path.endsWith('/preview') && request.method === 'GET') {
+    try {
+      const pathParts = path.split('/').filter(p => p);
+      const id = pathParts[pathParts.length - 2];
+      const automations = await getAutomations();
+      const automation = automations.find(a => a.id === parseInt(id));
+      
+      if (!automation) {
+        return new Response(JSON.stringify({ success: false, error: 'Automation not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      const preview = await simulateAutomation(automation);
+      return new Response(JSON.stringify({ success: true, preview }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  // Rutas UI de automatizaciones
+  if (path === '/admin/automations') {
+    return await renderAutomationsOverview(request, env);
+  }
+  
+  if (path === '/admin/automations/eventos-energeticos') {
+    return await renderAutomationsPlaceholder('eventos-energeticos', 'Reglas por Eventos Energéticos');
+  }
+  
+  if (path === '/admin/automations/patrones') {
+    return await renderAutomationsPlaceholder('patrones', 'Reglas por Patrones');
+  }
+  
+  if (path === '/admin/automations/tiempo') {
+    return await renderAutomationsPlaceholder('tiempo', 'Reglas por Tiempo / Recurrencia');
+  }
+  
+  if (path === '/admin/automations/acciones') {
+    return await renderAutomationsPlaceholder('acciones', 'Acciones Automáticas (preview)');
+  }
+  
+  if (path === '/admin/automations/logs') {
+    return await renderAutomationsPlaceholder('logs', 'Logs de Automatizaciones');
+  }
+  
+  if (path === '/admin/automations/configuracion') {
+    return await renderAutomationsPlaceholder('configuracion', 'Configuración Global');
+  }
 
   // Gestión de Módulos V6
   if (path === '/admin/modulos') {
@@ -1008,6 +1364,12 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await adminPreparacionesPracticaHandler(request, env);
   }
 
+  // Protecciones Energéticas
+  if (path === '/admin/protecciones-energeticas' || path.startsWith('/admin/protecciones-energeticas/')) {
+    const adminProteccionesEnergeticasHandler = (await import('./admin-protecciones-energeticas.js')).default;
+    return await adminProteccionesEnergeticasHandler(request, env);
+  }
+
   // Técnicas Post-práctica
   if (path === '/admin/tecnicas-post-practica' || path.startsWith('/admin/tecnicas-post-practica/')) {
     const adminTecnicasPostPracticaHandler = (await import('./admin-tecnicas-post-practica.js')).default;
@@ -1136,6 +1498,26 @@ export default async function adminPanelHandler(request, env, ctx) {
     return await renderConfiguracionFavoritos(request, env);
   }
 
+  // ============================================
+  // ⚠️ RECORRIDOS EDITOR (v1)
+  // Handler delegado: admin-recorridos.js (UI) + admin-recorridos-api.js (API)
+  // Feature flag: recorridos_editor_v1
+  // Rutas UI: /admin/recorridos, /admin/recorridos/new, /admin/recorridos/:id/edit
+  // Rutas API: /admin/api/recorridos/*
+  // ============================================
+  
+  // API de Recorridos (debe ir ANTES de la captura genérica /admin/api/)
+  if (path.startsWith('/admin/api/recorridos')) {
+    const adminRecorridosApiHandler = (await import('./admin-recorridos-api.js')).default;
+    return await adminRecorridosApiHandler(request, env, ctx);
+  }
+  
+  // UI de Recorridos
+  if (path === '/admin/recorridos' || path.startsWith('/admin/recorridos/')) {
+    const adminRecorridosHandler = (await import('./admin-recorridos.js')).default;
+    return await adminRecorridosHandler(request, env, ctx);
+  }
+
   // Endpoint temporal para crear tablas faltantes
   if (path === '/admin/crear-tablas-nuevas') {
     try {
@@ -1156,6 +1538,43 @@ export default async function adminPanelHandler(request, env, ctx) {
   // API endpoints (opcionales)
   if (path.startsWith('/admin/api/')) {
     return await handleAPI(request, env, path);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // NUEVA SECCIÓN: Progreso V4 (PASO 1 - AISLADA)
+  // ──────────────────────────────────────────────────────────────────
+
+  // Ruta para crear override (POST)
+  if (path.startsWith('/admin/progreso-v4/alumno/') && path.endsWith('/override') && request.method === 'POST') {
+    const pathParts = path.split('/');
+    const alumnoId = pathParts[pathParts.length - 2]; // El ID está antes de "/override"
+    return await handleCreateOverride(request, env, alumnoId);
+  }
+
+  // Ruta para revocar override (POST)
+  if (path.startsWith('/admin/progreso-v4/alumno/') && path.includes('/override/') && path.endsWith('/revoke') && request.method === 'POST') {
+    const pathParts = path.split('/');
+    const alumnoId = pathParts[pathParts.length - 3]; // El ID está 2 niveles antes de "/revoke"
+    const overrideId = pathParts[pathParts.length - 2]; // El overrideId está antes de "/revoke"
+    return await handleRevokeOverride(request, env, alumnoId, overrideId);
+  }
+
+  // Ruta para generar snapshot (POST)
+  if (path.startsWith('/admin/progreso-v4/alumno/') && path.endsWith('/generate-snapshot') && request.method === 'POST') {
+    const pathParts = path.split('/');
+    const alumnoId = pathParts[pathParts.length - 2]; // El ID está antes de "/generate-snapshot"
+    return await handleGenerateSnapshot(request, env, alumnoId);
+  }
+
+  // Ruta para detalle de alumno Progreso V4
+  if (path.startsWith('/admin/progreso-v4/alumno/')) {
+    const alumnoId = path.split('/')[4];
+    return await renderProgresoV4Detail(request, env, alumnoId);
+  }
+
+  // Ruta para listado global Progreso V4
+  if (path === '/admin/progreso-v4') {
+    return await renderProgresoV4(request, env);
   }
 
   return new Response('Página no encontrada', { status: 404 });
@@ -1179,26 +1598,54 @@ function renderLogin(error = null) {
 
 /**
  * Maneja login POST
+ * FASE 1 y FASE 4 - Logs detallados y flujo de login corregido
  */
 async function handleLogin(request, env) {
+  // LOG: Información del request
+  const requestUrl = request?.url || 'unknown';
+  const requestHost = request?.headers?.get('host') || 'unknown';
+  const forwardedProto = request?.headers?.get('x-forwarded-proto') || 'none';
+  const hasCookieHeader = request?.headers?.has('Cookie');
+  
+  console.log(`[AdminAuth] handleLogin() - URL: ${requestUrl}, Host: ${requestHost}, X-Forwarded-Proto: ${forwardedProto}, Has-Cookie-Header: ${hasCookieHeader}`);
+  
   const formData = await request.formData();
   const username = formData.get('username');
   const password = formData.get('password');
   const rememberMe = formData.get('remember_me') === 'on';
 
-  if (validateAdminCredentials(username, password)) {
+  console.log(`[AdminAuth] Intento de login para usuario: ${username}, RememberMe: ${rememberMe}`);
+
+  // Validar credenciales
+  const credentialsValid = await validateAdminCredentials(username, password);
+  console.log(`[AdminAuth] Validación de credenciales: ${credentialsValid ? 'VÁLIDAS' : 'INVÁLIDAS'}`);
+
+  if (credentialsValid) {
+    // Crear sesión
+    console.log(`[AdminAuth] Creando sesión admin...`);
     const { token } = createAdminSession(rememberMe);
-    const cookie = createSessionCookie(token, rememberMe);
+    console.log(`[AdminAuth] Sesión creada, token length: ${token.length}`);
+    
+    // Crear cookie
+    const cookie = createSessionCookie(token, rememberMe, request);
+    console.log(`[AdminAuth] Cookie creada, length: ${cookie.length}`);
+    
+    // FASE 4: Redirect explícito a /admin/dashboard (302) con Set-Cookie
+    // NO redirigir a /admin para evitar doble redirect
+    const redirectUrl = getAbsoluteUrl(request, '/admin/dashboard');
+    console.log(`[AdminAuth] Login exitoso. Redirigiendo a: ${redirectUrl}`);
+    console.log(`[AdminAuth] Set-Cookie header: ${cookie.substring(0, 150)}...`);
 
     return new Response('', {
       status: 302,
       headers: {
-        'Location': getAbsoluteUrl(request, '/admin/dashboard'),
+        'Location': redirectUrl,
         'Set-Cookie': cookie
       }
     });
   }
 
+  console.log(`[AdminAuth] Credenciales incorrectas para usuario: ${username}`);
   return renderLogin('Credenciales incorrectas');
 }
 
@@ -1369,9 +1816,17 @@ async function renderDashboard(env) {
       TITLE: 'Dashboard',
       CONTENT: content
     });
+    // #region agent log
+    const progresoV4LinkIndex = html.indexOf('/admin/progreso-v4');
+    const linkContext = progresoV4LinkIndex > -1 ? html.substring(Math.max(0, progresoV4LinkIndex - 100), Math.min(html.length, progresoV4LinkIndex + 200)) : 'NOT_FOUND';
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-panel-v4.js:1416',message:'Dashboard renderizado con baseTemplate',data:{hasProgresoV4Link:html.includes('/admin/progreso-v4'),linkIndex:progresoV4LinkIndex,linkContext:linkContext,htmlLength:html.length,hasNivelesEnergeticos:html.includes('/admin/niveles-energeticos')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
 
     return new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+      headers: { 
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      }
     });
   } catch (error) {
     console.error('Error renderizando dashboard:', error);
@@ -4032,6 +4487,263 @@ async function handleSendEmail(request, env) {
 }
 
 /**
+ * Renderiza sección READ-ONLY de auditoría
+ * Muestra últimos eventos de auditoría con filtros por event_type y actor_id
+ */
+async function renderAuditoria(request, env) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+  
+  const url = new URL(request.url);
+  const eventType = url.searchParams.get('event_type') || '';
+  const actorId = url.searchParams.get('actor_id') || '';
+  
+  const auditRepo = getDefaultAuditRepo();
+  
+  // Construir filtros
+  const filters = {};
+  if (eventType) filters.eventType = eventType;
+  if (actorId) filters.actorId = actorId;
+  
+  // Obtener eventos (máximo 200)
+  let events = [];
+  try {
+    events = await auditRepo.getRecentEvents(200, filters);
+  } catch (error) {
+    console.error('Error obteniendo eventos de auditoría:', error);
+  }
+  
+  let content = `
+    <div class="px-4 py-5 sm:p-6">
+      <h2 class="text-2xl font-bold text-white mb-6">📋 Auditoría (READ-ONLY)</h2>
+      
+      <div class="bg-slate-800 shadow-xl rounded border border-slate-700 p-6 mb-6">
+        <h3 class="text-lg font-medium text-white mb-4">Filtros</h3>
+        <form method="GET" action="/admin/auditoria" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-200 mb-2">Tipo de Evento</label>
+              <input type="text" name="event_type" 
+                     value="${eventType}"
+                     placeholder="Ej: SUBSCRIPTION_BLOCKED_PRACTICE"
+                     class="block w-full border border-slate-600 rounded-md px-3 py-2 bg-slate-700 text-white">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-200 mb-2">ID Actor</label>
+              <input type="text" name="actor_id" 
+                     value="${actorId}"
+                     placeholder="Ej: 123"
+                     class="block w-full border border-slate-600 rounded-md px-3 py-2 bg-slate-700 text-white">
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button type="submit" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+              Filtrar
+            </button>
+            <a href="/admin/auditoria" 
+               class="bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded">
+              Limpiar
+            </a>
+          </div>
+        </form>
+      </div>
+      
+      <div class="bg-slate-800 shadow-xl rounded border border-slate-700 p-6">
+        <h3 class="text-lg font-medium text-white mb-4">Últimos ${events.length} Eventos</h3>
+        
+        ${events.length === 0 ? `
+          <p class="text-slate-400">No se encontraron eventos con los filtros aplicados.</p>
+        ` : `
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-700">
+              <thead class="bg-slate-900">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Fecha</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Tipo</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Actor</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Request ID</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Severidad</th>
+                </tr>
+              </thead>
+              <tbody class="bg-slate-800 divide-y divide-slate-700">
+                ${events.map(event => {
+                  const fecha = new Date(event.created_at).toLocaleString('es-ES');
+                  const severityColor = {
+                    'info': 'text-blue-300',
+                    'warn': 'text-yellow-300',
+                    'error': 'text-red-300'
+                  }[event.severity] || 'text-slate-300';
+                  
+                  return `
+                    <tr class="hover:bg-slate-700">
+                      <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-300">${fecha}</td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm text-white font-medium">${event.event_type || 'N/A'}</td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
+                        ${event.actor_type || 'N/A'}${event.actor_id ? ` (${event.actor_id})` : ''}
+                      </td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-400 font-mono">${event.request_id || 'N/A'}</td>
+                      <td class="px-4 py-3 whitespace-nowrap text-sm ${severityColor}">${event.severity || 'info'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+  
+  return new Response(replace(baseTemplate, { TITLE: 'Auditoría', CONTENT: content }), {
+    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  });
+}
+
+/**
+ * Renderiza sección READ-ONLY de suscripciones
+ * Permite buscar alumno por email y ver estado de suscripción y pausas activas
+ */
+async function renderSuscripciones(request, env) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+  
+  const url = new URL(request.url);
+  const email = url.searchParams.get('email');
+  const subscriptionRepo = getDefaultSubscriptionRepo();
+  
+  let content = '';
+  
+  // Formulario de búsqueda
+  content += `
+    <div class="px-4 py-5 sm:p-6">
+      <h2 class="text-2xl font-bold text-white mb-6">📋 Estado de Suscripciones (READ-ONLY)</h2>
+      
+      <div class="bg-slate-800 shadow-xl rounded border border-slate-700 p-6 mb-6">
+        <h3 class="text-lg font-medium text-white mb-4">Buscar Alumno por Email</h3>
+        <form method="GET" action="/admin/suscripciones" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-200 mb-2">Email del Alumno</label>
+            <input type="email" name="email" required
+                   value="${email || ''}"
+                   placeholder="alumno@example.com"
+                   class="block w-full border border-slate-600 rounded-md px-3 py-2 bg-slate-700 text-white">
+          </div>
+          <button type="submit" 
+                  class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+            Buscar
+          </button>
+        </form>
+      </div>
+  `;
+  
+  // Si hay email, buscar y mostrar información
+  if (email) {
+    try {
+      const student = await findStudentByEmail(env, email);
+      
+      if (!student) {
+        content += `
+          <div class="bg-red-900 border border-red-700 rounded-lg p-4">
+            <p class="text-red-200">❌ Alumno no encontrado: ${email}</p>
+          </div>
+        `;
+      } else {
+        // Obtener estado de suscripción desde el repositorio
+        const subscriptionData = await subscriptionRepo.getByStudentId(student.id);
+        const estadoSuscripcion = subscriptionData?.estado_suscripcion || 'activa';
+        
+        // Obtener pausa activa si existe
+        const pausaActiva = await getPausaActiva(student.id);
+        
+        // Determinar color según estado
+        let estadoColor = 'text-green-300';
+        let estadoBg = 'bg-green-900';
+        if (estadoSuscripcion === 'pausada') {
+          estadoColor = 'text-yellow-300';
+          estadoBg = 'bg-yellow-900';
+        } else if (estadoSuscripcion === 'cancelada') {
+          estadoColor = 'text-red-300';
+          estadoBg = 'bg-red-900';
+        } else if (estadoSuscripcion === 'past_due') {
+          estadoColor = 'text-orange-300';
+          estadoBg = 'bg-orange-900';
+        }
+        
+        content += `
+          <div class="bg-slate-800 shadow-xl rounded border border-slate-700 p-6">
+            <h3 class="text-lg font-medium text-white mb-4">Estado de Suscripción</h3>
+            
+            <div class="space-y-4">
+              <div>
+                <span class="text-slate-400">Email:</span>
+                <span class="text-white ml-2">${student.email}</span>
+              </div>
+              
+              <div>
+                <span class="text-slate-400">ID Alumno:</span>
+                <span class="text-white ml-2">${student.id}</span>
+              </div>
+              
+              <div>
+                <span class="text-slate-400">Estado Suscripción:</span>
+                <span class="${estadoColor} ${estadoBg} px-2 py-1 rounded ml-2 font-semibold">
+                  ${estadoSuscripcion}
+                </span>
+              </div>
+              
+              ${subscriptionData?.fecha_reactivacion ? `
+                <div>
+                  <span class="text-slate-400">Fecha Reactivación:</span>
+                  <span class="text-white ml-2">${new Date(subscriptionData.fecha_reactivacion).toLocaleString('es-ES')}</span>
+                </div>
+              ` : ''}
+              
+              ${pausaActiva ? `
+                <div class="mt-4 pt-4 border-t border-slate-600">
+                  <h4 class="text-md font-medium text-yellow-300 mb-2">⏸️ Pausa Activa</h4>
+                  <div class="space-y-2">
+                    <div>
+                      <span class="text-slate-400">ID Pausa:</span>
+                      <span class="text-white ml-2">${pausaActiva.id}</span>
+                    </div>
+                    <div>
+                      <span class="text-slate-400">Inicio:</span>
+                      <span class="text-white ml-2">${new Date(pausaActiva.inicio).toLocaleString('es-ES')}</span>
+                    </div>
+                    <div>
+                      <span class="text-slate-400">Fin:</span>
+                      <span class="text-white ml-2">${pausaActiva.fin ? new Date(pausaActiva.fin).toLocaleString('es-ES') : 'Pausa activa (sin fin)'}</span>
+                    </div>
+                  </div>
+                </div>
+              ` : `
+                <div class="mt-4 pt-4 border-t border-slate-600">
+                  <p class="text-slate-400">✅ No hay pausas activas</p>
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Error buscando suscripción:', error);
+      content += `
+        <div class="bg-red-900 border border-red-700 rounded-lg p-4">
+          <p class="text-red-200">❌ Error: ${error.message}</p>
+        </div>
+      `;
+    }
+  }
+  
+  content += `</div>`;
+  
+  return new Response(replace(baseTemplate, { TITLE: 'Estado de Suscripciones', CONTENT: content }), {
+    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  });
+}
+
+/**
  * Maneja endpoints API (opcionales)
  */
 async function handleAPI(request, env, path) {
@@ -4107,9 +4819,1139 @@ async function handleAPI(request, env, path) {
     });
   }
 
+  // ========================================================================
+  // ENDPOINTS DE ENERGÍA (READ-ONLY)
+  // ========================================================================
+  
+  // GET /admin/api/energy/overview?subject_type=...
+  if (path === '/admin/api/energy/overview') {
+    const url = new URL(request.url);
+    const subjectType = url.searchParams.get('subject_type') || null;
+    
+    const data = await getEnergyOverview(subjectType);
+    return new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // GET /admin/api/energy/alumno/:id
+  if (path.startsWith('/admin/api/energy/alumno/')) {
+    const alumnoId = path.split('/').pop();
+    const alumnoIdInt = parseInt(alumnoId, 10);
+    
+    if (isNaN(alumnoIdInt)) {
+      return new Response(JSON.stringify({ error: 'ID de alumno inválido' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const data = await getEnergyAlumno(alumnoIdInt);
+    
+    if (!data) {
+      return new Response(JSON.stringify({ error: 'Alumno no encontrado' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    return new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   return new Response(JSON.stringify({ error: 'Endpoint no encontrado' }), {
     status: 404,
     headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+/**
+ * ──────────────────────────────────────────────────────────────────
+ * SECCIÓN ENERGÍA - FUNCIONES DE PROYECCIÓN (READ-ONLY)
+ * ──────────────────────────────────────────────────────────────────
+ */
+
+/**
+ * Obtiene overview agregado de energía por subject_type
+ * 
+ * @param {string|null} subjectType - Tipo de sujeto a filtrar (opcional)
+ * @returns {Promise<Object>} Datos agregados
+ */
+async function getEnergyOverview(subjectType = null) {
+  try {
+    const { query } = await import('../../database/pg.js');
+    
+    let whereClause = '';
+    const params = [];
+    
+    if (subjectType) {
+      whereClause = 'WHERE subject_type = $1';
+      params.push(subjectType);
+    }
+    
+    // Estadísticas agregadas por subject_type
+    const statsQuery = `
+      SELECT 
+        subject_type,
+        COUNT(*) as total_subjects,
+        COUNT(DISTINCT alumno_id) FILTER (WHERE alumno_id IS NOT NULL) as subjects_with_alumno,
+        COUNT(*) FILTER (WHERE is_clean = TRUE) as clean_count,
+        COUNT(*) FILTER (WHERE illumination_count > 0) as illuminated_count,
+        SUM(illumination_count) as total_illuminations,
+        MAX(last_event_at) as most_recent_activity
+      FROM energy_subject_state
+      ${whereClause}
+      GROUP BY subject_type
+      ORDER BY subject_type
+    `;
+    
+    const statsResult = await query(statsQuery, params);
+    
+    // Lista de sujetos con detalles (limitado a 100)
+    const subjectsQuery = `
+      SELECT 
+        id,
+        subject_type,
+        subject_id,
+        alumno_id,
+        is_clean,
+        clean_last_at,
+        illumination_count,
+        illumination_last_at,
+        last_event_at
+      FROM energy_subject_state
+      ${whereClause}
+      ORDER BY last_event_at DESC NULLS LAST
+      LIMIT 100
+    `;
+    
+    const subjectsResult = await query(subjectsQuery, params);
+    
+    return {
+      success: true,
+      stats: statsResult.rows,
+      subjects: subjectsResult.rows.map(row => ({
+        id: row.id,
+        subject_type: row.subject_type,
+        subject_id: row.subject_id,
+        alumno_id: row.alumno_id,
+        is_clean: row.is_clean,
+        clean_last_at: row.clean_last_at ? row.clean_last_at.toISOString() : null,
+        illumination_count: row.illumination_count,
+        illumination_last_at: row.illumination_last_at ? row.illumination_last_at.toISOString() : null,
+        last_event_at: row.last_event_at ? row.last_event_at.toISOString() : null
+      })),
+      filters: {
+        subject_type: subjectType
+      }
+    };
+  } catch (error) {
+    console.error('[EnergyOverview] Error:', error);
+    return {
+      success: false,
+      error: error.message,
+      stats: [],
+      subjects: []
+    };
+  }
+}
+
+/**
+ * Obtiene estado energético por alumno
+ * 
+ * @param {number} alumnoId - ID del alumno
+ * @returns {Promise<Object|null>} Datos del alumno o null si no existe
+ */
+async function getEnergyAlumno(alumnoId) {
+  try {
+    const { query } = await import('../../database/pg.js');
+    
+    // Verificar que el alumno existe
+    const alumnoCheck = await query('SELECT id, email, apodo FROM alumnos WHERE id = $1', [alumnoId]);
+    
+    if (alumnoCheck.rows.length === 0) {
+      return null;
+    }
+    
+    const alumno = alumnoCheck.rows[0];
+    
+    // Obtener todos los estados de proyección para este alumno
+    const statesQuery = `
+      SELECT 
+        id,
+        subject_type,
+        subject_id,
+        alumno_id,
+        is_clean,
+        clean_last_at,
+        illumination_count,
+        illumination_last_at,
+        last_event_at,
+        last_event_id
+      FROM energy_subject_state
+      WHERE alumno_id = $1
+      ORDER BY last_event_at DESC NULLS LAST
+    `;
+    
+    const statesResult = await query(statesQuery, [alumnoId]);
+    
+    // Agregar estadísticas
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_subjects,
+        COUNT(*) FILTER (WHERE is_clean = TRUE) as clean_count,
+        COUNT(*) FILTER (WHERE illumination_count > 0) as illuminated_count,
+        SUM(illumination_count) as total_illuminations,
+        MAX(last_event_at) as most_recent_activity
+      FROM energy_subject_state
+      WHERE alumno_id = $1
+    `;
+    
+    const summaryResult = await query(summaryQuery, [alumnoId]);
+    const summary = summaryResult.rows[0];
+    
+    // Agrupar por subject_type
+    const bySubjectType = {};
+    statesResult.rows.forEach(row => {
+      const type = row.subject_type || 'unknown';
+      if (!bySubjectType[type]) {
+        bySubjectType[type] = [];
+      }
+      bySubjectType[type].push({
+        id: row.id,
+        subject_id: row.subject_id,
+        is_clean: row.is_clean,
+        clean_last_at: row.clean_last_at ? row.clean_last_at.toISOString() : null,
+        illumination_count: row.illumination_count,
+        illumination_last_at: row.illumination_last_at ? row.illumination_last_at.toISOString() : null,
+        last_event_at: row.last_event_at ? row.last_event_at.toISOString() : null,
+        last_event_id: row.last_event_id
+      });
+    });
+    
+    return {
+      success: true,
+      alumno: {
+        id: alumno.id,
+        email: alumno.email,
+        apodo: alumno.apodo
+      },
+      summary: {
+        total_subjects: parseInt(summary.total_subjects, 10),
+        clean_count: parseInt(summary.clean_count, 10),
+        illuminated_count: parseInt(summary.illuminated_count, 10),
+        total_illuminations: parseInt(summary.total_illuminations || 0, 10),
+        most_recent_activity: summary.most_recent_activity ? summary.most_recent_activity.toISOString() : null
+      },
+      by_subject_type: bySubjectType,
+      states: statesResult.rows.map(row => ({
+        id: row.id,
+        subject_type: row.subject_type,
+        subject_id: row.subject_id,
+        is_clean: row.is_clean,
+        clean_last_at: row.clean_last_at ? row.clean_last_at.toISOString() : null,
+        illumination_count: row.illumination_count,
+        illumination_last_at: row.illumination_last_at ? row.illumination_last_at.toISOString() : null,
+        last_event_at: row.last_event_at ? row.last_event_at.toISOString() : null,
+        last_event_id: row.last_event_id
+      }))
+    };
+  } catch (error) {
+    console.error('[EnergyAlumno] Error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ──────────────────────────────────────────────────────────────────
+ * SECCIÓN PROGRESO V4 - FUNCIONES IMPLEMENTADAS (PASO 1)
+ * ──────────────────────────────────────────────────────────────────
+ * 
+ * REGLAS:
+ * - AISLADA: No modifica código existente
+ * - Usa computeProgress() como única fuente de verdad
+ * - Fail-open: errores controlados sin romper vistas
+ * - Todo auditable y reversible
+ */
+
+/**
+ * Renderiza listado global de Progreso V4
+ * Muestra todos los alumnos con su progreso calculado
+ */
+async function renderProgresoV4(request, env) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    console.log('[Admin Progreso V4] Renderizando listado global');
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-panel-v4.js:4437',message:'renderProgresoV4 iniciado',data:{path:request.url,hasBaseTemplate:typeof baseTemplate === 'string',baseTemplateLength:baseTemplate?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
+    // Obtener lista de alumnos usando el mismo helper que /admin/alumnos
+    const { alumnos, total } = await getAlumnosList({}, 1, 1000); // Obtener todos (ajustar si es necesario)
+
+    // Calcular progreso para cada alumno
+    const alumnosConProgreso = await Promise.all(
+      alumnos.map(async (alumno) => {
+        try {
+          // Construir objeto student para computeProgress
+          const student = {
+            id: alumno.id,
+            email: alumno.email,
+            fecha_inscripcion: alumno.fecha_inscripcion
+          };
+
+          // Calcular progreso usando computeProgress (única fuente de verdad)
+          const progress = await computeProgress({ student, now: new Date(), env });
+
+          // Calcular racha diaria usando función canónica
+          const racha = await getCurrentStreak(alumno.id);
+
+          // Obtener pausa activa
+          const pausaActiva = await getPausaActiva(alumno.id);
+
+          // Verificar si tiene overrides activos
+          const overrideRepo = getDefaultNivelOverrideRepo();
+          const overrideActivo = await overrideRepo.getActiveOverride(alumno.id);
+
+          return {
+            ...alumno,
+            progress,
+            racha,
+            pausa_activa: pausaActiva,
+            tiene_overrides: !!overrideActivo
+          };
+        } catch (error) {
+          console.error(`[Admin Progreso V4] Error calculando progreso para alumno ${alumno.id}:`, error);
+          // Fail-open: mostrar error controlado en la fila
+          return {
+            ...alumno,
+            progress: null,
+            racha: 0,
+            error: 'Error controlado al calcular progreso',
+            tiene_overrides: false
+          };
+        }
+      })
+    );
+
+    // Construir tabla HTML
+    let tableRows = '';
+    alumnosConProgreso.forEach((item) => {
+      if (item.error) {
+        tableRows += `
+          <tr class="border-b border-slate-700">
+            <td class="px-4 py-3 text-white">${item.email || 'N/A'}</td>
+            <td class="px-4 py-3 text-red-400" colspan="10">${item.error}</td>
+          </tr>
+        `;
+      } else {
+        const progress = item.progress;
+        const fechaInscripcion = item.fecha_inscripcion 
+          ? new Date(item.fecha_inscripcion).toLocaleDateString('es-ES')
+          : 'N/A';
+        tableRows += `
+          <tr class="border-b border-slate-700 hover:bg-slate-800">
+            <td class="px-4 py-3 text-white">${item.email || 'N/A'}</td>
+            <td class="px-4 py-3 text-slate-300">${item.apodo || '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${fechaInscripcion}</td>
+            <td class="px-4 py-3 text-slate-300">${progress?.nivel_base ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${progress?.nivel_efectivo ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${progress?.fase_efectiva?.nombre ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${progress?.dias_activos ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${progress?.dias_pausados ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">${item.racha ?? '—'}</td>
+            <td class="px-4 py-3 text-slate-300">
+              ${item.pausa_activa 
+                ? `<span class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">⏸️ Desde ${new Date(item.pausa_activa.inicio).toLocaleDateString('es-ES')}</span>` 
+                : '<span class="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">—</span>'}
+            </td>
+            <td class="px-4 py-3 text-center">
+              ${item.tiene_overrides 
+                ? '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Sí</span>' 
+                : '<span class="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">No</span>'}
+            </td>
+            <td class="px-4 py-3">
+              <a href="/admin/progreso-v4/alumno/${item.id}" 
+                 class="text-indigo-400 hover:text-indigo-300 underline">
+                Ver detalle
+              </a>
+            </td>
+          </tr>
+        `;
+      }
+    });
+
+    const content = `
+      <div class="px-4 py-5 sm:p-6">
+        <h2 class="text-2xl font-bold text-white mb-4">🧬 Estado del Alumno</h2>
+        <p class="text-slate-400 text-sm mb-6">Fuente de verdad del estado actual del alumno (cálculo + overrides)</p>
+        
+        <div class="mb-4 p-3 bg-slate-800 border border-slate-600 rounded-lg">
+          <p class="text-slate-300 text-xs">
+            ℹ️ Esta vista muestra el estado calculado en tiempo real usando computeProgress() como única fuente de verdad. Otras secciones pueden mostrar datos históricos.
+          </p>
+        </div>
+        
+        <div class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-700">
+              <thead class="bg-slate-900">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Email</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Apodo</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Fecha Inscripción
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Nivel Base
+                    <span class="block text-xs font-normal text-slate-500 mt-1">(calculado)</span>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Nivel Efectivo
+                    <span class="block text-xs font-normal text-slate-500 mt-1">(con overrides)</span>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Fase Efectiva
+                    <span class="block text-xs font-normal text-slate-500 mt-1">(configuración Admin)</span>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Días Activos
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Días Pausados
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Racha Diaria
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Pausas Activas
+                  </th>
+                  <th class="px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider">Overrides</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Acción</th>
+                </tr>
+              </thead>
+              <tbody class="bg-slate-800 divide-y divide-slate-700">
+                ${tableRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4 text-sm text-slate-400">
+          Total de alumnos: ${total}
+        </div>
+      </div>
+    `;
+
+    const finalHtml = replace(baseTemplate, { TITLE: 'Estado del Alumno', CONTENT: content });
+    // #region agent log
+    const progresoV4LinkIndex = finalHtml.indexOf('/admin/progreso-v4');
+    const linkContext = progresoV4LinkIndex > -1 ? finalHtml.substring(Math.max(0, progresoV4LinkIndex - 100), Math.min(finalHtml.length, progresoV4LinkIndex + 200)) : 'NOT_FOUND';
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-panel-v4.js:4547',message:'ProgresoV4 renderizado con baseTemplate',data:{hasProgresoV4Link:finalHtml.includes('/admin/progreso-v4'),linkIndex:progresoV4LinkIndex,linkContext:linkContext,htmlLength:finalHtml.length,hasNivelesEnergeticos:finalHtml.includes('/admin/niveles-energeticos')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    return new Response(finalHtml, {
+      headers: { 
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      }
+    });
+  } catch (error) {
+    console.error('[Admin Progreso V4] Error en renderProgresoV4:', error);
+    const errorContent = `
+      <div class="px-4 py-5 sm:p-6">
+        <div class="bg-red-900 border border-red-700 rounded-lg p-4">
+          <p class="text-red-200">❌ Error al cargar el listado: ${error.message}</p>
+        </div>
+      </div>
+    `;
+    return new Response(replace(baseTemplate, { TITLE: 'Estado del Alumno - Error', CONTENT: errorContent }), {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  }
+}
+
+/**
+ * Renderiza detalle de Progreso V4 para un alumno
+ */
+async function renderProgresoV4Detail(request, env, alumnoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    console.log(`[Admin Progreso V4] Renderizando detalle para alumno ${alumnoId}`);
+
+    // Obtener parámetros de URL para mensajes
+    const url = new URL(request.url);
+    const success = url.searchParams.get('success');
+    const error = url.searchParams.get('error');
+
+    // Obtener alumno
+    const student = await findStudentById(parseInt(alumnoId));
+    if (!student) {
+      const errorContent = `
+        <div class="px-4 py-5 sm:p-6">
+          <div class="bg-red-900 border border-red-700 rounded-lg p-4">
+            <p class="text-red-200">❌ Alumno no encontrado</p>
+          </div>
+          <div class="mt-4">
+            <a href="/admin/progreso-v4" class="text-indigo-400 hover:text-indigo-300 underline">
+              ← Volver al listado
+            </a>
+          </div>
+        </div>
+      `;
+      return new Response(replace(baseTemplate, { TITLE: 'Estado del Alumno - Error', CONTENT: errorContent }), {
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+      });
+    }
+
+    // Calcular progreso usando computeProgress (única fuente de verdad)
+    const progress = await computeProgress({ student, now: new Date(), env });
+
+    // Calcular racha diaria usando función canónica
+    const racha = await getCurrentStreak(student.id);
+
+    // Construir nivelInfoUX
+    const nivelInfoUX = buildProgressUX(progress);
+
+    // Obtener overrides activos
+    const overrideRepo = getDefaultNivelOverrideRepo();
+    const overridesActivos = await overrideRepo.findByStudent(student.id);
+    
+    // Nota: Para obtener historial completo (incluyendo revocados) necesitaríamos
+    // una nueva función en el repo. Por ahora solo mostramos activos, que es lo más importante.
+
+    // Obtener último snapshot (si existe)
+    const snapshotRepo = getDefaultProgressSnapshotRepo();
+    const latestSnapshot = await snapshotRepo.getLatestSnapshot(student.id);
+
+    // Construir contenido HTML
+    let overridesHtml = '';
+    if (overridesActivos.length > 0) {
+      overridesActivos.forEach((override) => {
+        overridesHtml += `
+          <div class="bg-yellow-900 border border-yellow-700 rounded-lg p-4 mb-2">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-yellow-200 font-semibold">Tipo: ${override.type} | Valor: ${override.value}</p>
+                <p class="text-yellow-300 text-sm mt-1">Razón: ${override.reason || 'Sin razón especificada'}</p>
+                <p class="text-yellow-400 text-xs mt-1">
+                  Creado: ${new Date(override.created_at).toLocaleString('es-ES')} por ${override.created_by || 'system'}
+                </p>
+              </div>
+              <form method="POST" action="/admin/progreso-v4/alumno/${student.id}/override/${override.id}/revoke" 
+                    onsubmit="return confirm('¿Revocar este override?');" class="inline">
+                <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">
+                  Revocar
+                </button>
+              </form>
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      overridesHtml = '<p class="text-slate-400">No hay overrides activos</p>';
+    }
+
+    // Construir mensajes de éxito/error
+    let mensajesHtml = '';
+    if (success === 'override_creado') {
+      mensajesHtml += `
+        <div class="mb-4 p-3 bg-green-900 border border-green-700 text-green-200 rounded">
+          ✅ Override creado correctamente
+        </div>
+      `;
+    }
+    if (success === 'override_revocado') {
+      mensajesHtml += `
+        <div class="mb-4 p-3 bg-green-900 border border-green-700 text-green-200 rounded">
+          ✅ Override revocado correctamente
+        </div>
+      `;
+    }
+    if (success === 'snapshot_generado') {
+      mensajesHtml += `
+        <div class="mb-4 p-3 bg-green-900 border border-green-700 text-green-200 rounded">
+          ✅ Snapshot generado correctamente
+        </div>
+      `;
+    }
+    if (error) {
+      let errorMsg = 'Error desconocido';
+      if (error === 'tipo_invalido') errorMsg = 'Tipo de override inválido';
+      else if (error === 'valor_invalido') errorMsg = 'Valor de override inválido (debe ser entre 1 y 15)';
+      else if (error === 'razon_obligatoria') errorMsg = 'La razón es obligatoria';
+      else if (error === 'alumno_no_encontrado') errorMsg = 'Alumno no encontrado';
+      else errorMsg = decodeURIComponent(error);
+      
+      mensajesHtml += `
+        <div class="mb-4 p-3 bg-red-900 border border-red-700 text-red-200 rounded">
+          ❌ ${errorMsg}
+        </div>
+      `;
+    }
+
+    const content = `
+      <div class="px-4 py-5 sm:p-6">
+        <div class="mb-4">
+          <a href="/admin/progreso-v4" class="text-indigo-400 hover:text-indigo-300 underline">
+            ← Volver al listado
+          </a>
+        </div>
+
+        ${mensajesHtml}
+
+        <h2 class="text-2xl font-bold text-white mb-4">🧬 Estado del Alumno - ${student.email}</h2>
+        <p class="text-slate-400 text-sm mb-6">Fuente de verdad del estado actual del alumno (cálculo + overrides)</p>
+        
+        <div class="mb-6 p-3 bg-slate-800 border border-slate-600 rounded-lg">
+          <p class="text-slate-300 text-xs">
+            ℹ️ Esta vista muestra el estado calculado en tiempo real usando computeProgress() como única fuente de verdad. Otras secciones pueden mostrar datos históricos.
+          </p>
+        </div>
+
+        <!-- Identidad del Alumno -->
+        <div class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-white mb-4">Identidad</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <span class="text-slate-400">ID:</span>
+              <span class="text-white ml-2">${student.id}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">Email:</span>
+              <span class="text-white ml-2">${student.email}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">Apodo:</span>
+              <span class="text-white ml-2">${student.apodo || '—'}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">Fecha de Inscripción:</span>
+              <span class="text-white ml-2">${student.fechaInscripcion ? new Date(student.fechaInscripcion).toLocaleDateString('es-ES') : 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- BLOQUE A: Estado Actual (Fuente de Verdad) -->
+        <div class="bg-gradient-to-br from-indigo-900 to-indigo-800 rounded-lg shadow-lg border-2 border-indigo-600 p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+              <h3 class="text-lg font-semibold text-white">Estado Actual (Fuente de Verdad)</h3>
+              <span class="ml-2 px-2 py-1 bg-indigo-700 text-indigo-200 rounded text-xs font-medium">ACTIVO</span>
+            </div>
+            <form method="POST" action="/admin/progreso-v4/alumno/${student.id}/generate-snapshot" 
+                  onsubmit="return confirm('¿Generar snapshot del progreso actual?');" class="inline">
+              <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm">
+                📸 Generar Snapshot
+              </button>
+            </form>
+          </div>
+          <p class="text-indigo-200 text-xs mb-4">
+            Estos datos provienen de computeProgress() y gobiernan el sistema actual.
+          </p>
+          
+          <div class="space-y-4">
+            <!-- Resultado de computeProgress() -->
+            <div class="bg-indigo-950 bg-opacity-50 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-indigo-200 mb-3">Resultado de computeProgress()</h4>
+              <div class="space-y-2">
+                <div>
+                  <span class="text-indigo-300 text-sm">Nivel Base (calculado):</span>
+                  <span class="text-white ml-2 font-semibold">${progress.nivel_base}</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Nivel Efectivo (con overrides):</span>
+                  <span class="text-white ml-2 font-semibold">${progress.nivel_efectivo}</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Fase Efectiva (configuración Admin):</span>
+                  <span class="text-white ml-2 font-semibold">${progress.fase_efectiva?.nombre || 'N/A'}</span>
+                  ${progress.fase_efectiva?.id ? `<span class="text-indigo-400 text-xs ml-2">(${progress.fase_efectiva.id})</span>` : ''}
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Días Activos:</span>
+                  <span class="text-white ml-2">${progress.dias_activos}</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Días Pausados:</span>
+                  <span class="text-white ml-2">${progress.dias_pausados}</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Racha Diaria:</span>
+                  <span class="text-white ml-2 font-semibold">${racha}</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Nombre Nivel:</span>
+                  <span class="text-white ml-2">${progress.nombre_nivel || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Overrides Activos -->
+            <div class="bg-indigo-950 bg-opacity-50 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-indigo-200 mb-3">Overrides Activos</h4>
+              ${overridesHtml}
+            </div>
+
+            <!-- nivelInfoUX -->
+            <div class="bg-indigo-950 bg-opacity-50 rounded-lg p-4">
+              <h4 class="text-sm font-semibold text-indigo-200 mb-3">NivelInfoUX</h4>
+              <div class="space-y-2">
+                <div>
+                  <span class="text-indigo-300 text-sm">Nivel:</span>
+                  <span class="text-white ml-2">${nivelInfoUX?.nivel?.actual || 'N/A'}</span>
+                  <span class="text-indigo-300 text-xs ml-2">(${nivelInfoUX?.nivel?.nombre || 'N/A'})</span>
+                </div>
+                <div>
+                  <span class="text-indigo-300 text-sm">Fase:</span>
+                  <span class="text-white ml-2">${nivelInfoUX?.fase?.nombre || 'N/A'}</span>
+                </div>
+                ${nivelInfoUX?.estado?.mensaje_corto ? `
+                  <div>
+                    <span class="text-indigo-300 text-sm">Mensaje Corto:</span>
+                    <span class="text-white ml-2">${nivelInfoUX.estado.mensaje_corto}</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BLOQUE SNAPSHOT: Último Snapshot Registrado -->
+        <div class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-white mb-4">📸 Último Snapshot Registrado</h3>
+          <p class="text-slate-400 text-xs mb-4">
+            Este snapshot es informativo. El sistema calcula el estado en tiempo real usando computeProgress().
+          </p>
+          ${latestSnapshot ? `
+            <div class="bg-slate-900 rounded-lg p-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <span class="text-slate-400 text-sm">Fecha del snapshot:</span>
+                  <span class="text-white ml-2">${new Date(latestSnapshot.snapshot_at).toLocaleString('es-ES')}</span>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-sm">Nivel Efectivo:</span>
+                  <span class="text-white ml-2 font-semibold">${latestSnapshot.nivel_efectivo}</span>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-sm">Nivel Base:</span>
+                  <span class="text-white ml-2">${latestSnapshot.nivel_base}</span>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-sm">Fase:</span>
+                  <span class="text-white ml-2">${latestSnapshot.fase_nombre}</span>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-sm">Días Activos:</span>
+                  <span class="text-white ml-2">${latestSnapshot.dias_activos}</span>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-sm">Días Pausados:</span>
+                  <span class="text-white ml-2">${latestSnapshot.dias_pausados}</span>
+                </div>
+              </div>
+            </div>
+          ` : `
+            <div class="bg-slate-900 rounded-lg p-4">
+              <p class="text-slate-400">No hay snapshots registrados aún. Usa el botón "Generar Snapshot" para crear uno.</p>
+            </div>
+          `}
+        </div>
+
+        <!-- BLOQUE B: Datos Legacy (Referencia Histórica) -->
+        <!-- 
+        SECCIÓN DE DATOS LEGACY OCULTA - POST MIGRACIÓN PROGRESO V4
+        Los datos legacy (nivel_actual, nivel_manual, nivel, streak) ya no se muestran
+        porque el sistema ahora opera 100% con Progreso V4 (computeProgress).
+        Estos datos se mantienen en DB como histórico pero no gobiernan el sistema.
+        
+        Si necesitas ver estos datos, consulta directamente la tabla 'alumnos' en PostgreSQL.
+        -->
+
+        <!-- Overrides - Formulario -->
+        <div class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-white mb-4">Gestionar Overrides</h3>
+
+          <!-- Formulario para crear nuevo override -->
+          <div class="mt-6 pt-6 border-t border-slate-700">
+            <h4 class="text-md font-semibold text-white mb-4">Crear Nuevo Override</h4>
+            <form method="POST" action="/admin/progreso-v4/alumno/${student.id}/override" 
+                  class="space-y-4">
+              <div>
+                <label class="block text-slate-400 text-sm font-medium mb-2">Tipo</label>
+                <select name="type" required 
+                        class="w-full bg-slate-900 border border-slate-600 text-white rounded px-3 py-2">
+                  <option value="ADD">ADD (Sumar al nivel base)</option>
+                  <option value="SET">SET (Establecer nivel absoluto)</option>
+                  <option value="MIN">MIN (Mínimo garantizado)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-sm font-medium mb-2">Valor</label>
+                <input type="number" name="value" required min="1" max="15"
+                       class="w-full bg-slate-900 border border-slate-600 text-white rounded px-3 py-2">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-sm font-medium mb-2">Razón (obligatorio)</label>
+                <textarea name="reason" required rows="3"
+                          class="w-full bg-slate-900 border border-slate-600 text-white rounded px-3 py-2"
+                          placeholder="Explica por qué se crea este override..."></textarea>
+              </div>
+              <button type="submit" 
+                      class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                Crear Override
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return new Response(replace(baseTemplate, { TITLE: `Estado del Alumno - ${student.email}`, CONTENT: content }), {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  } catch (error) {
+    console.error(`[Admin Progreso V4] Error en renderProgresoV4Detail para alumno ${alumnoId}:`, error);
+    const errorContent = `
+      <div class="px-4 py-5 sm:p-6">
+        <div class="bg-red-900 border border-red-700 rounded-lg p-4">
+          <p class="text-red-200">❌ Error al cargar el detalle: ${error.message}</p>
+        </div>
+        <div class="mt-4">
+          <a href="/admin/progreso-v4" class="text-indigo-400 hover:text-indigo-300 underline">
+            ← Volver al listado
+          </a>
+        </div>
+      </div>
+    `;
+    return new Response(replace(baseTemplate, { TITLE: 'Estado del Alumno - Error', CONTENT: errorContent }), {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    });
+  }
+}
+
+/**
+ * Maneja creación de override (POST)
+ */
+async function handleCreateOverride(request, env, alumnoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    console.log(`[Admin Progreso V4] Creando override para alumno ${alumnoId}`);
+
+    // Obtener datos del formulario
+    const formData = await request.formData();
+    const type = formData.get('type');
+    const value = parseInt(formData.get('value'));
+    const reason = formData.get('reason');
+
+    // Validar inputs manualmente
+    if (!type || !['ADD', 'SET', 'MIN'].includes(type)) {
+      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=tipo_invalido`), 302);
+    }
+
+    if (!value || isNaN(value) || value < 1 || value > 15) {
+      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=valor_invalido`), 302);
+    }
+
+    if (!reason || reason.trim().length === 0) {
+      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=razon_obligatoria`), 302);
+    }
+
+    // Obtener alumno para verificar que existe
+    const student = await findStudentById(parseInt(alumnoId));
+    if (!student) {
+      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+    }
+
+    // Crear override usando el repositorio
+    const overrideRepo = getDefaultNivelOverrideRepo();
+    const createdBy = authCtx.email || 'system';
+    
+    await overrideRepo.create({
+      student_id: student.id,
+      student_email: student.email,
+      type,
+      value,
+      reason: reason.trim(),
+      created_by: createdBy
+    });
+
+    // Registrar auditoría
+    const auditRepo = getDefaultAuditRepo();
+    await auditRepo.recordEvent({
+      actorType: 'admin',
+      actorId: createdBy,
+      eventType: 'NIVEL_OVERRIDE_CREATED',
+      severity: 'info',
+      data: {
+        student_id: student.id,
+        student_email: student.email,
+        override_type: type,
+        override_value: value,
+        reason: reason.trim()
+      }
+    });
+
+    console.log(`[Admin Progreso V4] Override creado exitosamente para alumno ${alumnoId}`);
+
+    // Redirect seguro
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_creado`), 302);
+  } catch (error) {
+    console.error(`[Admin Progreso V4] Error creando override para alumno ${alumnoId}:`, error);
+    // Fail-open: redirect con error pero no romper vista
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+  }
+}
+
+/**
+ * Maneja revocación de override (POST)
+ */
+async function handleRevokeOverride(request, env, alumnoId, overrideId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    console.log(`[Admin Progreso V4] Revocando override ${overrideId} para alumno ${alumnoId}`);
+
+    // Obtener alumno para verificar que existe
+    const student = await findStudentById(parseInt(alumnoId));
+    if (!student) {
+      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+    }
+
+    // Revocar override usando el repositorio (soft delete)
+    const overrideRepo = getDefaultNivelOverrideRepo();
+    const revokedBy = authCtx.email || 'system';
+    
+    await overrideRepo.revoke(parseInt(overrideId), revokedBy);
+
+    // Registrar auditoría
+    const auditRepo = getDefaultAuditRepo();
+    await auditRepo.recordEvent({
+      actorType: 'admin',
+      actorId: revokedBy,
+      eventType: 'NIVEL_OVERRIDE_REVOKED',
+      severity: 'info',
+      data: {
+        student_id: student.id,
+        student_email: student.email,
+        override_id: parseInt(overrideId)
+      }
+    });
+
+    console.log(`[Admin Progreso V4] Override ${overrideId} revocado exitosamente`);
+
+    // Redirect seguro
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_revocado`), 302);
+  } catch (error) {
+    console.error(`[Admin Progreso V4] Error revocando override ${overrideId}:`, error);
+    // Fail-open: redirect con error pero no romper vista
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+  }
+}
+
+/**
+ * Maneja generación de snapshot (POST)
+ */
+async function handleGenerateSnapshot(request, env, alumnoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    console.log(`[Progress Snapshot] Generando snapshot para alumno ${alumnoId}`);
+
+    // Obtener alumno
+    const student = await findStudentById(parseInt(alumnoId));
+    if (!student) {
+      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+    }
+
+    // Generar snapshot usando generateProgressSnapshot
+    const snapshot = await generateProgressSnapshot(student.id, { student, env });
+
+    // Registrar auditoría
+    const auditRepo = getDefaultAuditRepo();
+    await auditRepo.recordEvent({
+      actorType: 'admin',
+      actorId: authCtx.email || 'system',
+      eventType: 'PROGRESS_SNAPSHOT_GENERATED',
+      severity: 'info',
+      data: {
+        student_id: student.id,
+        student_email: student.email,
+        snapshot_id: snapshot.id,
+        nivel_base: snapshot.nivel_base,
+        nivel_efectivo: snapshot.nivel_efectivo,
+        fase_id: snapshot.fase_id
+      }
+    });
+
+    console.log(`[Progress Snapshot] Snapshot generado exitosamente: ${snapshot.id}`);
+
+    // Redirect seguro
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=snapshot_generado`), 302);
+  } catch (error) {
+    console.error(`[Progress Snapshot] Error generando snapshot para alumno ${alumnoId}:`, error);
+    // Fail-open: redirect con error pero no romper vista
+    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMIN_ROUTE_REGISTRY - Inventario de todas las rutas admin registradas
+// ═══════════════════════════════════════════════════════════════════════════════
+// 
+// Este registro existe como DOCUMENTACIÓN y REFERENCIA.
+// Si añades una nueva ruta admin, ACTUALIZA este registro.
+//
+// FORMATO:
+// { path, handler, description, feature_flag?, sidebar? }
+//
+// ⚠️ REGLA CRÍTICA:
+// Toda ruta /admin/* que no esté manejada arriba devuelve 404.
+// router.js delega TODO el tráfico /admin/* a este archivo.
+// Si tu ruta no está aquí → 404 garantizado.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const ADMIN_ROUTE_REGISTRY = [
+  // === AUTENTICACIÓN ===
+  { path: '/admin/login', handler: 'renderLogin', description: 'Pantalla de login admin' },
+  { path: '/admin/logout', handler: 'handleLogout', description: 'Cerrar sesión admin' },
+  
+  // === DASHBOARD Y CORE ===
+  { path: '/admin', handler: 'renderDashboard', description: 'Dashboard principal', sidebar: true },
+  { path: '/admin/dashboard', handler: 'renderDashboard', description: 'Dashboard principal', sidebar: true },
+  { path: '/admin/alumnos', handler: 'renderAlumnos', description: 'Lista de alumnos', sidebar: true },
+  { path: '/admin/alumno/:id', handler: 'renderAlumnoDetail', description: 'Detalle de alumno' },
+  { path: '/admin/practicas', handler: 'renderPracticas', description: 'Lista de prácticas', sidebar: true },
+  { path: '/admin/frases', handler: 'renderFrases', description: 'Frases motivadoras', sidebar: true },
+  
+  // === PEDAGOGÍA ===
+  { path: '/admin/recorrido-pedagogico', handler: 'renderRecorridoPedagogico', description: 'Recorrido pedagógico', sidebar: true },
+  { path: '/admin/configuracion-aspectos', handler: 'renderConfiguracionAspectos', description: 'Config aspectos' },
+  { path: '/admin/configuracion-racha', handler: 'renderConfiguracionRacha', description: 'Config racha' },
+  { path: '/admin/configuracion-caminos', handler: 'renderConfiguracionCaminos', description: 'Config caminos' },
+  { path: '/admin/configuracion-workflow', handler: 'renderConfiguracionWorkflow', description: 'Config workflow' },
+  
+  // === ANALYTICS Y AUDITORÍA ===
+  { path: '/admin/analytics', handler: 'renderAnalytics', description: 'Analytics', sidebar: true },
+  { path: '/admin/analytics-events', handler: 'renderAnalyticsEvents', description: 'Eventos analytics' },
+  { path: '/admin/analytics-resumen', handler: 'renderAnalyticsResumen', description: 'Resumen analytics' },
+  { path: '/admin/auditoria', handler: 'renderAuditoria', description: 'Auditoría', sidebar: true },
+  { path: '/admin/logs', handler: 'renderLogs', description: 'Logs del sistema' },
+  
+  // === GAMIFICACIÓN ===
+  { path: '/admin/misiones', handler: 'renderMisiones', description: 'Misiones', sidebar: true },
+  { path: '/admin/logros', handler: 'renderLogros', description: 'Logros', sidebar: true },
+  { path: '/admin/progreso-energetico', handler: 'renderProgresoEnergetico', description: 'Progreso energético' },
+  { path: '/admin/progreso-gamificado', handler: 'renderProgresoGamificado', description: 'Progreso gamificado' },
+  { path: '/admin/progreso-v4', handler: 'renderProgresoV4', description: 'Progreso V4' },
+  { path: '/admin/progreso-v4/alumno/:id', handler: 'renderProgresoV4Detail', description: 'Progreso V4 detalle' },
+  
+  // === RECORRIDOS (v1) ===
+  { path: '/admin/recorridos', handler: 'admin-recorridos.js', description: 'Editor de recorridos', sidebar: true, feature_flag: 'recorridos_editor_v1' },
+  { path: '/admin/recorridos/new', handler: 'admin-recorridos.js', description: 'Nuevo recorrido', sidebar: true, feature_flag: 'recorridos_editor_v1' },
+  { path: '/admin/recorridos/:id/edit', handler: 'admin-recorridos.js', description: 'Editor de recorrido', feature_flag: 'recorridos_editor_v1' },
+  { path: '/admin/api/recorridos/*', handler: 'admin-recorridos-api.js', description: 'API de recorridos', feature_flag: 'recorridos_editor_v1' },
+  
+  // === SYSTEM ===
+  { path: '/admin/system/capabilities', handler: 'admin-capabilities.js', description: 'Capability Registry', sidebar: true },
+  { path: '/admin/flags', handler: 'renderFlags', description: 'Feature flags' },
+  { path: '/admin/configuracion', handler: 'renderConfiguracion', description: 'Configuración general' },
+  { path: '/admin/configuracion-favoritos', handler: 'renderConfiguracionFavoritos', description: 'Config favoritos' },
+  
+  // === MASTER INSIGHT ===
+  { path: '/admin/master-insight/overview', handler: 'renderMasterInsightOverview', description: 'Master Insight', sidebar: true },
+  { path: '/admin/master-insight/*', handler: 'renderMasterInsightPlaceholder', description: 'Master Insight secciones' },
+  
+  // === AUTOMATIONS ===
+  { path: '/admin/automations', handler: 'renderAutomations', description: 'Automatizaciones', sidebar: true },
+  { path: '/admin/automations/*', handler: 'renderAutomations*', description: 'Automatizaciones secciones' },
+  
+  // === MÓDULOS V6 ===
+  { path: '/admin/modulos', handler: 'renderModulos', description: 'Módulos', sidebar: true },
+  { path: '/admin/auribosses', handler: 'renderAuribosses', description: 'Auribosses' },
+  { path: '/admin/arquetipos', handler: 'renderArquetipos', description: 'Arquetipos' },
+  { path: '/admin/avatar', handler: 'renderAvatar', description: 'Avatar' },
+  { path: '/admin/historia', handler: 'renderHistoria', description: 'Historia' },
+  { path: '/admin/aurimapa', handler: 'renderAurimapa', description: 'Aurimapa' },
+  { path: '/admin/auriquest', handler: 'renderAuriquest', description: 'Auriquest' },
+  { path: '/admin/tokens', handler: 'renderTokens', description: 'Tokens' },
+  { path: '/admin/informes', handler: 'renderInformes', description: 'Informes' },
+  { path: '/admin/sorpresas', handler: 'renderSorpresas', description: 'Sorpresas' },
+  
+  // === MÓDULOS V6.1 ===
+  { path: '/admin/circulos', handler: 'renderCirculosAuri', description: 'Círculos' },
+  { path: '/admin/diario', handler: 'renderDiarioAurelin', description: 'Diario' },
+  { path: '/admin/horarios', handler: 'renderPracticasHorario', description: 'Horarios' },
+  { path: '/admin/ideas', handler: 'renderIdeasCreativas', description: 'Ideas creativas' },
+  { path: '/admin/tarot', handler: 'renderTarot', description: 'Tarot' },
+  { path: '/admin/editor-pantallas', handler: 'renderEditorPantallas', description: 'Editor pantallas' },
+  { path: '/admin/timeline', handler: 'renderTimeline', description: 'Timeline' },
+  { path: '/admin/altar', handler: 'renderAltar', description: 'Altar' },
+  { path: '/admin/compasion', handler: 'renderCompasion', description: 'Compasión' },
+  { path: '/admin/notificaciones', handler: 'renderNotificaciones', description: 'Notificaciones' },
+  { path: '/admin/maestro', handler: 'renderMaestro', description: 'Maestro' },
+  { path: '/admin/sellos', handler: 'renderSellos', description: 'Sellos' },
+  
+  // === ENERGÉTICA ===
+  { path: '/admin/modo-maestro', handler: 'renderModoMaestro', description: 'Modo maestro' },
+  { path: '/admin/niveles-energeticos', handler: 'renderNivelesEnergeticos', description: 'Niveles energéticos' },
+  { path: '/admin/aspectos-energeticos', handler: 'renderAspectosEnergeticos', description: 'Aspectos energéticos' },
+  { path: '/admin/anatomia-energetica', handler: 'renderAnatomiaEnergetica', description: 'Anatomía energética' },
+  { path: '/admin/registros-karmicos', handler: 'renderRegistrosKarmicos', description: 'Registros kármicos' },
+  { path: '/admin/energias-indeseables', handler: 'renderEnergiasIndeseables', description: 'Energías indeseables' },
+  
+  // === TRANSMUTACIONES ===
+  { path: '/admin/transmutaciones/personas', handler: 'renderTransmutaciones', description: 'Transmutaciones personas' },
+  { path: '/admin/transmutaciones/lugares', handler: 'renderTransmutaciones', description: 'Transmutaciones lugares' },
+  { path: '/admin/transmutaciones/proyectos', handler: 'renderTransmutaciones', description: 'Transmutaciones proyectos' },
+  { path: '/admin/transmutaciones-energeticas', handler: 'renderTransmutacionesEnergeticas', description: 'Transmutaciones energéticas' },
+  
+  // === TÉCNICAS ===
+  { path: '/admin/tecnicas-limpieza', handler: 'renderTecnicasLimpieza', description: 'Técnicas limpieza' },
+  { path: '/admin/preparaciones-practica', handler: 'renderPreparacionesPractica', description: 'Preparaciones práctica' },
+  { path: '/admin/protecciones-energeticas', handler: 'renderProtecciones', description: 'Protecciones energéticas' },
+  { path: '/admin/tecnicas-post-practica', handler: 'renderTecnicasPostPractica', description: 'Técnicas post-práctica' },
+  { path: '/admin/decretos', handler: 'renderDecretos', description: 'Decretos' },
+  { path: '/admin/recursos-tecnicos/*', handler: 'admin-recursos-tecnicos.js', description: 'Recursos técnicos' },
+  
+  // === COMUNICACIÓN ===
+  { path: '/admin/comunicacion-directa', handler: 'renderComunicacionDirecta', description: 'Comunicación directa' },
+  { path: '/admin/email', handler: 'renderEmailForm', description: 'Email' },
+  
+  // === OTROS ===
+  { path: '/admin/aurigraph', handler: 'renderAurigraph', description: 'Aurigraph' },
+  { path: '/admin/audios', handler: 'renderAudios', description: 'Audios' },
+  { path: '/admin/auricalendar', handler: 'renderAuricalendar', description: 'Auricalendar' },
+  { path: '/admin/reflexiones', handler: 'renderReflexiones', description: 'Reflexiones' },
+  
+  // === API GENÉRICA (catch-all, debe ir al final) ===
+  { path: '/admin/api/*', handler: 'handleAPI', description: 'API endpoints genéricos' }
+];
+
+// Función helper para verificar si una ruta está registrada (uso en debugging)
+export function isAdminRouteRegistered(path) {
+  return ADMIN_ROUTE_REGISTRY.some(route => {
+    if (route.path.includes('*')) {
+      const prefix = route.path.replace('*', '');
+      return path.startsWith(prefix);
+    }
+    if (route.path.includes(':')) {
+      const pattern = route.path.replace(/:[\w]+/g, '[^/]+');
+      return new RegExp(`^${pattern}$`).test(path);
+    }
+    return route.path === path;
   });
 }
 

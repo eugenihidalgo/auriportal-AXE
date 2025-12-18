@@ -1,0 +1,318 @@
+<!-- Vista principal: Capability Explorer -->
+<div class="mb-6">
+    <h1 class="text-3xl font-bold text-white mb-2">System Capabilities</h1>
+    <p class="text-slate-400">Capacidades disponibles del motor de AuriPortal</p>
+  </div>
+  
+  <!-- Filtros -->
+  <div class="bg-slate-800 rounded-lg p-4 mb-6">
+    <div class="flex flex-wrap gap-4 items-center">
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Buscar</label>
+        <input 
+          type="text" 
+          id="search-input" 
+          placeholder="Buscar por ID o nombre..."
+          class="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        />
+      </div>
+      <div class="min-w-[150px]">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Estado</label>
+        <select 
+          id="status-filter" 
+          class="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        >
+          <option value="all">Todos</option>
+          <option value="on">ON</option>
+          <option value="beta">BETA</option>
+          <option value="off">OFF</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Tabs -->
+  <div class="bg-slate-800 rounded-lg mb-6">
+    <div class="border-b border-slate-700">
+      <div class="flex overflow-x-auto tabs-container">
+        <button 
+          onclick="switchTab('screen-templates')" 
+          class="tab-button px-6 py-3 text-sm font-medium text-slate-300 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors whitespace-nowrap active-tab"
+          data-tab="screen-templates"
+        >
+          Screen Templates <span id="count-screen-templates" class="ml-2 px-2 py-0.5 text-xs bg-slate-700 rounded">0</span>
+        </button>
+        <button 
+          onclick="switchTab('step-types')" 
+          class="tab-button px-6 py-3 text-sm font-medium text-slate-300 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors whitespace-nowrap"
+          data-tab="step-types"
+        >
+          Step Types <span id="count-step-types" class="ml-2 px-2 py-0.5 text-xs bg-slate-700 rounded">0</span>
+        </button>
+        <button 
+          onclick="switchTab('conditions')" 
+          class="tab-button px-6 py-3 text-sm font-medium text-slate-300 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors whitespace-nowrap"
+          data-tab="conditions"
+        >
+          Conditions <span id="count-conditions" class="ml-2 px-2 py-0.5 text-xs bg-slate-700 rounded">0</span>
+        </button>
+        <button 
+          onclick="switchTab('events')" 
+          class="tab-button px-6 py-3 text-sm font-medium text-slate-300 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors whitespace-nowrap"
+          data-tab="events"
+        >
+          Events <span id="count-events" class="ml-2 px-2 py-0.5 text-xs bg-slate-700 rounded">0</span>
+        </button>
+        <button 
+          onclick="switchTab('pde-resources')" 
+          class="tab-button px-6 py-3 text-sm font-medium text-slate-300 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors whitespace-nowrap"
+          data-tab="pde-resources"
+        >
+          PDE Resources <span id="count-pde-resources" class="ml-2 px-2 py-0.5 text-xs bg-slate-700 rounded">0</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Contenido de tabs -->
+    <div class="p-6">
+      <!-- Loading state -->
+      <div id="loading-state" class="text-center py-12">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+        <p class="mt-4 text-slate-400">Cargando capabilities...</p>
+      </div>
+      
+      <!-- Error state -->
+      <div id="error-state" class="hidden text-center py-12">
+        <p class="text-red-400 mb-4">Error al cargar capabilities</p>
+        <button 
+          onclick="loadRegistry()" 
+          class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
+      
+      <!-- Empty state -->
+      <div id="empty-state" class="hidden text-center py-12">
+        <p class="text-slate-400">No se encontraron capabilities</p>
+      </div>
+      
+      <!-- Content containers -->
+      <div id="tab-screen-templates" class="tab-content hidden">
+        <div id="list-screen-templates" class="space-y-3"></div>
+      </div>
+      <div id="tab-step-types" class="tab-content hidden">
+        <div id="list-step-types" class="space-y-3"></div>
+      </div>
+      <div id="tab-conditions" class="tab-content hidden">
+        <div id="list-conditions" class="space-y-3"></div>
+      </div>
+      <div id="tab-events" class="tab-content hidden">
+        <div id="list-events" class="space-y-3"></div>
+      </div>
+      <div id="tab-pde-resources" class="tab-content hidden">
+        <div id="list-pde-resources" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let registryData = null;
+  let currentTab = 'screen-templates';
+  
+  // Cargar registry al iniciar
+  document.addEventListener('DOMContentLoaded', function() {
+    loadRegistry();
+    
+    // Event listeners para filtros
+    document.getElementById('search-input').addEventListener('input', filterCapabilities);
+    document.getElementById('status-filter').addEventListener('change', filterCapabilities);
+  });
+  
+  // Cargar registry desde API
+  async function loadRegistry() {
+    const loadingEl = document.getElementById('loading-state');
+    const errorEl = document.getElementById('error-state');
+    const emptyEl = document.getElementById('empty-state');
+    
+    loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    emptyEl.classList.add('hidden');
+    
+    try {
+      const response = await fetch('/admin/api/registry', {
+        headers: {
+          'X-Admin-Panel': 'true'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      registryData = await response.json();
+      loadingEl.classList.add('hidden');
+      
+      // Actualizar contadores
+      updateCounters();
+      
+      // Renderizar contenido
+      renderCurrentTab();
+      
+    } catch (error) {
+      console.error('Error cargando registry:', error);
+      loadingEl.classList.add('hidden');
+      errorEl.classList.remove('hidden');
+    }
+  }
+  
+  // Actualizar contadores
+  function updateCounters() {
+    if (!registryData) return;
+    
+    document.getElementById('count-screen-templates').textContent = registryData.metadata?.screenTemplates_count || 0;
+    document.getElementById('count-step-types').textContent = registryData.metadata?.stepTypes_count || 0;
+    document.getElementById('count-conditions').textContent = registryData.metadata?.conditions_count || 0;
+    document.getElementById('count-events').textContent = registryData.metadata?.events_count || 0;
+    document.getElementById('count-pde-resources').textContent = registryData.metadata?.pdeResources_count || 0;
+  }
+  
+  // Cambiar tab
+  function switchTab(tabName) {
+    currentTab = tabName;
+    
+    // Actualizar botones
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.classList.remove('active-tab', 'border-indigo-500', 'text-white');
+      btn.classList.add('border-transparent', 'text-slate-300');
+    });
+    
+    const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+    if (activeBtn) {
+      activeBtn.classList.add('active-tab', 'border-indigo-500', 'text-white');
+      activeBtn.classList.remove('border-transparent', 'text-slate-300');
+    }
+    
+    // Ocultar todos los tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+      tab.classList.add('hidden');
+    });
+    
+    // Mostrar tab activo
+    const activeTab = document.getElementById(`tab-${tabName}`);
+    if (activeTab) {
+      activeTab.classList.remove('hidden');
+    }
+    
+    renderCurrentTab();
+  }
+  
+  // Renderizar tab actual
+  function renderCurrentTab() {
+    if (!registryData) return;
+    
+    const searchTerm = document.getElementById('search-input').value.toLowerCase();
+    const statusFilter = document.getElementById('status-filter').value;
+    
+    let items = [];
+    let type = '';
+    
+    switch (currentTab) {
+      case 'screen-templates':
+        items = registryData.screenTemplates || [];
+        type = 'screen-templates';
+        break;
+      case 'step-types':
+        items = registryData.stepTypes || [];
+        type = 'step-types';
+        break;
+      case 'conditions':
+        items = registryData.conditions || [];
+        type = 'conditions';
+        break;
+      case 'events':
+        items = registryData.events || [];
+        type = 'events';
+        break;
+      case 'pde-resources':
+        items = registryData.pdeResources || [];
+        type = 'pde-resources';
+        break;
+    }
+    
+    // Filtrar
+    let filtered = items.filter(item => {
+      const matchesSearch = !searchTerm || 
+        item.id?.toLowerCase().includes(searchTerm) ||
+        item.name?.toLowerCase().includes(searchTerm) ||
+        item.description?.toLowerCase().includes(searchTerm);
+      
+      const matchesStatus = statusFilter === 'all' || 
+        (item.feature_flag || 'on').toLowerCase() === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+    
+    // Renderizar
+    const container = document.getElementById(`list-${currentTab}`);
+    if (filtered.length === 0) {
+      container.innerHTML = '<p class="text-slate-400 text-center py-8">No se encontraron capabilities</p>';
+    } else {
+      container.innerHTML = filtered.map(item => renderCapabilityCard(item, type)).join('');
+    }
+  }
+  
+  // Renderizar card de capability
+  function renderCapabilityCard(item, type) {
+    const status = (item.feature_flag || 'on').toLowerCase();
+    const statusBadge = {
+      'on': '<span class="px-2 py-1 text-xs bg-green-900 text-green-200 rounded">ON</span>',
+      'beta': '<span class="px-2 py-1 text-xs bg-yellow-900 text-yellow-200 rounded">BETA</span>',
+      'off': '<span class="px-2 py-1 text-xs bg-red-900 text-red-200 rounded">OFF</span>'
+    }[status] || statusBadge['on'];
+    
+    const description = item.description || 'Sin descripción';
+    const shortDesc = description.length > 150 ? description.substring(0, 150) + '...' : description;
+    
+    return `
+      <a 
+        href="/admin/system/capabilities/${type}/${item.id}" 
+        class="block bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors"
+      >
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <div class="flex items-center gap-3 mb-2">
+              <h3 class="text-lg font-semibold text-white">${escapeHtml(item.id || 'N/A')}</h3>
+              ${statusBadge}
+            </div>
+            ${item.name ? `<p class="text-sm font-medium text-slate-300 mb-2">${escapeHtml(item.name)}</p>` : ''}
+            <p class="text-sm text-slate-400">${escapeHtml(shortDesc)}</p>
+          </div>
+        </div>
+      </a>
+    `;
+  }
+  
+  // Filtrar capabilities
+  function filterCapabilities() {
+    renderCurrentTab();
+  }
+  
+  // Escapar HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // Inicializar tab activo
+  switchTab('screen-templates');
+</script>
+
+<style>
+  .tab-button.active-tab {
+    border-bottom-color: #6366f1 !important;
+    color: white !important;
+  }
+</style>
+

@@ -1,0 +1,266 @@
+<div class="p-6 bg-slate-900 min-h-screen">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-white">🗺️ Recorridos</h1>
+    <a href="/admin/recorridos/new" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
+      ➕ Nuevo recorrido
+    </a>
+  </div>
+  
+  <div class="bg-slate-800 rounded-lg shadow-lg p-6 border border-slate-700">
+    <div class="mb-4">
+      <p class="text-slate-400 text-sm mb-4">Gestiona los recorridos pedagógicos que se mostrarán a los alumnos.</p>
+    </div>
+    
+    <div class="overflow-x-auto">
+      <table class="w-full text-left" id="recorridos-table">
+        <thead>
+          <tr class="border-b border-slate-700">
+            <th class="pb-3 px-4 text-slate-300 font-semibold">ID</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Nombre</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Estado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Versión Publicada</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Actualizado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="recorridos-tbody">
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">Cargando recorridos...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Cargar lista de recorridos
+  async function cargarRecorridos() {
+    const tbody = document.getElementById('recorridos-tbody');
+    
+    try {
+      const response = await fetch('/admin/api/recorridos', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const recorridos = data.recorridos || [];
+      
+      if (recorridos.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">No hay recorridos creados aún.</td>
+          </tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = recorridos.map(recorrido => {
+        const statusBadge = {
+          'draft': '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Draft</span>',
+          'published': '<span class="px-2 py-1 bg-green-900 text-green-200 rounded text-xs">Publicado</span>',
+          'deprecated': '<span class="px-2 py-1 bg-red-900 text-red-200 rounded text-xs">Deprecado</span>',
+          'archived': '<span class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">Archivado</span>',
+          'deleted': '<span class="px-2 py-1 bg-red-900 text-red-200 rounded text-xs">Borrado</span>'
+        }[recorrido.status] || '<span class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">Desconocido</span>';
+        
+        const updatedAt = recorrido.updated_at 
+          ? new Date(recorrido.updated_at).toLocaleString('es-ES', { 
+              year: 'numeric', 
+              month: 'short', 
+              day: 'numeric', 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })
+          : 'N/A';
+        
+        // Codificar ID para URLs (maneja espacios, acentos, etc.)
+        const encodedId = encodeURIComponent(recorrido.id);
+        // Escapar ID para usar en onclick (previene inyección)
+        const escapedId = (recorrido.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        return `
+          <tr class="border-b border-slate-700 hover:bg-slate-700">
+            <td class="py-3 px-4 text-white font-mono text-sm">${(recorrido.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4 text-white">${(recorrido.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4">${statusBadge}</td>
+            <td class="py-3 px-4 text-slate-300">${recorrido.current_published_version || '-'}</td>
+            <td class="py-3 px-4 text-slate-300 text-sm">${updatedAt}</td>
+            <td class="py-3 px-4">
+              <a href="/admin/recorridos/${encodedId}/edit" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors inline-block mr-2">Editar</a>
+              <button onclick="duplicarRecorrido('${escapedId}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors mr-2">Duplicar</button>
+              <button onclick="exportarRecorrido('${escapedId}')" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors mr-2">Exportar</button>
+              <button onclick="borrarRecorrido('${escapedId}')" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors">🗑️ Borrar</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      
+    } catch (error) {
+      console.error('Error cargando recorridos:', error);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-8 text-center text-red-400">
+            ❌ Error cargando recorridos: ${error.message}
+          </td>
+        </tr>
+      `;
+    }
+  }
+  
+  // Duplicar recorrido
+  async function duplicarRecorrido(recorridoId) {
+    if (!confirm(`¿Duplicar el recorrido "${recorridoId}"?`)) {
+      return;
+    }
+    
+    try {
+      // Codificar ID para la URL
+      const encodedId = encodeURIComponent(recorridoId);
+      
+      // Obtener recorrido original
+      const response = await fetch(`/admin/api/recorridos/${encodedId}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const definition = data.draft?.definition_json || data.published_version?.definition_json;
+      
+      if (!definition) {
+        alert('No se puede duplicar: el recorrido no tiene definición');
+        return;
+      }
+      
+      // Crear nuevo recorrido con ID único
+      const nuevoId = `${recorridoId}_copy_${Date.now()}`;
+      const nuevoNombre = `${data.recorrido.name} (copia)`;
+      
+      const createResponse = await fetch('/admin/api/recorridos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          id: nuevoId,
+          name: nuevoNombre
+        })
+      });
+      
+      if (!createResponse.ok) {
+        throw new Error(`Error creando recorrido: ${createResponse.status}`);
+      }
+      
+      // Actualizar draft con la definición copiada
+      const updateResponse = await fetch(`/admin/api/recorridos/${encodeURIComponent(nuevoId)}/draft`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          definition_json: definition
+        })
+      });
+      
+      if (!updateResponse.ok) {
+        throw new Error(`Error actualizando draft: ${updateResponse.status}`);
+      }
+      
+      alert(`✅ Recorrido duplicado exitosamente: ${nuevoId}`);
+      window.location.href = `/admin/recorridos/${encodeURIComponent(nuevoId)}/edit`;
+      
+    } catch (error) {
+      console.error('Error duplicando recorrido:', error);
+      alert(`❌ Error duplicando recorrido: ${error.message}`);
+    }
+  }
+  
+  // Exportar recorrido
+  async function exportarRecorrido(recorridoId) {
+    try {
+      // Codificar ID para la URL
+      const encodedId = encodeURIComponent(recorridoId);
+      
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/export`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+      
+      const bundle = await response.json();
+      
+      // Descargar como archivo JSON
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recorrido_${recorridoId}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert('✅ Recorrido exportado exitosamente');
+      
+    } catch (error) {
+      console.error('Error exportando recorrido:', error);
+      alert(`❌ Error exportando recorrido: ${error.message}`);
+    }
+  }
+  
+  // Borrar recorrido
+  async function borrarRecorrido(recorridoId) {
+    if (!confirm(`¿Estás seguro de que quieres borrar el recorrido "${recorridoId}"?\n\nEsta acción marcará el recorrido como eliminado (soft delete).`)) {
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.recorrido_id) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      alert('✅ Recorrido borrado correctamente');
+      
+      // Recargar lista
+      cargarRecorridos();
+      
+    } catch (error) {
+      console.error('Error borrando recorrido:', error);
+      alert(`Error al borrar recorrido: ${error.message}`);
+    }
+  }
+  
+  // Cargar al iniciar
+  document.addEventListener('DOMContentLoaded', cargarRecorridos);
+</script>
+

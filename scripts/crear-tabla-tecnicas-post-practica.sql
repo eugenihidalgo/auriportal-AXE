@@ -21,3 +21,12 @@ CREATE INDEX IF NOT EXISTS idx_tecnicas_post_practica_orden ON tecnicas_post_pra
 
 
 
+
+
+
+
+
+
+
+
+

@@ -9,6 +9,7 @@
   <link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="stylesheet" href="/css/theme-contract.css" />
   <link rel="stylesheet" href="/css/theme-variables.css" />
   <link rel="stylesheet" href="/css/theme-overrides.css" />
   <link rel="stylesheet" href="/css/reloj-meditacion.css">
@@ -26,10 +27,35 @@
       min-height: 100vh;
     }
 
+    /* LVCC v1: Container - Contenedor principal canónico */
     .container {
       width: 100%;
       max-width: 700px;
       margin: 0 auto;
+    }
+
+    /* LVCC v1: Panel - Bloque de agrupación informativa (layout y spacing mínimo) */
+    .panel {
+      /* Los estilos específicos se heredan de las clases existentes */
+      /* Esta clase define la semántica visual: agrupación informativa */
+    }
+
+    /* LVCC v1: Card - Entidad con identidad propia (layout y spacing mínimo) */
+    .card {
+      /* Los estilos específicos se heredan de las clases existentes */
+      /* Esta clase define la semántica visual: entidad con identidad propia */
+    }
+
+    /* LVCC v1: Content-block - Bloque interno de contenido (layout mínimo) */
+    .content-block {
+      /* Los estilos específicos se heredan de las clases existentes */
+      /* Esta clase define la semántica visual: contenido interno */
+    }
+
+    /* LVCC v1: Action-primary - Acción principal (jerarquía visual mínima) */
+    .action-primary {
+      /* Los estilos específicos se heredan de las clases existentes */
+      /* Esta clase define la semántica visual: acción principal única */
     }
 
     .header {
@@ -198,13 +224,43 @@
       display: none;
     }
 
+    /* Componente media-embed para vídeos y audio */
+    .media-embed {
+      position: relative;
+      width: 100%;
+      margin-top: 15px;
+      border-radius: var(--radius-md, 16px);
+      overflow: hidden;
+      background: var(--bg-card);
+      border: 1px solid var(--border-soft);
+    }
+
+    .media-embed.video {
+      padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    }
+
+    .media-embed iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .media-embed audio {
+      width: 100%;
+      padding: 10px;
+      background: var(--bg-card);
+    }
+
     .video-container {
       position: relative;
       width: 100%;
       padding-bottom: 56.25%; /* 16:9 aspect ratio */
       margin-top: 15px;
-      background: #000;
-      border-radius: 10px;
+      background: var(--bg-main);
+      border-radius: var(--radius-md, 16px);
       overflow: hidden;
       opacity: 0;
       transition: opacity 0.5s ease-in-out;
@@ -266,20 +322,26 @@
   </style>
 </head>
 <body>
+  <!-- LVCC v1: Contenedor principal canónico -->
   <div class="container">
+    <!-- LVCC v1: Header (no requiere clase canónica, es metadato) -->
     <div class="header">
       <h1>🔥 {{TITULO}}</h1>
     </div>
 
-    <div class="elementos-container">
+    <!-- LVCC v1: Panel - Bloque de agrupación informativa (instrucciones/estado) -->
+    <div class="elementos-container panel">
       {{ELEMENTOS_HTML}}
     </div>
 
+    <!-- LVCC v1: Panel - Bloque de agrupación informativa (resumen de tiempo) -->
     {{TOTAL_MINUTOS_HTML}}
 
+    <!-- LVCC v1: Content-block - Bloque interno de contenido (reloj) -->
     {{RELOJ_HTML}}
 
-    <a href="/limpieza" class="boton-continuar" style="text-decoration: none; text-align: center;">
+    <!-- LVCC v1: Action-primary - Acción principal de la pantalla (SOLO UNA) -->
+    <a href="/limpieza" class="boton-continuar action-primary" style="text-decoration: none; text-align: center;">
       Continuar a Limpieza Energética →
     </a>
   </div>

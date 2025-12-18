@@ -2,6 +2,7 @@
 // Sistema centralizado de logging para AuriPortal v4
 // Proporciona logs estructurados por dominio con trazabilidad de alumnos
 // Incluye correlación automática por request_id
+// Incluye redaction automática de secretos
 
 import { getRequestId } from './request-context.js';
 
@@ -13,6 +14,69 @@ const LOG_LEVELS = {
   WARN: 'warn',
   ERROR: 'error'
 };
+
+/**
+ * Lista de campos que deben ser redactados automáticamente
+ * Case-insensitive matching
+ */
+const SENSITIVE_FIELDS = [
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'token',
+  'password',
+  'secret',
+  'apikey',
+  'api_key',
+  'refreshtoken',
+  'refresh_token',
+  'access_token',
+  'session',
+  'sessionid',
+  'session_id',
+  'csrf',
+  'csrf_token'
+];
+
+/**
+ * Redacta valores sensibles en un objeto
+ * Reemplaza valores de campos sensibles con '[REDACTED]'
+ * 
+ * @param {Object} obj - Objeto a redactar
+ * @param {number} maxDepth - Profundidad máxima de recursión (default: 5)
+ * @returns {Object} Objeto con valores sensibles redactados
+ */
+function redactSensitiveData(obj, maxDepth = 5) {
+  if (!obj || typeof obj !== 'object' || maxDepth <= 0) {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => redactSensitiveData(item, maxDepth - 1));
+  }
+
+  const redacted = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    const keyLower = key.toLowerCase();
+    
+    // Verificar si el campo es sensible
+    const isSensitive = SENSITIVE_FIELDS.some(field => 
+      keyLower.includes(field.toLowerCase())
+    );
+    
+    if (isSensitive) {
+      redacted[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object') {
+      // Recursión para objetos anidados
+      redacted[key] = redactSensitiveData(value, maxDepth - 1);
+    } else {
+      redacted[key] = value;
+    }
+  }
+  
+  return redacted;
+}
 
 /**
  * Configuración de verbosidad por entorno
@@ -70,6 +134,9 @@ function createLog(level, domain, message, meta = {}, force = false) {
   // Obtener request_id del contexto actual (si existe)
   const requestId = getRequestId();
 
+  // Redactar datos sensibles de meta antes de loguear
+  const safeMeta = redactSensitiveData(meta);
+
   const logEntry = {
     timestamp: new Date().toISOString(),
     level: level.toUpperCase(),
@@ -79,7 +146,7 @@ function createLog(level, domain, message, meta = {}, force = false) {
     version: process.env.APP_VERSION || '4.0.0',
     build: process.env.BUILD_ID || 'unknown',
     ...(requestId && { request_id: requestId }), // Incluir request_id solo si existe
-    ...meta
+    ...safeMeta
   };
 
   // Formato de salida según nivel
@@ -95,12 +162,17 @@ function createLog(level, domain, message, meta = {}, force = false) {
   // También mostrar formato legible en consola (solo en dev/beta)
   const env = process.env.APP_ENV || 'prod';
   if (env === 'dev' || env === 'beta') {
-    const metaStr = Object.keys(meta).length > 0 
-      ? ` | ${JSON.stringify(meta)}` 
+    const metaStr = Object.keys(safeMeta).length > 0 
+      ? ` | ${JSON.stringify(safeMeta)}` 
       : '';
     console.log(`${prefix} [${domain.toUpperCase()}] ${message}${metaStr}`);
   }
 }
+
+/**
+ * Exportar función de redaction para tests
+ */
+export { redactSensitiveData };
 
 /**
  * Log informativo
@@ -163,5 +235,14 @@ export function extractStudentMeta(student) {
     estado_suscripcion: student.estado_suscripcion || student.suscripcionActiva ? 'activa' : null
   };
 }
+
+
+
+
+
+
+
+
+
 
 

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - AuriPortal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .error-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 32px;
+            margin-bottom: 16px;
+            color: #1a1a1a;
+        }
+        
+        .error-message {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+        
+        .request-id {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 24px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            word-break: break-all;
+            text-align: left;
+        }
+        
+        .request-id-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .request-id-value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .actions {
+            margin-top: 32px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background 0.2s;
+            margin: 0 8px;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            }
+            
+            .error-container {
+                background: #2a2a3e;
+                color: #e0e0e0;
+            }
+            
+            h1 {
+                color: #f0f0f0;
+            }
+            
+            .error-message {
+                color: #b0b0b0;
+            }
+            
+            .request-id {
+                background: #1a1a2e;
+            }
+            
+            .request-id-value {
+                color: #e0e0e0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">⚠️</div>
+        <h1>Algo salió mal</h1>
+        <p class="error-message">
+            Lo sentimos, ha ocurrido un error inesperado. Nuestro equipo ha sido notificado y está trabajando en solucionarlo.
+        </p>
+        
+        {{REQUEST_ID_SECTION}}
+        
+        <div class="actions">
+            <a href="/enter" class="btn">Volver al inicio</a>
+            <a href="javascript:history.back()" class="btn btn-secondary">Volver atrás</a>
+        </div>
+    </div>
+</body>
+</html>
+
+
+
+
+
+
+
+
+

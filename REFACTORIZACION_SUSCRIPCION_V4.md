@@ -361,3 +361,12 @@ Si se detecta un problema:
 **Sin cambios en comportamiento visible** ✅
 
 
+
+
+
+
+
+
+
+
+

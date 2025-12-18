@@ -306,6 +306,12 @@
             Alumnos
           </a>
           
+          <!-- Estado del Alumno -->
+          <a href="/admin/progreso-v4" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🧬</span>
+            Estado del Alumno
+          </a>
+          
           <!-- Modo Master -->
           <a href="/admin/modo-maestro" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">🧙</span>
@@ -396,22 +402,22 @@
             Preparación para la práctica
           </a>
           
-          <!-- Técnicas Post-práctica -->
+          <!-- Técnicas por práctica -->
           <a href="/admin/tecnicas-post-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/tecnicas-post-practica' ? 'menu-item-active' : ''}}">
             <span class="mr-3 text-lg">🎯</span>
-            Técnicas Post-práctica
+            Técnicas por práctica
+          </a>
+          
+          <!-- Protecciones Energéticas -->
+          <a href="/admin/protecciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/protecciones-energeticas' ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">🛡️</span>
+            Protecciones Energéticas
           </a>
           
           <!-- Biblioteca de Decretos -->
           <a href="/admin/decretos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/decretos' ? 'menu-item-active' : ''}}">
             <span class="mr-3 text-lg">📜</span>
             Biblioteca de Decretos
-          </a>
-          
-          <!-- Aspectos de Práctica -->
-          <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
-            <span class="mr-3 text-lg">🔥</span>
-            Aspectos de Práctica
           </a>
           
           <!-- Frases PDE -->
@@ -426,10 +432,88 @@
             Tarot (Cartas)
           </a>
           
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            🎨 Apariencia
+          </div>
+          
+          <!-- Pantallas -->
+          <a href="/admin/recorrido-pedagogico" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📱</span>
+            Pantallas
+          </a>
+          
+          <!-- Workflow -->
+          <a href="/admin/configuracion-workflow" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">→</span>
+            Workflow
+          </a>
+          
+          <!-- Caminos Pedagógicos -->
+          <a href="/admin/configuracion-caminos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">→</span>
+            Caminos Pedagógicos
+          </a>
+          
+          <!-- Editor de Pantallas -->
+          <a href="/admin/editor-pantallas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🎨</span>
+            Editor de Pantallas
+          </a>
+          
+          <!-- Temas -->
+          <a href="/admin/themes/ui" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/themes/ui' || CURRENT_PATH === '/admin/apariencia/temas' ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">🎨</span>
+            Temas
+          </a>
+          
+          <!-- Aspectos de Práctica -->
+          <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🔥</span>
+            Aspectos de Práctica
+          </a>
+          
           <!-- Sellos / Rituales -->
           <a href="/admin/sellos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">🏆</span>
             Sellos / Rituales
+          </a>
+          
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            🗺️ Recorridos
+          </div>
+          
+          <!-- Todos los recorridos -->
+          <a href="/admin/recorridos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/recorridos' || CURRENT_PATH.startsWith('/admin/recorridos/') ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">📋</span>
+            Todos los recorridos
+          </a>
+          
+          <!-- Nuevo recorrido -->
+          <a href="/admin/recorridos/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/recorridos/new' ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">➕</span>
+            Nuevo recorrido
+          </a>
+          
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            🧭 Navegaciones
+          </div>
+          
+          <!-- Todas las navegaciones -->
+          <a href="/admin/navigation" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/navigation' || CURRENT_PATH.startsWith('/admin/navigation/') ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">📋</span>
+            Todas las navegaciones
+          </a>
+          
+          <!-- Nueva navegación -->
+          <a href="/admin/navigation/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/navigation/new' ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">➕</span>
+            Nueva navegación
           </a>
           
           <!-- Divider -->
@@ -515,36 +599,6 @@
           <a href="/admin/eventos-globales" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">🎊</span>
             Eventos Globales
-          </a>
-          
-          <!-- Divider -->
-          <div class="my-2 border-t border-slate-800"></div>
-          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            🧭 Experiencia del alumno
-          </div>
-          
-          <!-- Pantallas -->
-          <a href="/admin/recorrido-pedagogico" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
-            <span class="mr-3 text-lg">📱</span>
-            Pantallas
-          </a>
-          
-          <!-- Workflow (conexiones) -->
-          <a href="/admin/configuracion-workflow" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
-            <span class="mr-3 text-lg">→</span>
-            Workflow (Conexiones)
-          </a>
-          
-          <!-- Caminos Pedagógicos -->
-          <a href="/admin/configuracion-caminos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
-            <span class="mr-3 text-lg">→</span>
-            Caminos Pedagógicos
-          </a>
-          
-          <!-- Editor de Pantallas -->
-          <a href="/admin/editor-pantallas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
-            <span class="mr-3 text-lg">🎨</span>
-            Editor de Pantallas
           </a>
           
           <!-- Divider -->
@@ -705,7 +759,7 @@
             <span class="mr-3 text-lg">→</span>
             Racha y fases
           </a>
-          
+
           <!-- Logros -->
           <a href="/admin/logros" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">🌟</span>
@@ -728,6 +782,18 @@
           <a href="/admin/analytics-resumen" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">📝</span>
             Resumen Diario
+          </a>
+          
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⚙️ System
+          </div>
+          
+          <!-- Capabilities -->
+          <a href="/admin/system/capabilities" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🔧</span>
+            Capabilities
           </a>
           
           <!-- Divider -->
@@ -759,6 +825,151 @@
           <a href="/admin/logs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">📜</span>
             Logs
+          </a>
+          
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            🧠 MASTER INSIGHT
+          </div>
+          
+          <!-- Visión General -->
+          <a href="/admin/master-insight/overview" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Visión General</span>
+            <span class="px-2 py-0.5 text-xs bg-green-900 text-green-200 rounded">ACTIVO</span>
+          </a>
+          
+          <!-- Alertas Inteligentes -->
+          <a href="/admin/master-insight/alertas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🚨</span>
+            <span class="flex-1">Alertas Inteligentes</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Sugerencias del Sistema -->
+          <a href="/admin/master-insight/sugerencias" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">💡</span>
+            <span class="flex-1">Sugerencias del Sistema</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Salud Energética Global -->
+          <a href="/admin/master-insight/salud-energetica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Salud Energética Global</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Patrones Emergentes -->
+          <a href="/admin/master-insight/patrones" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🔍</span>
+            <span class="flex-1">Patrones Emergentes</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Lugares (Insight) -->
+          <a href="/admin/master-insight/lugares" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🏠</span>
+            <span class="flex-1">Lugares (Insight)</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Proyectos (Insight) -->
+          <a href="/admin/master-insight/proyectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🚀</span>
+            <span class="flex-1">Proyectos (Insight)</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Apadrinados (Insight) -->
+          <a href="/admin/master-insight/apadrinados" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">👥</span>
+            <span class="flex-1">Apadrinados (Insight)</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Ritmos y Recurrencias -->
+          <a href="/admin/master-insight/ritmos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🔄</span>
+            <span class="flex-1">Ritmos y Recurrencias</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Eventos Especiales -->
+          <a href="/admin/master-insight/eventos-especiales" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⭐</span>
+            <span class="flex-1">Eventos Especiales</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Historial del Master -->
+          <a href="/admin/master-insight/historial" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Historial del Master</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Configuración de Criterios -->
+          <a href="/admin/master-insight/configuracion" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Configuración de Criterios</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">EN DESARROLLO</span>
+          </a>
+          
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⚙️ AUTOMATIZACIONES
+          </div>
+          
+          <!-- Overview Automatizaciones -->
+          <a href="/admin/automations" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Overview Automatizaciones</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Reglas por Eventos Energéticos -->
+          <a href="/admin/automations/eventos-energeticos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Reglas por Eventos Energéticos</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Reglas por Patrones -->
+          <a href="/admin/automations/patrones" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🔍</span>
+            <span class="flex-1">Reglas por Patrones</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Reglas por Tiempo / Recurrencia -->
+          <a href="/admin/automations/tiempo" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⏰</span>
+            <span class="flex-1">Reglas por Tiempo / Recurrencia</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Acciones Automáticas (preview) -->
+          <a href="/admin/automations/acciones" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">🎯</span>
+            <span class="flex-1">Acciones Automáticas (preview)</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Logs de Automatizaciones -->
+          <a href="/admin/automations/logs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Logs de Automatizaciones</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
+          </a>
+          
+          <!-- Configuración Global -->
+          <a href="/admin/automations/configuracion" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Configuración Global</span>
+            <span class="px-2 py-0.5 text-xs bg-yellow-900 text-yellow-200 rounded">PROTOTIPO</span>
           </a>
           
           <!-- Divider -->
@@ -805,6 +1016,15 @@
       const currentPath = window.location.pathname;
       const menuItems = document.querySelectorAll('aside nav a');
       const sidebarNav = document.getElementById('sidebar-nav');
+      
+      // #region agent log - Verificar que el enlace Progreso V4 está presente
+      const progresoV4Link = Array.from(menuItems).find(item => item.getAttribute('href') === '/admin/progreso-v4');
+      console.log('[DEBUG] Enlace Progreso V4 encontrado:', progresoV4Link ? 'SÍ' : 'NO');
+      if (progresoV4Link) {
+        console.log('[DEBUG] Enlace Progreso V4 visible:', window.getComputedStyle(progresoV4Link).display !== 'none');
+        console.log('[DEBUG] Enlace Progreso V4 parent visible:', window.getComputedStyle(progresoV4Link.parentElement).display !== 'none');
+      }
+      // #endregion
       
       // Restaurar posición de scroll del sidebar
       const savedScroll = localStorage.getItem('adminSidebarScroll');

@@ -7,7 +7,7 @@ import { renderHtml } from '../core/html-response.js';
 /**
  * Verifica si la solicitud viene de una IP autorizada o tiene password correcto
  */
-function verificarAccesoAdmin(request, env) {
+export function verificarAccesoAdmin(request, env) {
   // Opción 1: Verificar IP (si está configurada)
   const allowedIPs = env.ADMIN_ALLOWED_IPS ? env.ADMIN_ALLOWED_IPS.split(',') : [];
   const clientIP = request.headers.get('cf-connecting-ip') || 

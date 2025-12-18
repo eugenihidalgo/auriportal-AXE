@@ -1,0 +1,824 @@
+{
+  "catalog_id": "energy_transmutations",
+  "version": "1.0.0",
+  "status": "published",
+  "last_updated": "2025-12-17T00:00:00Z",
+  "modes": [
+    {
+      "mode_id": "rapida",
+      "label": "Limpieza Rápida",
+      "max_transmutations": 5,
+      "selection_strategy": "ordered",
+      "filters": {
+        "respect_level_cap": true
+      },
+      "description": "Limpieza express para días ocupados"
+    },
+    {
+      "mode_id": "basica",
+      "label": "Limpieza Básica",
+      "max_transmutations": 10,
+      "selection_strategy": "ordered",
+      "filters": {
+        "respect_level_cap": true
+      },
+      "description": "Limpieza equilibrada para práctica diaria"
+    },
+    {
+      "mode_id": "profunda",
+      "label": "Limpieza Profunda",
+      "max_transmutations": 25,
+      "selection_strategy": "ordered",
+      "filters": {
+        "respect_level_cap": true
+      },
+      "description": "Limpieza completa para transformación intensa"
+    },
+    {
+      "mode_id": "maestro",
+      "label": "Modo Maestro",
+      "max_transmutations": 50,
+      "selection_strategy": "ordered",
+      "filters": {
+        "respect_level_cap": true
+      },
+      "description": "Limpieza total para practicantes avanzados"
+    }
+  ],
+  "transmutations": [
+    {
+      "transmutation_id": "trans_001",
+      "slug": "miedo-valor",
+      "name": "Miedo → Valor",
+      "description": "Transforma el miedo paralizante en coraje para actuar",
+      "min_level": 1,
+      "weight": 100,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_002",
+      "slug": "ansiedad-serenidad",
+      "name": "Ansiedad → Serenidad",
+      "description": "Convierte la ansiedad en calma profunda",
+      "min_level": 1,
+      "weight": 99,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_003",
+      "slug": "tristeza-alegria",
+      "name": "Tristeza → Alegría",
+      "description": "Transforma la tristeza en gozo interior",
+      "min_level": 1,
+      "weight": 98,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_004",
+      "slug": "ira-paz",
+      "name": "Ira → Paz",
+      "description": "Convierte la ira en paz transformadora",
+      "min_level": 1,
+      "weight": 97,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_005",
+      "slug": "culpa-perdon",
+      "name": "Culpa → Perdón",
+      "description": "Transforma la culpa en auto-perdón sanador",
+      "min_level": 1,
+      "weight": 96,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_006",
+      "slug": "verguenza-dignidad",
+      "name": "Vergüenza → Dignidad",
+      "description": "Convierte la vergüenza en dignidad personal",
+      "min_level": 1,
+      "weight": 95,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_007",
+      "slug": "envidia-admiracion",
+      "name": "Envidia → Admiración",
+      "description": "Transforma la envidia en admiración constructiva",
+      "min_level": 1,
+      "weight": 94,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_008",
+      "slug": "celos-confianza",
+      "name": "Celos → Confianza",
+      "description": "Convierte los celos en confianza segura",
+      "min_level": 1,
+      "weight": 93,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_009",
+      "slug": "resentimiento-liberacion",
+      "name": "Resentimiento → Liberación",
+      "description": "Transforma el resentimiento en liberación total",
+      "min_level": 1,
+      "weight": 92,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_010",
+      "slug": "odio-compasion",
+      "name": "Odio → Compasión",
+      "description": "Convierte el odio en compasión universal",
+      "min_level": 2,
+      "weight": 91,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_011",
+      "slug": "frustracion-paciencia",
+      "name": "Frustración → Paciencia",
+      "description": "Transforma la frustración en paciencia serena",
+      "min_level": 1,
+      "weight": 90,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_012",
+      "slug": "impaciencia-calma",
+      "name": "Impaciencia → Calma",
+      "description": "Convierte la impaciencia en calma activa",
+      "min_level": 1,
+      "weight": 89,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_013",
+      "slug": "apatia-entusiasmo",
+      "name": "Apatía → Entusiasmo",
+      "description": "Transforma la apatía en entusiasmo vital",
+      "min_level": 1,
+      "weight": 88,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_014",
+      "slug": "desanimo-esperanza",
+      "name": "Desánimo → Esperanza",
+      "description": "Convierte el desánimo en esperanza renovada",
+      "min_level": 1,
+      "weight": 87,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_015",
+      "slug": "soledad-conexion",
+      "name": "Soledad → Conexión",
+      "description": "Transforma la soledad en conexión profunda",
+      "min_level": 1,
+      "weight": 86,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_016",
+      "slug": "rechazo-aceptacion",
+      "name": "Rechazo → Aceptación",
+      "description": "Convierte el rechazo en auto-aceptación",
+      "min_level": 1,
+      "weight": 85,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_017",
+      "slug": "abandono-completitud",
+      "name": "Abandono → Completitud",
+      "description": "Transforma el abandono en sentido de completitud",
+      "min_level": 2,
+      "weight": 84,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_018",
+      "slug": "confusion-claridad",
+      "name": "Confusión → Claridad",
+      "description": "Convierte la confusión en claridad mental",
+      "min_level": 1,
+      "weight": 83,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_019",
+      "slug": "duda-certeza",
+      "name": "Duda → Certeza",
+      "description": "Transforma la duda en certeza interior",
+      "min_level": 2,
+      "weight": 82,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_020",
+      "slug": "negacion-consciencia",
+      "name": "Negación → Consciencia",
+      "description": "Convierte la negación en consciencia plena",
+      "min_level": 2,
+      "weight": 81,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_021",
+      "slug": "orgullo-humildad",
+      "name": "Orgullo → Humildad",
+      "description": "Transforma el orgullo en humildad sabia",
+      "min_level": 2,
+      "weight": 80,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_022",
+      "slug": "arrogancia-sencillez",
+      "name": "Arrogancia → Sencillez",
+      "description": "Convierte la arrogancia en sencillez auténtica",
+      "min_level": 2,
+      "weight": 79,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_023",
+      "slug": "control-fluir",
+      "name": "Control → Fluir",
+      "description": "Transforma el control en capacidad de fluir",
+      "min_level": 2,
+      "weight": 78,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_024",
+      "slug": "rigidez-flexibilidad",
+      "name": "Rigidez → Flexibilidad",
+      "description": "Convierte la rigidez en flexibilidad adaptativa",
+      "min_level": 2,
+      "weight": 77,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_025",
+      "slug": "juicio-comprension",
+      "name": "Juicio → Comprensión",
+      "description": "Transforma el juicio en comprensión empática",
+      "min_level": 2,
+      "weight": 76,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_026",
+      "slug": "critica-aprecio",
+      "name": "Crítica → Aprecio",
+      "description": "Convierte la crítica en aprecio genuino",
+      "min_level": 2,
+      "weight": 75,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_027",
+      "slug": "pesimismo-optimismo",
+      "name": "Pesimismo → Optimismo",
+      "description": "Transforma el pesimismo en optimismo realista",
+      "min_level": 1,
+      "weight": 74,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_028",
+      "slug": "victimismo-responsabilidad",
+      "name": "Victimismo → Responsabilidad",
+      "description": "Convierte el victimismo en responsabilidad personal",
+      "min_level": 2,
+      "weight": 73,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_029",
+      "slug": "queja-gratitud",
+      "name": "Queja → Gratitud",
+      "description": "Transforma la queja en gratitud consciente",
+      "min_level": 1,
+      "weight": 72,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_030",
+      "slug": "escasez-abundancia",
+      "name": "Escasez → Abundancia",
+      "description": "Convierte la mentalidad de escasez en abundancia",
+      "min_level": 2,
+      "weight": 71,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_031",
+      "slug": "limitacion-expansion",
+      "name": "Limitación → Expansión",
+      "description": "Transforma la limitación en expansión infinita",
+      "min_level": 3,
+      "weight": 70,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_032",
+      "slug": "separacion-unidad",
+      "name": "Separación → Unidad",
+      "description": "Convierte la separación en consciencia de unidad",
+      "min_level": 3,
+      "weight": 69,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_033",
+      "slug": "ignorancia-sabiduria",
+      "name": "Ignorancia → Sabiduría",
+      "description": "Transforma la ignorancia en sabiduría práctica",
+      "min_level": 3,
+      "weight": 68,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_034",
+      "slug": "oscuridad-luz",
+      "name": "Oscuridad → Luz",
+      "description": "Convierte la oscuridad interior en luz radiante",
+      "min_level": 3,
+      "weight": 67,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_035",
+      "slug": "caos-orden",
+      "name": "Caos → Orden",
+      "description": "Transforma el caos en orden sagrado",
+      "min_level": 3,
+      "weight": 66,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_036",
+      "slug": "agotamiento-vitalidad",
+      "name": "Agotamiento → Vitalidad",
+      "description": "Convierte el agotamiento en vitalidad renovada",
+      "min_level": 1,
+      "weight": 65,
+      "category": "fisico",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_037",
+      "slug": "tension-relajacion",
+      "name": "Tensión → Relajación",
+      "description": "Transforma la tensión corporal en relajación profunda",
+      "min_level": 1,
+      "weight": 64,
+      "category": "fisico",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_038",
+      "slug": "dolor-sanacion",
+      "name": "Dolor → Sanación",
+      "description": "Convierte el dolor en proceso de sanación",
+      "min_level": 2,
+      "weight": 63,
+      "category": "fisico",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_039",
+      "slug": "bloqueo-flujo",
+      "name": "Bloqueo → Flujo",
+      "description": "Transforma los bloqueos energéticos en flujo libre",
+      "min_level": 2,
+      "weight": 62,
+      "category": "fisico",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_040",
+      "slug": "pesadez-ligereza",
+      "name": "Pesadez → Ligereza",
+      "description": "Convierte la pesadez corporal en ligereza",
+      "min_level": 1,
+      "weight": 61,
+      "category": "fisico",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_041",
+      "slug": "dependencia-autonomia",
+      "name": "Dependencia → Autonomía",
+      "description": "Transforma la dependencia en autonomía sana",
+      "min_level": 2,
+      "weight": 60,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_042",
+      "slug": "apego-desapego",
+      "name": "Apego → Desapego",
+      "description": "Convierte el apego en desapego amoroso",
+      "min_level": 3,
+      "weight": 59,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_043",
+      "slug": "expectativa-aceptacion",
+      "name": "Expectativa → Aceptación",
+      "description": "Transforma expectativas en aceptación plena",
+      "min_level": 2,
+      "weight": 58,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_044",
+      "slug": "manipulacion-autenticidad",
+      "name": "Manipulación → Autenticidad",
+      "description": "Convierte la manipulación en autenticidad",
+      "min_level": 3,
+      "weight": 57,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_045",
+      "slug": "desconfianza-fe",
+      "name": "Desconfianza → Fe",
+      "description": "Transforma la desconfianza en fe profunda",
+      "min_level": 3,
+      "weight": 56,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_046",
+      "slug": "codependencia-interdependencia",
+      "name": "Codependencia → Interdependencia",
+      "description": "Convierte codependencia en interdependencia sana",
+      "min_level": 3,
+      "weight": 55,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_047",
+      "slug": "aislamiento-comunidad",
+      "name": "Aislamiento → Comunidad",
+      "description": "Transforma el aislamiento en sentido de comunidad",
+      "min_level": 2,
+      "weight": 54,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_048",
+      "slug": "rechazo-pertenencia",
+      "name": "Rechazo → Pertenencia",
+      "description": "Convierte el rechazo en sentido de pertenencia",
+      "min_level": 2,
+      "weight": 53,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_049",
+      "slug": "intolerancia-tolerancia",
+      "name": "Intolerancia → Tolerancia",
+      "description": "Transforma la intolerancia en tolerancia activa",
+      "min_level": 2,
+      "weight": 52,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_050",
+      "slug": "prejuicio-apertura",
+      "name": "Prejuicio → Apertura",
+      "description": "Convierte prejuicios en apertura mental",
+      "min_level": 2,
+      "weight": 51,
+      "category": "relacional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_051",
+      "slug": "ego-servicio",
+      "name": "Ego → Servicio",
+      "description": "Transforma el ego en deseo de servir",
+      "min_level": 4,
+      "weight": 50,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_052",
+      "slug": "materialismo-espiritualidad",
+      "name": "Materialismo → Espiritualidad",
+      "description": "Convierte el materialismo en consciencia espiritual",
+      "min_level": 4,
+      "weight": 49,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_053",
+      "slug": "temporalidad-eternidad",
+      "name": "Temporalidad → Eternidad",
+      "description": "Transforma la consciencia temporal en sentido de eternidad",
+      "min_level": 4,
+      "weight": 48,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_054",
+      "slug": "dualidad-unicidad",
+      "name": "Dualidad → Unicidad",
+      "description": "Convierte la percepción dual en consciencia de unicidad",
+      "min_level": 5,
+      "weight": 47,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_055",
+      "slug": "resistencia-entrega",
+      "name": "Resistencia → Entrega",
+      "description": "Transforma la resistencia en entrega consciente",
+      "min_level": 4,
+      "weight": 46,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_056",
+      "slug": "carencia-plenitud",
+      "name": "Carencia → Plenitud",
+      "description": "Convierte el sentido de carencia en plenitud interior",
+      "min_level": 3,
+      "weight": 45,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_057",
+      "slug": "sufrimiento-trascendencia",
+      "name": "Sufrimiento → Trascendencia",
+      "description": "Transforma el sufrimiento en trascendencia",
+      "min_level": 5,
+      "weight": 44,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_058",
+      "slug": "ilusion-realidad",
+      "name": "Ilusión → Realidad",
+      "description": "Convierte la ilusión en percepción de la realidad",
+      "min_level": 5,
+      "weight": 43,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_059",
+      "slug": "karma-dharma",
+      "name": "Karma → Dharma",
+      "description": "Transforma el karma en dharma consciente",
+      "min_level": 5,
+      "weight": 42,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_060",
+      "slug": "inconsciencia-iluminacion",
+      "name": "Inconsciencia → Iluminación",
+      "description": "Convierte la inconsciencia en estados de iluminación",
+      "min_level": 5,
+      "weight": 41,
+      "category": "espiritual",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_061",
+      "slug": "procrastinacion-accion",
+      "name": "Procrastinación → Acción",
+      "description": "Transforma la procrastinación en acción decidida",
+      "min_level": 1,
+      "weight": 40,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_062",
+      "slug": "indiferencia-compromiso",
+      "name": "Indiferencia → Compromiso",
+      "description": "Convierte la indiferencia en compromiso activo",
+      "min_level": 2,
+      "weight": 39,
+      "category": "mental",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_063",
+      "slug": "inseguridad-confianza",
+      "name": "Inseguridad → Confianza",
+      "description": "Transforma la inseguridad en confianza personal",
+      "min_level": 1,
+      "weight": 38,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_064",
+      "slug": "amargura-dulzura",
+      "name": "Amargura → Dulzura",
+      "description": "Convierte la amargura en dulzura de carácter",
+      "min_level": 2,
+      "weight": 37,
+      "category": "emocional",
+      "is_active": true
+    },
+    {
+      "transmutation_id": "trans_065",
+      "slug": "fracaso-aprendizaje",
+      "name": "Fracaso → Aprendizaje",
+      "description": "Transforma el fracaso en oportunidad de aprendizaje",
+      "min_level": 1,
+      "weight": 36,
+      "category": "mental",
+      "is_active": true
+    }
+  ],
+  "techniques": [
+    {
+      "technique_id": "tech_001",
+      "slug": "respiracion-transmutadora",
+      "name": "Respiración Transmutadora",
+      "description": "Técnica de respiración profunda para facilitar la transmutación",
+      "instructions": "Inhala profundamente visualizando la energía negativa. Exhala visualizando su transformación en luz.",
+      "duration_seconds": 60,
+      "min_level": 1,
+      "category": "respiracion",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_002",
+      "slug": "visualizacion-fuego-violeta",
+      "name": "Visualización del Fuego Violeta",
+      "description": "Visualización del fuego violeta transmutador",
+      "instructions": "Visualiza una llama violeta envolviendo tu cuerpo, transmutando toda energía densa.",
+      "duration_seconds": 120,
+      "min_level": 1,
+      "category": "visualizacion",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_003",
+      "slug": "decreto-transmutacion",
+      "name": "Decreto de Transmutación",
+      "description": "Decreto verbal para activar la transmutación",
+      "instructions": "Repite: 'YO SOY la presencia transmutadora que disuelve y transforma toda energía densa en luz.'",
+      "duration_seconds": 30,
+      "min_level": 1,
+      "category": "decreto",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_004",
+      "slug": "meditacion-llama-violeta",
+      "name": "Meditación de la Llama Violeta",
+      "description": "Meditación profunda con la llama violeta de Saint Germain",
+      "instructions": "Entra en estado meditativo y conecta con la energía de la llama violeta para transmutación profunda.",
+      "duration_seconds": 300,
+      "min_level": 2,
+      "category": "meditacion",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_005",
+      "slug": "mudra-transmutacion",
+      "name": "Mudra de Transmutación",
+      "description": "Posición de manos para canalizar energía transmutadora",
+      "instructions": "Une el pulgar con el dedo índice formando un círculo. Mantén mientras respiras conscientemente.",
+      "duration_seconds": 90,
+      "min_level": 2,
+      "category": "mudra",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_006",
+      "slug": "mantra-om-transmutador",
+      "name": "Mantra OM Transmutador",
+      "description": "Canto del mantra OM con intención transmutadora",
+      "instructions": "Canta OM 7 veces sintiendo la vibración disolver las energías densas.",
+      "duration_seconds": 60,
+      "min_level": 1,
+      "category": "mantra",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_007",
+      "slug": "corte-cordones-energeticos",
+      "name": "Corte de Cordones Energéticos",
+      "description": "Técnica para cortar vínculos energéticos no saludables",
+      "instructions": "Visualiza los cordones energéticos y córtalos con una espada de luz violeta.",
+      "duration_seconds": 180,
+      "min_level": 3,
+      "category": "visualizacion",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_008",
+      "slug": "limpieza-aura",
+      "name": "Limpieza del Aura",
+      "description": "Técnica de limpieza del campo áurico",
+      "instructions": "Pasa tus manos a 10cm del cuerpo barriendo de arriba hacia abajo.",
+      "duration_seconds": 120,
+      "min_level": 2,
+      "category": "energia",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_009",
+      "slug": "activacion-merkaba",
+      "name": "Activación del Merkaba",
+      "description": "Activación del vehículo de luz para transmutación avanzada",
+      "instructions": "Visualiza dos tetraedros de luz girando en direcciones opuestas alrededor de tu cuerpo.",
+      "duration_seconds": 600,
+      "min_level": 4,
+      "category": "avanzada",
+      "is_active": true
+    },
+    {
+      "technique_id": "tech_010",
+      "slug": "conexion-yo-superior",
+      "name": "Conexión con el Yo Superior",
+      "description": "Técnica para conectar con la guía del Yo Superior",
+      "instructions": "En silencio interior, invoca la presencia de tu Yo Superior y pide guía para la transmutación.",
+      "duration_seconds": 300,
+      "min_level": 3,
+      "category": "meditacion",
+      "is_active": true
+    }
+  ],
+  "metadata": {
+    "created_by": "system",
+    "created_at": "2025-12-17T00:00:00Z",
+    "description": "Catálogo canónico de transmutaciones energéticas v1 para AuriPortal",
+    "notes": [
+      "Las transmutaciones están ordenadas por weight descendente",
+      "min_level indica el nivel mínimo requerido del alumno",
+      "Las categorías son: emocional, mental, espiritual, fisico, relacional",
+      "Técnicas complementan las transmutaciones y se filtran por nivel"
+    ]
+  }
+}
+

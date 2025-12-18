@@ -365,3 +365,12 @@ await findByAlumnoId(123);
 *El dominio PAUSAS ahora sigue arquitectura limpia por capas, manteniendo comportamiento idéntico y mejorando mantenibilidad y testabilidad.*
 
 
+
+
+
+
+
+
+
+
+

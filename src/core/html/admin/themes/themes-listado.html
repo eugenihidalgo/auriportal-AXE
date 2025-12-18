@@ -1,0 +1,116 @@
+<div class="p-6 bg-slate-900 min-h-screen">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-white">🎨 Temas</h1>
+    <a href="/admin/themes/new" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
+      ➕ Nuevo tema
+    </a>
+  </div>
+  
+  <div class="bg-slate-800 rounded-lg shadow-lg p-6 border border-slate-700">
+    <div class="mb-4">
+      <p class="text-slate-400 text-sm mb-4">Gestiona los temas visuales que se aplicarán a la interfaz de los alumnos.</p>
+    </div>
+    
+    <div class="overflow-x-auto">
+      <table class="w-full text-left" id="themes-table">
+        <thead>
+          <tr class="border-b border-slate-700">
+            <th class="pb-3 px-4 text-slate-300 font-semibold">ID</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Nombre</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Estado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Versión Publicada</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Actualizado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="themes-tbody">
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">Cargando temas...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Cargar lista de temas
+  async function cargarThemes() {
+    const tbody = document.getElementById('themes-tbody');
+    
+    try {
+      const response = await fetch('/admin/api/themes', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const themes = data.themes || [];
+      
+      if (themes.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">No hay temas creados aún.</td>
+          </tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = themes.map(theme => {
+        const statusBadge = {
+          'draft': '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Draft</span>',
+          'published': '<span class="px-2 py-1 bg-green-900 text-green-200 rounded text-xs">Publicado</span>',
+          'deprecated': '<span class="px-2 py-1 bg-red-900 text-red-200 rounded text-xs">Deprecado</span>',
+          'archived': '<span class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">Archivado</span>'
+        }[theme.status] || '<span class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">Desconocido</span>';
+        
+        const updatedAt = theme.updated_at 
+          ? new Date(theme.updated_at).toLocaleString('es-ES', { 
+              year: 'numeric', 
+              month: 'short', 
+              day: 'numeric', 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })
+          : 'N/A';
+        
+        const encodedId = encodeURIComponent(theme.id);
+        const escapedId = (theme.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        return `
+          <tr class="border-b border-slate-700 hover:bg-slate-700">
+            <td class="py-3 px-4 text-white font-mono text-sm">${(theme.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4 text-white">${(theme.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+            <td class="py-3 px-4">${statusBadge}</td>
+            <td class="py-3 px-4 text-slate-300">${theme.current_published_version || '-'}</td>
+            <td class="py-3 px-4 text-slate-300 text-sm">${updatedAt}</td>
+            <td class="py-3 px-4">
+              <a href="/admin/themes/${encodedId}/edit" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors inline-block mr-2">Editar</a>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      
+    } catch (error) {
+      console.error('Error cargando temas:', error);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-8 text-center text-red-400">
+            ❌ Error cargando temas: ${error.message}
+          </td>
+        </tr>
+      `;
+    }
+  }
+  
+  // Cargar al iniciar
+  cargarThemes();
+</script>
+
+

@@ -1,0 +1,508 @@
+<!-- 
+  EDITOR DE TEMAS - Layout Simple
+  Editor JSON con validaciones y preview
+-->
+<div class="themes-editor editor-layout" id="themes-editor" data-theme-id="{{THEME_ID}}">
+  <!-- Header del editor -->
+  <div class="editor-topbar bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <a href="/admin/themes" class="text-slate-400 hover:text-white" title="Volver al listado">←</a>
+        <h1 class="text-xl font-bold text-white" id="theme-name">Cargando...</h1>
+        <span id="theme-status" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Cargando...</span>
+        <span id="theme-version" class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">v-</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="guardarDraft()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors">
+          💾 Guardar Draft
+        </button>
+        <button onclick="validarTema()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+          ✓ Validar
+        </button>
+        <button onclick="previewTema()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
+          👁️ Preview
+        </button>
+        <button onclick="publicarTema()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
+          🚀 Publicar
+        </button>
+      </div>
+    </div>
+    <div id="validation-messages" class="mt-2"></div>
+  </div>
+  
+  <!-- Contenido principal -->
+  <div class="editor-body flex">
+    <!-- Izquierda: Editor JSON -->
+    <div class="flex-1 bg-slate-950 border-r border-slate-800 overflow-hidden flex flex-col">
+      <div class="p-4 border-b border-slate-700">
+        <h2 class="text-lg font-semibold text-white">Definition JSON</h2>
+        <p class="text-slate-400 text-sm mt-1">Edita la definición del tema en formato JSON</p>
+      </div>
+      <div class="flex-1 overflow-auto p-4">
+        <textarea 
+          id="theme-json-editor" 
+          class="w-full h-full bg-slate-900 text-slate-100 font-mono text-sm p-4 rounded border border-slate-700 focus:border-indigo-500 focus:outline-none resize-none"
+          spellcheck="false"
+          placeholder='{\n  "id": "dark-classic",\n  "name": "Dark Classic",\n  "tokens": {\n    "--bg-main": "#0a0a0a",\n    ...\n  }\n}'
+        ></textarea>
+      </div>
+    </div>
+    
+    <!-- Derecha: Preview y Validaciones -->
+    <div class="w-96 bg-slate-900 border-l border-slate-800 overflow-y-auto">
+      <!-- Validaciones -->
+      <div class="p-4 border-b border-slate-700">
+        <h2 class="text-lg font-semibold text-white mb-2">Validaciones</h2>
+        <div id="validation-results" class="space-y-2">
+          <p class="text-slate-400 text-sm">Edita el JSON y haz clic en "Validar"</p>
+        </div>
+      </div>
+      
+      <!-- Preview -->
+      <div class="p-4">
+        <h2 class="text-lg font-semibold text-white mb-2">Preview</h2>
+        <!-- SPRINT AXE v0.4: Preview Harness Unificado -->
+        <div id="preview-harness-container" style="display: none;"></div>
+        <!-- Preview legacy (fallback) -->
+        <div id="preview-container" class="bg-white rounded-lg shadow-lg p-4 min-h-[200px]">
+          <p class="text-slate-400 text-sm text-center">Haz clic en "Preview" para ver el tema aplicado</p>
+        </div>
+      </div>
+      
+      <!-- Información -->
+      <div class="p-4 border-t border-slate-700">
+        <h2 class="text-lg font-semibold text-white mb-2">Información</h2>
+        <div id="theme-info" class="text-slate-400 text-sm space-y-1">
+          <p>Cargando...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .editor-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 130px);
+    overflow: hidden;
+  }
+  
+  .editor-topbar {
+    position: relative;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  
+  .editor-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+  
+  .validation-error {
+    background: #7f1d1d;
+    border: 1px solid #991b1b;
+    color: #fecaca;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  
+  .validation-warning {
+    background: #78350f;
+    border: 1px solid #92400e;
+    color: #fde68a;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  
+  .validation-success {
+    background: #14532d;
+    border: 1px solid #166534;
+    color: #bbf7d0;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+</style>
+
+<script>
+  const themeId = document.getElementById('themes-editor')?.dataset.themeId || null;
+  let currentDefinition = null;
+  
+  // Cargar tema al iniciar
+  async function cargarTema() {
+    if (!themeId || themeId === 'null') {
+      // Nuevo tema
+      currentDefinition = {
+        id: '',
+        name: '',
+        description: '',
+        tokens: {},
+        meta: {}
+      };
+      document.getElementById('theme-json-editor').value = JSON.stringify(currentDefinition, null, 2);
+      document.getElementById('theme-name').textContent = 'Nuevo Tema';
+      document.getElementById('theme-status').textContent = 'Nuevo';
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(themeId);
+      const response = await fetch(`/admin/api/themes/${encodedId}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const theme = data.theme;
+      
+      // Usar draft si existe, sino published
+      currentDefinition = data.draft?.definition_json || data.published_version?.definition_json || {
+        id: theme.id,
+        name: theme.name,
+        tokens: {},
+        meta: {}
+      };
+      
+      document.getElementById('theme-json-editor').value = JSON.stringify(currentDefinition, null, 2);
+      document.getElementById('theme-name').textContent = theme.name;
+      document.getElementById('theme-status').textContent = theme.status;
+      document.getElementById('theme-version').textContent = theme.current_published_version ? `v${theme.current_published_version}` : 'v-';
+      
+      // Mostrar info
+      const infoHtml = `
+        <p><strong>ID:</strong> ${theme.id}</p>
+        <p><strong>Estado:</strong> ${theme.status}</p>
+        <p><strong>Versión:</strong> ${theme.current_published_version || 'N/A'}</p>
+        <p><strong>Actualizado:</strong> ${theme.updated_at ? new Date(theme.updated_at).toLocaleString('es-ES') : 'N/A'}</p>
+      `;
+      document.getElementById('theme-info').innerHTML = infoHtml;
+      
+    } catch (error) {
+      console.error('Error cargando tema:', error);
+      alert(`Error cargando tema: ${error.message}`);
+    }
+  }
+  
+  // Guardar draft
+  async function guardarDraft() {
+    if (!themeId || themeId === 'null') {
+      alert('Primero crea el tema con un ID y nombre válidos');
+      return;
+    }
+    
+    try {
+      const jsonText = document.getElementById('theme-json-editor').value;
+      const definition = JSON.parse(jsonText);
+      
+      const encodedId = encodeURIComponent(themeId);
+      const response = await fetch(`/admin/api/themes/${encodedId}/draft`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ definition_json: definition })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      currentDefinition = data.draft.definition_json;
+      
+      mostrarMensaje('✅ Draft guardado exitosamente', 'success');
+      
+    } catch (error) {
+      console.error('Error guardando draft:', error);
+      mostrarMensaje(`❌ Error guardando draft: ${error.message}`, 'error');
+    }
+  }
+  
+  // Validar tema
+  async function validarTema() {
+    try {
+      const jsonText = document.getElementById('theme-json-editor').value;
+      const definition = JSON.parse(jsonText);
+      
+      // Validar estructura básica
+      const results = document.getElementById('validation-results');
+      let html = '';
+      
+      // Validaciones básicas
+      if (!definition.id || typeof definition.id !== 'string') {
+        html += '<div class="validation-error">❌ ID es requerido y debe ser un string</div>';
+      }
+      
+      if (!definition.name || typeof definition.name !== 'string') {
+        html += '<div class="validation-error">❌ Name es requerido y debe ser un string</div>';
+      }
+      
+      if (!definition.tokens || typeof definition.tokens !== 'object') {
+        html += '<div class="validation-error">❌ Tokens es requerido y debe ser un objeto</div>';
+      } else {
+        const tokenCount = Object.keys(definition.tokens).length;
+        if (tokenCount === 0) {
+          html += '<div class="validation-warning">⚠️ Tokens está vacío. El tema necesita variables CSS.</div>';
+        } else {
+          html += `<div class="validation-success">✅ Tokens tiene ${tokenCount} variables</div>`;
+        }
+      }
+      
+      if (html === '') {
+        html = '<div class="validation-success">✅ Estructura básica válida</div>';
+      }
+      
+      results.innerHTML = html;
+      
+    } catch (error) {
+      const results = document.getElementById('validation-results');
+      results.innerHTML = `<div class="validation-error">❌ JSON inválido: ${error.message}</div>`;
+    }
+  }
+  
+  // SPRINT AXE v0.4: Preview usando Preview Harness Unificado
+  let previewHarness = null;
+  
+  // Inicializar Preview Harness
+  function initPreviewHarness() {
+    if (!themeId || themeId === 'null') {
+      return; // No inicializar si no hay tema
+    }
+    
+    const container = document.getElementById('preview-harness-container');
+    if (!container) return;
+    
+    // Cargar CSS del Preview Harness
+    if (!document.getElementById('preview-harness-css')) {
+      const link = document.createElement('link');
+      link.id = 'preview-harness-css';
+      link.rel = 'stylesheet';
+      link.href = '/css/preview-harness.css';
+      document.head.appendChild(link);
+    }
+    
+    // Cargar JS del Preview Harness
+    if (window.PreviewHarness) {
+      initHarnessInstance();
+    } else {
+      const script = document.createElement('script');
+      script.src = '/js/preview-harness.js';
+      script.onload = () => {
+        initHarnessInstance();
+      };
+      document.head.appendChild(script);
+    }
+  }
+  
+  function initHarnessInstance() {
+    const container = document.getElementById('preview-harness-container');
+    if (!container || !window.PreviewHarness) return;
+    
+    // SPRINT AXE v0.4: Adaptar Preview Harness para temas
+    // Usar un endpoint personalizado que renderiza con el tema
+    previewHarness = new window.PreviewHarness('preview-harness-container', {
+      previewEndpoint: '/admin/api/themes',
+      recorridoId: themeId, // Reutilizar recorridoId para themeId
+      stepId: 'preview', // StepId fijo para temas
+      onError: (error) => {
+        console.error('Error en Preview Harness:', error);
+        mostrarMensaje(`❌ Error en preview: ${error.message}`, 'error');
+      }
+    });
+    
+    // Sobrescribir refreshPreview para usar endpoint de temas
+    const originalRefreshPreview = previewHarness.refreshPreview.bind(previewHarness);
+    previewHarness.refreshPreview = async function() {
+      if (!this.options.recorridoId) { // recorridoId = themeId en este contexto
+        this.showError('Se requiere themeId para el preview');
+        return;
+      }
+      
+      const refreshBtn = document.getElementById('preview-refresh-btn');
+      if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Cargando...';
+      }
+      
+      try {
+        // SPRINT AXE v0.4: Inyectar theme_id en PreviewContext
+        const previewContext = this.currentContext || {};
+        // Asegurar que preview_mode siempre sea true (protección runtime)
+        previewContext.preview_mode = true;
+        // Inyectar theme_id en el PreviewContext
+        previewContext.theme_id = this.options.recorridoId; // recorridoId = themeId
+        
+        // Llamar al endpoint de preview de temas
+        const response = await fetch(
+          `${this.options.previewEndpoint}/${this.options.recorridoId}/preview`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              preview_context: previewContext,
+              use_draft: true
+            })
+          }
+        );
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error?.message || 'Error en preview');
+        }
+        
+        this.currentPreviewData = data;
+        this.renderPreview(data);
+        this.updateTechnicalPanel(data);
+        
+        if (data.warnings && data.warnings.length > 0) {
+          this.updateWarnings(data.warnings);
+        } else {
+          this.updateWarnings([]);
+        }
+      } catch (error) {
+        console.error('Error en preview:', error);
+        this.showError(error.message);
+      } finally {
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = '🔄 Actualizar Preview';
+        }
+      }
+    };
+  }
+  
+  // Preview tema (ahora usa Preview Harness)
+  async function previewTema() {
+    if (!themeId || themeId === 'null') {
+      alert('Primero guarda el tema con un ID válido');
+      return;
+    }
+    
+    // Guardar draft primero si hay cambios
+    try {
+      await guardarDraft();
+    } catch (error) {
+      console.warn('Error guardando draft antes de preview:', error);
+    }
+    
+    // Inicializar Preview Harness si no está inicializado
+    if (!previewHarness) {
+      initPreviewHarness();
+      // Esperar un momento para que se inicialice
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    if (!previewHarness) {
+      mostrarMensaje('❌ Error inicializando Preview Harness', 'error');
+      return;
+    }
+    
+    // Mostrar Preview Harness y ocultar preview legacy
+    const harnessContainer = document.getElementById('preview-harness-container');
+    const legacyContainer = document.getElementById('preview-container');
+    
+    if (harnessContainer) {
+      harnessContainer.style.display = 'block';
+    }
+    if (legacyContainer) {
+      legacyContainer.style.display = 'none';
+    }
+    
+    // Refrescar preview
+    await previewHarness.refreshPreview();
+    
+    mostrarMensaje('✅ Preview generado', 'success');
+  }
+  
+  // Publicar tema
+  async function publicarTema() {
+    if (!themeId || themeId === 'null') {
+      alert('Primero crea y guarda el tema');
+      return;
+    }
+    
+    if (!confirm('¿Publicar este tema? Una vez publicado, la versión será inmutable.')) {
+      return;
+    }
+    
+    try {
+      // Guardar draft primero
+      await guardarDraft();
+      
+      const encodedId = encodeURIComponent(themeId);
+      const response = await fetch(`/admin/api/themes/${encodedId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          release_notes: `Publicación desde editor - ${new Date().toLocaleString('es-ES')}`
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      mostrarMensaje(`✅ Tema publicado exitosamente (v${data.version.version})`, 'success');
+      
+      // Recargar tema para actualizar versión
+      await cargarTema();
+      
+    } catch (error) {
+      console.error('Error publicando tema:', error);
+      mostrarMensaje(`❌ Error publicando tema: ${error.message}`, 'error');
+    }
+  }
+  
+  // Mostrar mensaje
+  function mostrarMensaje(mensaje, tipo) {
+    const container = document.getElementById('validation-messages');
+    const className = tipo === 'success' ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200';
+    container.innerHTML = `<div class="px-4 py-2 rounded ${className}">${mensaje}</div>`;
+    setTimeout(() => {
+      container.innerHTML = '';
+    }, 5000);
+  }
+  
+  // Auto-validar al escribir (debounce)
+  let validationTimeout = null;
+  document.getElementById('theme-json-editor').addEventListener('input', () => {
+    clearTimeout(validationTimeout);
+    validationTimeout = setTimeout(() => {
+      // Validar JSON básico
+      try {
+        JSON.parse(document.getElementById('theme-json-editor').value);
+      } catch (e) {
+        // JSON inválido, no hacer nada (el usuario puede estar escribiendo)
+      }
+    }, 1000);
+  });
+  
+  // Cargar al iniciar
+  cargarTema().then(() => {
+    // Inicializar Preview Harness después de cargar el tema
+    if (themeId && themeId !== 'null') {
+      initPreviewHarness();
+    }
+  });
+</script>
+

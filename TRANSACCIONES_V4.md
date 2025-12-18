@@ -360,3 +360,12 @@ const nivel = calcularNivelPorDiasActivos(150); // Retorna nivel 6
 **Versión del documento:** 1.1 (v4.2.0 - Single Source of Truth para simulador)
 
 
+
+
+
+
+
+
+
+
+

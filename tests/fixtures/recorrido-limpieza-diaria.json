@@ -1,0 +1,155 @@
+{
+  "id": "limpieza_energetica_diaria",
+  "name": "Limpieza Energética Diaria",
+  "description": "Recorrido diario para limpiar el campo energético del usuario",
+  "entry_step_id": "step_intro",
+  "steps": {
+    "step_intro": {
+      "screen_template_id": "screen_intro_centered",
+      "step_type": "experience",
+      "props": {
+        "title": "Bienvenido a tu Limpieza Energética Diaria",
+        "subtitle": "Dedica unos minutos a limpiar tu campo energético y renovar tu energía",
+        "button_text": "Comenzar"
+      }
+    },
+    "step_eleccion": {
+      "screen_template_id": "screen_choice_cards",
+      "step_type": "decision",
+      "props": {
+        "title": "¿Qué área quieres limpiar hoy?",
+        "subtitle": "Elige el área que más necesite atención en este momento",
+        "choices": [
+          {
+            "id": "emocional",
+            "label": "Emocional",
+            "description": "Libera emociones bloqueadas y sanar heridas emocionales"
+          },
+          {
+            "id": "mental",
+            "label": "Mental",
+            "description": "Limpia pensamientos negativos y patrones limitantes"
+          },
+          {
+            "id": "fisico",
+            "label": "Físico",
+            "description": "Purifica tu cuerpo energético y restaura el equilibrio"
+          }
+        ]
+      },
+      "emit": [
+        {
+          "event_type": "step_completed",
+          "payload_template": {
+            "recorrido_id": "limpieza_energetica_diaria",
+            "step_id": "step_eleccion",
+            "user_id": "{{user_id}}",
+            "completion_data": {
+              "choice_id": "{{choice_id}}"
+            }
+          }
+        }
+      ]
+    },
+    "step_practica": {
+      "screen_template_id": "screen_practice_timer",
+      "step_type": "practice",
+      "props": {
+        "title": "Practica de Limpieza",
+        "instructions": "Respira profundamente y visualiza la luz limpiando tu campo energético. Siente cómo la energía negativa se disuelve y es reemplazada por luz y paz.",
+        "duration_seconds": 300,
+        "show_progress": true,
+        "sound_on_complete": true
+      },
+      "emit": [
+        {
+          "event_type": "practice_completed",
+          "payload_template": {
+            "recorrido_id": "limpieza_energetica_diaria",
+            "step_id": "step_practica",
+            "user_id": "{{user_id}}",
+            "duration_seconds": 300
+          }
+        }
+      ]
+    },
+    "step_reflexion": {
+      "screen_template_id": "screen_input_short",
+      "step_type": "reflection",
+      "props": {
+        "title": "¿Cómo te sientes ahora?",
+        "subtitle": "Comparte brevemente tu experiencia",
+        "placeholder": "Describe cómo te sientes después de la limpieza...",
+        "max_length": 200,
+        "required": false
+      },
+      "emit": [
+        {
+          "event_type": "step_completed",
+          "payload_template": {
+            "recorrido_id": "limpieza_energetica_diaria",
+            "step_id": "step_reflexion",
+            "user_id": "{{user_id}}"
+          }
+        }
+      ]
+    },
+    "step_cierre": {
+      "screen_template_id": "screen_outro_summary",
+      "step_type": "closure",
+      "props": {
+        "title": "¡Limpieza completada!",
+        "summary_text": "Has dedicado tiempo a limpiar tu campo energético. Recuerda que esta práctica diaria te ayuda a mantenerte en equilibrio y en conexión con tu esencia.",
+        "show_completion_badge": true,
+        "next_action_text": "Volver al inicio"
+      },
+      "emit": [
+        {
+          "event_type": "recorrido_completed",
+          "payload_template": {
+            "recorrido_id": "limpieza_energetica_diaria",
+            "user_id": "{{user_id}}",
+            "steps_completed": 4
+          }
+        }
+      ]
+    }
+  },
+  "edges": [
+    {
+      "from_step_id": "step_intro",
+      "to_step_id": "step_eleccion",
+      "condition": {
+        "type": "always"
+      }
+    },
+    {
+      "from_step_id": "step_eleccion",
+      "to_step_id": "step_practica",
+      "condition": {
+        "type": "field_exists",
+        "params": {
+          "field": "choice_id"
+        }
+      }
+    },
+    {
+      "from_step_id": "step_practica",
+      "to_step_id": "step_reflexion",
+      "condition": {
+        "type": "always"
+      }
+    },
+    {
+      "from_step_id": "step_reflexion",
+      "to_step_id": "step_cierre",
+      "condition": {
+        "type": "always"
+      }
+    }
+  ]
+}
+
+
+
+

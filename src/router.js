@@ -10,6 +10,7 @@ import onboardingCompleteHandler from "./endpoints/onboarding-complete.js";
 import syncAllHandler from "./endpoints/sync-all.js";
 import syncListaPrincipalHandler from "./endpoints/sync-lista-principal.js";
 import healthCheckHandler from "./endpoints/health-check.js";
+import healthAuthHandler from "./endpoints/health-auth.js";
 // Admin panels cargados dinámicamente para evitar errores de imports
 const adminPanelHandler = async (request, env, ctx) => {
   const handler = (await import("./endpoints/admin-panel.js")).default;
@@ -37,9 +38,31 @@ function formatUptime(seconds) {
 
 // Router para servidor Node.js (compatible con formato de Workers)
 async function routerFunction(request, env, ctx) {
-  const url = new URL(request.url);
-  const path = url.pathname;
-  const host = url.hostname;
+  const DEBUG_FORENSIC = process.env.DEBUG_FORENSIC === '1';
+  
+  try {
+      // Validar que request.url esté disponible (crítico para router)
+      if (!request || !request.url) {
+        console.error('[Router] request o request.url no disponible');
+        // Headers defensivos para evitar caché de errores 400
+        const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+        return new Response("Bad Request: URL no disponible", {
+          status: 400,
+          headers: { 
+            "Content-Type": "text/plain",
+            ...getErrorDefensiveHeaders()
+          }
+        });
+      }
+
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const host = url.hostname;
+    
+    // Log forense mínimo para / y /enter
+    if (DEBUG_FORENSIC && (path === '/' || path === '/enter')) {
+      console.log(`[Router] ${request.method} ${path} | host: ${host}`);
+    }
   
   // Manejar favicon.ico antes de otros archivos estáticos
   // Favicon con cache reducido para permitir actualizaciones sin versionado
@@ -64,11 +87,19 @@ async function routerFunction(request, env, ctx) {
           }
         });
       } catch (error) {
+        // Error leyendo favicon: devolver 204 (no error, solo ausencia de recurso)
         console.error(`[Router] Error sirviendo favicon: ${error.message}`);
+        return new Response(null, { 
+          status: 204,
+          headers: { "Cache-Control": "no-store" }
+        });
       }
     }
     // Si no existe, retornar 204 No Content (estándar para favicon faltante)
-    return new Response(null, { status: 204 });
+    return new Response(null, { 
+      status: 204,
+      headers: { "Cache-Control": "no-store" }
+    });
   }
   
   
@@ -104,7 +135,16 @@ async function routerFunction(request, env, ctx) {
       // Verificar que el archivo existe
       if (!existsSync(fullPath)) {
         console.error(`[Router] Archivo no encontrado: ${fullPath}`);
-        return new Response("Not Found", { status: 404 });
+        // 404 limpio - nunca debe convertirse en 500
+        // Headers defensivos para evitar caché de errores 404
+        const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+        return new Response("Not Found", { 
+          status: 404,
+          headers: { 
+            "Content-Type": "text/plain",
+            ...getErrorDefensiveHeaders()
+          }
+        });
       }
       
       const content = readFileSync(fullPath);
@@ -144,8 +184,17 @@ async function routerFunction(request, env, ctx) {
         }
       });
     } catch (error) {
+      // CRÍTICO: Cualquier error en archivos estáticos debe devolver 404 limpio, nunca 500
       console.error(`[Router] Error sirviendo archivo estático ${path}:`, error.message);
-      return new Response("Not Found", { status: 404 });
+      // Headers defensivos para evitar caché de errores 404
+      const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+      return new Response("Not Found", { 
+        status: 404,
+        headers: { 
+          "Content-Type": "text/plain",
+          ...getErrorDefensiveHeaders()
+        }
+      });
     }
   }
   
@@ -155,6 +204,9 @@ async function routerFunction(request, env, ctx) {
     if (host === 'portal.pdeeugenihidalgo.org' || host.startsWith('portal.') || host === 'pdeeugenihidalgo.org' || host === 'www.pdeeugenihidalgo.org') {
       // Portal principal - manejar todas las rutas principales
       if (path === "/" || path === "/enter") {
+        if (DEBUG_FORENSIC) {
+          console.log(`[Router] Handler elegido: enterHandler para ${path}`);
+        }
         return enterHandler(request, env, ctx);
       }
       if (path === "/aprender") {
@@ -231,7 +283,15 @@ async function routerFunction(request, env, ctx) {
           const { renderHtml } = await import('./core/html-response.js');
           return renderHtml(html);
         } else {
-          return new Response('Archivo no encontrado', { status: 404 });
+          // Headers defensivos para evitar caché de errores 404
+          const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+          return new Response('Archivo no encontrado', { 
+            status: 404,
+            headers: {
+              "Content-Type": "text/plain",
+              ...getErrorDefensiveHeaders()
+            }
+          });
         }
       }
       
@@ -289,12 +349,86 @@ async function routerFunction(request, env, ctx) {
         return apiGuardarTemaAlumno(request, env);
       }
       
+      // API endpoint para señales post-práctica (AUTO-2A)
+      if (path.startsWith("/api/practicas/") && path.endsWith("/signals") && request.method === "POST") {
+        const practiceSignalsHandler = (await import("./endpoints/practice-signals.js")).default;
+        return practiceSignalsHandler(request, env, ctx);
+      }
+      
+      // Endpoint de Navegación v1 (alumnos)
+      // GET /api/navigation - Devuelve navegación filtrada según visibility_rules
+      if (path === "/api/navigation" && request.method === "GET") {
+        const apiNavigationHandler = (await import("./endpoints/api-navigation.js")).default;
+        return apiNavigationHandler(request, env, ctx);
+      }
+      
+      // Endpoints de Transmutaciones Energéticas v1 (alumnos)
+      // GET /api/energy/transmutations/bundle?mode_id=basica - Bundle para modo específico
+      // GET /api/energy/transmutations/modes - Lista modos disponibles
+      if (path === "/api/energy/transmutations/bundle" && request.method === "GET") {
+        const apiEnergyTransmutationsHandler = (await import("./endpoints/api-energy-transmutations.js")).default;
+        return apiEnergyTransmutationsHandler(request, env, ctx);
+      }
+      if (path === "/api/energy/transmutations/modes" && request.method === "GET") {
+        const { apiEnergyTransmutationsModesHandler } = await import("./endpoints/api-energy-transmutations.js");
+        return apiEnergyTransmutationsModesHandler(request, env, ctx);
+      }
+      
       // Vista Master (placeholder)
       if (path.startsWith("/portal/master-view/")) {
         const alumnoId = path.split("/").pop();
         const { renderMasterView } = await import("./endpoints/master-view.js");
         return await renderMasterView(request, env, alumnoId);
       }
+      
+      // Endpoints API de energía (antes de delegar a admin-panel-v4)
+      if (path === "/admin/api/energy/clean" && request.method === "POST") {
+        const { handleEnergyClean } = await import("./endpoints/admin-energy-api.js");
+        return handleEnergyClean(request, env, ctx);
+      }
+      if (path === "/admin/api/energy/illuminate" && request.method === "POST") {
+        const { handleEnergyIlluminate } = await import("./endpoints/admin-energy-api.js");
+        return handleEnergyIlluminate(request, env, ctx);
+      }
+      
+      // Endpoints API de temas (antes de delegar a admin-panel-v4)
+      if (path.startsWith("/admin/themes")) {
+        const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
+        return adminThemesHandler(request, env, ctx);
+      }
+      
+      // Endpoint de diagnóstico de Ollama (solo admin)
+      if (path === "/admin/ollama/health" && request.method === "GET") {
+        const adminOllamaHealthHandler = (await import("./endpoints/admin-ollama-health.js")).default;
+        return adminOllamaHealthHandler(request, env, ctx);
+      }
+      
+      // Endpoint admin para Capability Registry v1 (Recorridos)
+      if (path === "/admin/api/registry" && request.method === "GET") {
+        const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
+        return adminRegistryHandler(request, env, ctx);
+      }
+      
+      // Endpoints API de Navegación (Admin) - Editor de Navegación v1
+      // Rutas API con prefijo explícito /admin/api/navigation
+      if (path.startsWith("/admin/api/navigation")) {
+        const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
+        return adminNavigationApiHandler(request, env, ctx);
+      }
+      
+      // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
+      // Rutas HTML sin prefijo /api (solo páginas)
+      if (path.startsWith("/admin/navigation")) {
+        const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
+        return adminNavigationPagesHandler(request, env, ctx);
+      }
+      
+      // Delegar rutas /admin/* al Admin Panel (incluye /admin/progreso-v4)
+      if (path === "/admin" || path.startsWith("/admin/")) {
+        const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
+        return adminPanelV4Handler(request, env, ctx);
+      }
+      
       // Por defecto, redirigir a /enter
       return enterHandler(request, env, ctx);
     }
@@ -318,7 +452,64 @@ async function routerFunction(request, env, ctx) {
       if (path === "/health-check" || path === "/health" || path === "/status") {
         return healthCheckHandler(request, env, ctx);
       }
-      // Usar admin panel v4
+      // Endpoints API de energía (antes de delegar a admin-panel-v4)
+      if (path === "/admin/api/energy/clean" && request.method === "POST") {
+        const { handleEnergyClean } = await import("./endpoints/admin-energy-api.js");
+        return handleEnergyClean(request, env, ctx);
+      }
+      if (path === "/admin/api/energy/illuminate" && request.method === "POST") {
+        const { handleEnergyIlluminate } = await import("./endpoints/admin-energy-api.js");
+        return handleEnergyIlluminate(request, env, ctx);
+      }
+      
+      // UI del editor de temas
+      if (path === "/admin/themes/ui" || path === "/admin/apariencia/temas") {
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:433',message:'Router: ruta /admin/themes/ui detectada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        const adminThemesUIHandler = (await import("./endpoints/admin-themes-ui.js")).default;
+        return adminThemesUIHandler(request, env, ctx);
+      }
+      
+      // Endpoints API de temas (antes de delegar a admin-panel-v4)
+      if (path.startsWith("/admin/themes")) {
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:439',message:'Router: ruta /admin/themes API detectada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
+        return adminThemesHandler(request, env, ctx);
+      }
+      
+      // Endpoint de diagnóstico de Ollama (solo admin)
+      if (path === "/admin/ollama/health" && request.method === "GET") {
+        const adminOllamaHealthHandler = (await import("./endpoints/admin-ollama-health.js")).default;
+        return adminOllamaHealthHandler(request, env, ctx);
+      }
+      
+      // Endpoint admin para Capability Registry v1 (Recorridos)
+      if (path === "/admin/api/registry" && request.method === "GET") {
+        const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
+        return adminRegistryHandler(request, env, ctx);
+      }
+      
+      // Endpoints API de Navegación (Admin) - Editor de Navegación v1
+      // Rutas API con prefijo explícito /admin/api/navigation
+      if (path.startsWith("/admin/api/navigation")) {
+        const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
+        return adminNavigationApiHandler(request, env, ctx);
+      }
+      
+      // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
+      // Rutas HTML sin prefijo /api (solo páginas)
+      if (path.startsWith("/admin/navigation")) {
+        const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
+        return adminNavigationPagesHandler(request, env, ctx);
+      }
+      
+      // Delegar TODAS las rutas al Admin Panel v4
+      // - Rutas explícitas /admin/* (incluye /admin/progreso-v4)
+      // - Rutas raíz "/" o "" (el admin-panel-v4.js las normalizará a /admin)
+      // - Cualquier otra ruta (el admin-panel-v4.js las normalizará internamente)
       const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
       return adminPanelV4Handler(request, env, ctx);
     }
@@ -441,6 +632,9 @@ async function routerFunction(request, env, ctx) {
   // y si NO es un dominio de pdeeugenihidalgo.org (ya manejado arriba)
   
   if (path === "/" || path === "/enter") {
+    if (DEBUG_FORENSIC) {
+      console.log(`[Router] Handler elegido: enterHandler (default) para ${path}`);
+    }
     return enterHandler(request, env, ctx);
   }
 
@@ -590,6 +784,101 @@ async function routerFunction(request, env, ctx) {
     return googleApiManagerHandler(request, env, ctx);
   }
 
+  // Endpoints API de temas (antes de delegar a admin-panel-v4)
+  if (path.startsWith("/admin/themes")) {
+    const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
+    return adminThemesHandler(request, env, ctx);
+  }
+  
+  // Endpoint de diagnóstico de Ollama (solo admin)
+  if (path === "/admin/ollama/health" && request.method === "GET") {
+    const adminOllamaHealthHandler = (await import("./endpoints/admin-ollama-health.js")).default;
+    return adminOllamaHealthHandler(request, env, ctx);
+  }
+  
+  // Endpoint admin para Capability Registry v1 (Recorridos)
+  if (path === "/admin/api/registry" && request.method === "GET") {
+    const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
+    return adminRegistryHandler(request, env, ctx);
+  }
+
+  // Endpoints API de Navegación (Admin) - Editor de Navegación v1
+  // Rutas API con prefijo explícito /admin/api/navigation
+  if (path.startsWith("/admin/api/navigation")) {
+    const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
+    return adminNavigationApiHandler(request, env, ctx);
+  }
+  
+  // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
+  // Rutas HTML sin prefijo /api (solo páginas)
+  if (path.startsWith("/admin/navigation")) {
+    const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
+    return adminNavigationPagesHandler(request, env, ctx);
+  }
+
+  // Endpoints API de Recorridos (Admin)
+  if (path.startsWith("/admin/api/recorridos")) {
+    const adminRecorridosApiHandler = (await import("./endpoints/admin-recorridos-api.js")).default;
+    return adminRecorridosApiHandler(request, env, ctx);
+  }
+
+  // Endpoints API de Temas (Admin)
+  if (path.startsWith("/admin/api/themes")) {
+    const adminThemesApiHandler = (await import("./endpoints/admin-themes-api.js")).default;
+    const adminScreenTemplatesHandler = (await import("./endpoints/admin-screen-templates.js")).default;
+    const adminScreenTemplatesApiHandler = (await import("./endpoints/admin-screen-templates-api.js")).default;
+    return adminThemesApiHandler(request, env, ctx);
+  }
+
+  // Endpoints UI de Recorridos (Admin)
+  if (path.startsWith("/admin/recorridos")) {
+    const adminRecorridosHandler = (await import("./endpoints/admin-recorridos.js")).default;
+    return adminRecorridosHandler(request, env, ctx);
+  }
+
+  // Endpoints UI de Temas (Admin)
+  if (path.startsWith("/admin/themes")) {
+    const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
+    return adminThemesHandler(request, env, ctx);
+  }
+
+  // Endpoints API de Screen Templates (Admin)
+  if (path.startsWith("/api/admin/screen-templates")) {
+    const adminScreenTemplatesApiHandler = (await import("./endpoints/admin-screen-templates-api.js")).default;
+    return adminScreenTemplatesApiHandler(request, env, ctx);
+  }
+
+  // Endpoints UI de Screen Templates (Admin)
+  if (path.startsWith("/admin/screen-templates")) {
+    const adminScreenTemplatesHandler = (await import("./endpoints/admin-screen-templates.js")).default;
+    return adminScreenTemplatesHandler(request, env, ctx);
+  }
+
+  // Endpoint de Navegación v1 (alumnos)
+  // GET /api/navigation - Devuelve navegación filtrada según visibility_rules
+  if (path === "/api/navigation" && request.method === "GET") {
+    const apiNavigationHandler = (await import("./endpoints/api-navigation.js")).default;
+    return apiNavigationHandler(request, env, ctx);
+  }
+
+  // Endpoints de Transmutaciones Energéticas v1 (alumnos)
+  // GET /api/energy/transmutations/bundle?mode_id=basica - Bundle para modo específico
+  // GET /api/energy/transmutations/modes - Lista modos disponibles
+  if (path === "/api/energy/transmutations/bundle" && request.method === "GET") {
+    const apiEnergyTransmutationsHandler = (await import("./endpoints/api-energy-transmutations.js")).default;
+    return apiEnergyTransmutationsHandler(request, env, ctx);
+  }
+  if (path === "/api/energy/transmutations/modes" && request.method === "GET") {
+    const { apiEnergyTransmutationsModesHandler } = await import("./endpoints/api-energy-transmutations.js");
+    return apiEnergyTransmutationsModesHandler(request, env, ctx);
+  }
+
+  // Endpoints de Runtime de Recorridos (alumnos)
+  if (path.startsWith("/api/recorridos/")) {
+    const recorridosRuntimeHandler = (await import("./endpoints/recorridos-runtime.js")).default;
+    return recorridosRuntimeHandler(request, env, ctx);
+  }
+
   // Panel de control administrativo
   if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {
     const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
@@ -623,9 +912,20 @@ async function routerFunction(request, env, ctx) {
     return limpiarTransmutacion(request, env);
   }
 
+  // Endpoint de ingesta de analytics (client)
+  if (path === "/analytics/collect" || path === "/api/analytics/collect") {
+    const analyticsCollectHandler = (await import("./endpoints/analytics-collect-v1.js")).default;
+    return analyticsCollectHandler(request, env, ctx);
+  }
+
   // Endpoint para verificar estado de configuración y APIs
   if (path === "/health-check" || path === "/health" || path === "/status") {
     return healthCheckHandler(request, env, ctx);
+  }
+
+  // Endpoint temporal para verificar autenticación
+  if (path === "/health-auth") {
+    return healthAuthHandler(request, env, ctx);
   }
 
   // Endpoint para información de versión y build
@@ -666,10 +966,32 @@ async function routerFunction(request, env, ctx) {
     return configurarDriveWebhookHandler(request, env, ctx);
   }
 
-  return new Response("AuriPortal v3.1 — Ruta no encontrada", {
-    status: 404,
-    headers: { "Content-Type": "text/plain" }
-  });
+    // Headers defensivos para evitar caché de errores 404
+    const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+    return new Response("AuriPortal v3.1 — Ruta no encontrada", {
+      status: 404,
+      headers: { 
+        "Content-Type": "text/plain",
+        ...getErrorDefensiveHeaders()
+      }
+    });
+  } catch (error) {
+    // CRÍTICO: Capturar TODOS los errores no manejados en el router
+    // Esto previene que errores se propaguen y generen 500
+    console.error('[Router] Error no manejado:', error);
+    console.error('[Router] Stack:', error.stack);
+    
+    // Devolver respuesta de error válida (nunca lanzar excepción)
+    // Headers defensivos para evitar caché de errores 500
+    const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+    return new Response("Error interno del servidor", {
+      status: 500,
+      headers: { 
+        "Content-Type": "text/plain",
+        ...getErrorDefensiveHeaders()
+      }
+    });
+  }
 }
 
 // Exportar como función y como objeto con método fetch (compatibilidad)

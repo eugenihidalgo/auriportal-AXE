@@ -1,0 +1,164 @@
+/* ============================================================================
+   THEME CONTRACT v1 - AuriPortal
+   Contrato canónico de variables CSS - ÚNICA FUENTE DE VERDAD
+   ============================================================================
+   
+   REGLAS ABSOLUTAS:
+   1. NO usar colores directos (hex, rgb, hsl, nombres) en HTML/JS
+   2. TODO color debe venir de estas variables
+   3. Las variables están agrupadas por semántica (bg/text/border/accent/shadow/radius)
+   4. Este archivo es la BASE - theme-variables.css define los valores
+   5. theme-overrides.css aplica estilos específicos usando estas variables
+   
+   USO:
+   - En HTML: usar variables directamente (var(--bg-primary))
+   - En JS: NO hardcodear colores, usar clases CSS
+   - En CSS: usar estas variables, NO valores directos
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   FONDOS (Backgrounds)
+   ---------------------------------------------------------------------------- */
+:root {
+  /* Fondos principales */
+  --bg-main: /* Definido en theme-variables.css */;
+  --bg-primary: /* Alias de --bg-main */;
+  --bg-panel: /* Paneles y contenedores */;
+  --bg-card: /* Cards y elementos elevados */;
+  --bg-card-active: /* Cards en estado activo/hover */;
+  --bg-secondary: /* Fondos secundarios */;
+  --bg-elevated: /* Fondos elevados (accordions, modales) */;
+  --bg-section: /* Fondos de secciones */;
+  
+  /* Fondos semánticos */
+  --bg-warning: /* Fondos de advertencia */;
+  --bg-error: /* Fondos de error */;
+  --bg-success: /* Fondos de éxito */;
+  --bg-info: /* Fondos informativos */;
+  --bg-muted: /* Fondos deshabilitados */;
+}
+
+/* ----------------------------------------------------------------------------
+   TEXTOS (Text Colors)
+   ---------------------------------------------------------------------------- */
+:root {
+  --text-primary: /* Texto principal */;
+  --text-secondary: /* Texto secundario */;
+  --text-muted: /* Texto muted/deshabilitado */;
+  --text-accent: /* Títulos y acentos */;
+  --text-streak: /* Racha y números destacados */;
+  --text-danger: /* Texto de error */;
+  --text-success: /* Texto de éxito */;
+  --text-warning: /* Texto de advertencia */;
+}
+
+/* ----------------------------------------------------------------------------
+   BORDES (Borders)
+   ---------------------------------------------------------------------------- */
+:root {
+  --border-soft: /* Bordes suaves */;
+  --border-strong: /* Bordes más visibles */;
+  --border-color: /* Alias para compatibilidad */;
+  --border-accent: /* Bordes de acento */;
+  --border-focus: /* Bordes en focus */;
+  --border-subtle: /* Bordes extremadamente sutiles */;
+}
+
+/* ----------------------------------------------------------------------------
+   ACENTOS (Accent Colors)
+   ---------------------------------------------------------------------------- */
+:root {
+  --accent-primary: /* Color de acento principal */;
+  --accent-secondary: /* Color de acento secundario */;
+  --accent-hover: /* Color de acento en hover */;
+  --accent-warning: /* Color de advertencia */;
+  --accent-error: /* Color de error */;
+  --accent-success: /* Color de éxito */;
+  --accent-danger: /* Alias de --accent-error */;
+}
+
+/* ----------------------------------------------------------------------------
+   SOMBRAS (Shadows)
+   ---------------------------------------------------------------------------- */
+:root {
+  --shadow-sm: /* Sombra pequeña */;
+  --shadow-md: /* Sombra media */;
+  --shadow-lg: /* Sombra grande */;
+  --shadow-xl: /* Sombra extra grande */;
+  --shadow-soft: /* Sombra suave integrada */;
+}
+
+/* ----------------------------------------------------------------------------
+   GRADIENTES (Gradients)
+   ---------------------------------------------------------------------------- */
+:root {
+  --gradient-primary: /* Gradiente principal */;
+  --gradient-hover: /* Gradiente en hover */;
+  --gradient-header: /* Gradiente de header */;
+  --header-bg: /* Alias de --gradient-header */;
+  --aura-gradient: /* Gradiente de aura */;
+  --gradient-accordion: /* Gradiente de accordion */;
+  --gradient-accordion-hover: /* Gradiente de accordion en hover */;
+  --gradient-success: /* Gradiente de éxito */;
+  --gradient-error: /* Gradiente de error */;
+}
+
+/* ----------------------------------------------------------------------------
+   BADGES Y ESTADOS (Badges & States)
+   ---------------------------------------------------------------------------- */
+:root {
+  --badge-bg-active: /* Fondo de badge activo */;
+  --badge-text-active: /* Texto de badge activo */;
+  --badge-bg-pending: /* Fondo de badge pendiente */;
+  --badge-text-pending: /* Texto de badge pendiente */;
+  --badge-bg-obligatory: /* Fondo de badge obligatorio */;
+  --badge-text-obligatory: /* Texto de badge obligatorio */;
+}
+
+/* ----------------------------------------------------------------------------
+   INPUTS (Form Inputs)
+   ---------------------------------------------------------------------------- */
+:root {
+  --input-bg: /* Fondo de input */;
+  --input-border: /* Borde de input */;
+  --input-text: /* Texto de input */;
+  --input-focus-border: /* Borde de input en focus */;
+}
+
+/* ----------------------------------------------------------------------------
+   BOTONES (Buttons)
+   ---------------------------------------------------------------------------- */
+:root {
+  --button-text-color: /* Color de texto de botones */;
+}
+
+/* ----------------------------------------------------------------------------
+   RADIOS Y BORDES REDONDEADOS (Border Radius)
+   ---------------------------------------------------------------------------- */
+:root {
+  --radius-sm: /* Radio pequeño (12px) */;
+  --radius-md: /* Radio medio (16px) */;
+  --radius-lg: /* Radio grande (20px) */;
+  --radius-xl: /* Radio extra grande (24px) */;
+  --radius-full: /* Radio circular (9999px) */;
+}
+
+/* ----------------------------------------------------------------------------
+   NOTA IMPORTANTE
+   ----------------------------------------------------------------------------
+   Este archivo solo declara las variables. Los valores reales están en
+   theme-variables.css. Este contrato sirve como documentación y referencia
+   para desarrolladores.
+   
+   Si necesitas una nueva variable:
+   1. Añádela aquí con comentario
+   2. Define su valor en theme-variables.css
+   3. Úsala en theme-overrides.css o en componentes
+   4. NUNCA uses valores directos de color
+   ============================================================================ */
+
+
+
+
+
+

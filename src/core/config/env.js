@@ -21,21 +21,6 @@ const PROJECT_ROOT = join(__dirname, '../../../');
 export function loadEnvIfNeeded(options = {}) {
   const { force = false, envFile = '.env' } = options;
   
-  // En producción, PM2 normalmente carga las variables desde env_file
-  // Solo cargar .env manualmente si:
-  // 1. No estamos en producción, O
-  // 2. Se fuerza con el flag force, O
-  // 3. Las variables críticas no están ya cargadas
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'prod';
-  
-  // Si ya hay variables críticas cargadas, no necesitamos cargar .env
-  const hasCriticalVars = process.env.CLICKUP_API_TOKEN || process.env.DATABASE_URL || process.env.PGUSER;
-  
-  if (isProduction && !force && hasCriticalVars) {
-    // En producción con variables ya cargadas (probablemente por PM2), no cargar .env
-    return { loaded: false, path: null, reason: 'Variables ya cargadas por PM2 o sistema' };
-  }
-  
   // Construir ruta al archivo .env
   const envPath = join(PROJECT_ROOT, envFile);
   
@@ -43,7 +28,21 @@ export function loadEnvIfNeeded(options = {}) {
     return { loaded: false, path: envPath, reason: 'Archivo .env no encontrado' };
   }
   
-  // Cargar .env
+  // Verificar variables críticas que DEBEN estar presentes
+  // Si faltan, cargar .env SIEMPRE (incluso en producción)
+  const hasAdminAuth = process.env.ADMIN_USER && process.env.ADMIN_PASS;
+  const hasDatabase = process.env.DATABASE_URL || (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD);
+  const hasCriticalVars = hasAdminAuth && hasDatabase;
+  
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'prod';
+  
+  // Si NO se fuerza y estamos en producción y YA tenemos todas las variables críticas,
+  // asumir que PM2 las cargó correctamente
+  if (isProduction && !force && hasCriticalVars) {
+    return { loaded: false, path: null, reason: 'Variables críticas ya cargadas por PM2 o sistema' };
+  }
+  
+  // Cargar .env (necesario si faltan variables críticas o si se fuerza)
   const result = dotenv.config({ path: envPath });
   
   if (result.error) {
@@ -155,3 +154,13 @@ export function getRequiredEnvKeys() {
   
   return required.filter(Boolean);
 }
+
+
+
+
+
+
+
+
+
+

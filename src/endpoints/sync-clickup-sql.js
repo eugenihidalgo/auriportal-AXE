@@ -1,11 +1,9 @@
 // src/endpoints/sync-clickup-sql.js
-// Endpoint para sincronización bidireccional ClickUp ↔ SQL
-// Sincroniza cambios desde ClickUp a SQL y viceversa
+// Endpoint para sincronización bidireccional ClickUp ↔ SQL (LEGACY - DESHABILITADO)
+// Este endpoint ha sido deshabilitado porque usa SQLite legacy.
+// La sincronización ahora se realiza directamente con PostgreSQL v4.
 
-import { CLICKUP } from "../config/config.js";
-import { clickup } from "../services/clickup.js";
-import { getDatabase, students } from "../../database/db.js";
-import { calcularNivelAutomatico } from "../modules/nivel.js";
+import { gone } from "../core/http/gone.js";
 
 /**
  * Sincroniza un estudiante desde ClickUp a SQL
@@ -276,45 +274,10 @@ async function sincronizarBidireccional(email, env) {
 }
 
 export default async function syncClickUpSQLHandler(request, env, ctx) {
-  const url = new URL(request.url);
-  const email = url.searchParams.get("email");
-
-  if (!email) {
-    return new Response(JSON.stringify({ 
-      error: "Falta parámetro 'email'" 
-    }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
-
-  const direccion = url.searchParams.get("direccion") || "bidireccional"; // "clickup-sql", "sql-clickup", "bidireccional"
-
-  try {
-    let resultado;
-
-    if (direccion === "clickup-sql") {
-      resultado = await sincronizarClickUpASQL(email, env);
-    } else if (direccion === "sql-clickup") {
-      resultado = await sincronizarSQLAClickUp(email, env);
-    } else {
-      resultado = await sincronizarBidireccional(email, env);
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      resultado
-    }), {
-      headers: { "Content-Type": "application/json" }
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: err.message
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
+  return gone(
+    "Este endpoint ha sido deprecado. La sincronización ClickUp ↔ SQLite ya no está disponible. Usa los módulos v4 de PostgreSQL.",
+    "sync-clickup-sql-disabled",
+    request
+  );
 }
 

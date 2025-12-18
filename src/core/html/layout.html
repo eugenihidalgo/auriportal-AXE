@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="{{PAGE_DESCRIPTION}}" />
+<title>{{PAGE_TITLE}}</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+{{ADDITIONAL_STYLES}}
+</head>
+<body class="{{BODY_CLASS}}">
+  {{SIDEBAR_HTML}}
+  <main class="main-content">
+    {{CONTENT}}
+  </main>
+  {{ADDITIONAL_SCRIPTS}}
+</body>
+</html>
+
+<style>
+  /* Layout base con soporte para sidebar */
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .main-content {
+    min-height: 100vh;
+    transition: margin-left 0.3s ease;
+  }
+
+  /* Cuando hay sidebar, ajustar margen del contenido */
+  body.has-sidebar .main-content {
+    margin-left: 280px;
+  }
+
+  /* Móvil: sidebar oculto, contenido a ancho completo */
+  @media (max-width: 768px) {
+    body.has-sidebar .main-content {
+      margin-left: 0;
+    }
+  }
+</style>
+
+

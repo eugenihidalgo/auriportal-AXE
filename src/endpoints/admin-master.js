@@ -8,6 +8,13 @@ import { query } from '../../database/pg.js';
 import { validarSuscripcionActiva, obtenerNotasAlumno, crearNota } from '../services/notas-master.js';
 import { listarSecciones } from '../services/secciones-limpieza.js';
 import { obtenerTransmutacionesPorAlumno, limpiarItemParaAlumno } from '../services/transmutaciones-energeticas.js';
+import { findStudentById } from '../modules/student-v4.js';
+import { computeProgress } from '../core/progress-engine.js';
+import { computeStreakFromPracticas } from '../core/streak-engine.js';
+import { gestionarEstadoSuscripcion } from '../modules/suscripcion-v4.js';
+import { calcularDiasPausados, estaPausada } from '../modules/pausa-v4.js';
+import { logAuditEvent } from '../core/audit/audit-service.js';
+import { requireAdminContext } from '../core/auth-context.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,22 +61,35 @@ async function columnaExiste(nombreTabla, nombreColumna) {
 const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
 const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
 
-function replace(html, placeholders) {
+async function replace(html, placeholders) {
   let output = html;
+  
+  // VALIDACIÓN CRÍTICA: Detectar Promises antes de reemplazar
   for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
+    let value = placeholders[key] ?? "";
+    
+    // DETECCIÓN DE PROMISE: Si value es una Promise, lanzar error visible
+    if (value && typeof value === 'object' && typeof value.then === 'function') {
+      const errorMsg = `DEBUG: PLACEHOLDER ${key} IS A PROMISE (MISSING AWAIT)`;
+      console.error(`[REPLACE] ${errorMsg}`);
+      value = `<div style="padding:8px;color:#fca5a5;background:#1e293b;border:2px solid #fca5a5;border-radius:4px;margin:8px;font-weight:bold;">${errorMsg}</div>`;
+    }
+    
     const regex = new RegExp(`{{${key}}}`, "g");
     output = output.replace(regex, value);
   }
+  
   return output;
 }
 
 /**
- * Validar que el alumno tiene suscripción activa
- * Devuelve el alumno si es válido, null si no
+ * Validar que el alumno tiene suscripción activa y obtener contexto V4
+ * Devuelve { alumno, ctx } donde:
+ * - alumno: datos legacy del alumno (para compatibilidad)
+ * - ctx: studentContext V4 (null si falla, con fail-open)
  */
 async function validarYobtenerAlumno(alumnoId) {
-  // Primero obtener el alumno
+  // Primero obtener el alumno legacy
   const result = await query(
     `SELECT id, email, apodo, nombre_completo, nivel_actual, 
             estado_suscripcion, streak as racha,
@@ -85,7 +105,7 @@ async function validarYobtenerAlumno(alumnoId) {
   
   const alumno = result.rows[0];
   
-  // Obtener la fase basándose en el nivel
+  // Obtener la fase basándose en el nivel (legacy, solo para compatibilidad)
   const nivel = alumno.nivel_actual || 1;
   const faseResult = await query(
     `SELECT fase FROM niveles_fases 
@@ -98,7 +118,165 @@ async function validarYobtenerAlumno(alumnoId) {
   
   alumno.fase_actual = faseResult.rows.length > 0 ? faseResult.rows[0].fase : 'sanación';
   
-  return alumno;
+  // FASE 1: Cargar studentContext V4 (fail-open controlado)
+  let ctx = null;
+  try {
+    // Obtener student desde student-v4.js
+    const student = await findStudentById(alumnoId);
+    
+    if (!student) {
+      console.warn(`[Master][CTX_FAIL] alumnoId=${alumnoId} error=student_not_found`);
+      return { alumno, ctx: null };
+    }
+    
+    // Construir contexto usando las mismas funciones que buildStudentContext()
+    // (sin pasar por autenticación, ya que estamos en contexto admin)
+    
+    // 1. Calcular progreso (nivel + fase)
+    const progressResult = await computeProgress({ 
+      student, 
+      now: new Date(), 
+      env: {} 
+    });
+    
+    // 2. Obtener racha canónica desde practicas (FASE 1.5)
+    let streakResult;
+    try {
+      streakResult = await computeStreakFromPracticas(alumnoId);
+      console.log(`[Master][StreakEngine] alumnoId=${alumnoId} actual=${streakResult.actual} hoy_practicado=${streakResult.hoy_practicado}`);
+    } catch (streakError) {
+      console.error(`[Master][StreakEngine][FAIL] alumnoId=${alumnoId} error=${streakError.message}`);
+      // Fail-open: usar valores por defecto
+      streakResult = {
+        actual: student.streak || 0,
+        hoy_practicado: false,
+        congelada_por_pausa: false,
+        dias_congelados: 0
+      };
+    }
+    
+    // 3. Obtener estado de suscripción (pausas)
+    const estadoSuscripcion = await gestionarEstadoSuscripcion(
+      student.email, 
+      {}, 
+      student, 
+      null
+    );
+    
+    // 4. Obtener pausas activas (FASE 2B: usar estaPausada como fuente canónica)
+    let pausaActiva = false;
+    try {
+      pausaActiva = await estaPausada(alumnoId);
+    } catch (pausaError) {
+      console.warn(`[Master][CTX_FAIL] alumnoId=${alumnoId} error=pausa_calculation errorMsg=${pausaError.message}`);
+      // Continuar sin información de pausa (fail-open)
+      pausaActiva = false;
+    }
+    
+    // Construir contexto simplificado (solo lo necesario para la cabecera)
+    ctx = {
+      progress: {
+        nivel_efectivo: progressResult.nivel_efectivo,
+        nivel_base: progressResult.nivel_base,
+        fase_efectiva: progressResult.fase_efectiva
+      },
+      streak: {
+        actual: streakResult.actual,
+        hoy_practicado: streakResult.hoy_practicado,
+        congelada_por_pausa: streakResult.congelada_por_pausa,
+        dias_congelados: streakResult.dias_congelados
+      },
+      pausas: {
+        activa: pausaActiva
+      }
+    };
+    
+    console.log(`[Master][CTX_OK] alumnoId=${alumnoId} nivel_efectivo=${ctx.progress.nivel_efectivo} fase=${typeof ctx.progress.fase_efectiva === 'object' ? ctx.progress.fase_efectiva.nombre : ctx.progress.fase_efectiva} streak=${ctx.streak.actual}`);
+    
+  } catch (error) {
+    // Fail-open: continuar con ctx = null y usar datos legacy
+    console.error(`[Master][CTX_FAIL] alumnoId=${alumnoId} error=${error.message}`);
+    ctx = null;
+  }
+  
+  return { alumno, ctx };
+}
+
+/**
+ * FASE 2B: Validación centralizada de pausa activa para acciones mutables
+ * 
+ * Regla canónica:
+ * - SI ctx.pausas.activa === true → BLOQUEAR acción mutable
+ * - SI ctx NO está disponible → PERMITIR (fail-open) con log
+ * 
+ * @param {number} alumnoId - ID del alumno
+ * @param {string} actionName - Nombre de la acción (para logs)
+ * @returns {Promise<{blocked: boolean, response: Response|null}>}
+ *   - blocked: true si la acción está bloqueada
+ *   - response: Response con 403 si está bloqueada, null si está permitida
+ */
+async function checkPausaActiva(alumnoId, actionName, request = null) {
+  try {
+    // Obtener contexto del alumno
+    const resultado = await validarYobtenerAlumno(alumnoId);
+    
+    if (!resultado || !resultado.ctx) {
+      // Fail-open: si no hay contexto, permitir la acción
+      console.log(`[Master][PAUSE_FALLBACK] alumnoId=${alumnoId} action=${actionName} reason=ctx_not_available`);
+      return { blocked: false, response: null };
+    }
+    
+    const ctx = resultado.ctx;
+    
+    // Verificar si hay pausa activa
+    if (ctx.pausas && ctx.pausas.activa === true) {
+      // BLOQUEAR: pausa activa detectada
+      console.log(`[Master][PAUSE_BLOCK] alumnoId=${alumnoId} action=${actionName}`);
+      
+      // FASE 3: Registrar evento de bloqueo por pausa
+      try {
+        await logAuditEvent({
+          actor: 'admin',
+          actorId: null, // Se puede obtener del contexto admin si está disponible
+          alumnoId: Number(alumnoId),
+          action: 'pause_block',
+          entityType: 'alumno',
+          entityId: String(alumnoId),
+          payload: {
+            actionName,
+            pausaActiva: true,
+            pausaId: ctx.pausas.pausaActiva?.id || null,
+            motivo: ctx.pausas.pausaActiva?.motivo || null
+          },
+          req: request
+        });
+      } catch (auditError) {
+        // Fail-open: no fallar si la auditoría falla
+        console.warn(`[Master][PAUSE_BLOCK] Error registrando auditoría: ${auditError.message}`);
+      }
+      
+      const response = new Response(
+        JSON.stringify({ 
+          error: 'El alumno está en pausa activa. Acción no permitida.' 
+        }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      
+      return { blocked: true, response };
+    }
+    
+    // PERMITIR: no hay pausa activa
+    console.log(`[Master][PAUSE_ALLOW] alumnoId=${alumnoId} action=${actionName}`);
+    return { blocked: false, response: null };
+    
+  } catch (error) {
+    // Fail-open: en caso de error, permitir la acción
+    console.error(`[Master][PAUSE_FALLBACK] alumnoId=${alumnoId} action=${actionName} error=${error.message}`);
+    return { blocked: false, response: null };
+  }
 }
 
 /**
@@ -106,10 +284,10 @@ async function validarYobtenerAlumno(alumnoId) {
  */
 export async function renderMaster(request, env, alumnoId) {
   try {
-    // Validar suscripción activa
-    const alumno = await validarYobtenerAlumno(alumnoId);
+    // Validar suscripción activa y obtener contexto V4
+    const resultado = await validarYobtenerAlumno(alumnoId);
     
-    if (!alumno) {
+    if (!resultado || !resultado.alumno) {
       return new Response(
         `<!DOCTYPE html>
 <html>
@@ -164,33 +342,71 @@ export async function renderMaster(request, env, alumnoId) {
       );
     }
 
+    const { alumno, ctx } = resultado;
+    
     // Obtener datos básicos adicionales
-    const nombre = alumno.nombre_completo || alumno.apodo || alumno.email;
-    const fase = alumno.fase_actual || 'sanación';
-    const primeraLetra = (nombre || 'A').charAt(0).toUpperCase();
+    // El apodo es el identificador humano principal; si no hay apodo, usar email
+    const nombreDisplay = alumno.apodo || alumno.nombre_completo || alumno.email;
+    const primeraLetra = (nombreDisplay || 'A').charAt(0).toUpperCase();
+    
+    // FASE 1: Usar datos canónicos del contexto V4 si está disponible
+    let nivelMostrar, faseMostrar, rachaMostrar;
+    let indicadorLegacy = '';
+    
+    if (ctx && ctx.progress) {
+      // Datos canónicos del Sistema de Progreso V4
+      nivelMostrar = ctx.progress.nivel_efectivo || 1;
+      const faseEfectiva = ctx.progress.fase_efectiva;
+      faseMostrar = typeof faseEfectiva === 'object' ? faseEfectiva.nombre : (faseEfectiva || 'sanación');
+      rachaMostrar = ctx.streak && ctx.streak.actual !== undefined ? ctx.streak.actual : 0;
+    } else {
+      // Fallback a datos legacy (marcado visualmente)
+      nivelMostrar = alumno.nivel_actual || 1;
+      faseMostrar = alumno.fase_actual || 'sanación';
+      rachaMostrar = alumno.racha || 0;
+      indicadorLegacy = ' <span class="text-yellow-400 text-xs">(LEGACY / FALLBACK)</span>';
+      console.log(`[Master][CTX_FALLBACK] alumnoId=${alumnoId} usando datos legacy`);
+    }
     
     // Generar contenido HTML para el Modo Master
     const content = `
       <!-- Cabecera del Alumno -->
       <div class="bg-slate-800 rounded-lg p-6 mb-6 shadow-lg">
         <div class="flex justify-between items-start">
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-4 flex-1">
             <!-- Avatar -->
             <div class="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center text-3xl text-white font-bold">
               ${primeraLetra}
             </div>
-            <div>
-              <h2 class="text-2xl font-bold text-white mb-2">${nombre}</h2>
+            <div class="flex-1">
+              <div class="flex items-center gap-3 mb-2">
+                <h2 class="text-2xl font-bold text-white">${nombreDisplay}</h2>
+                <button 
+                  id="btn-editar-apodo" 
+                  class="text-indigo-400 hover:text-indigo-300 text-sm font-medium px-3 py-1 border border-indigo-600 rounded hover:bg-indigo-900/30 transition-colors"
+                  title="Editar apodo del alumno">
+                  ✏️ Editar Apodo
+                </button>
+              </div>
+              
+              <!-- Apodo destacado (editable) -->
+              <div class="mb-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-indigo-400 font-semibold text-sm">👤 Apodo (Identificador Principal):</span>
+                  <span id="apodo-display" class="text-white font-semibold text-base">${alumno.apodo || '<span class="text-slate-500 italic">Sin apodo</span>'}</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">El apodo es el identificador humano principal del alumno en el sistema.</p>
+              </div>
+              
               <div class="flex items-center gap-3 text-sm text-slate-300 flex-wrap">
                 <span>📧 ${alumno.email || 'N/A'}</span>
                 <span>•</span>
-                <span>👤 Apodo: ${alumno.apodo || 'N/A'}</span>
+                <span>⭐ Nivel ${nivelMostrar}${indicadorLegacy}</span>
                 <span>•</span>
-                <span>⭐ Nivel ${alumno.nivel_actual || 1}</span>
+                <span>🔑 Fase: ${faseMostrar}</span>
                 <span>•</span>
-                <span>🔑 Fase: ${fase}</span>
-                <span>•</span>
-                <span>🔥 Racha: ${alumno.racha || 0} días</span>
+                <span>🔥 Racha: ${rachaMostrar} días</span>
+                ${ctx && ctx.pausas && ctx.pausas.activa ? '<span>•</span><span class="text-yellow-400">⏸️ Pausa activa</span>' : ''}
               </div>
               <div class="text-xs text-slate-400 mt-2">
                 📅 Última práctica: ${alumno.fecha_ultima_practica 
@@ -259,6 +475,31 @@ export async function renderMaster(request, env, alumnoId) {
         
         <!-- Tab 1: Información General -->
         <div id="tab-info" class="tab-content" style="display: block !important;" data-alumno-id="${alumnoId}" data-loaded="false">
+          <!-- FASE 3: Bloque de Pausas (siempre visible) -->
+          <div class="bg-slate-800 rounded-lg p-6 mb-6 shadow-lg border ${ctx && ctx.pausas && ctx.pausas.activa ? 'border-yellow-500' : 'border-slate-700'}">
+            <div class="flex justify-between items-start mb-4">
+              <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                ⏸️ Gestión de Pausas
+                ${ctx && ctx.pausas && ctx.pausas.activa 
+                  ? '<span class="text-yellow-400 text-sm font-normal">(Pausa Activa)</span>' 
+                  : '<span class="text-green-400 text-sm font-normal">(Sin Pausa)</span>'}
+              </h3>
+              <div class="flex gap-2">
+                ${ctx && ctx.pausas && ctx.pausas.activa 
+                  ? `<button id="btn-finalizar-pausa" class="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium">
+                      ✅ Finalizar Pausa
+                    </button>`
+                  : `<button id="btn-crear-pausa" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium">
+                      ➕ Crear Pausa
+                    </button>`}
+              </div>
+            </div>
+            
+            <div id="pausa-info" class="text-slate-300 text-sm">
+              <div class="text-slate-400">Cargando información de pausas...</div>
+            </div>
+          </div>
+          
           <div class="text-center py-8">
             <div class="text-slate-400">Cargando información general...</div>
           </div>
@@ -324,6 +565,233 @@ export async function renderMaster(request, env, alumnoId) {
       
       <script src="/js/admin-master.js?v=${Date.now()}"></script>
       <script>
+        // Funcionalidad de edición de apodo
+        document.addEventListener('DOMContentLoaded', function() {
+          const btnEditarApodo = document.getElementById('btn-editar-apodo');
+          const apodoDisplay = document.getElementById('apodo-display');
+          const alumnoId = ${alumnoId};
+          
+          if (btnEditarApodo && apodoDisplay) {
+            btnEditarApodo.addEventListener('click', async function() {
+              const apodoActual = apodoDisplay.textContent.trim();
+              const apodoSinEtiqueta = apodoActual.includes('Sin apodo') ? '' : apodoActual;
+              
+              // Usar prompt mejorado si está disponible, sino usar prompt nativo
+              const nuevoApodo = typeof mostrarModalFormulario !== 'undefined'
+                ? await mostrarModalFormulario({
+                    titulo: 'Editar Apodo del Alumno',
+                    ayuda: 'El apodo es el identificador humano principal del alumno en el sistema. Puede dejarse vacío para eliminarlo.',
+                    campos: [{
+                      nombre: 'apodo',
+                      etiqueta: 'Apodo',
+                      tipo: 'text',
+                      valor: apodoSinEtiqueta,
+                      placeholder: 'Ej: Juan, María, etc.'
+                    }],
+                    botonTexto: 'Guardar Apodo'
+                  }).then(result => result.apodo).catch(() => null)
+                : prompt('Ingrese el nuevo apodo (deje vacío para eliminar):', apodoSinEtiqueta);
+              
+              if (nuevoApodo === null) return; // Usuario canceló
+              
+              // Normalizar: string vacío se convierte en null
+              const apodoParaGuardar = nuevoApodo.trim() === '' ? null : nuevoApodo.trim();
+              
+              try {
+                btnEditarApodo.disabled = true;
+                btnEditarApodo.textContent = '⏳ Guardando...';
+                
+                const response = await fetch('/admin/master/' + alumnoId + '/apodo', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ apodo: apodoParaGuardar })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                  // Actualizar display
+                  apodoDisplay.innerHTML = data.alumno.apodo || '<span class="text-slate-500 italic">Sin apodo</span>';
+                  
+                  // Actualizar título si es necesario
+                  const tituloPrincipal = document.querySelector('h2.text-2xl');
+                  if (tituloPrincipal) {
+                    tituloPrincipal.textContent = data.alumno.apodo || data.alumno.email;
+                  }
+                  
+                  // Mostrar mensaje de éxito
+                  const mensaje = document.createElement('div');
+                  mensaje.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                  mensaje.textContent = '✅ Apodo actualizado correctamente';
+                  document.body.appendChild(mensaje);
+                  setTimeout(() => mensaje.remove(), 3000);
+                  
+                  // Recargar datos del alumno para reflejar cambios
+                  if (typeof loadTabData === 'function') {
+                    const tabActivo = document.querySelector('.tab-content[style*="display: block"]')?.id;
+                    if (tabActivo) {
+                      const tabContent = document.getElementById(tabActivo);
+                      if (tabContent) {
+                        tabContent.dataset.loaded = 'false';
+                        loadTabData(tabActivo);
+                      }
+                    }
+                  }
+                } else {
+                  throw new Error(data.error || 'Error al actualizar apodo');
+                }
+              } catch (error) {
+                console.error('Error actualizando apodo:', error);
+                alert('❌ Error al actualizar apodo: ' + error.message);
+              } finally {
+                btnEditarApodo.disabled = false;
+                btnEditarApodo.textContent = '✏️ Editar Apodo';
+              }
+            });
+          }
+          
+          // FASE 3: Funcionalidad de gestión de pausas
+          const btnCrearPausa = document.getElementById('btn-crear-pausa');
+          const btnFinalizarPausa = document.getElementById('btn-finalizar-pausa');
+          const pausaInfo = document.getElementById('pausa-info');
+          
+          // Función para actualizar información de pausas
+          async function actualizarInfoPausas() {
+            try {
+              const response = await fetch('/admin/master/' + alumnoId + '/data');
+              const data = await response.json();
+              
+              if (data.pausas) {
+                const { activa, pausaActiva, historial, diasPausados } = data.pausas;
+                
+                let html = '';
+                if (activa && pausaActiva) {
+                  const inicio = new Date(pausaActiva.inicio);
+                  html = \`
+                    <div class="mb-3 p-3 bg-yellow-900/30 rounded-lg border border-yellow-700">
+                      <div class="font-semibold text-yellow-400 mb-2">⏸️ Pausa Activa</div>
+                      <div class="text-sm space-y-1">
+                        <div><strong>Inicio:</strong> \${inicio.toLocaleDateString('es-ES')} \${inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+                        \${pausaActiva.motivo ? \`<div><strong>Motivo:</strong> \${pausaActiva.motivo}</div>\` : ''}
+                        <div><strong>Días pausados totales:</strong> \${diasPausados || 0} días</div>
+                      </div>
+                    </div>
+                  \`;
+                } else {
+                  html = \`
+                    <div class="mb-3 p-3 bg-green-900/30 rounded-lg border border-green-700">
+                      <div class="font-semibold text-green-400 mb-2">✅ Sin Pausa Activa</div>
+                      <div class="text-sm"><strong>Días pausados totales:</strong> \${diasPausados || 0} días</div>
+                    </div>
+                  \`;
+                }
+                
+                if (historial && historial.length > 0) {
+                  html += '<div class="mt-3"><div class="font-semibold text-slate-300 mb-2">📋 Historial (últimas 10):</div><div class="text-xs space-y-1 max-h-40 overflow-y-auto">';
+                  historial.forEach(p => {
+                    const inicio = new Date(p.inicio);
+                    const fin = p.fin ? new Date(p.fin) : null;
+                    html += \`
+                      <div class="p-2 bg-slate-900/50 rounded border border-slate-700">
+                        <div><strong>Inicio:</strong> \${inicio.toLocaleDateString('es-ES')}</div>
+                        <div><strong>Fin:</strong> \${fin ? fin.toLocaleDateString('es-ES') : 'Activa'}</div>
+                        \${p.motivo ? \`<div><strong>Motivo:</strong> \${p.motivo}</div>\` : ''}
+                      </div>
+                    \`;
+                  });
+                  html += '</div></div>';
+                }
+                
+                if (pausaInfo) {
+                  pausaInfo.innerHTML = html;
+                }
+              }
+            } catch (err) {
+              console.error('Error actualizando info de pausas:', err);
+              if (pausaInfo) {
+                pausaInfo.innerHTML = '<div class="text-red-400 text-sm">Error cargando información de pausas</div>';
+              }
+            }
+          }
+          
+          // Botón crear pausa
+          if (btnCrearPausa) {
+            btnCrearPausa.addEventListener('click', async function() {
+              const motivo = prompt('Ingrese el motivo de la pausa (requerido):');
+              if (!motivo || motivo.trim().length === 0) {
+                alert('El motivo es requerido');
+                return;
+              }
+              
+              try {
+                btnCrearPausa.disabled = true;
+                btnCrearPausa.textContent = '⏳ Creando...';
+                
+                const response = await fetch('/admin/master/' + alumnoId + '/pausas/crear', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ motivo: motivo.trim() })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                  alert('✅ Pausa creada correctamente');
+                  location.reload();
+                } else {
+                  throw new Error(data.error || 'Error al crear pausa');
+                }
+              } catch (error) {
+                console.error('Error creando pausa:', error);
+                alert('❌ Error al crear pausa: ' + error.message);
+              } finally {
+                btnCrearPausa.disabled = false;
+                btnCrearPausa.textContent = '➕ Crear Pausa';
+              }
+            });
+          }
+          
+          // Botón finalizar pausa
+          if (btnFinalizarPausa) {
+            btnFinalizarPausa.addEventListener('click', async function() {
+              if (!confirm('¿Está seguro de que desea finalizar la pausa activa?')) {
+                return;
+              }
+              
+              try {
+                btnFinalizarPausa.disabled = true;
+                btnFinalizarPausa.textContent = '⏳ Finalizando...';
+                
+                const response = await fetch('/admin/master/' + alumnoId + '/pausas/finalizar', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                  alert('✅ Pausa finalizada correctamente');
+                  location.reload();
+                } else {
+                  throw new Error(data.error || 'Error al finalizar pausa');
+                }
+              } catch (error) {
+                console.error('Error finalizando pausa:', error);
+                alert('❌ Error al finalizar pausa: ' + error.message);
+              } finally {
+                btnFinalizarPausa.disabled = false;
+                btnFinalizarPausa.textContent = '✅ Finalizar Pausa';
+              }
+            });
+          }
+          
+          // Cargar información de pausas al inicio
+          actualizarInfoPausas();
+        });
+        
         // Asegurar que openTab esté disponible globalmente
         window.openTab = typeof openTab !== 'undefined' ? openTab : function(tabId) {
           // Fallback si el script no se cargó
@@ -372,8 +840,10 @@ export async function renderMaster(request, env, alumnoId) {
     `;
     
     // Renderizar usando baseTemplate
-    const html = replace(baseTemplate, {
-      TITLE: `Modo Master: ${nombre}`,
+    // Usar apodo como identificador principal en el título
+    const tituloPagina = alumno.apodo || alumno.nombre_completo || alumno.email;
+    const html = await replace(baseTemplate, {
+      TITLE: `Modo Master: ${tituloPagina}`,
       CONTENT: content
     });
 
@@ -420,10 +890,10 @@ async function obtenerLimpiezasHoy(alumnoId) {
  */
 export async function getMasterData(request, env, alumnoId) {
   try {
-    // Validar suscripción activa
-    const alumno = await validarYobtenerAlumno(alumnoId);
+    // Validar suscripción activa y obtener contexto V4
+    const resultado = await validarYobtenerAlumno(alumnoId);
     
-    if (!alumno) {
+    if (!resultado || !resultado.alumno) {
       return new Response(
         JSON.stringify({ error: 'Alumno no tiene suscripción activa' }),
         {
@@ -432,6 +902,23 @@ export async function getMasterData(request, env, alumnoId) {
         }
       );
     }
+
+    const { alumno, ctx } = resultado;
+    
+    // FASE 2A: Extraer nivel_efectivo desde ctx (canónico) con fail-open controlado
+    let nivelEfectivo;
+    if (ctx && ctx.progress && ctx.progress.nivel_efectivo !== undefined) {
+      nivelEfectivo = ctx.progress.nivel_efectivo;
+      console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=inicializacion`);
+    } else {
+      // Fail-open: usar nivel_actual como fallback explícito
+      nivelEfectivo = alumno.nivel_actual || 1;
+      console.log(`[Master][LEVEL_FALLBACK] alumnoId=${alumnoId} nivel_actual=${nivelEfectivo}`);
+    }
+
+    // El contexto (ctx) está disponible internamente pero no se expone en JSON
+    // para mantener compatibilidad con código frontend existente
+    // En FASE 1 solo se usa en la cabecera renderizada
 
     // Validar tablas críticas antes de hacer queries
     const tablasRequeridas = [
@@ -557,14 +1044,15 @@ export async function getMasterData(request, env, alumnoId) {
       (async () => {
         if (columnasExistentes.aspectos_energeticos_nivel_minimo) {
           try {
+            console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=aspectos_energeticos`);
             return await query(`
               SELECT ae.*,
                      COALESCE(ae.nivel_minimo, 1) as nivel_minimo
               FROM aspectos_energeticos ae
               WHERE ae.activo = true 
-                AND (COALESCE(ae.nivel_minimo, 1) <= (SELECT nivel_actual FROM alumnos WHERE id = $1 LIMIT 1))
+                AND (COALESCE(ae.nivel_minimo, 1) <= $2)
               ORDER BY ae.orden, ae.nombre
-            `, [alumnoId]);
+            `, [alumnoId, nivelEfectivo]);
           } catch (err) {
             if (err.message.includes('nivel_minimo')) {
               console.warn('⚠️ Columna nivel_minimo no existe en aspectos_energeticos, usando consulta sin filtro de nivel');
@@ -656,13 +1144,14 @@ export async function getMasterData(request, env, alumnoId) {
       (async () => {
         if (columnasExistentes.aspectos_karmicos_nivel_minimo) {
           try {
+            console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=aspectos_karmicos`);
             return await query(`
               SELECT ak.*, COALESCE(ak.nivel_minimo, 1) as nivel_minimo
               FROM aspectos_karmicos ak
               WHERE ak.activo = true 
-                AND (COALESCE(ak.nivel_minimo, 1) <= (SELECT nivel_actual FROM alumnos WHERE id = $1 LIMIT 1))
+                AND (COALESCE(ak.nivel_minimo, 1) <= $2)
               ORDER BY ak.orden, ak.nombre
-            `, [alumnoId]);
+            `, [alumnoId, nivelEfectivo]);
           } catch (err) {
             if (err.message.includes('nivel_minimo')) {
               console.warn('⚠️ Columna nivel_minimo no existe en aspectos_karmicos, usando consulta sin filtro de nivel');
@@ -780,13 +1269,14 @@ export async function getMasterData(request, env, alumnoId) {
       (async () => {
         if (columnasExistentes.aspectos_indeseables_nivel_minimo) {
           try {
+            console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=aspectos_indeseables`);
             return await query(`
               SELECT ai.*, COALESCE(ai.nivel_minimo, 1) as nivel_minimo
               FROM aspectos_indeseables ai
               WHERE ai.activo = true 
-                AND (COALESCE(ai.nivel_minimo, 1) <= (SELECT nivel_actual FROM alumnos WHERE id = $1 LIMIT 1))
+                AND (COALESCE(ai.nivel_minimo, 1) <= $2)
               ORDER BY ai.orden, ai.nombre
-            `, [alumnoId]);
+            `, [alumnoId, nivelEfectivo]);
           } catch (err) {
             if (err.message.includes('nivel_minimo')) {
               console.warn('⚠️ Columna nivel_minimo no existe en aspectos_indeseables, usando consulta sin filtro de nivel');
@@ -1042,8 +1532,8 @@ export async function getMasterData(request, env, alumnoId) {
         return { rows: [] }; // Devolver estructura vacía en lugar de lanzar error
       }),
       
-      // Transmutaciones Energéticas (nuevo sistema)
-      obtenerTransmutacionesPorAlumno(alumnoId).catch((err) => {
+      // Transmutaciones Energéticas (FASE 2A: pasar nivel_efectivo)
+      obtenerTransmutacionesPorAlumno(alumnoId, nivelEfectivo).catch((err) => {
         console.error('❌ Error obteniendo transmutaciones energéticas:', err.message);
         return { listas: [] }; // Devolver estructura vacía
       }),
@@ -1055,6 +1545,7 @@ export async function getMasterData(request, env, alumnoId) {
         
         try {
           if (columnasExistentes.limpieza_hogar_nivel_minimo && tieneUltimaLimpieza && tieneVecesLimpiado) {
+            console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=limpieza_hogar`);
             return await query(`
               SELECT 
                 lh.*,
@@ -1069,9 +1560,9 @@ export async function getMasterData(request, env, alumnoId) {
               LEFT JOIN limpieza_hogar_alumnos lha ON lh.id = lha.aspecto_id AND lha.alumno_id = $1
               WHERE lh.activo = true
                 AND (SELECT estado_suscripcion FROM alumnos WHERE id = $1 LIMIT 1) = 'activa'
-                AND (COALESCE(lh.nivel_minimo, 1) <= (SELECT nivel_actual FROM alumnos WHERE id = $1 LIMIT 1))
+                AND (COALESCE(lh.nivel_minimo, 1) <= $2)
               ORDER BY COALESCE(lh.nivel_minimo, 1) ASC, lh.orden ASC, lh.nombre ASC
-            `, [alumnoId]);
+            `, [alumnoId, nivelEfectivo]);
           } else if (tieneUltimaLimpieza && tieneVecesLimpiado) {
             return await query(`
               SELECT 
@@ -1289,6 +1780,7 @@ export async function getMasterData(request, env, alumnoId) {
       (seccionesLimpieza || []).map(async (seccion) => {
         try {
           // Obtener aspectos de esta sección
+          console.log(`[Master][LEVEL_FILTER] alumnoId=${alumnoId} nivel_efectivo=${nivelEfectivo} seccion=secciones_dinamicas seccion_id=${seccion.id}`);
           const aspectosSeccion = await query(`
             SELECT ae.*, COALESCE(ae.nivel_minimo, 1) as nivel_minimo
             FROM aspectos_energeticos ae
@@ -1296,7 +1788,7 @@ export async function getMasterData(request, env, alumnoId) {
               AND ae.seccion_id = $1
               AND (COALESCE(ae.nivel_minimo, 1) <= $2)
             ORDER BY COALESCE(ae.nivel_minimo, 1) ASC, COALESCE(ae.orden, 0) ASC, ae.nombre ASC
-          `, [seccion.id, alumno.nivel_actual || 1]);
+          `, [seccion.id, nivelEfectivo]);
 
           // Obtener estado del alumno para estos aspectos
           const tieneMetadata = columnasExistentes.aspectos_energeticos_alumnos_metadata;
@@ -1351,7 +1843,8 @@ export async function getMasterData(request, env, alumnoId) {
           email: alumno.email,
           apodo: alumno.apodo,
           nombre_completo: alumno.nombre_completo,
-          nivel: alumno.nivel_actual,
+          nombre_display: alumno.apodo || alumno.nombre_completo || alumno.email, // Apodo como identificador principal
+          nivel: nivelEfectivo, // FASE 2A: Usar nivel_efectivo canónico
           fase: fase,
           racha: alumno.racha,
           estado_suscripcion: alumno.estado_suscripcion,
@@ -1394,7 +1887,7 @@ export async function getMasterData(request, env, alumnoId) {
         auribosses: auribosses.rows,
         tokens: tokens.rows,
         notas: notas || [],
-        nivel_alumno: alumno.nivel_actual || 1,
+        nivel_alumno: nivelEfectivo, // FASE 2A: Usar nivel_efectivo canónico
         // Transmutaciones PDE
         alumnos_lugares: transmutacionesLugares?.rows || [],
         alumnos_proyectos: transmutacionesProyectos?.rows || [],
@@ -1407,7 +1900,29 @@ export async function getMasterData(request, env, alumnoId) {
         // Superprioritarios
         superprioritarios: superprioritarios?.rows || [],
         // Secciones de limpieza dinámicas (con aspectos procesados)
-        secciones_limpieza: seccionesConAspectos || []
+        secciones_limpieza: seccionesConAspectos || [],
+        // FASE 3: Información de pausas
+        pausas: {
+          activa: ctx?.pausas?.activa || false,
+          pausaActiva: ctx?.pausas?.pausaActiva || null,
+          historial: await (async () => {
+            try {
+              const { findByAlumnoId } = await import('../modules/pausa-v4.js');
+              const todasPausas = await findByAlumnoId(Number(alumnoId));
+              // Retornar últimas 10 pausas ordenadas por inicio DESC
+              return todasPausas.slice(0, 10).map(p => ({
+                id: p.id,
+                inicio: p.inicio,
+                fin: p.fin,
+                motivo: p.motivo || null
+              }));
+            } catch (err) {
+              console.warn('Error obteniendo historial de pausas:', err.message);
+              return [];
+            }
+          })(),
+          diasPausados: await calcularDiasPausados(Number(alumnoId))
+        }
       }),
       {
         headers: { 'Content-Type': 'application/json' }
@@ -1448,6 +1963,12 @@ export async function handleMarcarLimpio(request, env, alumnoId) {
     if (request.method !== 'POST') {
       console.log(`❌ [handleMarcarLimpio] Método no permitido: ${request.method}`);
       return jsonResponse({ error: 'Método no permitido' }, 405);
+    }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'marcar-limpio', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
     }
 
     console.log(`🔵 [handleMarcarLimpio] Validando suscripción activa para alumno ${alumnoId}...`);
@@ -1703,6 +2224,29 @@ export async function handleMarcarLimpio(request, env, alumnoId) {
       console.warn('⚠️ [handleMarcarLimpio] Error registrando en historial (no crítico):', error.message);
     }
 
+    // FASE 3: Registrar evento de auditoría
+    try {
+      await logAuditEvent({
+        actor: 'admin',
+        alumnoId: Number(alumnoId),
+        action: 'marcar-limpio',
+        entityType: tipo,
+        entityId: String(aspecto_id),
+        payload: {
+          tipo,
+          aspecto_id,
+          seccionId: seccionId || null,
+          seccionNombre: seccionNombre || null,
+          esTransmutacionEnergetica,
+          fecha_limpieza: ahora.toISOString()
+        },
+        req: request
+      });
+    } catch (auditError) {
+      // Fail-open: no fallar si la auditoría falla
+      console.warn(`[handleMarcarLimpio] Error registrando auditoría: ${auditError.message}`);
+    }
+
     console.log(`✅ [handleMarcarLimpio] Éxito completo - tipo: ${tipo}, aspecto_id: ${aspecto_id}`);
     return jsonResponse({ 
       success: true, 
@@ -1723,10 +2267,20 @@ export async function handleMarcarLimpio(request, env, alumnoId) {
 }
 
 /**
- * POST /admin/master/:alumnoId/datos-nacimiento - Actualizar datos de nacimiento
+ * POST /admin/master/:alumnoId/apodo - Actualizar apodo del alumno
  */
-export async function handleDatosNacimiento(request, env, alumnoId) {
+export async function handleApodo(request, env, alumnoId) {
   try {
+    if (request.method !== 'POST') {
+      return new Response('Método no permitido', { status: 405 });
+    }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'apodo', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
+
     // Validar suscripción activa
     const esActivo = await validarSuscripcionActiva(alumnoId);
     if (!esActivo) {
@@ -1739,8 +2293,83 @@ export async function handleDatosNacimiento(request, env, alumnoId) {
       );
     }
 
+    const body = await request.json();
+    const { apodo } = body;
+
+    // Actualizar apodo usando student-v4.js (que incluye auditoría)
+    const { updateStudentApodo } = await import('../modules/student-v4.js');
+    const alumnoActualizado = await updateStudentApodo(Number(alumnoId), apodo || null);
+
+    // FASE 3: Registrar evento de auditoría
+    try {
+      await logAuditEvent({
+        actor: 'admin',
+        alumnoId: Number(alumnoId),
+        action: 'apodo',
+        entityType: 'alumno',
+        entityId: String(alumnoId),
+        payload: {
+          apodoAnterior: null, // Se puede obtener del contexto si está disponible
+          apodoNuevo: apodo || null
+        },
+        req: request
+      });
+    } catch (auditError) {
+      // Fail-open: no fallar si la auditoría falla
+      console.warn(`[handleApodo] Error registrando auditoría: ${auditError.message}`);
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: 'Apodo actualizado correctamente',
+        alumno: {
+          id: alumnoActualizado.id,
+          email: alumnoActualizado.email,
+          apodo: alumnoActualizado.apodo
+        }
+      }),
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error en handleApodo:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
+}
+
+/**
+ * POST /admin/master/:alumnoId/datos-nacimiento - Actualizar datos de nacimiento
+ */
+export async function handleDatosNacimiento(request, env, alumnoId) {
+  try {
     if (request.method !== 'POST') {
       return new Response('Método no permitido', { status: 405 });
+    }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'datos-nacimiento', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
+
+    // Validar suscripción activa
+    const esActivo = await validarSuscripcionActiva(alumnoId);
+    if (!esActivo) {
+      return new Response(
+        JSON.stringify({ error: 'Alumno no tiene suscripción activa' }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const body = await request.json();
@@ -1761,6 +2390,26 @@ export async function handleDatosNacimiento(request, env, alumnoId) {
         alumnoId
       ]
     );
+
+    // FASE 3: Registrar evento de auditoría
+    try {
+      await logAuditEvent({
+        actor: 'admin',
+        alumnoId: Number(alumnoId),
+        action: 'datos-nacimiento',
+        entityType: 'alumno',
+        entityId: String(alumnoId),
+        payload: {
+          fecha_nacimiento: fecha_nacimiento || null,
+          hora_nacimiento: hora_nacimiento || null,
+          lugar_nacimiento: lugar_nacimiento || null
+        },
+        req: request
+      });
+    } catch (auditError) {
+      // Fail-open: no fallar si la auditoría falla
+      console.warn(`[handleDatosNacimiento] Error registrando auditoría: ${auditError.message}`);
+    }
 
     return new Response(
       JSON.stringify({ 
@@ -1846,6 +2495,12 @@ export async function handleActivarLugar(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'activar-lugar', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { lugar_id } = body;
@@ -1902,6 +2557,12 @@ export async function handleDesactivarLugar(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'desactivar-lugar', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { lugar_id } = body;
@@ -1944,6 +2605,12 @@ export async function handleActivarProyecto(request, env, alumnoId) {
         status: 405,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'activar-proyecto', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
     }
     
     const body = await request.json();
@@ -2001,6 +2668,12 @@ export async function handleDesactivarProyecto(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'desactivar-proyecto', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { proyecto_id } = body;
@@ -2044,6 +2717,12 @@ export async function handleCrearLugar(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'crear-lugar', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { nombre, descripcion } = body;
@@ -2086,6 +2765,12 @@ export async function handleCrearProyecto(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'crear-proyecto', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { nombre, descripcion } = body;
@@ -2127,6 +2812,12 @@ export async function handleActualizarLugar(request, env, alumnoId) {
         status: 405,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'actualizar-lugar', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
     }
     
     const body = await request.json();
@@ -2178,6 +2869,12 @@ export async function handleActualizarProyecto(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'actualizar-proyecto', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { proyecto_id, nombre, descripcion } = body;
@@ -2228,6 +2925,12 @@ export async function handleEliminarLugar(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'eliminar-lugar', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { lugar_id } = body;
@@ -2277,6 +2980,12 @@ export async function handleEliminarProyecto(request, env, alumnoId) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // FASE 2B: Validar pausa activa (BLOQUEAR acción mutable si hay pausa)
+    const pausaCheck = await checkPausaActiva(alumnoId, 'eliminar-proyecto', request);
+    if (pausaCheck.blocked) {
+      return pausaCheck.response;
+    }
     
     const body = await request.json();
     const { proyecto_id } = body;
@@ -2312,6 +3021,282 @@ export async function handleEliminarProyecto(request, env, alumnoId) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+/**
+ * POST /admin/master/:alumnoId/pausas/crear - Crear pausa manualmente (FASE 3)
+ * 
+ * IMPORTANTE: Esta acción NO está bloqueada por checkPausaActiva porque
+ * precisamente es para gestionar las pausas.
+ */
+export async function handleCrearPausa(request, env, alumnoId) {
+  try {
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Método no permitido' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validar suscripción activa
+    const esActivo = await validarSuscripcionActiva(alumnoId);
+    if (!esActivo) {
+      return new Response(
+        JSON.stringify({ error: 'Alumno no tiene suscripción activa' }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    const body = await request.json();
+    const { inicio, fin, motivo } = body;
+
+    // Validar motivo (requerido mínimo)
+    if (!motivo || motivo.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'El motivo es requerido' }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Fecha de inicio: por defecto hoy, o la proporcionada
+    const fechaInicio = inicio ? new Date(inicio) : new Date();
+    // Fecha de fin: opcional (null para pausa indefinida)
+    const fechaFin = fin ? new Date(fin) : null;
+
+    // Verificar si ya hay una pausa activa
+    const { getPausaActiva } = await import('../modules/pausa-v4.js');
+    const pausaActiva = await getPausaActiva(Number(alumnoId));
+    if (pausaActiva) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Ya existe una pausa activa. Finalícela antes de crear una nueva.',
+          pausaActiva: {
+            id: pausaActiva.id,
+            inicio: pausaActiva.inicio,
+            motivo: pausaActiva.motivo || null
+          }
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Crear la pausa usando el servicio canónico
+    const { crearPausa } = await import('../modules/pausa-v4.js');
+    const pausa = await crearPausa({
+      alumno_id: Number(alumnoId),
+      inicio: fechaInicio,
+      fin: fechaFin,
+      motivo: motivo.trim()
+    });
+
+    // FASE 3: Registrar evento de auditoría
+    let auditEvent = null;
+    try {
+      auditEvent = await logAuditEvent({
+        actor: 'admin',
+        alumnoId: Number(alumnoId),
+        action: 'pause_create',
+        entityType: 'pausa',
+        entityId: String(pausa.id),
+        payload: {
+          pausaId: pausa.id,
+          inicio: fechaInicio.toISOString(),
+          fin: fechaFin ? fechaFin.toISOString() : null,
+          motivo: motivo.trim()
+        },
+        req: request
+      });
+    } catch (auditError) {
+      // Fail-open: no fallar si la auditoría falla
+      console.warn(`[handleCrearPausa] Error registrando auditoría: ${auditError.message}`);
+    }
+
+    // AUTO-1: Disparar automatizaciones después de pause_create
+    try {
+      const { runAutomationsForAlumno } = await import('../core/automations/automation-engine.js');
+      await runAutomationsForAlumno(
+        Number(alumnoId),
+        'pause_create',
+        auditEvent,
+        env,
+        request
+      ).catch(autoError => {
+        // Fail-open: no fallar si las automatizaciones fallan
+        console.warn(`[handleCrearPausa] Error ejecutando automatizaciones: ${autoError.message}`);
+      });
+    } catch (autoError) {
+      // Fail-open: no fallar si las automatizaciones fallan
+      console.warn(`[handleCrearPausa] Error importando motor de automatizaciones: ${autoError.message}`);
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        message: 'Pausa creada correctamente',
+        pausa: {
+          id: pausa.id,
+          inicio: pausa.inicio,
+          fin: pausa.fin,
+          motivo: pausa.motivo || motivo.trim()
+        }
+      }),
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error en handleCrearPausa:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
+}
+
+/**
+ * POST /admin/master/:alumnoId/pausas/finalizar - Finalizar pausa activa (FASE 3)
+ * 
+ * IMPORTANTE: Esta acción NO está bloqueada por checkPausaActiva porque
+ * precisamente es para gestionar las pausas.
+ */
+export async function handleFinalizarPausa(request, env, alumnoId) {
+  try {
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Método no permitido' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validar suscripción activa
+    const esActivo = await validarSuscripcionActiva(alumnoId);
+    if (!esActivo) {
+      return new Response(
+        JSON.stringify({ error: 'Alumno no tiene suscripción activa' }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    const body = await request.json();
+    const { pausaId } = body;
+
+    // Obtener pausa activa
+    const { getPausaActiva, cerrarPausa, cerrarPausaActiva } = await import('../modules/pausa-v4.js');
+    
+    let pausaActiva;
+    if (pausaId) {
+      // Si se proporciona pausaId, verificar que existe y está activa
+      const todasPausas = await query(
+        'SELECT * FROM pausas WHERE id = $1 AND alumno_id = $2 AND fin IS NULL',
+        [pausaId, alumnoId]
+      );
+      if (todasPausas.rows.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Pausa no encontrada o ya finalizada' }),
+          {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      pausaActiva = todasPausas.rows[0];
+    } else {
+      // Si no se proporciona pausaId, usar la pausa activa actual
+      pausaActiva = await getPausaActiva(Number(alumnoId));
+      if (!pausaActiva) {
+        return new Response(
+          JSON.stringify({ error: 'No hay pausa activa para finalizar' }),
+          {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    }
+
+    // Cerrar la pausa (fecha fin = ahora)
+    const pausaCerrada = await cerrarPausa(pausaActiva.id);
+
+    // FASE 3: Registrar evento de auditoría
+    let auditEvent = null;
+    try {
+      auditEvent = await logAuditEvent({
+        actor: 'admin',
+        alumnoId: Number(alumnoId),
+        action: 'pause_end',
+        entityType: 'pausa',
+        entityId: String(pausaCerrada.id),
+        payload: {
+          pausaId: pausaCerrada.id,
+          inicio: pausaCerrada.inicio ? (pausaCerrada.inicio instanceof Date ? pausaCerrada.inicio.toISOString() : pausaCerrada.inicio) : null,
+          fin: pausaCerrada.fin ? (pausaCerrada.fin instanceof Date ? pausaCerrada.fin.toISOString() : pausaCerrada.fin) : null,
+          motivo: pausaCerrada.motivo || null
+        },
+        req: request
+      });
+    } catch (auditError) {
+      // Fail-open: no fallar si la auditoría falla
+      console.warn(`[handleFinalizarPausa] Error registrando auditoría: ${auditError.message}`);
+    }
+
+    // AUTO-1: Disparar automatizaciones después de pause_end
+    try {
+      const { runAutomationsForAlumno } = await import('../core/automations/automation-engine.js');
+      await runAutomationsForAlumno(
+        Number(alumnoId),
+        'pause_end',
+        auditEvent,
+        env,
+        request
+      ).catch(autoError => {
+        // Fail-open: no fallar si las automatizaciones fallan
+        console.warn(`[handleFinalizarPausa] Error ejecutando automatizaciones: ${autoError.message}`);
+      });
+    } catch (autoError) {
+      // Fail-open: no fallar si las automatizaciones fallan
+      console.warn(`[handleFinalizarPausa] Error importando motor de automatizaciones: ${autoError.message}`);
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        message: 'Pausa finalizada correctamente',
+        pausa: {
+          id: pausaCerrada.id,
+          inicio: pausaCerrada.inicio,
+          fin: pausaCerrada.fin,
+          motivo: pausaCerrada.motivo || null
+        }
+      }),
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error en handleFinalizarPausa:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 }
 

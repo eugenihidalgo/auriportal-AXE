@@ -12,11 +12,24 @@ import { execSync } from 'child_process';
 import { loadEnvIfNeeded, getRequiredEnv, getRequiredEnvKeys } from './src/core/config/env.js';
 
 // Cargar variables de entorno si es necesario
-const envLoadResult = loadEnvIfNeeded();
+// Verificar primero si faltan variables críticas
+const needsEnvLoad = !process.env.ADMIN_USER || !process.env.ADMIN_PASS || 
+                     !process.env.PGHOST || !process.env.PGUSER || !process.env.PGPASSWORD;
+const envLoadResult = loadEnvIfNeeded({ force: needsEnvLoad });
 if (envLoadResult.loaded) {
   console.log(`📁 Variables de entorno cargadas desde: ${envLoadResult.path}`);
 } else if (envLoadResult.reason) {
   console.log(`ℹ️  ${envLoadResult.reason}`);
+  // Si faltan variables críticas, intentar forzar carga
+  if (needsEnvLoad) {
+    console.log('⚠️  Variables críticas faltantes, forzando carga de .env...');
+    const forcedResult = loadEnvIfNeeded({ force: true });
+    if (forcedResult.loaded) {
+      console.log(`✅ Variables de entorno cargadas forzadamente desde: ${forcedResult.path}`);
+    } else {
+      console.error(`❌ No se pudo cargar .env: ${forcedResult.reason || forcedResult.error?.message}`);
+    }
+  }
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -84,6 +97,24 @@ console.log(`🌍 Entorno: ${APP_ENV}`);
 console.log(`⏰ Servidor iniciado: ${new Date(SERVER_START_TIME).toISOString()}`);
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('');
+
+// ============================================================================
+// FASE 1 - VERIFICACIÓN DE ENTORNO (OBLIGATORIA)
+// ============================================================================
+console.log('[ENV CHECK]', {
+  ADMIN_USER: !!process.env.ADMIN_USER,
+  ADMIN_PASS: !!process.env.ADMIN_PASS,
+  PGHOST: !!process.env.PGHOST,
+  PGDATABASE: !!process.env.PGDATABASE,
+  PGUSER: !!process.env.PGUSER,
+  PGPASSWORD_TYPE: typeof process.env.PGPASSWORD,
+  NODE_ENV: process.env.NODE_ENV,
+  APP_ENV: process.env.APP_ENV
+});
+
+if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) {
+  console.log('[ENV CHECK] ERROR: ADMIN_USER / ADMIN_PASS no están configurados');
+}
 // ============================================================================
 
 // Importar router y validación
@@ -109,6 +140,28 @@ try {
 
 // Inicializar base de datos PostgreSQL (única fuente de verdad v4)
 initPostgreSQL();
+
+// Inicializar UI & Experience System v1 (auto-registra layers)
+import('./src/core/ui-experience/init.js')
+  .then(() => {
+    console.log('✅ UI & Experience System v1 inicializado (layers auto-registrados)');
+  })
+  .catch((error) => {
+    console.warn('⚠️  Error inicializando UI & Experience System:', error.message);
+    // No fallar el servidor si el sistema UI no se puede inicializar (fail-open)
+  });
+
+// Inicializar Motor de Automatizaciones (AUTO-1)
+import('./src/core/automations/automation-scheduler.js')
+  .then((schedulerModule) => {
+    const intervalSeconds = parseInt(process.env.AUTOMATION_SCHEDULER_INTERVAL || '30', 10);
+    schedulerModule.startScheduler(env, intervalSeconds);
+    console.log(`✅ Motor de Automatizaciones (AUTO-1) iniciado (intervalo: ${intervalSeconds}s)`);
+  })
+  .catch((error) => {
+    console.warn('⚠️  Error inicializando Motor de Automatizaciones:', error.message);
+    // No fallar el servidor si el motor no se puede inicializar (fail-open)
+  });
 
 // Validar configuración adicional al inicio
 console.log('🔍 Validando configuración adicional...');
@@ -153,13 +206,85 @@ if (validation.warnings.length > 0) {
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// ============================================================================
+// LOGS FORENSES - Captura global de excepciones no manejadas
+// ============================================================================
+const DEBUG_FORENSIC = process.env.DEBUG_FORENSIC === '1';
+
+// Handler global para excepciones no capturadas
+process.on('uncaughtException', (error) => {
+  const marker = `[FORENSIC-UNCAUGHT]`;
+  console.error(`${marker} ========================================`);
+  console.error(`${marker} EXCEPCIÓN NO CAPTURADA DETECTADA`);
+  console.error(`${marker} ========================================`);
+  console.error(`${marker} Error:`, error.message);
+  console.error(`${marker} Stack:`, error.stack);
+  console.error(`${marker} Timestamp:`, new Date().toISOString());
+  console.error(`${marker} ========================================`);
+  // NO hacer process.exit() aquí - dejar que el servidor continúe
+  // para poder capturar más información
+});
+
+// Handler global para promesas rechazadas no manejadas
+process.on('unhandledRejection', (reason, promise) => {
+  const marker = `[FORENSIC-UNHANDLED]`;
+  console.error(`${marker} ========================================`);
+  console.error(`${marker} PROMESA RECHAZADA NO MANEJADA`);
+  console.error(`${marker} ========================================`);
+  console.error(`${marker} Reason:`, reason);
+  if (reason instanceof Error) {
+    console.error(`${marker} Error message:`, reason.message);
+    console.error(`${marker} Stack:`, reason.stack);
+  }
+  console.error(`${marker} Promise:`, promise);
+  console.error(`${marker} Timestamp:`, new Date().toISOString());
+  console.error(`${marker} ========================================`);
+});
+
+// ============================================================================
+
 // Crear servidor HTTP
 const server = http.createServer(async (req, res) => {
   // Procesar request dentro del contexto de request_id
   // Esto garantiza que todos los logs del flujo tengan el mismo request_id
   await initRequestContext(async () => {
+    // Obtener request_id para logs forenses
+    const { getRequestId } = await import('./src/core/observability/request-context.js');
+    let requestId = 'no-id';
+    let traceMarker = '';
     try {
-        // Crear objeto Headers compatible con Workers
+      requestId = getRequestId() || 'no-id';
+      traceMarker = DEBUG_FORENSIC ? `[TRACE-${requestId}]` : '';
+    } catch (e) {
+      // Si falla obtener requestId, continuar sin él
+      traceMarker = DEBUG_FORENSIC ? '[TRACE-no-id]' : '';
+    }
+    
+    try {
+      // TRACE A: Inicio del request
+      if (DEBUG_FORENSIC) {
+        console.log(`${traceMarker} A - Inicio request: ${req.method} ${req.url}`);
+        console.log(`${traceMarker} A - Host: ${req.headers.host || 'NO HOST'}`);
+        console.log(`${traceMarker} A - Headers keys: ${Object.keys(req.headers).join(', ')}`);
+      }
+      
+      // Validar que req.url esté disponible (crítico para construir request)
+      if (!req.url) {
+        console.error('❌ [Server] req.url no está disponible');
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'text/plain');
+        // Headers defensivos para evitar caché de errores 400
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.end('Bad Request: URL no disponible');
+        return;
+      }
+
+      // Crear objeto Headers compatible con Workers
+      // IMPORTANTE: Normalizar headers de Node.js (minúsculas) a Headers Web API (case-insensitive)
+      // CRÍTICO: Asegurar que 'cookie' (minúscula de Node.js) se mapee correctamente
+      // El objeto Headers Web API es case-insensitive, pero debemos asegurar que funcione
       const headers = new Headers();
       for (const [key, value] of Object.entries(req.headers)) {
         if (Array.isArray(value)) {
@@ -168,55 +293,82 @@ const server = http.createServer(async (req, res) => {
           headers.set(key, value);
         }
       }
+      
+      // Validación: Asegurar que las cookies se puedan leer correctamente
+      // Si req.headers tiene 'cookie' (minúscula), debe ser accesible como 'Cookie' (mayúscula)
+      const cookieFromReq = req.headers.cookie;
+      const cookieFromHeaders = headers.get('Cookie');
+      if (cookieFromReq && !cookieFromHeaders) {
+        // Si hay cookie en req.headers pero no en headers, forzar el set
+        console.warn('⚠️ [Server] Cookie presente en req.headers pero no accesible en headers, corrigiendo...');
+        headers.set('Cookie', cookieFromReq);
+      }
+
+      // Construir URL completa desde el request
+      // Asegurar que siempre tengamos una URL válida
+      const protocol = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+      const host = req.headers.host || `${HOST}:${PORT}`;
+      const url = new URL(req.url, `${protocol}://${host}`);
+
+      // CRÍTICO: En Node.js, el stream del request solo puede leerse UNA VEZ
+      // Leer el body una sola vez y reutilizarlo para todos los métodos
+      let bodyCache = null;
+      let bodyPromise = null;
+      
+      const readBodyOnce = () => {
+        if (bodyPromise) return bodyPromise;
+        
+        bodyPromise = new Promise((resolve, reject) => {
+          // Solo leer body si hay contenido (POST, PUT, PATCH, etc.)
+          if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'DELETE') {
+            resolve('');
+            return;
+          }
+          
+          let body = '';
+          req.on('data', chunk => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            bodyCache = body;
+            resolve(body);
+          });
+          req.on('error', (err) => {
+            reject(err);
+          });
+        });
+        
+        return bodyPromise;
+      };
 
       // Crear objeto Request compatible con Workers
+      // CRÍTICO: Asegurar que request.url y request.headers estén siempre definidos
+      // Esto garantiza que auth-context y cookies.js puedan leer correctamente
       const request = {
-        method: req.method,
+        method: req.method || 'GET',
         url: url.toString(),
         headers: headers,
         body: null,
         json: async () => {
-          return new Promise((resolve, reject) => {
-            let body = '';
-            req.on('data', chunk => {
-              body += chunk.toString();
-            });
-            req.on('end', () => {
-              try {
-                resolve(JSON.parse(body));
-              } catch (e) {
-                reject(e);
-              }
-            });
-          });
+          const body = await readBodyOnce();
+          try {
+            return JSON.parse(body);
+          } catch (e) {
+            throw new Error(`Invalid JSON: ${e.message}`);
+          }
         },
         text: async () => {
-          return new Promise((resolve) => {
-            let body = '';
-            req.on('data', chunk => {
-              body += chunk.toString();
-            });
-            req.on('end', () => {
-              resolve(body);
-            });
-          });
+          return await readBodyOnce();
         },
         formData: async () => {
-          return new Promise((resolve) => {
-            let body = '';
-            req.on('data', chunk => {
-              body += chunk.toString();
-            });
-            req.on('end', () => {
-              // Crear FormData desde URLSearchParams
-              const params = new URLSearchParams(body);
-              const formData = new FormData();
-              for (const [key, value] of params.entries()) {
-                formData.append(key, value);
-              }
-              resolve(formData);
-            });
-          });
+          const body = await readBodyOnce();
+          // Crear FormData desde URLSearchParams
+          const params = new URLSearchParams(body);
+          const formData = new FormData();
+          for (const [key, value] of params.entries()) {
+            formData.append(key, value);
+          }
+          return formData;
         }
       };
 
@@ -265,41 +417,176 @@ const server = http.createServer(async (req, res) => {
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD
       };
 
+      // TRACE B: Request construido
+      if (DEBUG_FORENSIC) {
+        console.log(`${traceMarker} B - Request construido: ${request.method} ${request.url}`);
+        console.log(`${traceMarker} B - Headers construidos: ${request.headers ? 'OK' : 'FALLO'}`);
+      }
+      
+      // Validar que el objeto request esté completo antes de pasarlo al router
+      // CRÍTICO: request.url y request.headers deben estar siempre definidos
+      // para que auth-context y cookies.js funcionen correctamente
+      if (!request.url || !request.headers) {
+        console.error(`${traceMarker} ❌ [Server] Objeto request incompleto:`, {
+          hasUrl: !!request.url,
+          hasHeaders: !!request.headers,
+          method: request.method
+        });
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'text/plain');
+        // Headers defensivos para evitar caché de errores 500
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.end('Error interno: objeto request incompleto');
+        return;
+      }
+
       // Crear contexto (vacío para Node.js)
       const ctx = {};
 
+      // TRACE C: Llamar router.fetch
+      if (DEBUG_FORENSIC) {
+        console.log(`${traceMarker} C - Llamando router.fetch...`);
+      }
+      
       // Procesar request con el router
       // El request_id se propaga automáticamente a todos los logs gracias a AsyncLocalStorage
-      const response = await router.fetch(request, env, ctx);
+      let response;
+      try {
+        response = await router.fetch(request, env, ctx);
+        
+        // TRACE D: router.fetch devuelve response
+        if (DEBUG_FORENSIC) {
+          console.log(`${traceMarker} D - router.fetch devolvió response:`, {
+            status: response?.status,
+            hasHeaders: !!response?.headers,
+            isResponse: response instanceof Response
+          });
+        }
+      } catch (routerError) {
+        // CRÍTICO: Si el router lanza una excepción no capturada, nunca propagarla
+        console.error(`${traceMarker} ❌ Error en router.fetch:`, routerError);
+        console.error(`${traceMarker} ❌ Stack:`, routerError.stack);
+        console.error(`${traceMarker} ❌ Request:`, { method: request.method, url: request.url });
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'text/plain');
+        // Headers defensivos para evitar caché de errores 500
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.end('Error interno del servidor');
+        return;
+      }
 
       // Verificar que response sea válido
       if (!response || !(response instanceof Response)) {
-        console.error('❌ Router devolvió respuesta inválida:', response);
+        console.error(`${traceMarker} ❌ Router devolvió respuesta inválida:`, response);
+        console.error(`${traceMarker} ❌ Tipo de response:`, typeof response);
+        console.error(`${traceMarker} ❌ Es Response?:`, response instanceof Response);
         res.statusCode = 500;
         res.setHeader('Content-Type', 'text/plain');
+        // Headers defensivos para evitar caché de errores 500
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.end('Error interno del servidor: respuesta inválida');
         return;
       }
 
+      // TRACE E: Enviar respuesta - copiar status y headers
+      if (DEBUG_FORENSIC) {
+        console.log(`${traceMarker} E - Enviando respuesta: status=${response.status}`);
+      }
+      
       // Enviar respuesta
       res.statusCode = response.status;
       
       // Copiar headers (verificar que existan)
       if (response.headers && typeof response.headers.entries === 'function') {
-        for (const [key, value] of response.headers.entries()) {
-          res.setHeader(key, value);
+        try {
+          for (const [key, value] of response.headers.entries()) {
+            res.setHeader(key, value);
+          }
+          if (DEBUG_FORENSIC) {
+            console.log(`${traceMarker} E - Headers copiados correctamente`);
+          }
+        } catch (headersError) {
+          console.error(`${traceMarker} ❌ Error copiando headers:`, headersError.message);
+          console.error(`${traceMarker} ❌ Stack:`, headersError.stack);
+          // Continuar sin headers adicionales
+        }
+      } else {
+        if (DEBUG_FORENSIC) {
+          console.log(`${traceMarker} E - No hay headers para copiar`);
         }
       }
 
+      // TRACE F: Leer body
+      if (DEBUG_FORENSIC) {
+        console.log(`${traceMarker} F - Leyendo body de response...`);
+      }
+      
       // Enviar body
-      const body = await response.text();
-      res.end(body);
+      // CRÍTICO: Manejar casos donde response.text() puede fallar
+      // (ej: body ya consumido, null, o Response sin body)
+      try {
+        // Verificar que response tenga método text() antes de llamarlo
+        if (response && typeof response.text === 'function') {
+          const body = await response.text();
+          if (DEBUG_FORENSIC) {
+            console.log(`${traceMarker} F - Body leído: ${body ? body.length + ' bytes' : 'vacío'}`);
+          }
+          res.end(body || '');
+          
+          // TRACE G: res.end completado
+          if (DEBUG_FORENSIC) {
+            console.log(`${traceMarker} G - res.end completado OK`);
+          }
+        } else {
+          // Response sin body o método text() no disponible
+          if (DEBUG_FORENSIC) {
+            console.log(`${traceMarker} F - Response sin método text(), enviando body vacío`);
+          }
+          res.end('');
+        }
+      } catch (bodyError) {
+        // Si falla response.text(), nunca propagar el error
+        // Loggear y enviar respuesta vacía para evitar 500
+        console.error(`${traceMarker} ❌ Error leyendo body de respuesta:`, bodyError.message);
+        console.error(`${traceMarker} ❌ Stack:`, bodyError.stack);
+        console.error(`${traceMarker} ❌ Status: ${response.status}, URL: ${req.url}`);
+        console.error(`${traceMarker} ❌ Response type:`, typeof response);
+        console.error(`${traceMarker} ❌ Response tiene text?:`, typeof response?.text);
+        res.end('');
+      }
 
     } catch (error) {
-      console.error('Error procesando request:', error);
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Error interno del servidor');
+      // CRÍTICO: Capturar TODOS los errores no manejados en el servidor
+      const requestId = getRequestId() || 'no-id';
+      const traceMarker = DEBUG_FORENSIC ? `[TRACE-${requestId}]` : '';
+      
+      console.error(`${traceMarker} ❌ [Server] Error procesando request:`, error);
+      console.error(`${traceMarker} ❌ [Server] Stack:`, error.stack);
+      console.error(`${traceMarker} ❌ [Server] URL:`, req.url);
+      console.error(`${traceMarker} ❌ [Server] Method:`, req.method);
+      console.error(`${traceMarker} ❌ [Server] Host:`, req.headers.host);
+      console.error(`${traceMarker} ❌ [Server] Headers:`, JSON.stringify(req.headers, null, 2));
+      
+      // Intentar enviar respuesta de error
+      try {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'text/plain');
+        // CRÍTICO: Headers para evitar que Cloudflare cachee errores
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.end('Error interno del servidor');
+      } catch (resError) {
+        // Si incluso res.end falla, loggear pero no propagar
+        console.error(`${traceMarker} ❌ [Server] Error enviando respuesta de error:`, resError.message);
+        console.error(`${traceMarker} ❌ [Server] resError stack:`, resError.stack);
+      }
     }
     // El contexto se limpia automáticamente al salir de initRequestContext
   }, req);

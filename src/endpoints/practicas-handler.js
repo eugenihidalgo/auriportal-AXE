@@ -358,18 +358,21 @@ export async function renderEjecucion(request, env) {
             <span class="accordion-icon" id="icon-${accordionId}">▼</span>
           </button>
           <div class="accordion-content" id="${accordionId}" style="display: none;">
-            <div class="elemento-contenido">${contenidoSanitizado}</div>
+            <!-- LVCC v1: Content-block - Bloque interno de contenido (texto) -->
+            <div class="elemento-contenido content-block">${contenidoSanitizado}</div>
           </div>
         </div>
       `;
     }
     
     return `
-      <div class="elemento-practica" data-id="${prep.id}">
+      <!-- LVCC v1: Card - Entidad con identidad propia (preparación/elemento de práctica) -->
+      <div class="elemento-practica card" data-id="${prep.id}">
         <h3 class="elemento-nombre">${(prep.nombre || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h3>
         ${contenidoHTML}
         ${tieneVideo ? `
-          <div class="video-container" data-video-id="${videoId}" style="display: none;">
+          <!-- LVCC v1: Content-block - Bloque interno de contenido (vídeo) -->
+          <div class="video-container content-block" data-video-id="${videoId}" style="display: none;">
             <!-- El iframe se cargará aquí dinámicamente -->
           </div>
           <button class="boton-ver-video" onclick="mostrarVideo('${videoId}', this)" data-video-id="${videoId}">
@@ -385,7 +388,8 @@ export async function renderEjecucion(request, env) {
   let totalMinutosHTML = '';
   if (totalMinutos > 0) {
     totalMinutosHTML = `
-      <div class="total-minutos">
+      <!-- LVCC v1: Panel - Bloque de agrupación informativa (resumen de tiempo) -->
+      <div class="total-minutos panel">
         <div class="total-minutos-titulo">⏱️ Tiempo total de práctica</div>
         <div class="total-minutos-valor">${totalMinutos} ${totalMinutos === 1 ? 'minuto' : 'minutos'}</div>
       </div>
@@ -437,7 +441,8 @@ export async function renderEjecucion(request, env) {
   // Formato exacto del handler antiguo que funcionaba
   const relojConfigStr = JSON.stringify(relojConfig).replace(/"/g, '&quot;');
   relojHTML = `
-    <div id="reloj-meditacion-unico" data-reloj-config="${relojConfigStr}"></div>
+    <!-- LVCC v1: Content-block - Bloque interno de contenido (reloj de meditación) -->
+    <div id="reloj-meditacion-unico" class="content-block" data-reloj-config="${relojConfigStr}"></div>
   `;
   
   // Cargar template
@@ -817,27 +822,90 @@ export async function renderDecreto(request, env) {
   const authCtx = await requireStudentContext(request, env);
   if (authCtx instanceof Response) return authCtx;
   
-  // Usar ctx.user en lugar de buscar alumno directamente
   const student = authCtx.user;
+  
+  // Extraer decreto_id de la URL: /practica/:practicaId/decreto/:decretoId
+  const url = new URL(request.url);
+  const pathParts = url.pathname.split('/').filter(p => p);
+  // pathParts: ['practica', '1', 'decreto', '5']
+  const decretoIdIndex = pathParts.indexOf('decreto');
+  const decretoId = decretoIdIndex !== -1 ? parseInt(pathParts[decretoIdIndex + 1], 10) : null;
+  const practicaId = pathParts[1] || '1';
+  
+  // URL de retorno
+  const returnUrl = url.searchParams.get('return') || `/practica/${practicaId}/preparaciones`;
   
   // Cargar template
   const templatePath = join(__dirname, '../core/html/practicas/decreto.html');
   let html = readFileSync(templatePath, 'utf-8');
   
-  // Reemplazar placeholders mínimos
-  html = replace(html, {
-    TITULO: 'Decreto'
-  });
+  // Si no hay decreto_id, mostrar error
+  if (!decretoId || isNaN(decretoId)) {
+    html = replace(html, {
+      TITULO: 'Decreto no encontrado',
+      CONTENIDO_HTML: '<p style="text-align: center; color: var(--text-error);">No se especificó un decreto válido.</p>',
+      URL_VOLVER: returnUrl,
+      THEME_COLOR: '#1a1a2e',
+      DECRETO_ID: '0'
+    });
+    return renderHtml(html, { student });
+  }
   
-  // Usar renderHtml centralizado (aplica tema y headers anti-cache automáticamente)
-  return renderHtml(html, { student });
+  // Obtener decreto de la BD
+  try {
+    const { resolveDecreeById } = await import('../core/pde/catalogs/decrees-resolver.js');
+    const { buildStudentContext } = await import('../core/student-context.js');
+    
+    // Construir contexto para nivel_efectivo
+    const ctxResult = await buildStudentContext(request, env);
+    const studentCtx = ctxResult.ok ? ctxResult.ctx : null;
+    
+    const decreto = await resolveDecreeById(decretoId, studentCtx);
+    
+    if (!decreto) {
+      html = replace(html, {
+        TITULO: 'Decreto no encontrado',
+        CONTENIDO_HTML: '<p style="text-align: center; color: var(--text-error);">El decreto solicitado no existe o no tienes acceso a él.</p>',
+        URL_VOLVER: returnUrl,
+        THEME_COLOR: '#1a1a2e',
+        DECRETO_ID: String(decretoId)
+      });
+      return renderHtml(html, { student });
+    }
+    
+    // Renderizar con datos del decreto
+    html = replace(html, {
+      TITULO: decreto.nombre || 'Decreto',
+      CONTENIDO_HTML: decreto.contenido_html || '<p>Este decreto no tiene contenido definido.</p>',
+      URL_VOLVER: returnUrl,
+      THEME_COLOR: '#ffd86b',
+      DECRETO_ID: String(decreto.id)
+    });
+    
+    return renderHtml(html, { student });
+    
+  } catch (error) {
+    console.error('[renderDecreto] Error obteniendo decreto:', error);
+    html = replace(html, {
+      TITULO: 'Error',
+      CONTENIDO_HTML: `<p style="text-align: center; color: var(--text-error);">Error al cargar el decreto: ${error.message}</p>`,
+      URL_VOLVER: returnUrl,
+      THEME_COLOR: '#1a1a2e',
+      DECRETO_ID: String(decretoId || 0)
+    });
+    return renderHtml(html, { student });
+  }
 }
 
 /**
- * API: Obtener decreto (POST)
+ * API: Obtener decreto por ID (GET /api/decreto/:id)
+ * 
+ * @param {Request} request 
+ * @param {Object} env 
+ * @returns {Response} JSON con datos del decreto
  */
 export async function apiObtenerDecreto(request, env) {
-  // Obtener contexto de autenticación (devuelve Response si no autenticado)
+  // Obtener contexto de autenticación
   const authCtx = await requireStudentContext(request, env);
   if (authCtx instanceof Response) {
     return new Response(JSON.stringify({ error: 'No autorizado' }), {
@@ -846,16 +914,78 @@ export async function apiObtenerDecreto(request, env) {
     });
   }
   
-  // Usar ctx.user en lugar de buscar alumno directamente
   const student = authCtx.user;
   
-  // Lógica aún no implementada
-  return new Response(JSON.stringify({ 
-    message: 'API aún no implementada',
-    decreto: null
-  }), {
-    headers: { "Content-Type": "application/json" }
-  });
+  try {
+    // Parsear body para obtener decreto_id
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ 
+        error: 'Body JSON inválido. Formato: { "decreto_id": 123 }' 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    const { decreto_id } = body;
+    
+    if (!decreto_id || typeof decreto_id !== 'number') {
+      return new Response(JSON.stringify({ 
+        error: 'decreto_id es requerido y debe ser un número' 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    // Construir contexto para nivel_efectivo
+    const { buildStudentContext } = await import('../core/student-context.js');
+    const ctxResult = await buildStudentContext(request, env);
+    const studentCtx = ctxResult.ok ? ctxResult.ctx : null;
+    
+    // Obtener decreto
+    const { resolveDecreeById } = await import('../core/pde/catalogs/decrees-resolver.js');
+    const decreto = await resolveDecreeById(decreto_id, studentCtx);
+    
+    if (!decreto) {
+      return new Response(JSON.stringify({ 
+        error: 'Decreto no encontrado o no accesible',
+        decreto_id
+      }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    // Devolver decreto
+    return new Response(JSON.stringify({ 
+      success: true,
+      decreto: {
+        id: decreto.id,
+        nombre: decreto.nombre,
+        contenido_html: decreto.contenido_html,
+        nivel_minimo: decreto.nivel_minimo,
+        posicion: decreto.posicion,
+        obligatoria_global: decreto.obligatoria_global,
+        obligatoria_por_nivel: decreto.obligatoria_por_nivel
+      }
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+    
+  } catch (error) {
+    console.error('[apiObtenerDecreto] Error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message 
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
 }
 
 /**

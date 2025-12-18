@@ -12,6 +12,9 @@ import { renderHtml } from './html-response.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { getDefaultAuditRepo } from '../infra/repos/audit-repo-pg.js';
+import { getRequestId } from './observability/request-context.js';
+import { logError } from './observability/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,12 +37,20 @@ function replace(html, placeholders) {
 
 /**
  * Renderiza la pantalla de login de admin
+ * PROTEGIDO: Si replace() falla, muestra fallback simple pero NO aborta auth
  */
 function renderAdminLogin() {
-  const html = replace(loginTemplate, {
-    ERROR_MESSAGE: ''
-  });
-  return renderHtml(html);
+  try {
+    const html = replace(loginTemplate, {
+      ERROR_MESSAGE: ''
+    });
+    return renderHtml(html);
+  } catch (replaceError) {
+    // Si replace() falla, mostrar fallback simple pero NO romper el flujo
+    console.error('[auth-context] Error en renderAdminLogin/replace:', replaceError);
+    const fallbackHtml = loginTemplate.replace('{{ERROR_MESSAGE}}', '');
+    return renderHtml(fallbackHtml);
+  }
 }
 
 /**
@@ -79,6 +90,28 @@ export async function requireStudentContext(request, env) {
   if (!student) {
     // Si no existe en PostgreSQL, limpiar cookie y mostrar pantalla de inscripción
     console.log(`⚠️  [auth-context] ${emailCookie} no existe en PostgreSQL, limpiando cookie`);
+    
+    // Registrar evento de auditoría (sin datos sensibles)
+    try {
+      const auditRepo = getDefaultAuditRepo();
+      await auditRepo.recordEvent({
+        requestId: getRequestId(),
+        actorType: 'system',
+        actorId: null,
+        eventType: 'AUTH_CONTEXT_FAIL',
+        severity: 'warn',
+        data: {
+          reason: 'student_not_found',
+          email_provided: !!emailCookie
+        }
+      });
+    } catch (err) {
+      // No fallar si el audit falla (fail-open)
+      logError('audit', 'Error registrando AUTH_CONTEXT_FAIL', {
+        error: err.message
+      });
+    }
+    
     const response = renderPantalla0();
     // Clonar response para poder modificar headers
     const newHeaders = new Headers(response.headers);
@@ -92,17 +125,19 @@ export async function requireStudentContext(request, env) {
   // Si existe, usar getOrCreateStudent para asegurar datos actualizados
   student = await getOrCreateStudent(emailCookie, env);
   
-  // Devolver contexto de autenticación
+  // Devolver contexto de autenticación con requestId
   return {
     user: student,
     isAdmin: false,
     isAuthenticated: true,
-    request
+    request,
+    requestId: getRequestId()
   };
 }
 
 /**
  * Requiere contexto de admin autenticado
+ * FASE 1 - Logs detallados para diagnóstico
  * 
  * Si no hay sesión admin válida, devuelve directamente
  * una respuesta HTML (login admin) usando renderHtml().
@@ -118,22 +153,88 @@ export async function requireStudentContext(request, env) {
  * @returns {object|Response} Contexto de autenticación o Response HTML
  */
 export async function requireAdminContext(request, env) {
+  // LOG: Información del request
+  const requestUrl = request?.url || 'unknown';
+  const requestHost = request?.headers?.get('host') || 'unknown';
+  const forwardedProto = request?.headers?.get('x-forwarded-proto') || 'none';
+  const hasCookieHeader = request?.headers?.has('Cookie');
+  
+  console.log(`[AdminAuth] requireAdminContext() - URL: ${requestUrl}, Host: ${requestHost}, X-Forwarded-Proto: ${forwardedProto}, Has-Cookie-Header: ${hasCookieHeader}`);
+  
+  // ============================================================================
+  // FASE 4 - VERIFICACIÓN DE REQUEST POSTERIOR
+  // ============================================================================
+  // Log al inicio
+  const cookieHeader = request.headers.get('cookie') || '';
+  console.log('[ADMIN AUTH QA] Incoming cookies', cookieHeader);
+  
+  // Confirmar si la cookie de sesión está presente
+  const cookieMatch = cookieHeader.match(/admin_session=([^;]+)/);
+  const cookiePresent = !!cookieMatch;
+  console.log('[ADMIN AUTH QA] Cookie admin_session presente:', cookiePresent);
+  
+  if (cookiePresent) {
+    try {
+      const token = decodeURIComponent(cookieMatch[1]);
+      console.log('[ADMIN AUTH QA] Cookie parseada correctamente, token length:', token.length);
+    } catch (error) {
+      console.log('[ADMIN AUTH QA] Error parseando cookie:', error.message);
+    }
+  }
+  
   // Validar sesión admin usando admin-auth.js
   const isValidSession = validateAdminSession(request);
+  
+  console.log(`[AdminAuth] requireAdminContext() - Sesión válida: ${isValidSession}`);
+  console.log('[ADMIN AUTH QA] requireAdminContext acepta la sesión:', isValidSession);
   
   if (!isValidSession) {
     // Si no hay sesión válida → pantalla de login admin
     console.log(`⚠️  [auth-context] No hay sesión admin válida, mostrando login`);
+    
+    // Registrar evento de auditoría (sin datos sensibles)
+    try {
+      const auditRepo = getDefaultAuditRepo();
+      await auditRepo.recordEvent({
+        requestId: getRequestId(),
+        actorType: 'system',
+        actorId: null,
+        eventType: 'AUTH_CONTEXT_FAIL',
+        severity: 'warn',
+        data: {
+          reason: 'admin_session_invalid',
+          context: 'admin'
+        }
+      });
+    } catch (err) {
+      // No fallar si el audit falla (fail-open)
+      logError('audit', 'Error registrando AUTH_CONTEXT_FAIL (admin)', {
+        error: err.message
+      });
+    }
+    
     return renderAdminLogin();
   }
   
-  // Devolver contexto de autenticación admin
+  console.log(`[AdminAuth] requireAdminContext() - Sesión válida, devolviendo contexto admin`);
+  
+  // Devolver contexto de autenticación admin con requestId
   return {
     user: { isAdmin: true }, // Objeto admin simplificado
     isAdmin: true,
     isAuthenticated: true,
-    request
+    request,
+    requestId: getRequestId()
   };
 }
+
+
+
+
+
+
+
+
+
 
 

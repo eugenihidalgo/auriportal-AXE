@@ -290,3 +290,12 @@ Esta refactorización avanza hacia arquitectura limpia:
 **Aprobación:** Pendiente
 
 
+
+
+
+
+
+
+
+
+

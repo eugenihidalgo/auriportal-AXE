@@ -188,9 +188,9 @@ export function iniciarScheduler(env) {
   console.log('✅ Tarea programada configurada: Recálculo masivo de niveles de todos los alumnos a las 3:00 AM');
   
   // Procesamiento de transcripciones cada X minutos (configurable)
-  // Esto funciona como respaldo si el webhook no está configurado o falla
-  // TEMPORALMENTE DESACTIVADO - Solo se ejecuta manualmente o cuando se reactive
-  const intervaloTranscripciones = env.DRIVE_MONITOR_INTERVAL || 5; // minutos por defecto
+  // DESACTIVADO PERMANENTEMENTE - Solo se ejecuta manualmente o cuando se reactive explícitamente
+  // Para reactivar, cambiar scheduled: false a scheduled: true
+  const intervaloTranscripciones = env.DRIVE_MONITOR_INTERVAL || 30; // minutos por defecto (aumentado de 5 a 30)
   const tareaTranscripciones = cron.schedule(`*/${intervaloTranscripciones} * * * *`, async () => {
     // Verificar si está activo antes de ejecutar
     const { getControlTranscripciones } = await import('./whisper-transcripciones.js');
@@ -201,14 +201,15 @@ export function iniciarScheduler(env) {
     }
     await ejecutarProcesamientoTranscripciones(env);
   }, {
-    scheduled: true,
+    scheduled: false, // DESACTIVADO - No se ejecuta automáticamente
     timezone: "Europe/Madrid"
   });
   
-  console.log(`✅ Tarea programada configurada: Procesamiento de transcripciones cada ${intervaloTranscripciones} minutos (respaldo) - Verifica estado activo antes de ejecutar`);
+  console.log(`⏸️ Tarea programada DESACTIVADA: Procesamiento de transcripciones cada ${intervaloTranscripciones} minutos (solo manual)`);
   
   // Procesamiento nocturno de audios largos (diario a las 23:00 - 6:00)
-  // Procesa audios largos con Whisper Large cuando hay menos carga
+  // DESACTIVADO PERMANENTEMENTE - Solo se ejecuta manualmente o cuando se reactive explícitamente
+  // Para reactivar, cambiar scheduled: false a scheduled: true
   const tareaNocturnaAudiosLargos = cron.schedule('0 23 * * *', async () => {
     const horaInicio = new Date().toISOString();
     console.log(`\n🌙 [${horaInicio}] Iniciando procesamiento nocturno de audios largos con Whisper Large...`);
@@ -245,13 +246,15 @@ export function iniciarScheduler(env) {
       console.error(`❌ [${new Date().toISOString()}] Error en procesamiento nocturno:`, err);
     }
   }, {
-    scheduled: true,
+    scheduled: false, // DESACTIVADO - No se ejecuta automáticamente
     timezone: "Europe/Madrid"
   });
   
-  console.log('✅ Tarea programada configurada: Procesamiento nocturno de audios largos a las 23:00 (Whisper Large) - Verifica estado activo antes de ejecutar');
+  console.log('⏸️ Tarea programada DESACTIVADA: Procesamiento nocturno de audios largos a las 23:00 (solo manual)');
   
   // Procesamiento automático de transcripciones Whisper (diario a las 2:00 AM)
+  // DESACTIVADO PERMANENTEMENTE - Solo se ejecuta manualmente o cuando se reactive explícitamente
+  // Para reactivar, cambiar scheduled: false a scheduled: true
   const tareaWhisperTranscripciones = cron.schedule('0 2 * * *', async () => {
     const horaInicio = new Date().toISOString();
     console.log(`\n🎤 [${horaInicio}] Iniciando procesamiento automático de transcripciones Whisper...`);
@@ -283,11 +286,11 @@ export function iniciarScheduler(env) {
       console.error(`❌ [${new Date().toISOString()}] Error en procesamiento Whisper:`, err);
     }
   }, {
-    scheduled: true,
+    scheduled: false, // DESACTIVADO - No se ejecuta automáticamente
     timezone: "Europe/Madrid"
   });
   
-  console.log('✅ Tarea programada configurada: Procesamiento automático de transcripciones Whisper a las 2:00 AM - Verifica estado activo antes de ejecutar');
+  console.log('⏸️ Tarea programada DESACTIVADA: Procesamiento automático de transcripciones Whisper a las 2:00 AM (solo manual)');
   
   // Cálculo automático de resumen diario de analytics (diario a las 2:00 AM)
   const tareaResumenDiario = cron.schedule('0 2 * * *', async () => {
@@ -310,6 +313,56 @@ export function iniciarScheduler(env) {
   });
   
   console.log('✅ Tarea programada configurada: Cálculo de resumen diario de analytics a las 2:00 AM');
+  
+  // Auditoría de caché de Cloudflare (cada 6 horas)
+  // Detecta errores cacheados y ejecuta purga automática
+  const tareaAuditorCache = cron.schedule('0 */6 * * *', async () => {
+    const horaInicio = new Date().toISOString();
+    console.log(`\n🔍 [${horaInicio}] Iniciando auditoría de caché de Cloudflare...`);
+    try {
+      // Importar y ejecutar auditor (import dinámico para evitar dependencias circulares)
+      // Usar ruta absoluta desde la raíz del proyecto
+      const { fileURLToPath } = await import('url');
+      const { dirname, join } = await import('path');
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const projectRoot = join(__dirname, '../..');
+      const auditorPath = join(projectRoot, 'scripts', 'cloudflare', 'cache-auditor.js');
+      const { auditCache } = await import(`file://${auditorPath}`);
+      const resultado = await auditCache();
+      
+      const horaFin = new Date().toISOString();
+      if (resultado.success) {
+        if (resultado.errorsDetected > 0) {
+          console.warn(`⚠️  [${horaFin}] Auditoría completada con ${resultado.errorsDetected} error(es) cacheado(s) detectado(s)`);
+          if (resultado.purgeExecuted) {
+            console.log(`   ✅ Purga automática ejecutada`);
+          }
+        } else {
+          console.log(`✅ [${horaFin}] Auditoría completada - sin errores cacheados`);
+        }
+      } else {
+        console.warn(`⚠️  [${horaFin}] Error en auditoría de caché: ${resultado.error || 'Error desconocido'}`);
+      }
+    } catch (err) {
+      // Fail-open: nunca crashear el scheduler
+      console.warn(`⚠️  [${new Date().toISOString()}] Error en auditoría de caché de Cloudflare:`, err.message);
+      // Log estructurado de error
+      console.warn(JSON.stringify({
+        source: 'cloudflare',
+        action: 'audit',
+        reason: 'scheduler_error',
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  }, {
+    scheduled: true,
+    timezone: "Europe/Madrid"
+  });
+  
+  console.log('✅ Tarea programada configurada: Auditoría de caché de Cloudflare cada 6 horas');
   
   // Intentar configurar webhook automáticamente al iniciar (si está habilitado)
   if (env.DRIVE_WEBHOOK_AUTO_SETUP !== 'false') {

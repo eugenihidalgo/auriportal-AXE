@@ -4,162 +4,208 @@
 // REGLA: Los endpoints no gestionan autenticación; solo consumen contexto.
 
 import { createCookie } from "../core/cookies.js";
-import { requireStudentContext } from "../core/auth-context.js";
+import { buildStudentContext } from "../core/student-context.js";
 import {
   renderPantalla0,
   renderPantalla1,
-  renderPantalla2,
-  hitoMessage
+  renderPantalla2
 } from "../core/responses.js";
 
-import { getOrCreateStudent, findStudentByEmail } from "../modules/student-v4.js";
-import { checkDailyStreak, detectMilestone } from "../modules/streak-v4.js";
+import { findStudentByEmail } from "../modules/student-v4.js";
 import { recordAccessLog } from "../modules/logs-v4.js";
-import { actualizarNivelSiCorresponde, getNivelInfo } from "../modules/nivel-v4.js";
-import { gestionarEstadoSuscripcion } from "../modules/suscripcion-v4.js";
-import { getFrasePorNivel } from "../modules/frases.js";
+import { actualizarNivelSiCorresponde } from "../modules/nivel-v4.js";
 import { buildTypeformUrl } from "../core/typeform-utils.js";
 import { TYPEFORM } from "../config/config.js";
 import { isFeatureEnabled } from "../core/flags/feature-flags.js";
 import { logInfo } from "../core/observability/logger.js";
+import { getNavigationItemsForStudent } from "../core/navigation/navigation-renderer.js";
+import { getSidebarItemsForStudent, determineSidebarContext } from "../core/navigation/sidebar-renderer.js";
 
 export default async function enterHandler(request, env, ctx) {
-  const url = new URL(request.url);
+  try {
+    // Validar que request.url esté disponible
+    if (!request || !request.url) {
+      console.error('[enter] request o request.url no disponible');
+      return new Response("Bad Request", {
+        status: 400,
+        headers: { "Content-Type": "text/plain" }
+      });
+    }
+
+    const url = new URL(request.url);
 
   // -----------------------------
   // 0. Manejo de formulario POST (recuperación de sesión con email)
   // -----------------------------
   if (request.method === "POST") {
-    const formData = await request.formData();
-    let email = formData.get("email");
+    // CRÍTICO: POST /enter NUNCA debe devolver 500
+    // Logs explícitos para diagnóstico
+    console.log('[enter] POST /enter recibido');
     
-    // Leer checkbox "Recuérdame en este dispositivo" (true si está marcado, false si no)
-    const rememberMe = formData.get("remember_me") === "on";
+    try {
+      // Intentar parsear formData
+      let formData;
+      try {
+        formData = await request.formData();
+        console.log('[enter] formData parseado correctamente');
+      } catch (formDataError) {
+        console.error('[enter] Error parseando formData:', formDataError.message);
+        console.error('[enter] formData stack:', formDataError.stack);
+        // Si falla formData, mostrar pantalla0
+        return renderPantalla0();
+      }
+      
+      // Verificar si request.body existe (para diagnóstico)
+      console.log('[enter] request.body existe:', request.body !== null && request.body !== undefined);
+      
+      let email = formData ? formData.get("email") : null;
+      console.log('[enter] email extraído del formData:', email ? `"${email}"` : 'NO HAY EMAIL');
+      
+      // Leer checkbox "Recuérdame en este dispositivo" (true si está marcado, false si no)
+      const rememberMe = formData ? formData.get("remember_me") === "on" : false;
+      console.log('[enter] rememberMe:', rememberMe);
 
-    if (!email) {
+      // Validar email
+      if (!email || typeof email !== 'string' || email.trim().length === 0) {
+        console.warn('[enter] Email no válido o vacío, mostrando pantalla0');
+        return renderPantalla0();
+      }
+
+      // Normalizar email a minúsculas y trim
+      email = email.toLowerCase().trim();
+      console.log(`📧 Email recibido en POST: "${email}"`);
+      console.log(`🍪 Recuérdame: ${rememberMe ? 'SÍ (1 año)' : 'NO (sesión)'}`);
+
+      // NUEVO FLUJO: Verificar si el email existe en PostgreSQL (fuente de verdad)
+      console.log(`🔍 Verificando si ${email} existe en PostgreSQL...`);
+      let student;
+      try {
+        student = await findStudentByEmail(env, email);
+      } catch (findError) {
+        console.error('[enter] Error en findStudentByEmail:', findError.message);
+        console.error('[enter] findStudentByEmail stack:', findError.stack);
+        // Si falla la búsqueda, mostrar pantalla0
+        return renderPantalla0();
+      }
+      
+      if (student) {
+        // El email EXISTE en PostgreSQL → crear cookie y redirigir directamente a pantalla de racha
+        console.log(`✅ ${email} existe en PostgreSQL, creando cookie y yendo a pantalla de racha`);
+        
+        // Crear cookie con duración según rememberMe: 1 año si está marcado, 1 día si no
+        let cookieString;
+        try {
+          cookieString = createCookie({ email }, request, rememberMe);
+          console.log(`🍪 Cookie creada para ${email} (rememberMe: ${rememberMe}): ${cookieString.substring(0, 100)}...`);
+        } catch (cookieError) {
+          console.error('[enter] Error en createCookie:', cookieError.message);
+          console.error('[enter] createCookie stack:', cookieError.stack);
+          // Si falla la cookie, continuar sin cookie (el usuario puede reintentar)
+          cookieString = '';
+        }
+        
+        // Crear headers con la cookie
+        const headers = new Headers({
+          "Location": "/enter"
+        });
+        
+        // Solo añadir Set-Cookie si la cookie se creó correctamente
+        if (cookieString && cookieString.length > 0) {
+          headers.set("Set-Cookie", cookieString);
+        }
+        
+        const response = new Response("", {
+          status: 302,
+          headers: headers
+        });
+
+        return response;
+      }
+
+      // Si NO existe en PostgreSQL → redirigir a Typeform para completar el formulario de bienvenida
+      // Enviar solo email como hidden field (Typeform ya no pedirá el email)
+      console.log(`📝 ${email} no existe en PostgreSQL, redirigiendo a Typeform con email como hidden field`);
+      try {
+        const typeformUrl = buildTypeformUrl(TYPEFORM.ONBOARDING_ID, {
+          email: email
+        });
+        return Response.redirect(typeformUrl, 302);
+      } catch (typeformError) {
+        console.error('[enter] Error en buildTypeformUrl:', typeformError.message);
+        console.error('[enter] buildTypeformUrl stack:', typeformError.stack);
+        // Si falla Typeform, mostrar pantalla0
+        return renderPantalla0();
+      }
+    } catch (postError) {
+      // CRÍTICO: Capturar CUALQUIER error en POST /enter
+      console.error('[enter] Error en bloque POST /enter:', postError.message);
+      console.error('[enter] POST /enter stack:', postError.stack);
+      // NUNCA devolver 500, siempre pantalla0
       return renderPantalla0();
     }
-
-    // Normalizar email a minúsculas y trim
-    email = email.toLowerCase().trim();
-    console.log(`📧 Email recibido en POST: "${email}"`);
-    console.log(`🍪 Recuérdame: ${rememberMe ? 'SÍ (1 año)' : 'NO (sesión)'}`);
-
-    // NUEVO FLUJO: Verificar si el email existe en PostgreSQL (fuente de verdad)
-    console.log(`🔍 Verificando si ${email} existe en PostgreSQL...`);
-    let student = await findStudentByEmail(env, email);
-    
-    if (student) {
-      // El email EXISTE en PostgreSQL → crear cookie y redirigir directamente a pantalla de racha
-      console.log(`✅ ${email} existe en PostgreSQL, creando cookie y yendo a pantalla de racha`);
-      
-      // Crear cookie con duración según rememberMe: 1 año si está marcado, 1 día si no
-      const cookieString = createCookie({ email }, request, rememberMe);
-      console.log(`🍪 Cookie creada para ${email} (rememberMe: ${rememberMe}): ${cookieString.substring(0, 100)}...`);
-      
-      // Crear headers con la cookie
-      const headers = new Headers({
-        "Location": "/enter",
-        "Set-Cookie": cookieString
-      });
-      
-      const response = new Response("", {
-        status: 302,
-        headers: headers
-      });
-
-      return response;
-    }
-
-    // Si NO existe en PostgreSQL → redirigir a Typeform para completar el formulario de bienvenida
-    // Enviar solo email como hidden field (Typeform ya no pedirá el email)
-    console.log(`📝 ${email} no existe en PostgreSQL, redirigiendo a Typeform con email como hidden field`);
-    const typeformUrl = buildTypeformUrl(TYPEFORM.ONBOARDING_ID, {
-      email: email
-    });
-    return Response.redirect(typeformUrl, 302);
   }
 
   // -----------------------------
   // 1. Si pulsa "Sí, hoy practico"
   // -----------------------------
   if (url.searchParams.get("practico") === "si") {
-    // Obtener contexto de autenticación (devuelve Response si no autenticado)
-    const authCtx = await requireStudentContext(request, env);
-    if (authCtx instanceof Response) return authCtx;
-    
-    // Usar ctx.user en lugar de buscar alumno directamente
-    let student = authCtx.user;
-
-    // Verificar estado de suscripción antes de permitir practicar
-    const estadoSuscripcion = await gestionarEstadoSuscripcion(emailCookie, env, student);
-    if (estadoSuscripcion.pausada) {
-      // Mostrar mensaje de que está pausada
-      const nivelInfo = await getNivelInfo(student);
+    console.log('[enter] GET /enter?practico=si recibido');
+    try {
+      // Construir contexto del estudiante (con forcePractice: true)
+      const contextResult = await buildStudentContext(request, env, { forcePractice: true });
       
-      // Obtener frase del sistema con variables dinámicas (ya renderizada)
-      const fraseNivel = await getFrasePorNivel(nivelInfo.nivel, student);
+      if (!contextResult.ok) {
+        return contextResult.response;
+      }
       
-      const streakInfo = {
-        todayPracticed: false,
-        streak: student.streak,
-        motivationalPhrase: `⏸️ Tu suscripción está pausada. ${estadoSuscripcion.razon || "No puedes practicar hasta que se reactive."}`,
-        fraseNivel: fraseNivel, // Frase del sistema con variables dinámicas renderizadas
-        nivelInfo: nivelInfo,
-        suscripcionPausada: true
-      };
-      return renderPantalla1(student, streakInfo);
+      const ctx = contextResult.ctx;
+      const student = ctx.student;
+      
+      // Si la suscripción está pausada, mostrar pantalla1 con mensaje
+      if (ctx.estadoSuscripcion && ctx.estadoSuscripcion.pausada) {
+        console.log('[enter] Suscripción pausada, mostrando pantalla1');
+        try {
+          return renderPantalla1(student, ctx);
+        } catch (renderError) {
+          console.error('[enter] Error en renderPantalla1 (practico pausada):', renderError.message);
+          return renderPantalla0();
+        }
+      }
+      
+      // Actualizar nivel en background (no crítico para mostrar pantalla)
+      actualizarNivelSiCorresponde(student, env)
+        .catch(err => console.error("Error actualizando nivel en background:", err));
+      
+      // Mostrar pantalla2 (ya practicó)
+      console.log('[enter] Decision pantalla: pantalla2 (ya practicó)');
+      try {
+        return renderPantalla2(student, ctx);
+      } catch (renderError) {
+        console.error('[enter] Error en renderPantalla2 (practico):', renderError.message);
+        return renderPantalla0();
+      }
+    } catch (practicoError) {
+      console.error('[enter] Error en bloque practico:', practicoError.message);
+      console.error('[enter] practico stack:', practicoError.stack);
+      return renderPantalla0();
     }
-
-    // Actualizar racha (solo si no está pausada)
-    const streakCheck = await checkDailyStreak(student, env, {
-      forcePractice: true
-    });
-
-    // Actualizar nivel en background (no crítico para mostrar pantalla)
-    actualizarNivelSiCorresponde(student, env)
-      .catch(err => console.error("Error actualizando nivel en background:", err));
-
-    // Usar el streak del resultado de checkDailyStreak (ya está actualizado)
-    // Esto evita recargar el estudiante innecesariamente
-    const streakFinal = streakCheck.streak !== undefined ? streakCheck.streak : student.streak;
-    
-    const bloqueHito = detectMilestone(streakFinal)
-      ? hitoMessage(streakFinal)
-      : "";
-
-    // Obtener información de nivel (con fase dinámica)
-    const nivelInfo = await getNivelInfo(student);
-    
-    // Obtener frase del sistema con variables dinámicas (ya renderizada)
-    const fraseNivel = await getFrasePorNivel(nivelInfo.nivel, student);
-    
-    // Crear streakInfo con datos del resultado de checkDailyStreak
-    const streakInfo = {
-      todayPracticed: true,
-      streak: streakFinal,
-      motivationalPhrase: getMotivationalPhrase(streakFinal),
-      fraseNivel: fraseNivel, // Frase del sistema con variables dinámicas renderizadas
-      nivelInfo: nivelInfo
-    };
-
-    return renderPantalla2(student, streakInfo, bloqueHito);
   }
 
   // -----------------------------
-  // 2. Obtener contexto de autenticación
+  // 2. Obtener contexto del estudiante
   // -----------------------------
-  // Los endpoints no gestionan autenticación; solo consumen contexto.
-  const authCtx = await requireStudentContext(request, env);
+  // CRÍTICO: GET / y GET /enter NUNCA deben devolver 500
+  console.log('[enter] GET /enter o GET / recibido');
   
-  // Si no está autenticado, requireStudentContext ya devolvió la respuesta HTML (pantalla0)
-  if (authCtx instanceof Response) return authCtx;
+  // Construir contexto completo del estudiante
+  const contextResult = await buildStudentContext(request, env);
   
-  // Usar ctx.user en lugar de buscar alumno directamente
-  let student = authCtx.user;
+  if (!contextResult.ok) {
+    return contextResult.response;
+  }
   
-  // Obtener email normalizado del estudiante
-  const emailCookie = student.email.toLowerCase().trim();
+  const ctx = contextResult.ctx;
+  const student = ctx.student;
   
   // -----------------------------
   // FEATURE FLAG: progress_v4 (PRIMER USO DE FEATURE FLAGS V4)
@@ -190,23 +236,6 @@ export default async function enterHandler(request, env, ctx) {
   // Si la feature está desactivada, isFeatureEnabled ya hizo su WARN automático
   // y continuamos con el flujo normal sin cambios
   
-  // -----------------------------
-  // 3. Gestionar estado de suscripción PRIMERO (CRÍTICO para cálculo de días activos)
-  // -----------------------------
-  // IMPORTANTE: Esto debe ejecutarse ANTES de calcular el nivel para que las pausas
-  // se registren correctamente y el cálculo de días activos sea preciso
-  const estadoSuscripcion = await gestionarEstadoSuscripcion(emailCookie, env, student, null);
-  
-  // Si se reactivó, recargar estudiante para tener datos actualizados
-  if (estadoSuscripcion.reactivada) {
-    student = await getOrCreateStudent(emailCookie, env);
-  }
-
-  // -----------------------------
-  // 4. Comprobar racha (para mostrar pantalla rápido)
-  // -----------------------------
-  const streakCheck = await checkDailyStreak(student, env);
-
   // OPERACIONES NO CRÍTICAS EN BACKGROUND (no bloquean la respuesta)
   Promise.all([
     // Registro de acceso en background
@@ -219,45 +248,114 @@ export default async function enterHandler(request, env, ctx) {
       .catch(err => console.error("Error actualizando nivel en background:", err))
   ]).catch(() => {}); // Ignorar errores en background
 
-  // Usar el streak del resultado de checkDailyStreak (ya está actualizado)
-  // Solo recargar estudiante si necesitamos otros datos actualizados (como nivel)
-  // pero para el streak usamos directamente el valor de streakCheck
-  const streakFinal = streakCheck.streak !== undefined ? streakCheck.streak : student.streak;
-  
-  // Obtener información de nivel (con fase dinámica)
-  const nivelInfo = await getNivelInfo(student);
-  
-  // Obtener frase del sistema con variables dinámicas (ya renderizada si hay alumno)
-  const fraseNivel = await getFrasePorNivel(nivelInfo.nivel, student);
-  
-  const streakInfo = {
-    todayPracticed: streakCheck.todayPracticed,
-    streak: streakFinal,
-    motivationalPhrase: getMotivationalPhrase(streakFinal),
-    fraseNivel: fraseNivel || getMotivationalPhrase(streakFinal), // Frase del sistema o frase motivacional por defecto
-    nivelInfo: nivelInfo
-  };
-
-  if (!streakInfo.todayPracticed) {
-    return renderPantalla1(student, streakInfo);
+  // Decidir pantalla basado en ctx.todayPracticed (single source of truth)
+  if (!ctx.todayPracticed) {
+    console.log('[enter] Decision pantalla: pantalla1 (no ha practicado hoy)');
+    try {
+      // Determinar contexto del sidebar basado en la ruta actual
+      const sidebarContext = determineSidebarContext(url.pathname);
+      
+      // Obtener items de navegación dinámica para la Home
+      let navItems = [];
+      try {
+        navItems = await getNavigationItemsForStudent(ctx, 'main-navigation', 'home', url.pathname);
+        console.log(`[enter] Navegación cargada: ${navItems.length} items (zone: home)`);
+      } catch (navError) {
+        // FAIL-OPEN: Si falla, continuar con navegación vacía
+        console.error('[enter] Error cargando navegación (fail-open):', navError.message);
+        navItems = [];
+      }
+      
+      // Obtener items del sidebar
+      let sidebarItems = [];
+      try {
+        sidebarItems = await getSidebarItemsForStudent(ctx, sidebarContext, 'main-navigation', url.pathname);
+        console.log(`[enter] Sidebar cargado: ${sidebarItems.length} items (contexto: ${sidebarContext})`);
+      } catch (sidebarError) {
+        // FAIL-OPEN: Si falla, continuar con sidebar vacío
+        console.error('[enter] Error cargando sidebar (fail-open):', sidebarError.message);
+        sidebarItems = [];
+      }
+      
+      // Añadir navItems y sidebarItems al contexto para renderPantalla1
+      const ctxWithNav = { ...ctx, navItems, sidebarItems, sidebarContext };
+      
+      return renderPantalla1(student, ctxWithNav);
+    } catch (renderError) {
+      console.error('[enter] Error en renderPantalla1:', renderError.message);
+      return renderPantalla0();
+    }
   }
 
   // -----------------------------
-  // 5. Pantalla 2 si ya practicó
+  // 3. Pantalla 2 si ya practicó
   // -----------------------------
-  const bloqueHito = detectMilestone(student.streak)
-    ? hitoMessage(student.streak)
-    : "";
-
-  return renderPantalla2(student, streakInfo, bloqueHito);
+  console.log('[enter] Decision pantalla: pantalla2 (ya practicó hoy)');
+  try {
+    // Determinar contexto del sidebar basado en la ruta actual
+    const sidebarContext = determineSidebarContext(url.pathname);
+    
+    // Obtener items del sidebar
+    let sidebarItems = [];
+    try {
+      sidebarItems = await getSidebarItemsForStudent(ctx, sidebarContext, 'main-navigation', url.pathname);
+      console.log(`[enter] Sidebar cargado: ${sidebarItems.length} items (contexto: ${sidebarContext})`);
+    } catch (sidebarError) {
+      // FAIL-OPEN: Si falla, continuar con sidebar vacío
+      console.error('[enter] Error cargando sidebar (fail-open):', sidebarError.message);
+      sidebarItems = [];
+    }
+    
+    // Añadir sidebarItems al contexto para renderPantalla2
+    const ctxWithSidebar = { ...ctx, sidebarItems, sidebarContext };
+    
+    return renderPantalla2(student, ctxWithSidebar);
+  } catch (renderError) {
+    console.error('[enter] Error en renderPantalla2:', renderError.message);
+    return renderPantalla0();
+  }
+  } catch (error) {
+    // CRÍTICO: Capturar TODOS los errores en enterHandler
+    // NUNCA devolver 500 - siempre pantalla0 o respuesta HTML básica con status 200
+    console.error('[enter] Error no manejado:', error);
+    console.error('[enter] Stack:', error.stack);
+    console.error('[enter] request.method:', request.method);
+    console.error('[enter] request.url:', request.url);
+    
+    // En caso de error, mostrar pantalla0 (login) en lugar de error 500
+    // Esto asegura que el cliente siempre pueda cargar
+    try {
+      return renderPantalla0();
+    } catch (renderError) {
+      // Si incluso renderPantalla0 falla, devolver respuesta HTML básica con status 200
+      // NUNCA devolver 500 - el cliente debe poder ver algo
+      console.error('[enter] Error renderizando pantalla0:', renderError);
+      console.error('[enter] renderPantalla0 stack:', renderError.stack);
+      // Respuesta HTML básica con status 200 para que el cliente pueda recargar
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>AuriPortal</title>
+          <meta http-equiv="refresh" content="3;url=/">
+        </head>
+        <body>
+          <h1>Portal en mantenimiento</h1>
+          <p>Por favor, recarga la página en unos segundos.</p>
+          <p><a href="/">Volver al inicio</a></p>
+        </body>
+        </html>
+      `, {
+        status: 200,
+        headers: { 
+          "Content-Type": "text/html; charset=UTF-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        }
+      });
+    }
+  }
 }
 
-/**
- * Frases motivacionales según racha
- */
-function getMotivationalPhrase(streak) {
-  if (streak <= 3) return "Hoy enciendes tu luz interior.";
-  if (streak <= 10) return "Tu constancia está despertando un fuego nuevo.";
-  if (streak <= 30) return "Tu energía ya sostiene un ritmo sagrado.";
-  return "Tu compromiso ilumina caminos invisibles.";
-}

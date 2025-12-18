@@ -5,7 +5,7 @@
 // REFACTOR: Usa PracticeRepo en lugar de importar directamente database/pg.js
 // El repositorio encapsula todas las queries de prácticas.
 
-import getDefaultPracticeRepo from "../infra/repos/practice-repo-pg.js";
+import { getDefaultPracticeRepo } from "../infra/repos/practice-repo-pg.js";
 import { logInfo, logWarn } from "../core/observability/logger.js";
 
 /**
@@ -168,5 +168,15 @@ export const practicas = {
   existsForDate,
   countByAlumnoId
 };
+
+
+
+
+
+
+
+
+
+
 
 

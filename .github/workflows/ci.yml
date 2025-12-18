@@ -1,0 +1,91 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Tests y Linter
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Instalar dependencias
+        run: npm ci
+      
+      - name: Ejecutar linter (si existe)
+        run: |
+          if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ] || [ -f "eslint.config.js" ]; then
+            npm run lint || echo "⚠️ Linter no configurado, continuando..."
+          else
+            echo "ℹ️ No hay configuración de linter, omitiendo..."
+          fi
+        continue-on-error: true
+      
+      - name: Ejecutar tests
+        run: npm run test:ci || npm test
+        env:
+          NODE_ENV: test
+          APP_ENV: dev
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_auriportal
+      
+      - name: Generar reporte de cobertura
+        if: matrix.node-version == '20.x'
+        run: |
+          if [ -d "coverage" ]; then
+            echo "📊 Cobertura de código generada"
+            npm run test:coverage || echo "⚠️ Reporte de cobertura no disponible"
+          fi
+        continue-on-error: true
+      
+      - name: Comentar fallos en PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## ❌ Tests Fallidos\n\n';
+            
+            // Intentar leer reporte de tests si existe
+            try {
+              const testOutput = fs.readFileSync('test-results.txt', 'utf8');
+              comment += '### Detalles de fallos:\n\n```\n' + testOutput + '\n```\n';
+            } catch (e) {
+              comment += 'Revisa los logs del workflow para más detalles.\n';
+            }
+            
+            comment += '\n---\n';
+            comment += '🔍 Revisa los [logs completos](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+
+
+
+
+
+
+
+

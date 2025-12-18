@@ -1,0 +1,1989 @@
+<!-- 
+  EDITOR DE NAVEGACIONES - Layout Canónico v2
+  ESTRUCTURA:
+  - .editor-layout: Contenedor flex column que ocupa todo el espacio disponible
+  - .editor-topbar: Header del editor (position: relative, NO fixed)
+  - .editor-body: Contenido principal (flex: 1, overflow: auto) con 3 columnas
+-->
+<div class="navigation-editor editor-layout" id="navigation-editor" data-navigation-id="{{NAVIGATION_ID}}">
+  <!-- Header del editor (NO fixed, forma parte del layout) -->
+  <div class="editor-topbar bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <a href="/admin/navigation" class="text-slate-400 hover:text-white" title="Volver al listado">←</a>
+        <select id="navigation-selector" onchange="cambiarNavegacion()" class="px-3 py-1 bg-slate-700 text-white rounded text-sm" style="display: none;">
+          <option>Cargando...</option>
+        </select>
+        <h1 class="text-xl font-bold text-white" id="navigation-name">Cargando...</h1>
+        <span id="publish-status-badge" class="publish-status publish-status--draft" style="display: none;"></span>
+        <span id="navigation-status" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Cargando...</span>
+        <span id="dirty-badge" class="px-2 py-1 bg-orange-900 text-orange-200 rounded text-xs font-semibold" style="display: none;">● Cambios sin guardar</span>
+        <span id="navigation-version" class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">v-</span>
+        <span id="navigation-published-info" class="px-2 py-1 bg-green-900 text-green-200 rounded text-xs" style="display: none;"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="guardarNavegacion()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors" title="Guardar draft">
+          💾 Guardar
+        </button>
+        <button onclick="validarNavegacion()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+          ✓ Validar
+        </button>
+        <button onclick="exportarNavegacion()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
+          📤 Exportar
+        </button>
+        <button onclick="publicarNavegacion()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
+          🚀 Publicar
+        </button>
+      </div>
+    </div>
+    <div id="validation-messages" class="mt-2"></div>
+  </div>
+  
+  <!-- Contenido principal del editor (flex: 1, scroll interno) -->
+  <div class="editor-body flex flex-col">
+    <!-- Tabs para cambiar vista -->
+    <div class="bg-slate-800 border-b border-slate-700 px-6 py-2 flex gap-2">
+      <button onclick="cambiarVista('mapa')" id="tab-mapa" class="tab-button active px-4 py-2 text-sm font-medium rounded-t transition-colors">
+        🗺️ Mapa
+      </button>
+      <button onclick="cambiarVista('arbol')" id="tab-arbol" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
+        🌳 Árbol
+      </button>
+      <button onclick="cambiarVista('json')" id="tab-json" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
+        📄 JSON
+      </button>
+    </div>
+    
+    <!-- Contenedor de vistas -->
+    <div class="flex-1 flex overflow-hidden">
+      <!-- Vista MAPA (default) -->
+      <div id="vista-mapa" class="vista-container flex-1 flex">
+        <!-- Columna izquierda: Mapa visual jerárquico -->
+        <div class="w-80 bg-slate-950 border-r border-slate-800 overflow-y-auto">
+          <div class="p-4">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-lg font-semibold text-white">Mapa de Navegación</h2>
+              <button onclick="añadirNodo()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded" title="Añadir nodo">
+                ➕
+              </button>
+            </div>
+            <div id="nodes-map" class="space-y-2">
+              <p class="text-slate-400 text-sm">Cargando mapa...</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Columna centro: Propiedades del nodo seleccionado -->
+        <div class="flex-1 bg-slate-900 overflow-y-auto p-6">
+          <div id="node-properties" class="bg-slate-800 rounded-lg shadow-lg p-6">
+            <div class="text-center text-slate-400 py-8">
+              <p>Selecciona un nodo del mapa para editarlo</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Columna derecha: Preview estructural -->
+        <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto">
+          <div class="p-4">
+            <h2 class="text-lg font-semibold text-white mb-4">Preview Estructural</h2>
+            <div id="structural-preview" class="bg-slate-900 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-auto">
+              <pre id="preview-json" class="whitespace-pre-wrap">Cargando...</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Vista ÁRBOL -->
+      <div id="vista-arbol" class="vista-container flex-1 flex hidden">
+        <!-- Columna izquierda: Árbol expand/collapse -->
+        <div class="w-80 bg-slate-950 border-r border-slate-800 overflow-y-auto">
+          <div class="p-4">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-lg font-semibold text-white">Árbol de Nodos</h2>
+              <button onclick="añadirNodo()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded" title="Añadir nodo">
+                ➕
+              </button>
+            </div>
+            <div id="nodes-tree" class="space-y-1">
+              <p class="text-slate-400 text-sm">Cargando nodos...</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Columna centro: Propiedades del nodo seleccionado -->
+        <div class="flex-1 bg-slate-900 overflow-y-auto p-6">
+          <div id="node-properties-arbol" class="bg-slate-800 rounded-lg shadow-lg p-6">
+            <div class="text-center text-slate-400 py-8">
+              <p>Selecciona un nodo del árbol para editarlo</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Columna derecha: Preview estructural -->
+        <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto">
+          <div class="p-4">
+            <h2 class="text-lg font-semibold text-white mb-4">Preview Estructural</h2>
+            <div id="structural-preview-arbol" class="bg-slate-900 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-auto">
+              <pre id="preview-json-arbol" class="whitespace-pre-wrap">Cargando...</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Vista JSON (read-only + copiar) -->
+      <div id="vista-json" class="vista-container flex-1 hidden">
+        <div class="w-full bg-slate-900 overflow-y-auto p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-white">Vista JSON (Read-Only)</h2>
+            <button onclick="copiarJSON()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">
+              📋 Copiar JSON
+            </button>
+          </div>
+          <div class="bg-slate-950 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-auto">
+            <pre id="preview-json-full" class="whitespace-pre-wrap">Cargando...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ============================================================================
+   * LAYOUT CANÓNICO DEL EDITOR (FIX BUG CRÍTICO UI)
+   * ============================================================================
+   */
+  
+  .editor-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 130px);
+    overflow: hidden;
+  }
+  
+  .editor-topbar {
+    position: relative;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  
+  .editor-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+  
+  .editor-body > div {
+    height: 100%;
+    min-height: 0;
+  }
+  
+  @media (max-width: 1024px) {
+    .editor-layout {
+      height: auto;
+      min-height: calc(100vh - 130px);
+    }
+    
+    .editor-body {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    
+    .editor-body > div {
+      height: auto;
+      min-height: 300px;
+      width: 100% !important;
+      flex-shrink: 0;
+    }
+  }
+  
+  .navigation-editor {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  /* Estilos para el árbol de nodos */
+  .node-item {
+    padding: 10px;
+    background: #1e293b;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+    margin-bottom: 4px;
+  }
+  
+  .node-item:hover {
+    background: #334155;
+  }
+  
+  .node-item.active {
+    border-color: #4f46e5;
+    background: #334155;
+  }
+  
+  .node-item .node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  
+  .node-item .node-id {
+    font-weight: 600;
+    color: #fff;
+    font-size: 13px;
+    font-family: monospace;
+  }
+  
+  .node-item .node-label {
+    color: #cbd5e1;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  
+  .node-item .node-kind {
+    font-size: 11px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  
+  .node-item .node-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  
+  .node-item:hover .node-actions {
+    opacity: 1;
+  }
+  
+  .node-item .node-actions button {
+    padding: 2px 6px;
+    font-size: 11px;
+    background: #475569;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+  }
+  
+  .node-item .node-actions button:hover {
+    background: #64748b;
+  }
+  
+  /* Estilos para propiedades de nodo */
+  .property-group {
+    margin-bottom: 20px;
+  }
+  
+  .property-group label {
+    display: block;
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  
+  .property-group input,
+  .property-group select,
+  .property-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  
+  .property-group input:focus,
+  .property-group select:focus,
+  .property-group textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .property-group textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+  
+  /* Preview JSON */
+  #preview-json {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #cbd5e1;
+  }
+  
+  /* Badges de estado */
+  .publish-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  .publish-status--ready {
+    background: #064e3b;
+    color: #6ee7b7;
+  }
+  
+  .publish-status--draft {
+    background: #78350f;
+    color: #fcd34d;
+  }
+  
+  .publish-status--invalid {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+  
+  /* Tabs de vistas */
+  .tab-button {
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .tab-button:hover {
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  .tab-button.active {
+    color: #fff;
+    background: #1e293b;
+    border-bottom: 2px solid #4f46e5;
+  }
+  
+  /* Vistas */
+  .vista-container {
+    display: flex;
+  }
+  
+  .vista-container.hidden {
+    display: none;
+  }
+  
+  /* Mapa visual */
+  .map-node {
+    padding: 12px;
+    background: #1e293b;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: move;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+  }
+  
+  .map-node:hover {
+    background: #334155;
+    border-color: #4f46e5;
+  }
+  
+  .map-node.active {
+    border-color: #4f46e5;
+    background: #334155;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+  }
+  
+  .map-node.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+  }
+  
+  .map-node.drag-over {
+    border-top: 3px solid #3498db;
+    background: #1e3a5f;
+  }
+  
+  .map-node.drop-zone {
+    border: 2px dashed #4f46e5;
+    background: rgba(79, 70, 229, 0.1);
+  }
+  
+  .map-node.drop-zone-invalid {
+    border: 2px dashed #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+  }
+  
+  .map-node-children {
+    margin-left: 24px;
+    margin-top: 8px;
+    padding-left: 16px;
+    border-left: 2px solid #334155;
+  }
+  
+  /* Árbol expand/collapse */
+  .tree-node {
+    padding: 8px;
+    background: #1e293b;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  
+  .tree-node:hover {
+    background: #334155;
+  }
+  
+  .tree-node.active {
+    border-color: #4f46e5;
+    background: #334155;
+  }
+  
+  .tree-node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .tree-node-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 12px;
+  }
+  
+  .tree-node-toggle:hover {
+    color: #fff;
+  }
+  
+  .tree-node-children {
+    margin-left: 28px;
+    margin-top: 4px;
+  }
+  
+  .tree-node-children.collapsed {
+    display: none;
+  }
+</style>
+
+<script>
+  // Estado del editor
+  const editorState = {
+    navigationId: null,
+    definition: null,
+    tree: null, // Fuente de verdad local: TREE
+    selectedNodeId: null,
+    dirty: false,
+    valid: false,
+    isSaving: false,
+    validationErrors: [],
+    validationWarnings: [],
+    currentView: 'mapa', // 'mapa', 'arbol', 'json'
+    treeState: {}, // Estado de expand/collapse del árbol
+    lastSavedAt: null // Timestamp del último guardado
+  };
+  
+  // Toast system simple
+  function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
+      type === 'success' ? 'bg-green-600 text-white' : 
+      type === 'error' ? 'bg-red-600 text-white' : 
+      'bg-blue-600 text-white'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.3s';
+      setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
+  }
+  
+  // Marcar como dirty
+  function markDirty() {
+    if (!editorState.dirty) {
+      editorState.dirty = true;
+      updateDirtyBadge();
+    }
+  }
+  
+  // Actualizar badge de dirty
+  function updateDirtyBadge() {
+    const badge = document.getElementById('dirty-badge');
+    if (badge) {
+      if (editorState.dirty) {
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  }
+  
+  // Inicializar editor
+  async function initEditor() {
+    const editor = document.getElementById('navigation-editor');
+    editorState.navigationId = editor.dataset.navigationId;
+    
+    if (editorState.navigationId === 'new') {
+      await crearNuevaNavegacion();
+    } else {
+      await cargarNavegacion();
+    }
+  }
+  
+  // Crear nueva navegación
+  async function crearNuevaNavegacion() {
+    const name = prompt('Nombre de la navegación:');
+    if (!name || !name.trim()) {
+      window.location.href = '/admin/navigation';
+      return;
+    }
+    
+    const id = prompt(
+      `ID técnico de la navegación:\n\n` +
+      `⚠️ El ID debe ser:\n` +
+      `- Solo letras minúsculas, números, guiones y guiones bajos\n` +
+      `- Sin espacios ni acentos`,
+      name.toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+    );
+    
+    if (!id || !id.trim()) {
+      window.location.href = '/admin/navigation';
+      return;
+    }
+    
+    try {
+      const response = await fetch('/admin/api/navigation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          navigation_id: id.trim(),
+          name: name.trim()
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      editorState.definition = data.data.draft?.draft_json || data.data.draft?.definition_json;
+      editorState.navigationId = data.data.navigation?.navigation_id || id.trim();
+      editorState.dirty = false;
+      
+      window.history.replaceState({}, '', `/admin/navigation/${encodeURIComponent(editorState.navigationId)}/edit`);
+      
+      actualizarUI();
+    } catch (error) {
+      console.error('Error creando navegación:', error);
+      alert(`Error creando navegación: ${error.message}`);
+      window.location.href = '/admin/navigation';
+    }
+  }
+  
+  // Cargar lista de navegaciones para selector
+  async function cargarListaNavegaciones() {
+    try {
+      const response = await fetch('/admin/api/navigation', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data && data.data.navigations) {
+          const selector = document.getElementById('navigation-selector');
+          if (selector) {
+            selector.style.display = 'block';
+            selector.innerHTML = data.data.navigations.map(nav => {
+              const selected = nav.navigation_id === editorState.navigationId ? 'selected' : '';
+              return `<option value="${nav.navigation_id}" ${selected}>${nav.name || nav.navigation_id}</option>`;
+            }).join('');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando lista de navegaciones:', error);
+    }
+  }
+  
+  // Cambiar navegación (con confirmación si hay cambios sin guardar)
+  function cambiarNavegacion() {
+    const selector = document.getElementById('navigation-selector');
+    if (!selector) return;
+    
+    const nuevoId = selector.value;
+    if (nuevoId && nuevoId !== editorState.navigationId) {
+      if (editorState.dirty) {
+        if (!confirm('Tienes cambios sin guardar. ¿Estás seguro de que quieres cambiar de navegación? Los cambios se perderán.')) {
+          // Revertir selector al valor anterior
+          selector.value = editorState.navigationId;
+          return;
+        }
+      }
+      window.location.href = `/admin/navigation/${encodeURIComponent(nuevoId)}/edit`;
+    }
+  }
+  
+  // Prevenir pérdida de trabajo al salir
+  window.addEventListener('beforeunload', (e) => {
+    if (editorState.dirty) {
+      e.preventDefault();
+      e.returnValue = 'Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?';
+      return e.returnValue;
+    }
+  });
+  
+  // Cargar navegación
+  async function cargarNavegacion() {
+    try {
+      const encodedId = encodeURIComponent(editorState.navigationId);
+      
+      // Cargar lista de navegaciones para selector
+      await cargarListaNavegaciones();
+      
+      // Intentar cargar draft primero
+      let response = await fetch(`/admin/api/navigation/${encodedId}/draft`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data && data.data.draft_json) {
+          editorState.definition = data.data.draft_json;
+          // Construir tree desde definition al cargar
+          editorState.tree = buildTreeFromDefinition(editorState.definition);
+        }
+      }
+      
+      // Cargar información de versión publicada
+      let publishedVersion = null;
+      let publishedAt = null;
+      
+      response = await fetch(`/admin/api/navigation/${encodedId}/published`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data) {
+          publishedVersion = data.data.version;
+          publishedAt = data.data.published_at;
+          
+          // Si no hay draft, usar published como referencia
+          if (!editorState.definition && data.data.definition_json) {
+            editorState.definition = JSON.parse(JSON.stringify(data.data.definition_json));
+            // Construir tree desde definition
+            editorState.tree = buildTreeFromDefinition(editorState.definition);
+          }
+        }
+      }
+      
+      // Actualizar indicador de versión publicada
+      const versionEl = document.getElementById('navigation-version');
+      if (versionEl) {
+        if (publishedVersion) {
+          versionEl.textContent = `v${publishedVersion}`;
+          versionEl.className = 'px-2 py-1 bg-green-900 text-green-200 rounded text-xs';
+        } else {
+          versionEl.textContent = 'Sin publicar';
+          versionEl.className = 'px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs';
+        }
+      }
+      
+      const publishedInfoEl = document.getElementById('navigation-published-info');
+      if (publishedInfoEl && publishedAt) {
+        const fecha = new Date(publishedAt);
+        publishedInfoEl.textContent = `Publicado: ${fecha.toLocaleDateString('es-ES')} ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+        publishedInfoEl.style.display = 'inline-block';
+      }
+      
+      if (!editorState.definition) {
+        throw new Error('No se pudo cargar la navegación');
+      }
+      
+      // Construir tree desde definition si no existe
+      if (!editorState.tree) {
+        editorState.tree = buildTreeFromDefinition(editorState.definition);
+      }
+      
+      editorState.dirty = false;
+      editorState.lastSavedAt = null;
+      updateDirtyBadge();
+      actualizarUI();
+    } catch (error) {
+      console.error('Error cargando navegación:', error);
+      alert(`Error cargando navegación: ${error.message}`);
+    }
+  }
+  
+  // Cambiar vista
+  function cambiarVista(vista) {
+    editorState.currentView = vista;
+    
+    // Ocultar todas las vistas
+    document.querySelectorAll('.vista-container').forEach(el => el.classList.add('hidden'));
+    
+    // Desactivar todas las tabs
+    document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+    
+    // Mostrar vista seleccionada
+    const vistaEl = document.getElementById(`vista-${vista}`);
+    if (vistaEl) {
+      vistaEl.classList.remove('hidden');
+    }
+    
+    // Activar tab seleccionada
+    const tabEl = document.getElementById(`tab-${vista}`);
+    if (tabEl) {
+      tabEl.classList.add('active');
+    }
+    
+    // Renderizar según la vista
+    if (vista === 'mapa') {
+      renderNodesMap();
+    } else if (vista === 'arbol') {
+      renderNodesTree();
+    } else if (vista === 'json') {
+      renderJSONView();
+    }
+  }
+  
+  // Copiar JSON al portapapeles
+  async function copiarJSON() {
+    if (!editorState.definition) return;
+    
+    const json = JSON.stringify(editorState.definition, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      alert('✅ JSON copiado al portapapeles');
+    } catch (error) {
+      console.error('Error copiando JSON:', error);
+      alert('Error al copiar JSON');
+    }
+  }
+  
+  // Renderizar vista JSON
+  function renderJSONView() {
+    const previewEl = document.getElementById('preview-json-full');
+    if (!previewEl || !editorState.definition) return;
+    
+    previewEl.textContent = JSON.stringify(editorState.definition, null, 2);
+  }
+  
+  // Actualizar UI completa
+  function actualizarUI() {
+    if (!editorState.definition) return;
+    
+    // Actualizar nombre
+    const nameEl = document.getElementById('navigation-name');
+    if (nameEl) {
+      nameEl.textContent = editorState.definition.name || editorState.navigationId;
+    }
+    
+    // Renderizar según la vista actual
+    if (editorState.currentView === 'mapa') {
+      renderNodesMap();
+    } else if (editorState.currentView === 'arbol') {
+      renderNodesTree();
+    } else if (editorState.currentView === 'json') {
+      renderJSONView();
+    }
+    
+    // Renderizar preview
+    renderPreview();
+    
+    // Si hay nodo seleccionado, mostrar propiedades
+    if (editorState.selectedNodeId) {
+      renderNodeProperties(editorState.selectedNodeId);
+    } else {
+      // Seleccionar nodo raíz por defecto
+      if (editorState.definition.entry_node_id) {
+        seleccionarNodo(editorState.definition.entry_node_id);
+      }
+    }
+    
+    // Actualizar estado
+    updateStatusIndicator();
+  }
+  
+  // ========================================================================
+  // FUNCIONES DE SERIALIZACIÓN (buildTreeFromDefinition / buildDefinitionFromTree)
+  // ========================================================================
+  
+  /**
+   * Convierte NavigationDefinition (nodes+edges) → árbol jerárquico
+   * @param {Object} definition - NavigationDefinition con nodes y edges
+   * @returns {Object} Árbol con estructura { node, children: [...] }
+   */
+  function buildTreeFromDefinition(definition) {
+    if (!definition || !definition.nodes) return null;
+    
+    const nodes = definition.nodes;
+    const edges = definition.edges || [];
+    const entryNodeId = definition.entry_node_id;
+    
+    // Construir mapa de hijos desde edges
+    const childrenMap = {};
+    edges.forEach(edge => {
+      if (edge.kind === 'child' || !edge.kind) {
+        if (!childrenMap[edge.from]) {
+          childrenMap[edge.from] = [];
+        }
+        childrenMap[edge.from].push({
+          nodeId: edge.to,
+          order: edge.order || 0
+        });
+      }
+    });
+    
+    // Ordenar hijos por order
+    Object.keys(childrenMap).forEach(parentId => {
+      childrenMap[parentId].sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+    
+    // Construir árbol recursivamente
+    function buildNodeTree(nodeId, visited = new Set()) {
+      if (visited.has(nodeId)) {
+        console.warn(`Loop detectado en nodo ${nodeId}`);
+        return null; // Evitar loops
+      }
+      visited.add(nodeId);
+      
+      const node = nodes[nodeId];
+      if (!node) return null;
+      
+      const children = (childrenMap[nodeId] || []).map(child => {
+        const childTree = buildNodeTree(child.nodeId, new Set(visited));
+        return childTree;
+      }).filter(child => child !== null);
+      
+      return {
+        node: { ...node },
+        children: children
+      };
+    }
+    
+    if (entryNodeId && nodes[entryNodeId]) {
+      return buildNodeTree(entryNodeId);
+    }
+    
+    // Si no hay entry_node_id, construir árbol desde todos los nodos sin padre
+    const rootNodes = Object.keys(nodes).filter(nodeId => {
+      return !edges.some(edge => edge.to === nodeId && (edge.kind === 'child' || !edge.kind));
+    });
+    
+    if (rootNodes.length === 1) {
+      return buildNodeTree(rootNodes[0]);
+    }
+    
+    // Múltiples raíces: crear nodo virtual
+    return {
+      node: { id: '__root__', kind: 'virtual' },
+      children: rootNodes.map(nodeId => buildNodeTree(nodeId)).filter(n => n !== null)
+    };
+  }
+  
+  /**
+   * Convierte árbol jerárquico → NavigationDefinition (nodes+edges)
+   * @param {Object} tree - Árbol con estructura { node, children: [...] }
+   * @param {string} entryNodeId - ID del nodo raíz
+   * @returns {Object} NavigationDefinition con nodes y edges
+   */
+  function buildDefinitionFromTree(tree, entryNodeId) {
+    if (!tree) return { nodes: {}, edges: [], entry_node_id: null };
+    
+    const nodes = {};
+    const edges = [];
+    let currentOrder = 0;
+    
+    function processNode(nodeTree, parentId = null, order = 0) {
+      if (!nodeTree || !nodeTree.node) return;
+      
+      const node = nodeTree.node;
+      
+      // Ignorar nodo virtual raíz
+      if (node.id === '__root__' && node.kind === 'virtual') {
+        if (nodeTree.children) {
+          nodeTree.children.forEach((child, idx) => {
+            processNode(child, null, idx);
+          });
+        }
+        return;
+      }
+      
+      // Añadir nodo
+      nodes[node.id] = { ...node };
+      
+      // Añadir edge si tiene padre
+      if (parentId) {
+        edges.push({
+          from: parentId,
+          to: node.id,
+          kind: 'child',
+          order: order
+        });
+      }
+      
+      // Procesar hijos
+      if (nodeTree.children && Array.isArray(nodeTree.children)) {
+        nodeTree.children.forEach((child, idx) => {
+          processNode(child, node.id, idx);
+        });
+      }
+    }
+    
+    processNode(tree);
+    
+    // Actualizar order en nodos según posición en edges
+    Object.keys(nodes).forEach(nodeId => {
+      const nodeEdges = edges.filter(e => e.to === nodeId);
+      if (nodeEdges.length > 0) {
+        nodes[nodeId].order = nodeEdges[0].order || 0;
+      }
+    });
+    
+    return {
+      nodes: nodes,
+      edges: edges,
+      entry_node_id: entryNodeId || (tree?.node?.id !== '__root__' ? tree?.node?.id : null)
+    };
+  }
+  
+  // Renderizar mapa visual jerárquico
+  function renderNodesMap() {
+    const mapEl = document.getElementById('nodes-map');
+    if (!mapEl || !editorState.tree) {
+      if (mapEl) {
+        mapEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      }
+      return;
+    }
+    
+    const tree = editorState.tree;
+    if (!tree) {
+      mapEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      return;
+    }
+    
+    let html = '';
+    
+    function renderMapNode(nodeTree, level = 0) {
+      if (!nodeTree || !nodeTree.node) return '';
+      
+      const node = nodeTree.node;
+      
+      // Ignorar nodo virtual raíz
+      if (node.id === '__root__' && node.kind === 'virtual') {
+        if (nodeTree.children) {
+          return nodeTree.children.map(child => renderMapNode(child, level)).join('');
+        }
+        return '';
+      }
+      
+      const isActive = editorState.selectedNodeId === node.id;
+      const escapedId = (node.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      
+      html += `
+        <div class="map-node ${isActive ? 'active' : ''}" 
+             draggable="true"
+             data-node-id="${escapedId}"
+             onclick="seleccionarNodo('${escapedId}')"
+             ondragstart="handleDragStart(event)"
+             ondragover="handleDragOver(event)"
+             ondrop="handleDrop(event)"
+             ondragend="handleDragEnd(event)">
+          <div class="flex justify-between items-center">
+            <div class="flex-1">
+              <div class="font-semibold text-white">${(node.label || node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              <div class="text-xs text-slate-400 mt-1">${(node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')} • ${(node.kind || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+            <div class="node-actions" onclick="event.stopPropagation()">
+              <button onclick="eliminarNodo('${escapedId}')" title="Eliminar" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded">🗑️</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Renderizar hijos
+      if (nodeTree.children && nodeTree.children.length > 0) {
+        html += '<div class="map-node-children">';
+        nodeTree.children.forEach(child => {
+          html += renderMapNode(child, level + 1);
+        });
+        html += '</div>';
+      }
+      
+      return '';
+    }
+    
+    html = renderMapNode(tree);
+    
+    if (html === '') {
+      html = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+    }
+    
+    mapEl.innerHTML = html;
+  }
+  
+  // Renderizar árbol de nodos con expand/collapse
+  function renderNodesTree() {
+    const treeEl = document.getElementById('nodes-tree');
+    if (!treeEl || !editorState.tree) {
+      if (treeEl) {
+        treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      }
+      return;
+    }
+    
+    const tree = editorState.tree;
+    if (!tree) {
+      treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      return;
+    }
+    
+    let html = '';
+    
+    function renderTreeNode(nodeTree, level = 0) {
+      if (!nodeTree || !nodeTree.node) return '';
+      
+      const node = nodeTree.node;
+      
+      // Ignorar nodo virtual raíz
+      if (node.id === '__root__' && node.kind === 'virtual') {
+        if (nodeTree.children) {
+          return nodeTree.children.map(child => renderTreeNode(child, level)).join('');
+        }
+        return '';
+      }
+      
+      const isActive = editorState.selectedNodeId === node.id;
+      const hasChildren = nodeTree.children && nodeTree.children.length > 0;
+      const isExpanded = editorState.treeState[node.id] !== false; // Por defecto expandido
+      const escapedId = (node.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      
+      html += `
+        <div class="tree-node ${isActive ? 'active' : ''}" onclick="seleccionarNodo('${escapedId}')">
+          <div class="tree-node-header">
+            ${hasChildren ? `
+              <span class="tree-node-toggle" onclick="event.stopPropagation(); toggleTreeNode('${escapedId}')">
+                ${isExpanded ? '▼' : '▶'}
+              </span>
+            ` : '<span style="width: 20px;"></span>'}
+            <div class="flex-1">
+              <div class="font-semibold text-white">${(node.label || node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              <div class="text-xs text-slate-400">${(node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')} • ${(node.kind || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+            <div class="node-actions" onclick="event.stopPropagation()">
+              <button onclick="eliminarNodo('${escapedId}')" title="Eliminar" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded">🗑️</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Renderizar hijos si está expandido
+      if (hasChildren && isExpanded) {
+        html += '<div class="tree-node-children">';
+        nodeTree.children.forEach(child => {
+          html += renderTreeNode(child, level + 1);
+        });
+        html += '</div>';
+      }
+      
+      return '';
+    }
+    
+    html = renderTreeNode(tree);
+    
+    if (html === '') {
+      html = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+    }
+    
+    treeEl.innerHTML = html;
+  }
+  
+  // Toggle expand/collapse de nodo en árbol
+  function toggleTreeNode(nodeId) {
+    editorState.treeState[nodeId] = !editorState.treeState[nodeId];
+    renderNodesTree();
+  }
+  
+  // Drag & Drop handlers
+  let draggedNodeId = null;
+  
+  function handleDragStart(event) {
+    draggedNodeId = event.currentTarget.dataset.nodeId;
+    event.currentTarget.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+  }
+  
+  function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const target = event.currentTarget;
+    const targetNodeId = target.dataset.nodeId;
+    
+    if (targetNodeId !== draggedNodeId) {
+      // Verificar si el movimiento es válido
+      if (editorState.tree) {
+        const isValid = !esAncestroEnTree(editorState.tree, targetNodeId, draggedNodeId) && 
+                        draggedNodeId !== editorState.definition?.entry_node_id;
+        
+        if (isValid) {
+          target.classList.add('drag-over', 'drop-zone');
+          target.classList.remove('drop-zone-invalid');
+        } else {
+          target.classList.add('drag-over', 'drop-zone-invalid');
+          target.classList.remove('drop-zone');
+        }
+      } else {
+        target.classList.add('drag-over', 'drop-zone');
+      }
+    }
+  }
+  
+  function handleDrop(event) {
+    event.preventDefault();
+    const target = event.currentTarget;
+    const targetNodeId = target.dataset.nodeId;
+    
+    // Limpiar clases de drop zone
+    target.classList.remove('drag-over', 'drop-zone', 'drop-zone-invalid');
+    
+    if (draggedNodeId && targetNodeId && draggedNodeId !== targetNodeId) {
+      // Verificar que el movimiento es válido antes de ejecutar
+      if (editorState.tree) {
+        if (esAncestroEnTree(editorState.tree, targetNodeId, draggedNodeId)) {
+          showToast('⚠️ Movimiento inválido: no se puede mover un nodo dentro de sus propios descendientes (loop)', 'error');
+          return;
+        }
+        
+        if (draggedNodeId === editorState.definition?.entry_node_id) {
+          showToast('⚠️ No se puede mover el nodo raíz', 'error');
+          return;
+        }
+      }
+      
+      // Mover nodo: cambiar parent
+      moverNodo(draggedNodeId, targetNodeId);
+    }
+  }
+  
+  function handleDragEnd(event) {
+    event.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.drag-over, .drop-zone, .drop-zone-invalid').forEach(el => {
+      el.classList.remove('drag-over', 'drop-zone', 'drop-zone-invalid');
+    });
+    draggedNodeId = null;
+  }
+  
+  // Mover nodo (cambiar de padre)
+  function moverNodo(nodeId, nuevoParentId) {
+    if (!editorState.tree) return;
+    
+    // Validar que no se cree un loop (no meter un padre dentro de su hijo)
+    if (esAncestroEnTree(editorState.tree, nuevoParentId, nodeId)) {
+      showToast('⚠️ Movimiento inválido: no se puede mover un nodo dentro de sus propios descendientes (loop)', 'error');
+      return;
+    }
+    
+    // Prohibir mover root
+    if (nodeId === editorState.definition?.entry_node_id) {
+      showToast('⚠️ No se puede mover el nodo raíz', 'error');
+      return;
+    }
+    
+    // Mover en el tree (fuente de verdad)
+    const moved = moveNodeInTree(editorState.tree, nodeId, nuevoParentId);
+    if (!moved) {
+      showToast('⚠️ No se pudo mover el nodo', 'error');
+      return;
+    }
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    markDirty();
+    actualizarUI();
+  }
+  
+  // Mover nodo en el tree
+  function moveNodeInTree(tree, nodeId, newParentId) {
+    if (!tree || !tree.node) return false;
+    
+    // Buscar el nodo a mover y su padre actual
+    let nodeToMove = null;
+    let currentParent = null;
+    
+    function findNode(parentTree, targetId, parent = null) {
+      if (!parentTree || !parentTree.node) return null;
+      
+      if (parentTree.node.id === targetId) {
+        nodeToMove = parentTree;
+        currentParent = parent;
+        return parentTree;
+      }
+      
+      if (parentTree.children) {
+        for (let i = 0; i < parentTree.children.length; i++) {
+          const found = findNode(parentTree.children[i], targetId, parentTree);
+          if (found) return found;
+        }
+      }
+      
+      return null;
+    }
+    
+    findNode(tree, nodeId);
+    
+    if (!nodeToMove) return false;
+    
+    // Buscar nuevo padre
+    let newParent = null;
+    function findParent(parentTree, targetId) {
+      if (!parentTree || !parentTree.node) return null;
+      
+      if (parentTree.node.id === targetId) {
+        return parentTree;
+      }
+      
+      if (parentTree.children) {
+        for (const child of parentTree.children) {
+          const found = findParent(child, targetId);
+          if (found) return found;
+        }
+      }
+      
+      return null;
+    }
+    
+    newParent = findParent(tree, newParentId);
+    if (!newParent) return false;
+    
+    // Remover de padre actual
+    if (currentParent && currentParent.children) {
+      currentParent.children = currentParent.children.filter(child => child !== nodeToMove);
+    }
+    
+    // Añadir a nuevo padre
+    if (!newParent.children) {
+      newParent.children = [];
+    }
+    newParent.children.push(nodeToMove);
+    
+    // Recalcular order
+    if (newParent.children) {
+      newParent.children.forEach((child, idx) => {
+        if (child.node) {
+          child.node.order = idx;
+        }
+      });
+    }
+    
+    return true;
+  }
+  
+  // Verificar si un nodo es ancestro de otro en el tree
+  function esAncestroEnTree(tree, ancestroId, descendienteId) {
+    if (ancestroId === descendienteId) return true;
+    
+    function findNode(parentTree, targetId) {
+      if (!parentTree || !parentTree.node) return null;
+      
+      if (parentTree.node.id === targetId) {
+        return parentTree;
+      }
+      
+      if (parentTree.children) {
+        for (const child of parentTree.children) {
+          const found = findNode(child, targetId);
+          if (found) return found;
+        }
+      }
+      
+      return null;
+    }
+    
+    const ancestroNode = findNode(tree, ancestroId);
+    if (!ancestroNode) return false;
+    
+    // Buscar descendienteId dentro de ancestroNode
+    return findNode(ancestroNode, descendienteId) !== null;
+  }
+  
+  // Verificar si un nodo es ancestro de otro (para evitar loops)
+  function esAncestro(ancestroId, descendienteId) {
+    if (ancestroId === descendienteId) return true;
+    
+    const edges = editorState.definition.edges || [];
+    const childrenMap = {};
+    
+    edges.forEach(edge => {
+      if (edge.kind === 'child' || !edge.kind) {
+        if (!childrenMap[edge.from]) {
+          childrenMap[edge.from] = [];
+        }
+        childrenMap[edge.from].push(edge.to);
+      }
+    });
+    
+    function buscarDescendientes(nodeId, visited = new Set()) {
+      if (visited.has(nodeId)) return false;
+      visited.add(nodeId);
+      
+      if (nodeId === descendienteId) return true;
+      
+      const children = childrenMap[nodeId] || [];
+      return children.some(childId => buscarDescendientes(childId, visited));
+    }
+    
+    return buscarDescendientes(ancestroId);
+  }
+  
+  // Seleccionar nodo
+  function seleccionarNodo(nodeId) {
+    editorState.selectedNodeId = nodeId;
+    renderNodesTree();
+    renderNodeProperties(nodeId);
+  }
+  
+  // Renderizar propiedades del nodo (compartido entre vistas)
+  function renderNodeProperties(nodeId) {
+    // Actualizar en ambas vistas si existen
+    const propsEl = document.getElementById('node-properties');
+    const propsElArbol = document.getElementById('node-properties-arbol');
+    
+    const propsHTML = generarHTMLPropiedades(nodeId);
+    
+    if (propsEl) propsEl.innerHTML = propsHTML;
+    if (propsElArbol) propsElArbol.innerHTML = propsHTML;
+  }
+  
+  // Generar HTML de propiedades (reutilizable)
+  function generarHTMLPropiedades(nodeId) {
+    if (!editorState.definition || !editorState.definition.nodes) {
+      return '<div class="text-center text-red-400 py-8">Nodo no encontrado</div>';
+    }
+    
+    const node = editorState.definition.nodes[nodeId];
+    if (!node) {
+      return '<div class="text-center text-red-400 py-8">Nodo no encontrado</div>';
+    }
+    
+    const escapedId = (nodeId || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    
+    return `
+      <h3 class="text-xl font-bold text-white mb-4">Propiedades: ${(node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h3>
+      
+      <div class="property-group">
+        <label>ID</label>
+        <input type="text" id="node-id" value="${(node.id || '').replace(/"/g, '&quot;')}" disabled class="bg-slate-700 text-slate-400">
+        <p class="text-xs text-slate-400 mt-1">El ID no se puede cambiar (estable)</p>
+      </div>
+      
+      <div class="property-group">
+        <label>Kind</label>
+        <select id="node-kind" onchange="actualizarPropiedadNodo('kind', this.value)">
+          <option value="section" ${node.kind === 'section' ? 'selected' : ''}>Section</option>
+          <option value="group" ${node.kind === 'group' ? 'selected' : ''}>Group</option>
+          <option value="item" ${node.kind === 'item' ? 'selected' : ''}>Item</option>
+          <option value="hub" ${node.kind === 'hub' ? 'selected' : ''}>Hub</option>
+          <option value="external_link" ${node.kind === 'external_link' ? 'selected' : ''}>External Link</option>
+          <option value="system_entry" ${node.kind === 'system_entry' ? 'selected' : ''}>System Entry</option>
+        </select>
+      </div>
+      
+      <div class="property-group">
+        <label>Label</label>
+        <input type="text" id="node-label" value="${(node.label || '').replace(/"/g, '&quot;')}" onchange="actualizarPropiedadNodo('label', this.value)" placeholder="Texto visible del nodo">
+      </div>
+      
+      <div class="property-group">
+        <label>Subtitle</label>
+        <input type="text" id="node-subtitle" value="${(node.subtitle || '').replace(/"/g, '&quot;')}" onchange="actualizarPropiedadNodo('subtitle', this.value)" placeholder="Subtítulo opcional">
+      </div>
+      
+      <div class="property-group">
+        <label>Icon</label>
+        <input type="text" id="node-icon" value="${(node.icon || '').replace(/"/g, '&quot;')}" onchange="actualizarPropiedadNodo('icon', this.value)" placeholder="Emoji o código de icono">
+      </div>
+      
+      <div class="property-group">
+        <label>Order</label>
+        <input type="number" id="node-order" value="${node.order !== undefined ? node.order : ''}" onchange="actualizarPropiedadNodo('order', parseInt(this.value) || 0)" placeholder="0">
+        <p class="text-xs text-slate-400 mt-1">Orden entre hermanos (se recalcula automáticamente al mover)</p>
+      </div>
+      
+      <div class="property-group">
+        <label>Layout Hint</label>
+        <select id="node-layout-hint" onchange="actualizarPropiedadNodo('layout_hint', this.value || null)">
+          <option value="">Ninguno</option>
+          <option value="list" ${node.layout_hint === 'list' ? 'selected' : ''}>List</option>
+          <option value="grid" ${node.layout_hint === 'grid' ? 'selected' : ''}>Grid</option>
+          <option value="map" ${node.layout_hint === 'map' ? 'selected' : ''}>Map</option>
+          <option value="cards" ${node.layout_hint === 'cards' ? 'selected' : ''}>Cards</option>
+          <option value="tree" ${node.layout_hint === 'tree' ? 'selected' : ''}>Tree</option>
+        </select>
+      </div>
+      
+      <div class="property-group">
+        <label>Target Type</label>
+        <select id="node-target-type" onchange="actualizarTargetNodo('type', this.value || null)">
+          <option value="">Ninguno</option>
+          <option value="recorrido" ${node.target?.type === 'recorrido' ? 'selected' : ''}>Recorrido</option>
+          <option value="pde_catalog" ${node.target?.type === 'pde_catalog' ? 'selected' : ''}>PDE Catalog</option>
+          <option value="screen" ${node.target?.type === 'screen' ? 'selected' : ''}>Screen</option>
+          <option value="url" ${node.target?.type === 'url' ? 'selected' : ''}>URL</option>
+          <option value="admin_tool" ${node.target?.type === 'admin_tool' ? 'selected' : ''}>Admin Tool</option>
+        </select>
+      </div>
+      
+      <div class="property-group">
+        <label>Target Ref</label>
+        <input type="text" id="node-target-ref" value="${(node.target?.ref || '').replace(/"/g, '&quot;')}" onchange="actualizarTargetNodo('ref', this.value || null)" placeholder="Referencia según Target Type">
+      </div>
+      
+      ${node.visibility ? `
+      <div class="property-group">
+        <label>Visibility (JSON)</label>
+        <textarea id="node-visibility" rows="3" onchange="actualizarPropiedadNodo('visibility', JSON.parse(this.value || '{}'))" class="font-mono text-xs">${JSON.stringify(node.visibility, null, 2)}</textarea>
+      </div>
+      ` : ''}
+    `;
+  }
+  
+  // Actualizar propiedad del nodo
+  function actualizarPropiedadNodo(prop, value) {
+    if (!editorState.tree || !editorState.selectedNodeId) return;
+    
+    // Actualizar en tree (fuente de verdad)
+    function updateNodeInTree(tree, nodeId, prop, value) {
+      if (!tree || !tree.node) return false;
+      
+      if (tree.node.id === nodeId) {
+        if (value === null || value === '' || value === undefined) {
+          delete tree.node[prop];
+        } else {
+          tree.node[prop] = value;
+        }
+        return true;
+      }
+      
+      if (tree.children) {
+        for (const child of tree.children) {
+          if (updateNodeInTree(child, nodeId, prop, value)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    const updated = updateNodeInTree(editorState.tree, editorState.selectedNodeId, prop, value);
+    if (!updated) return;
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    markDirty();
+    updateStatusIndicator();
+    renderPreview();
+  }
+  
+  // Actualizar target del nodo
+  function actualizarTargetNodo(prop, value) {
+    if (!editorState.tree || !editorState.selectedNodeId) return;
+    
+    // Actualizar en tree (fuente de verdad)
+    function updateTargetInTree(tree, nodeId, prop, value) {
+      if (!tree || !tree.node) return false;
+      
+      if (tree.node.id === nodeId) {
+        if (!tree.node.target) {
+          tree.node.target = {};
+        }
+        
+        if (value === null || value === '' || value === undefined) {
+          delete tree.node.target[prop];
+          if (Object.keys(tree.node.target).length === 0) {
+            delete tree.node.target;
+          }
+        } else {
+          tree.node.target[prop] = value;
+        }
+        return true;
+      }
+      
+      if (tree.children) {
+        for (const child of tree.children) {
+          if (updateTargetInTree(child, nodeId, prop, value)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    const updated = updateTargetInTree(editorState.tree, editorState.selectedNodeId, prop, value);
+    if (!updated) return;
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    markDirty();
+    updateStatusIndicator();
+    renderPreview();
+  }
+  
+  // Renderizar preview (actualiza todas las vistas)
+  function renderPreview() {
+    if (!editorState.definition) return;
+    
+    const json = JSON.stringify(editorState.definition, null, 2);
+    
+    // Actualizar preview en vista Mapa
+    const previewEl = document.getElementById('preview-json');
+    if (previewEl) previewEl.textContent = json;
+    
+    // Actualizar preview en vista Árbol
+    const previewElArbol = document.getElementById('preview-json-arbol');
+    if (previewElArbol) previewElArbol.textContent = json;
+    
+    // Actualizar vista JSON completa si está activa
+    if (editorState.currentView === 'json') {
+      renderJSONView();
+    }
+  }
+  
+  // Añadir nodo
+  function añadirNodo() {
+    const nodeId = prompt('ID del nuevo nodo:');
+    if (!nodeId || !nodeId.trim()) return;
+    
+    // Verificar que no existe en definition
+    if (editorState.definition?.nodes?.[nodeId.trim()]) {
+      showToast('Ya existe un nodo con ese ID', 'error');
+      return;
+    }
+    
+    // Crear nuevo nodo en tree
+    const newNode = {
+      node: {
+        id: nodeId.trim(),
+        kind: 'item',
+        label: nodeId.trim()
+      },
+      children: []
+    };
+    
+    // Si no hay tree, crear uno nuevo
+    if (!editorState.tree) {
+      editorState.tree = newNode;
+      if (!editorState.definition) {
+        editorState.definition = { nodes: {}, edges: [] };
+      }
+      editorState.definition.entry_node_id = nodeId.trim();
+    } else {
+      // Añadir como hijo del nodo seleccionado o del root
+      const parentId = editorState.selectedNodeId || editorState.definition?.entry_node_id;
+      if (parentId) {
+        function addToTree(tree, parentId, newNode) {
+          if (!tree || !tree.node) return false;
+          
+          if (tree.node.id === parentId) {
+            if (!tree.children) {
+              tree.children = [];
+            }
+            tree.children.push(newNode);
+            return true;
+          }
+          
+          if (tree.children) {
+            for (const child of tree.children) {
+              if (addToTree(child, parentId, newNode)) {
+                return true;
+              }
+            }
+          }
+          
+          return false;
+        }
+        
+        addToTree(editorState.tree, parentId, newNode);
+      } else {
+        // Si no hay selección, añadir al root
+        if (!editorState.tree.children) {
+          editorState.tree.children = [];
+        }
+        editorState.tree.children.push(newNode);
+      }
+    }
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    markDirty();
+    actualizarUI();
+    seleccionarNodo(nodeId.trim());
+  }
+  
+  // Eliminar nodo
+  function eliminarNodo(nodeId) {
+    if (!confirm(`¿Eliminar el nodo "${nodeId}"?`)) return;
+    
+    if (!editorState.tree) return;
+    
+    // Prohibir eliminar root
+    if (nodeId === editorState.definition?.entry_node_id) {
+      showToast('⚠️ No se puede eliminar el nodo raíz', 'error');
+      return;
+    }
+    
+    // Eliminar del tree
+    function removeFromTree(tree, targetId) {
+      if (!tree || !tree.node) return false;
+      
+      if (tree.children) {
+        for (let i = 0; i < tree.children.length; i++) {
+          if (tree.children[i].node.id === targetId) {
+            tree.children.splice(i, 1);
+            return true;
+          }
+          if (removeFromTree(tree.children[i], targetId)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    const removed = removeFromTree(editorState.tree, nodeId);
+    if (!removed) {
+      showToast('No se pudo eliminar el nodo', 'error');
+      return;
+    }
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    editorState.selectedNodeId = null;
+    markDirty();
+    actualizarUI();
+  }
+  
+  // Guardar navegación (asegura que edges estén sincronizados)
+  async function guardarNavegacion() {
+    if (!editorState.definition || !editorState.navigationId) return;
+    
+    editorState.isSaving = true;
+    updateStatusIndicator();
+    
+    try {
+      // Asegurar que la definición esté normalizada
+      // Si estamos en vista árbol/mapa, los edges ya deberían estar actualizados
+      // Pero por si acaso, validar estructura básica
+      if (!editorState.definition.nodes) {
+        editorState.definition.nodes = {};
+      }
+      if (!editorState.definition.edges) {
+        editorState.definition.edges = [];
+      }
+      if (!editorState.definition.entry_node_id && Object.keys(editorState.definition.nodes).length > 0) {
+        editorState.definition.entry_node_id = Object.keys(editorState.definition.nodes)[0];
+      }
+      
+      const encodedId = encodeURIComponent(editorState.navigationId);
+      const response = await fetch(`/admin/api/navigation/${encodedId}/draft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          draft_json: editorState.definition,
+          name: editorState.definition.name || editorState.navigationId
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      editorState.dirty = false;
+      editorState.isSaving = false;
+      editorState.lastSavedAt = new Date();
+      updateStatusIndicator();
+      updateDirtyBadge();
+      
+      const timestamp = editorState.lastSavedAt.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      showToast(`✅ Guardado ✓ ${timestamp}`, 'success');
+    } catch (error) {
+      console.error('Error guardando navegación:', error);
+      editorState.isSaving = false;
+      updateStatusIndicator();
+      alert(`Error guardando navegación: ${error.message}`);
+    }
+  }
+  
+  // Validar navegación
+  async function validarNavegacion() {
+    if (!editorState.definition || !editorState.navigationId) {
+      showToast('No hay navegación para validar', 'error');
+      return false;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.navigationId);
+      const response = await fetch(`/admin/api/navigation/${encodedId}/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          draft_json: editorState.definition
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      editorState.valid = data.data.ok;
+      editorState.validationErrors = data.data.errors || [];
+      editorState.validationWarnings = data.data.warnings || [];
+      
+      // Mostrar mensajes de validación
+      const messagesEl = document.getElementById('validation-messages');
+      if (messagesEl) {
+        let html = '';
+        
+        if (editorState.validationErrors.length > 0) {
+          html += `<div class="text-red-400 text-sm font-semibold">❌ Errores: ${editorState.validationErrors.length}</div>`;
+          editorState.validationErrors.forEach(err => {
+            html += `<div class="text-red-300 text-xs ml-4 mt-1">• ${err}</div>`;
+          });
+        }
+        
+        if (editorState.validationWarnings.length > 0) {
+          html += `<div class="text-yellow-400 text-sm font-semibold mt-2">⚠️ Advertencias: ${editorState.validationWarnings.length}</div>`;
+          editorState.validationWarnings.forEach(warn => {
+            html += `<div class="text-yellow-300 text-xs ml-4 mt-1">• ${warn}</div>`;
+          });
+        }
+        
+        if (editorState.valid && editorState.validationErrors.length === 0) {
+          html = '<div class="text-green-400 text-sm font-semibold">✅ Navegación válida</div>';
+        }
+        
+        messagesEl.innerHTML = html;
+      }
+      
+      updateStatusIndicator();
+      return true;
+    } catch (error) {
+      console.error('Error validando navegación:', error);
+      showToast(`Error validando navegación: ${error.message}`, 'error');
+      return false;
+    }
+  }
+  
+  // Publicar navegación (con validación previa)
+  async function publicarNavegacion() {
+    if (!editorState.definition || !editorState.navigationId) return;
+    
+    // Primero validar
+    const validationResult = await validarNavegacion();
+    if (!validationResult) {
+      return; // validarNavegacion ya mostró el error
+    }
+    
+    // Si hay errores, no permitir publicar
+    if (editorState.validationErrors && editorState.validationErrors.length > 0) {
+      showToast('❌ No se puede publicar: hay errores de validación. Corrígelos antes de publicar.', 'error');
+      return;
+    }
+    
+    // Si hay warnings, mostrar confirmación
+    if (editorState.validationWarnings && editorState.validationWarnings.length > 0) {
+      const warningsText = editorState.validationWarnings.slice(0, 3).join('\n• ');
+      const moreWarnings = editorState.validationWarnings.length > 3 ? `\n... y ${editorState.validationWarnings.length - 3} más` : '';
+      if (!confirm(`⚠️ Hay ${editorState.validationWarnings.length} advertencia(s):\n\n• ${warningsText}${moreWarnings}\n\n¿Continuar con la publicación?`)) {
+        return;
+      }
+    } else {
+      if (!confirm('¿Publicar esta versión de la navegación? Esto creará una nueva versión publicada.')) {
+        return;
+      }
+    }
+    
+    // Primero guardar el draft
+    await guardarNavegacion();
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.navigationId);
+      const response = await fetch(`/admin/api/navigation/${encodedId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      showToast(`✅ Navegación publicada como versión ${data.data.version}`, 'success');
+      
+      // Recargar para obtener la nueva versión
+      await cargarNavegacion();
+    } catch (error) {
+      console.error('Error publicando navegación:', error);
+      showToast(`Error publicando navegación: ${error.message}`, 'error');
+    }
+  }
+  
+  // Exportar navegación
+  async function exportarNavegacion() {
+    if (!editorState.navigationId) return;
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.navigationId);
+      const response = await fetch(`/admin/api/navigation/${encodedId}/export`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      // Descargar como archivo JSON
+      const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `navigation-${editorState.navigationId}-v${data.data.version || 'draft'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exportando navegación:', error);
+      alert(`Error al exportar navegación: ${error.message}`);
+    }
+  }
+  
+  // Actualizar indicador de estado
+  function updateStatusIndicator() {
+    const statusEl = document.getElementById('navigation-status');
+    if (!statusEl) return;
+    
+    if (editorState.isSaving) {
+      statusEl.textContent = '💾 Guardando...';
+      statusEl.className = 'px-2 py-1 bg-blue-900 text-blue-200 rounded text-xs';
+    } else if (editorState.dirty) {
+      statusEl.textContent = '● Cambios sin guardar';
+      statusEl.className = 'px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs';
+    } else {
+      if (editorState.lastSavedAt) {
+        const timeStr = editorState.lastSavedAt.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        statusEl.textContent = `✓ Guardado ${timeStr}`;
+      } else {
+        statusEl.textContent = '✓ Guardado';
+      }
+      statusEl.className = 'px-2 py-1 bg-green-900 text-green-200 rounded text-xs';
+    }
+  }
+  
+  // Assert consistency (solo en dev mode)
+  function assertConsistency() {
+    if (process?.env?.NODE_ENV === 'production') return; // Solo en dev
+    
+    if (!editorState.tree || !editorState.definition) return;
+    
+    // Reconstruir tree desde definition
+    const rebuiltTree = buildTreeFromDefinition(editorState.definition);
+    
+    // Comparar estructura (ids y jerarquía)
+    function compareTrees(tree1, tree2) {
+      if (!tree1 && !tree2) return true;
+      if (!tree1 || !tree2) return false;
+      
+      if (tree1.node?.id !== tree2.node?.id) return false;
+      
+      const children1 = tree1.children || [];
+      const children2 = tree2.children || [];
+      
+      if (children1.length !== children2.length) return false;
+      
+      for (let i = 0; i < children1.length; i++) {
+        if (!compareTrees(children1[i], children2[i])) return false;
+      }
+      
+      return true;
+    }
+    
+    const isConsistent = compareTrees(editorState.tree, rebuiltTree);
+    
+    if (!isConsistent) {
+      console.warn('[NavigationEditor] Inconsistencia detectada entre tree y definition', {
+        tree: editorState.tree,
+        rebuiltTree: rebuiltTree,
+        definition: editorState.definition
+      });
+    }
+  }
+  
+  // Inicializar cuando se carga la página
+  initEditor();
+</script>
+

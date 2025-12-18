@@ -1,0 +1,68 @@
+{
+  "navigation_id": "main-navigation",
+  "name": "Navegación Principal AuriPortal",
+  "entry_node_id": "root",
+  "nodes": {
+    "root": {
+      "id": "root",
+      "kind": "section",
+      "label": "Inicio",
+      "order": 0
+    },
+    "home_practice": {
+      "id": "home_practice",
+      "kind": "item",
+      "label": "Sí, hoy practico",
+      "icon": "✨",
+      "order": 1,
+      "target": {
+        "type": "screen",
+        "ref": "/practicar"
+      },
+      "visibility": { "min_nivel_efectivo": 1 }
+    },
+    "fuegos_sagrados": {
+      "id": "fuegos_sagrados",
+      "kind": "external_link",
+      "label": "Gestionar emociones con los fuegos sagrados",
+      "icon": "🔥",
+      "order": 2,
+      "target": {
+        "type": "url",
+        "ref": "https://pdeeugenihidalgo.typeform.com/to/Q1LgxtSu"
+      }
+    },
+    "perfil_personal": {
+      "id": "perfil_personal",
+      "kind": "item",
+      "label": "Mi universo personal",
+      "icon": "🌌",
+      "order": 3,
+      "target": {
+        "type": "screen",
+        "ref": "/perfil-personal"
+      }
+    },
+    "limpieza_diaria": {
+      "id": "limpieza_diaria",
+      "kind": "item",
+      "label": "Limpieza Energética Diaria",
+      "icon": "🧹",
+      "order": 4,
+      "target": {
+        "type": "recorrido",
+        "ref": "limpieza-energetica-diaria-v1"
+      },
+      "visibility": { "min_nivel_efectivo": 3 }
+    }
+  },
+  "edges": [
+    { "from": "root", "to": "home_practice", "kind": "child" },
+    { "from": "root", "to": "fuegos_sagrados", "kind": "child" },
+    { "from": "root", "to": "perfil_personal", "kind": "child" },
+    { "from": "root", "to": "limpieza_diaria", "kind": "child" }
+  ]
+}
+
+
+

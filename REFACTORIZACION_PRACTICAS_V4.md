@@ -381,3 +381,12 @@ await findByAlumnoId(123);
 *El dominio PRÁCTICAS ahora sigue arquitectura limpia por capas, manteniendo comportamiento idéntico y mejorando mantenibilidad y testabilidad.*
 
 
+
+
+
+
+
+
+
+
+

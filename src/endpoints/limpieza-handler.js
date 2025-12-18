@@ -5,10 +5,13 @@
 
 import { requireStudentContext } from '../core/auth-context.js';
 import { obtenerAspectosParaLimpieza as obtenerAspectosParaLimpiezaNuevo } from '../services/transmutaciones-energeticas.js';
-import { limpiarItemParaAlumno } from '../services/transmutaciones-energeticas.js';
+import { limpiarItemParaAlumno, obtenerItemPorId, obtenerListaPorId } from '../services/transmutaciones-energeticas.js';
 import { obtenerTecnicasPorNivel } from '../services/tecnicas-limpieza.js';
 import { checkDailyStreak } from '../modules/streak.js';
 import { renderHtml } from '../core/html-response.js';
+import { insertEnergyEvent } from '../core/energy/energy-events.js';
+import { getRequestId } from '../core/observability/request-context.js';
+import { query } from '../../database/pg.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -381,6 +384,55 @@ export async function handleMarcarLimpio(request, env) {
     
     // Marcar como limpiado usando el nuevo sistema
     await limpiarItemParaAlumno(aspecto_id, student.id);
+    
+    // ========================================================================
+    // EMITIR EVENTO EN PARALELO (fail-open: no rompe si falla)
+    // ========================================================================
+    try {
+      const ahora = new Date();
+      const item = await obtenerItemPorId(aspecto_id);
+      const lista = item ? await obtenerListaPorId(item.lista_id) : null;
+      
+      // Obtener estado antes (si existe)
+      const estadoAntes = await query(`
+        SELECT ultima_limpieza, veces_completadas 
+        FROM items_transmutaciones_alumnos
+        WHERE item_id = $1 AND alumno_id = $2
+      `, [aspecto_id, student.id]).catch(() => null);
+      
+      const wasCleanBefore = estadoAntes?.rows?.[0]?.ultima_limpieza ? true : false;
+      
+      await insertEnergyEvent({
+        occurred_at: ahora,
+        event_type: 'cleaning',
+        actor_type: 'alumno',
+        actor_id: String(student.id),
+        alumno_id: student.id,
+        subject_type: 'transmutacion_item',
+        subject_id: String(aspecto_id),
+        origin: 'web_portal',
+        notes: item ? `Limpieza de item transmutación ${item.nombre} desde portal alumno` : `Limpieza de item transmutación desde portal alumno`,
+        metadata: {
+          legacy_table_updated: true,
+          item_id: aspecto_id,
+          item_nombre: item?.nombre || null,
+          lista_id: item?.lista_id || null,
+          lista_nombre: lista?.nombre || null,
+          tipo_lista: lista?.tipo || null,
+          frecuencia_dias: item?.frecuencia_dias || null,
+          veces_limpiar: item?.veces_limpiar || null
+        },
+        request_id: getRequestId(),
+        requires_clean_state: true,
+        was_clean_before: wasCleanBefore,
+        is_clean_after: true,
+        request: request,
+        ctx: { request_id: getRequestId() }
+      });
+    } catch (energyError) {
+      // FAIL-OPEN: No romper la limpieza legacy si falla el evento
+      console.error(`[handleMarcarLimpio][EnergyEvent][FAIL] alumno_id=${student.id}`, energyError.message);
+    }
     
     return new Response(JSON.stringify({ success: true }), {
       headers: { "Content-Type": "application/json" }

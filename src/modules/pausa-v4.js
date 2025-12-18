@@ -5,7 +5,7 @@
 // REFACTOR: Usa PausaRepo en lugar de importar directamente database/pg.js
 // El repositorio encapsula todas las queries de pausas.
 
-import getDefaultPausaRepo from "../infra/repos/pausa-repo-pg.js";
+import { getDefaultPausaRepo } from "../infra/repos/pausa-repo-pg.js";
 import { logInfo, logWarn } from "../core/observability/logger.js";
 
 /**
@@ -234,5 +234,15 @@ export const pausas = {
   calcularDiasPausados,
   calcularDiasPausadosHastaFecha
 };
+
+
+
+
+
+
+
+
+
+
 
 

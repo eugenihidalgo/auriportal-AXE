@@ -11,7 +11,7 @@
 
 import { getDiasActivos, findStudentById } from './student-v4.js';
 import { calcularDiasPausados, calcularDiasPausadosHastaFecha, getPausaActiva } from './pausa-v4.js';
-import getDefaultStudentRepo from '../infra/repos/student-repo-pg.js';
+import { getDefaultStudentRepo } from '../infra/repos/student-repo-pg.js';
 
 /**
  * Simula el cálculo de días activos de un alumno
@@ -128,5 +128,15 @@ export async function simulateDiasActivos({ student, fechaHasta, modo = 'actual'
     desglose
   };
 }
+
+
+
+
+
+
+
+
+
+
 
 

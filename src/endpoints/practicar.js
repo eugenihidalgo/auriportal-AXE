@@ -4,7 +4,7 @@
 import { getCookieData } from "../core/cookies.js";
 import { getOrCreateStudent, findStudentByEmail } from "../modules/student-v4.js";
 import { getNivelInfo } from "../modules/nivel-v4.js";
-import { checkDailyStreak } from "../modules/streak-v4.js";
+import { checkDailyStreak } from "../modules/streak.js";
 import { renderPantalla0, renderPantalla2Practicar } from "../core/responses.js";
 
 export default async function practicarHandler(request, env, ctx) {
@@ -39,6 +39,7 @@ export default async function practicarHandler(request, env, ctx) {
   
   return renderPantalla2Practicar(student, streakInfo);
 }
+
 
 
 

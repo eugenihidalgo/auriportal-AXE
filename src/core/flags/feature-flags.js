@@ -27,6 +27,7 @@
 
 import { logInfo, logWarn } from '../observability/logger.js';
 import { getRequestId } from '../observability/request-context.js';
+import auditRepo from '../../infra/repos/audit-repo-pg.js';
 
 /**
  * Fuente de verdad única de Feature Flags
@@ -50,7 +51,8 @@ const FEATURE_FLAGS = {
   // Propósito: Permitir evolución segura del cálculo de días activos sin deploy completo
   // Estado inicial: 'off' (comportamiento actual intacto)
   // Cuando se active: permitirá implementar nueva lógica de cálculo sin riesgo
-  dias_activos_v2: 'off',
+  // ACTIVADO: 2025-12-15 - Para reconstrucción de estado derivado
+  dias_activos_v2: 'on',
   
   // Feature flag para cálculo automático de niveles (v2)
   // Propósito: Proteger la función actualizarNivelSiCorresponde() que modifica nivel_actual en PostgreSQL
@@ -75,6 +77,116 @@ const FEATURE_FLAGS = {
   // Cuando se active: permitirá implementar nueva lógica de control de suscripción sin riesgo
   // Afecta: acceso a prácticas, estado de suscripción, pausas y reactivaciones
   suscripcion_control_v2: 'off',
+  
+  // Feature flag para Analytics Spine v1
+  // Propósito: Sistema de recogida de eventos robusta y reutilizable, preparada para futuros módulos
+  //   - off: no guarda eventos (comportamiento por defecto)
+  //   - beta: solo en dev/beta
+  //   - on: todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá recoger eventos de analytics sin romper UX
+  // Afecta: recogida de eventos de analytics (client y server)
+  analytics_v1: 'off',
+  
+  // Feature flag para UI & Experience System v1
+  // Propósito: Sistema de UI & Experience con Themes, Screens, Layers y Conversation Scripts
+  //   - off: engine no se ejecuta (comportamiento actual intacto)
+  //   - beta: solo en dev/beta
+  //   - on: todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá usar el engine de UI sin romper pantallas existentes
+  // Afecta: renderizado de pantallas con themes y layers
+  ui_experience_v1: 'off',
+  
+  // Feature flag para Guided Conversation Layer v1 (Aurelín)
+  // Propósito: Layer conversacional con pasos (wizard) y scripts versionados
+  //   - off: layer no se aplica
+  //   - beta: solo en dev/beta
+  //   - on: todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá mostrar conversaciones guiadas sobre pantallas
+  // Afecta: overlay conversacional con Aurelín
+  ui_guided_conversation_v1: 'off',
+  
+  // Feature flag para Transition Background Layer v1
+  // Propósito: Layer simple de transición de fondo (CSS/HTML)
+  //   - off: layer no se aplica
+  //   - beta: solo en dev/beta
+  //   - on: todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá aplicar transiciones de fondo
+  // Afecta: decoración visual de pantallas
+  ui_transition_layer_v1: 'off',
+  
+  // Feature flag para Custom Extension Layer v1 (Escape Hatch)
+  // Propósito: Layer especial que permite inyectar CSS/JS/HTML con guardarraíles
+  //   - off: layer no se aplica (nunca en prod por defecto)
+  //   - beta: solo en dev/beta (con guardarraíles)
+  //   - on: todos los entornos (con guardarraíles estrictos)
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá extensibilidad total sin quedar bloqueado
+  // Afecta: escape hatch controlado para no limitar ideas futuras
+  ui_custom_extension_v1: 'off',
+  
+  // Feature flag para Motor de Automatizaciones (AUTO-1)
+  // Propósito: Controlar ejecución de reglas con status 'beta'
+  //   - off: reglas beta nunca se ejecutan
+  //   - beta: reglas beta se ejecutan solo en dev/beta
+  //   - on: reglas beta se ejecutan en todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá ejecutar reglas en beta sin riesgo en prod
+  // Afecta: ejecución de reglas de automatización con status 'beta'
+  automations_beta: 'off',
+  
+  // Feature flag para Capability Registry v1 (Recorridos)
+  // Propósito: Sistema de registry para descubrir ScreenTemplates, StepTypes, Conditions, Events y PDE Resources
+  //   - off: registry no disponible
+  //   - beta: registry disponible solo en dev/beta
+  //   - on: registry disponible en todos los entornos
+  // Estado inicial: 'beta' (disponible en dev/beta para testing)
+  // ACTIVADO: 2025-12-16 - Para permitir acceso al registry en producción
+  // Afecta: endpoint /admin/api/registry y validación de recorridos
+  recorridos_registry_v1: 'on',
+  
+  // Feature flag para Editor de Recorridos v1 (UI)
+  // Propósito: UI del editor de recorridos v1
+  //   - off: editor no disponible
+  //   - beta: editor disponible solo en dev/beta
+  //   - on: editor disponible en todos los entornos
+  // Estado inicial: 'beta' (disponible en dev/beta para testing)
+  // Cuando se active: permitirá usar el editor en producción
+  // Afecta: UI del editor de recorridos (/admin/recorridos)
+  recorridos_editor_v1: 'on',
+  
+  // Feature flag para Runtime de Recorridos v1 (Sprint 2B)
+  // Propósito: Sistema de ejecución de recorridos publicados para alumnos
+  //   - off: runtime no disponible
+  //   - beta: runtime disponible solo en dev/beta
+  //   - on: runtime disponible en todos los entornos
+  // Estado inicial: 'beta' (disponible en dev/beta para testing)
+  // Cuando se active: permitirá ejecutar recorridos en producción
+  // Afecta: endpoints /api/recorridos/* para alumnos
+  recorridos_runtime_v1: 'on',
+  
+  // Feature flag para Transmutaciones Energéticas v1
+  // Propósito: Sistema de catálogo y resolución de bundles de transmutaciones energéticas
+  //   - off: endpoint no disponible (fail-open con bundle vacío)
+  //   - beta: disponible solo en dev/beta
+  //   - on: disponible en todos los entornos
+  // Estado inicial: 'on' (disponible en todos los entornos)
+  // ACTIVADO: 2025-12-17 - Sistema funcional
+  // Afecta: endpoint GET /api/energy/transmutations/bundle
+  energy_transmutations_v1: 'on',
+  
+  // Feature flag para Editor de Navegación v1 (Backend)
+  // Propósito: Sistema de navegación con versionado (draft/publish), auditoría y validación
+  //   - off: endpoints no disponibles
+  //   - beta: disponible solo en dev/beta
+  //   - on: disponible en todos los entornos
+  // Estado inicial: 'on' (habilitado en todos los entornos)
+  // ACTIVADO: 2025-12-17 - Sistema funcional
+  // Afecta: endpoints /admin/navigation/*
+  navigation_editor_v1: 'on',
   
   // Agregar nuevos flags aquí siguiendo el mismo patrón
   // ejemplo_nuevo_flag: 'off',
@@ -213,6 +325,32 @@ export function isFeatureEnabled(flagName, ctx = null) {
   }
   // Si está "on" y activa, no logueamos (evitar ruido en logs)
   
+  // Registrar evento de auditoría solo para flags críticos
+  // Por ahora solo suscripcion_control_v2
+  // Se ejecuta de forma asíncrona (fire and forget) para no bloquear
+  if (flagName === 'suscripcion_control_v2') {
+    (async () => {
+      try {
+        await auditRepo.recordEvent({
+          requestId: getRequestId(),
+          actorType: ctx?.student ? 'student' : 'system',
+          actorId: ctx?.student?.id?.toString(),
+          eventType: 'FLAG_EVALUATED',
+          severity: 'info',
+          data: {
+            flag_name: flagName,
+            flag_state: flagState,
+            is_active: isActive,
+            env: meta.env
+          }
+        });
+      } catch (err) {
+        // No fallar si el audit falla (fail-open)
+        // No logueamos aquí para evitar ruido
+      }
+    })();
+  }
+  
   return isActive;
 }
 
@@ -273,5 +411,7 @@ export function getAllFeatureFlags() {
   
   return result;
 }
+
+
 
 

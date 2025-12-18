@@ -39,6 +39,10 @@ export function initPostgreSQL() {
       standardizeLimpiezaColumns().catch(err => {
         console.error('⚠️  Error ejecutando migración de columnas (se reintentará al usar):', err.message);
       });
+      // Ejecutar migraciones pendientes
+      runMigrations().catch(err => {
+        console.error('⚠️  Error ejecutando migraciones (se reintentará al usar):', err.message);
+      });
     }).catch(err => {
       console.error('⚠️  Error creando tablas (se reintentará al usar):', err.message);
     });
@@ -247,6 +251,48 @@ export async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_racha_fases_dias_min ON racha_fases(dias_min);
       CREATE INDEX IF NOT EXISTS idx_racha_fases_dias_max ON racha_fases(dias_max);
       CREATE INDEX IF NOT EXISTS idx_racha_fases_orden ON racha_fases(orden);
+    `);
+
+    // Tabla: nivel_overrides (overrides del Master para ajustes manuales auditables)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS nivel_overrides (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES alumnos(id) ON DELETE CASCADE,
+        student_email VARCHAR(255),
+        type VARCHAR(10) NOT NULL CHECK (type IN ('ADD', 'SET', 'MIN')),
+        value INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        created_by VARCHAR(255) DEFAULT 'system',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        revoked_at TIMESTAMP,
+        revoked_by VARCHAR(255)
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_nivel_overrides_student_id ON nivel_overrides(student_id);
+      CREATE INDEX IF NOT EXISTS idx_nivel_overrides_student_email ON nivel_overrides(student_email);
+      CREATE INDEX IF NOT EXISTS idx_nivel_overrides_revoked_at ON nivel_overrides(revoked_at);
+      CREATE INDEX IF NOT EXISTS idx_nivel_overrides_created_at ON nivel_overrides(created_at);
+    `);
+
+    // Tabla: student_progress_snapshot (snapshots de progreso del alumno)
+    // REGLA: El snapshot es DERIVADO, no fuente de verdad. computeProgress() siempre gana.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS student_progress_snapshot (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id INTEGER NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+        nivel_base INTEGER NOT NULL,
+        nivel_efectivo INTEGER NOT NULL,
+        fase_id VARCHAR(100) NOT NULL,
+        fase_nombre VARCHAR(255) NOT NULL,
+        dias_activos INTEGER NOT NULL DEFAULT 0,
+        dias_pausados INTEGER NOT NULL DEFAULT 0,
+        snapshot_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_progress_snapshot_student_id ON student_progress_snapshot(student_id);
+      CREATE INDEX IF NOT EXISTS idx_progress_snapshot_snapshot_at ON student_progress_snapshot(snapshot_at);
+      CREATE INDEX IF NOT EXISTS idx_progress_snapshot_student_snapshot ON student_progress_snapshot(student_id, snapshot_at DESC);
     `);
 
     // Insertar datos iniciales de racha_fases si no existen
@@ -1422,6 +1468,26 @@ export async function createTables() {
       `);
       
       console.log('✅ Tabla de Técnicas Post-práctica creada/verificada');
+      
+      // Tabla: protecciones_energeticas (Categoría de contenido PDE reutilizable dentro de prácticas)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS protecciones_energeticas (
+          id SERIAL PRIMARY KEY,
+          key VARCHAR(255) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          usage_context TEXT,
+          recommended_moment TEXT,
+          tags JSONB DEFAULT '[]',
+          status VARCHAR(20) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT protecciones_energeticas_status_check CHECK (status IN ('active', 'archived'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_protecciones_energeticas_key ON protecciones_energeticas(key);
+        CREATE INDEX IF NOT EXISTS idx_protecciones_energeticas_status ON protecciones_energeticas(status);
+      `);
+      console.log('✅ Tabla de Protecciones Energéticas creada/verificada');
       
       // Agregar campos de reloj a tecnicas_post_practica si no existen
       try {
@@ -2964,3 +3030,125 @@ export const nivelesFases = {
     return result.rows;
   }
 };
+
+/**
+ * Ejecuta migraciones pendientes
+ */
+export async function runMigrations() {
+  const pool = getPool();
+  const { readFileSync } = await import('fs');
+  const { fileURLToPath } = await import('url');
+  const { dirname, join } = await import('path');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  
+  try {
+    // Migración v4.13.0: Crear tabla theme_definitions
+    const migrationPath = join(__dirname, 'migrations', 'v4.13.0-create-theme-definitions.sql');
+    try {
+      const migrationSQL = readFileSync(migrationPath, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v4.13.0 ejecutada: theme_definitions');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        console.warn('⚠️  Error ejecutando migración v4.13.0:', error.message);
+      }
+    }
+    
+    // Migración v5.1.0: Crear tablas de versionado de recorridos (DEBE ejecutarse ANTES de v5.2.0)
+    const migration51Path = join(__dirname, 'migrations', 'v5.1.0-create-recorridos-versioning.sql');
+    try {
+      const migrationSQL = readFileSync(migration51Path, 'utf-8');
+      // Ejecutar por statements separados para evitar problemas de parsing
+      const statements = migrationSQL
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => {
+          const trimmed = s.trim();
+          return trimmed.length > 0 && 
+                 !trimmed.startsWith('--') && 
+                 !trimmed.match(/^\/\*/) &&
+                 trimmed.length > 10;
+        });
+      
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt + ';');
+        } catch (stmtError) {
+          // Si es error de "already exists", continuar (idempotente)
+          if (stmtError.message && (
+            stmtError.message.includes('already exists') ||
+            stmtError.message.includes('duplicate')
+          )) {
+            continue;
+          }
+          throw stmtError;
+        }
+      }
+      console.log('✅ Migración v5.1.0 ejecutada: recorridos, recorrido_drafts, recorrido_versions, recorrido_audit_log');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && error.message.includes('already exists')) {
+          console.log('ℹ️  Migración v5.1.0 ya aplicada (tablas existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.1.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.2.0: Crear tablas de runtime de recorridos (depende de v5.1.0)
+    const migration52Path = join(__dirname, 'migrations', 'v5.2.0-create-recorrido-runtime.sql');
+    try {
+      const migrationSQL = readFileSync(migration52Path, 'utf-8');
+      // Ejecutar por statements separados para evitar problemas de parsing
+      const statements = migrationSQL
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => {
+          const trimmed = s.trim();
+          // Filtrar comentarios y líneas vacías
+          return trimmed.length > 0 && 
+                 !trimmed.startsWith('--') && 
+                 !trimmed.match(/^\/\*/) &&
+                 trimmed.length > 10; // Filtrar statements muy cortos
+        });
+      
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt + ';');
+        } catch (stmtError) {
+          // Si es error de "already exists", continuar (idempotente)
+          if (stmtError.message && (
+            stmtError.message.includes('already exists') ||
+            stmtError.message.includes('duplicate')
+          )) {
+            continue;
+          }
+          // Si es error de "relation does not exist" en índices/constraints, continuar
+          // (se crearán después cuando existan las tablas)
+          if (stmtError.message && 
+              stmtError.message.includes('does not exist') &&
+              (stmt.includes('INDEX') || stmt.includes('CONSTRAINT'))) {
+            continue;
+          }
+          // Para otros errores, lanzar
+          throw stmtError;
+        }
+      }
+      console.log('✅ Migración v5.2.0 ejecutada: recorrido_runs, recorrido_step_results, recorrido_events');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && error.message.includes('already exists')) {
+          console.log('ℹ️  Migración v5.2.0 ya aplicada (tablas existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.2.0:', error.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️  Error ejecutando migraciones:', error.message);
+  }
+}

@@ -180,12 +180,67 @@
       font-size: 1.6rem;
     }
   }
+
+  /* Aurelín imagen fija superior (FASE 2) */
+  .home-aurelin {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .aurelin-image {
+    max-width: 220px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-lg, 20px);
+    box-shadow: 0 4px 15px var(--shadow-md);
+  }
+
+  /* Contenedor de acciones de navegación */
+  .home-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  /* Estilos para items de navegación dinámica */
+  .nav-item {
+    /* Hereda de .boton-practico */
+  }
+
+  .nav-item--action {
+    background: var(--gradient-primary);
+  }
+
+  .nav-item--link {
+    background: var(--gradient-secondary, var(--gradient-primary));
+  }
+
+  .nav-item--primary {
+    font-weight: 700;
+  }
+
+  @media (max-width: 768px) {
+    .home-aurelin {
+      margin-bottom: 16px;
+    }
+
+    .aurelin-image {
+      max-width: 180px;
+    }
+
+    .home-actions {
+      gap: 10px;
+      margin-top: 15px;
+    }
+  }
 </style>
 </head>
 
 <body>
   <div class="container">
     <div class="card">
+      <!-- Aurelín imagen fija superior con aura (mantener como estaba) -->
       <div class="aura-container">
         <div class="aura-circle"></div>
         <img src="{{IMAGEN_AURI}}" class="auri-img" alt="Aurelín" onerror="this.onerror=null; this.src='https://images.typeform.com/images/tXs4JibWTbvb';">
@@ -203,17 +258,18 @@
         Nivel {{NIVEL}} - {{FASE}}
       </div>
 
-      <button class="boton-practico" onclick="location.href='{{URL_SI_PRACTICO}}'">
-        Sí, hoy practico
-      </button>
-
-      <a href="{{URL_FUEGOS_SAGRADOS}}" class="boton-practico" onclick="openTypeformInApp(event, '{{URL_FUEGOS_SAGRADOS}}'); return false;">
-        Gestionar emociones con los fuegos sagrados
-      </a>
-
-      <button class="boton-practico" onclick="location.href='/perfil-personal'">
-        Quiero visitar mi universo personal
-      </button>
+      {{#SUSCRIPCION_PAUSADA}}
+      <div style="background: var(--bg-warning, rgba(255, 193, 7, 0.1)); border: 1px solid var(--border-warning, rgba(255, 193, 7, 0.3)); border-radius: var(--radius-md, 16px); padding: 20px; margin: 20px 0; color: var(--text-warning, #ffc107);">
+        <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 10px;">⏸️ Suscripción pausada</p>
+        <p style="font-size: 0.95rem; margin-bottom: 15px;">{{MENSAJE_PAUSADA}}</p>
+        <p style="font-size: 0.85rem; opacity: 0.8;">Para reactivar tu suscripción, contacta con soporte.</p>
+      </div>
+      {{/SUSCRIPCION_PAUSADA}}
+      
+      <!-- Navegación dinámica (FASE 2) -->
+      <div class="home-actions">
+        {{NAV_ITEMS_HTML}}
+      </div>
     </div>
   </div>
 
@@ -232,6 +288,25 @@
     
     // Hacer función global
     window.openTypeformInApp = openTypeformInApp;
+    
+    // Handler de navegación dinámica (FASE 2)
+    function handleNavClick(type, target) {
+      if (!target || target === '#') return;
+      
+      if (type === 'url') {
+        // Enlaces externos - abrir en nueva pestaña
+        window.open(target, '_blank', 'noopener,noreferrer');
+      } else if (type === 'modal') {
+        // Modales - por ahora navegar normalmente
+        window.location.href = target;
+      } else {
+        // screen - navegación interna
+        window.location.href = target;
+      }
+    }
+    
+    // Hacer función global
+    window.handleNavClick = handleNavClick;
   </script>
 </body>
 </html>

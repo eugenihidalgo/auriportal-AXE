@@ -14,6 +14,9 @@ import { updateStudentEstadoSuscripcion, findStudentById, findStudentByEmail } f
 import { isFeatureEnabled } from "../core/flags/feature-flags.js";
 import { logInfo, logWarn, logError, extractStudentMeta } from "../core/observability/logger.js";
 import { withTransaction } from "../infra/db/tx.js";
+import { getDefaultSubscriptionRepo } from "../infra/repos/subscription-repo-pg.js";
+import { getDefaultAuditRepo } from "../infra/repos/audit-repo-pg.js";
+import { getRequestId } from "../core/observability/request-context.js";
 
 /**
  * LÓGICA ACTUAL: Verifica y actualiza el estado de pausa de la suscripción en PostgreSQL
@@ -97,9 +100,12 @@ export async function gestionarEstadoSuscripcion(email, env, student, accesoInfo
     logWarn('suscripcion', 'suscripcion_control_v2 activo – camino preparado', meta);
   }
 
-  // Por ahora, siempre ejecutar lógica actual (flag 'off' o placeholder cuando esté 'on')
-  // Cuando se implemente nueva lógica, aquí se decidirá qué ejecutar según el flag
-  return await gestionarEstadoSuscripcion_LogicaActual(email, env, student, accesoInfo);
+  // Decidir qué lógica ejecutar según el flag
+  if (flagActivo) {
+    return await gestionarEstadoSuscripcion_LogicaNueva(email, env, student, accesoInfo);
+  } else {
+    return await gestionarEstadoSuscripcion_LogicaActual(email, env, student, accesoInfo);
+  }
 }
 
 /**
@@ -269,8 +275,213 @@ export async function puedePracticarHoy(email, env, student) {
     logWarn('suscripcion', 'suscripcion_control_v2 activo – camino preparado', meta);
   }
 
-  // Por ahora, siempre ejecutar lógica actual (flag 'off' o placeholder cuando esté 'on')
-  // Cuando se implemente nueva lógica, aquí se decidirá qué ejecutar según el flag
-  return await puedePracticarHoy_LogicaActual(email, env, student);
+  // Decidir qué lógica ejecutar según el flag
+  if (flagActivo) {
+    return await puedePracticarHoy_LogicaNueva(email, env, student);
+  } else {
+    return await puedePracticarHoy_LogicaActual(email, env, student);
+  }
+}
+
+/**
+ * LÓGICA NUEVA (v4.4.0): Verifica y actualiza el estado de pausa de la suscripción en PostgreSQL
+ * Usa repositorio de suscripciones y evalúa pausas activas de forma coherente.
+ * 
+ * @param {string} email - Email del estudiante
+ * @param {object} env - Variables de entorno
+ * @param {object} student - Objeto estudiante
+ * @param {object} accesoInfo - (Opcional) Datos de acceso ya verificados
+ * @returns {Promise<Object>} Objeto con { status, pausada, reason, canPractice, effectiveUntil? }
+ */
+async function gestionarEstadoSuscripcion_LogicaNueva(email, env, student, accesoInfo = null) {
+  const subscriptionRepo = getDefaultSubscriptionRepo();
+  
+  try {
+    // Validar que tenemos student con ID
+    if (!student || !student.id) {
+      logWarn('suscripcion', 'gestionarEstadoSuscripcion: student sin ID', {
+        email: email || student?.email
+      });
+      return { 
+        status: 'activa', 
+        pausada: false, 
+        canPractice: true,
+        reason: null 
+      };
+    }
+    
+    // Asegurar que existe registro con estado (crea default 'activa' si no existe, sin romper onboarding)
+    const alumnoConEstado = await subscriptionRepo.ensureDefault(student.id);
+    
+    if (!alumnoConEstado) {
+      // Alumno no existe en BD (no debería pasar si student.id existe, pero por seguridad)
+      logWarn('suscripcion', 'gestionarEstadoSuscripcion: alumno no existe en BD', {
+        alumno_id: student.id,
+        email: email || student?.email
+      });
+      return { 
+        status: 'activa', 
+        pausada: false, 
+        canPractice: true,
+        reason: null 
+      };
+    }
+    
+    // Leer estado actual
+    const estadoActual = alumnoConEstado.estado_suscripcion || 'activa';
+    
+    // Verificar si hay pausa activa (sin fin) en tabla pausas
+    const pausaActiva = await getPausaActiva(student.id);
+    
+    // Determinar estado efectivo
+    let statusEfectivo = estadoActual;
+    let pausada = false;
+    let reason = null;
+    let effectiveUntil = null;
+    
+    // Si hay pausa activa, el estado efectivo es 'pausada' (aunque estado_suscripcion diga otra cosa)
+    if (pausaActiva) {
+      statusEfectivo = 'pausada';
+      pausada = true;
+      reason = 'Suscripción pausada';
+      
+      // Si la pausa tiene fecha de fin programada, incluirla
+      if (pausaActiva.fin) {
+        effectiveUntil = pausaActiva.fin instanceof Date 
+          ? pausaActiva.fin.toISOString() 
+          : pausaActiva.fin;
+      }
+      
+      // Sincronizar: si estado_suscripcion no es 'pausada', actualizarlo
+      if (estadoActual !== 'pausada') {
+        await subscriptionRepo.updateStatus(student.id, 'pausada', null);
+        logInfo('suscripcion', 'Estado sincronizado a pausada por pausa activa', {
+          alumno_id: student.id,
+          pausa_id: pausaActiva.id
+        });
+      }
+    } else {
+      // No hay pausa activa
+      if (estadoActual === 'pausada' || estadoActual === 'cancelada') {
+        pausada = true;
+        reason = `Suscripción ${estadoActual}`;
+        statusEfectivo = estadoActual;
+      } else if (estadoActual === 'past_due') {
+        // Past due también bloquea práctica
+        pausada = true;
+        reason = 'Suscripción vencida';
+        statusEfectivo = 'past_due';
+      } else {
+        // Estado activa o cualquier otro estado no bloqueante
+        pausada = false;
+        statusEfectivo = 'activa';
+      }
+    }
+    
+    // Retornar objeto estructurado
+    return {
+      status: statusEfectivo,
+      pausada,
+      reason,
+      canPractice: !pausada,
+      effectiveUntil,
+      estadoAnterior: estadoActual,
+      tienePausaActiva: pausaActiva !== null
+    };
+    
+  } catch (err) {
+    logError('suscripcion', 'Error gestionando estado de suscripción (lógica nueva)', {
+      error: err.message,
+      stack: err.stack,
+      alumno_id: student?.id,
+      email: email || student?.email
+    });
+    
+    // En caso de error, permitir acceso (fail-open para no bloquear usuarios)
+    return { 
+      status: 'activa', 
+      pausada: false, 
+      canPractice: true,
+      reason: null,
+      error: err.message 
+    };
+  }
+}
+
+/**
+ * LÓGICA NUEVA (v4.4.0): Verifica si puede practicar hoy (considerando estado de suscripción)
+ * Usa la nueva lógica de gestionarEstadoSuscripcion.
+ * 
+ * @param {string} email - Email del estudiante
+ * @param {object} env - Variables de entorno
+ * @param {object} student - Objeto estudiante
+ * @returns {Promise<Object>} Objeto con { puede, razon, estado }
+ */
+async function puedePracticarHoy_LogicaNueva(email, env, student) {
+  const estado = await gestionarEstadoSuscripcion_LogicaNueva(email, env, student);
+  
+  if (!estado.canPractice) {
+    // Log cuando se bloquea práctica por suscripción (sin PII sensible)
+    logWarn('suscripcion', 'Práctica bloqueada por suscripción', {
+      alumno_id: student?.id,
+      status: estado.status,
+      reason: estado.reason,
+      codigo: 'sub_paused' // Código para métricas futuras
+    });
+    
+    // Registrar evento de auditoría
+    try {
+      const auditRepo = getDefaultAuditRepo();
+      await auditRepo.recordEvent({
+        requestId: getRequestId(),
+        actorType: 'student',
+        actorId: student?.id?.toString(),
+        eventType: 'SUBSCRIPTION_BLOCKED_PRACTICE',
+        severity: 'warn',
+        data: {
+          status: estado.status,
+          reason: estado.reason,
+          codigo: 'sub_paused'
+        }
+      });
+    } catch (err) {
+      // No fallar si el audit falla (fail-open)
+      logError('audit', 'Error registrando SUBSCRIPTION_BLOCKED_PRACTICE', {
+        error: err.message
+      });
+    }
+    
+    return {
+      puede: false,
+      razon: estado.reason || "Suscripción no activa",
+      estado,
+      codigo: 'sub_paused'
+    };
+  }
+
+  // Registrar evento cuando se permite práctica
+  try {
+    const auditRepo = getDefaultAuditRepo();
+    await auditRepo.recordEvent({
+      requestId: getRequestId(),
+      actorType: 'student',
+      actorId: student?.id?.toString(),
+      eventType: 'SUBSCRIPTION_ALLOWED_PRACTICE',
+      severity: 'info',
+      data: {
+        status: estado.status
+      }
+    });
+  } catch (err) {
+    // No fallar si el audit falla (fail-open)
+    logError('audit', 'Error registrando SUBSCRIPTION_ALLOWED_PRACTICE', {
+      error: err.message
+    });
+  }
+
+  return {
+    puede: true,
+    estado
+  };
 }
 

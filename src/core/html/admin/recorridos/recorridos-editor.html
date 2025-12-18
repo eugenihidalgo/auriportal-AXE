@@ -1,0 +1,4497 @@
+<!-- 
+  EDITOR DE RECORRIDOS - Layout Canónico v2
+  
+  ESTRUCTURA:
+  - .editor-layout: Contenedor flex column que ocupa todo el espacio disponible
+  - .editor-topbar: Header del editor (position: relative, NO fixed)
+  - .editor-body: Contenido principal (flex: 1, overflow: auto)
+  
+  REGLAS:
+  - NO usar position: fixed en ningún elemento
+  - El topbar usa flex-shrink: 0 para mantener altura fija
+  - El body usa flex: 1 para ocupar el espacio restante
+-->
+<div class="recorridos-editor editor-layout" id="recorridos-editor" data-recorrido-id="{{RECORRIDO_ID}}">
+  <!-- Header del editor (NO fixed, forma parte del layout) -->
+  <div class="editor-topbar bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <a href="/admin/recorridos" class="text-slate-400 hover:text-white" title="Volver al listado">←</a>
+        <h1 class="text-xl font-bold text-white" id="recorrido-name">Cargando...</h1>
+        <span id="publish-status-badge" class="publish-status publish-status--draft" style="display: none;"></span>
+        <span id="recorrido-status" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Cargando...</span>
+        <span id="recorrido-version" class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">v-</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Botón de guardar manual (BLINDAJE v2) -->
+        <button onclick="forzarGuardado()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors" title="Guardar ahora (si es válido)">
+          💾 Guardar
+        </button>
+        <button onclick="validarRecorrido()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+          ✓ Validar
+        </button>
+        <button onclick="previewRecorrido()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
+          👁️ Preview
+        </button>
+        <button onclick="publicarRecorrido()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
+          🚀 Publicar
+        </button>
+      </div>
+    </div>
+    <div id="validation-messages" class="mt-2"></div>
+  </div>
+  
+  <!-- Contenido principal del editor (flex: 1, scroll interno) -->
+  <div class="editor-body flex">
+    <!-- Columna izquierda: Lista de steps -->
+    <div class="steps-panel bg-slate-950 border-r border-slate-800 overflow-y-auto" id="steps-panel">
+      <div class="p-4">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-semibold text-white">Steps</h2>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleStepsPanel()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors" id="toggle-steps-panel-btn" title="Colapsar/Expandir panel">
+              ◀
+            </button>
+            <button onclick="añadirStep()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">
+              ➕
+            </button>
+          </div>
+        </div>
+        <div id="steps-list" class="space-y-2">
+          <p class="text-slate-400 text-sm">Cargando steps...</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Divisor draggable para redimensionar -->
+    <div class="panel-resizer" id="panel-resizer"></div>
+    
+    <!-- Centro: Preview de pantalla -->
+    <div class="editor-main flex-1 bg-slate-900 overflow-y-auto p-6">
+      <!-- SPRINT AXE v0.3: Preview Harness Unificado -->
+      <div id="preview-harness-container" style="display: none;"></div>
+      <!-- Preview legacy (fallback) -->
+      <div class="bg-white rounded-lg shadow-lg min-h-full" id="preview-container">
+        <div class="p-8 text-center text-slate-400">
+          <p>Selecciona un step para ver el preview</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Derecha: Panel de configuración -->
+    <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto">
+      <div class="p-4" id="config-panel">
+        <p class="text-slate-400 text-sm">Selecciona un step para configurarlo</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ============================================================================
+   * LAYOUT CANÓNICO DEL EDITOR (FIX BUG CRÍTICO UI)
+   * ============================================================================
+   * 
+   * ESTRUCTURA:
+   * - .editor-layout: flex column, altura completa
+   * - .editor-topbar: height fija, flex-shrink: 0, position: relative
+   * - .editor-body: flex: 1, overflow: auto
+   * 
+   * PROHIBIDO:
+   * - position: fixed en el topbar
+   * - margin-top/padding-top "mágicos" para compensar headers
+   * - z-index excesivos
+   * ============================================================================
+   */
+  
+  .editor-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 130px); /* Altura total menos header del admin base (~130px aprox) */
+    overflow: hidden;
+  }
+  
+  .editor-topbar {
+    position: relative; /* NO fixed */
+    flex-shrink: 0;
+    z-index: 10; /* z-index normal, no excesivo */
+  }
+  
+  .editor-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden; /* El scroll lo manejan los hijos */
+    min-height: 0; /* Importante para que flex funcione con overflow */
+  }
+  
+  /* Columnas internas del editor */
+  .editor-body > div {
+    height: 100%;
+    min-height: 0;
+  }
+  
+  /* Responsive: en móvil, stack vertical */
+  @media (max-width: 1024px) {
+    .editor-layout {
+      height: auto;
+      min-height: calc(100vh - 130px);
+    }
+    
+    .editor-body {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    
+    .editor-body > div {
+      height: auto;
+      min-height: 300px;
+      width: 100% !important;
+      flex-shrink: 0;
+    }
+  }
+  
+  /* ============================================================================
+   * PANEL DE STEPS REDIMENSIONABLE
+   * ============================================================================
+   */
+  
+  .steps-panel {
+    width: var(--steps-panel-width, 280px);
+    min-width: 200px;
+    max-width: 500px;
+    transition: width 0.2s ease;
+    position: relative;
+  }
+  
+  .steps-panel.collapsed {
+    width: 48px !important;
+    min-width: 48px;
+    max-width: 48px;
+  }
+  
+  .steps-panel.collapsed .p-4 > *:not(.flex) {
+    display: none;
+  }
+  
+  .steps-panel.collapsed .p-4 .flex {
+    justify-content: center;
+  }
+  
+  .steps-panel.collapsed #steps-list {
+    display: none;
+  }
+  
+  .panel-resizer {
+    width: 6px;
+    cursor: col-resize;
+    background: rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+    user-select: none;
+  }
+  
+  .steps-panel.collapsed + .panel-resizer {
+    display: none;
+  }
+  
+  .panel-resizer:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .panel-resizer.resizing {
+    background: rgba(79, 70, 229, 0.3);
+  }
+  
+  .editor-main {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .recorridos-editor {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  .step-item {
+    padding: 12px;
+    background: #1e293b;
+    border-radius: 8px;
+    cursor: grab;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+  }
+  
+  .step-item:hover {
+    background: #334155;
+  }
+  
+  .step-item.active {
+    border-color: #4f46e5;
+    background: #334155;
+  }
+  
+  .step-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+  }
+  
+  .step-item.drag-over {
+    border-top: 2px solid #3498db;
+  }
+  
+  .step-item .step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  
+  .step-item .step-id {
+    font-weight: 600;
+    color: #fff;
+    font-size: 14px;
+  }
+  
+  .step-item .step-actions {
+    display: flex;
+    gap: 4px;
+  }
+  
+  .step-item .step-actions button {
+    padding: 2px 6px;
+    font-size: 12px;
+    background: #475569;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+  }
+  
+  .step-item .step-actions button:hover {
+    background: #64748b;
+  }
+  
+  .step-item .step-type {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
+  
+  .config-section {
+    margin-bottom: 24px;
+  }
+  
+  .config-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #334155;
+  }
+  
+  .form-group {
+    margin-bottom: 16px;
+  }
+  
+  .form-group label {
+    display: block;
+    font-size: 14px;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+  }
+  
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 14px;
+  }
+  
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #4f46e5;
+  }
+  
+  .validation-error {
+    background: #7f1d1d;
+    border: 1px solid #991b1b;
+    color: #fecaca;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+  
+  .validation-warning {
+    background: #78350f;
+    border: 1px solid #92400e;
+    color: #fed7aa;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+  
+  .validation-success {
+    background: #14532d;
+    border: 1px solid #166534;
+    color: #bbf7d0;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_text EDITOR
+   * ============================================================================
+   */
+  
+  .screen-text-editor {
+    padding: 8px 0;
+  }
+  
+  .screen-text-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-text-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-text-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 200px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .screen-text-textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-text-textarea::placeholder {
+    color: #64748b;
+    font-style: italic;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_text PREVIEW
+   * ============================================================================
+   */
+  
+  .screen-text-preview {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+  }
+  
+  .mobile-frame {
+    width: 100%;
+    max-width: 375px;
+    min-height: 600px;
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 24px;
+    box-shadow: 
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06),
+      inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .mobile-content {
+    flex: 1;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .preview-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 12px 0;
+    line-height: 1.2;
+  }
+  
+  .preview-subtitle {
+    font-size: 18px;
+    font-weight: 500;
+    color: #475569;
+    margin: 0 0 24px 0;
+    line-height: 1.4;
+  }
+  
+  .preview-body {
+    font-size: 16px;
+    color: #334155;
+    line-height: 1.7;
+    flex: 1;
+  }
+  
+  .preview-placeholder {
+    color: #94a3b8;
+    font-style: italic;
+  }
+  
+  .preview-action-btn {
+    margin-top: auto;
+    padding: 16px 32px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .preview-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+  
+  .preview-info {
+    text-align: center;
+  }
+  
+  .preview-info code {
+    background: #1e293b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_video EDITOR
+   * ============================================================================
+   */
+  
+  .screen-video-editor {
+    padding: 8px 0;
+  }
+  
+  .screen-video-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-video-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-video-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 80px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .screen-video-textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-video-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .screen-video-select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-video-radio-group {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  
+  .screen-video-radio-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1;
+    min-width: 140px;
+  }
+  
+  .screen-video-radio-item:hover {
+    border-color: #475569;
+  }
+  
+  .screen-video-radio-item.active {
+    border-color: #6366f1;
+    background: #312e81;
+  }
+  
+  .screen-video-radio-item input[type="radio"] {
+    accent-color: #6366f1;
+    width: 16px;
+    height: 16px;
+  }
+  
+  .screen-video-radio-item label {
+    color: #e2e8f0;
+    font-size: 14px;
+    cursor: pointer;
+    margin: 0;
+  }
+  
+  .screen-video-number {
+    width: 120px;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-video-number:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_video PREVIEW
+   * ============================================================================
+   */
+  
+  .screen-video-preview {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+  }
+  
+  .video-preview-container {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 16px 0;
+    border: 1px solid #334155;
+    overflow: hidden;
+  }
+  
+  .video-preview-youtube {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 12px;
+  }
+  
+  .video-preview-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: #64748b;
+  }
+  
+  .video-preview-placeholder .icon {
+    font-size: 48px;
+    opacity: 0.7;
+  }
+  
+  .video-preview-placeholder .text {
+    font-size: 14px;
+    text-align: center;
+    max-width: 200px;
+  }
+  
+  .video-collapsed-btn {
+    padding: 16px 32px;
+    background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .video-collapsed-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+  }
+  
+  .video-duration-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #1e293b;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 8px;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_audio EDITOR
+   * ============================================================================
+   */
+  
+  .screen-audio-editor {
+    padding: 8px 0;
+  }
+  
+  .screen-audio-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-audio-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-audio-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .screen-audio-select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-audio-number {
+    width: 120px;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-audio-number:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_audio PREVIEW
+   * ============================================================================
+   */
+  
+  .screen-audio-preview {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+  }
+  
+  .audio-preview-container {
+    width: 100%;
+    padding: 24px 20px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 16px 0;
+    border: 1px solid #334155;
+  }
+  
+  .audio-preview-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+  }
+  
+  .audio-preview-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: #64748b;
+  }
+  
+  .audio-preview-placeholder .icon {
+    font-size: 48px;
+    opacity: 0.7;
+  }
+  
+  .audio-preview-placeholder .text {
+    font-size: 14px;
+    text-align: center;
+    max-width: 200px;
+  }
+  
+  .audio-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #334155;
+    border-radius: 3px;
+    margin: 16px 0 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .audio-progress-bar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 35%;
+    background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+    border-radius: 3px;
+  }
+  
+  .audio-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  
+  .audio-play-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .audio-play-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+  
+  .audio-time {
+    font-size: 12px;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .audio-duration-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #1e293b;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 8px;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_choice EDITOR
+   * ============================================================================
+   */
+  
+  .screen-choice-editor {
+    padding: 8px 0;
+  }
+  
+  .screen-choice-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  
+  .screen-choice-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  .screen-choice-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 80px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .screen-choice-textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  
+  /* Lista de opciones */
+  .choices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .choice-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.2s;
+  }
+  
+  .choice-card:hover {
+    border-color: #475569;
+  }
+  
+  .choice-card.incomplete {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #1e293b 0%, #2c1d10 100%);
+  }
+  
+  .choice-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #334155;
+  }
+  
+  .choice-card-number {
+    font-size: 14px;
+    font-weight: 600;
+    color: #818cf8;
+  }
+  
+  .choice-card-actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .choice-card-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+    background: #475569;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .choice-card-actions button:hover {
+    background: #64748b;
+  }
+  
+  .choice-card-actions button.delete-btn:hover {
+    background: #dc2626;
+  }
+  
+  .choice-field {
+    margin-bottom: 12px;
+  }
+  
+  .choice-field:last-child {
+    margin-bottom: 0;
+  }
+  
+  .choice-field label {
+    display: block;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  
+  .choice-field-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  
+  .choice-field input,
+  .choice-field textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  
+  .choice-field input:focus,
+  .choice-field textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  }
+  
+  .choice-field input.slug-input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  
+  .choice-field input.slug-input.invalid {
+    border-color: #dc2626;
+  }
+  
+  .choice-field-hint {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+  
+  .auto-slug-btn {
+    padding: 6px 12px;
+    background: #3730a3;
+    border: none;
+    border-radius: 6px;
+    color: #c7d2fe;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  
+  .auto-slug-btn:hover {
+    background: #4338ca;
+  }
+  
+  .choice-minutes-input {
+    width: 80px !important;
+  }
+  
+  .add-choice-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+    border: 2px dashed #334155;
+    border-radius: 12px;
+    color: #94a3b8;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  .add-choice-btn:hover {
+    border-color: #6366f1;
+    color: #c7d2fe;
+    background: linear-gradient(135deg, #312e81 0%, #1e293b 100%);
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA screen_choice PREVIEW
+   * ============================================================================
+   */
+  
+  .screen-choice-preview {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+  }
+  
+  .preview-question {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 20px 0;
+    line-height: 1.4;
+    text-align: center;
+    padding: 16px;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    border-left: 4px solid #6366f1;
+  }
+  
+  .preview-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  
+  .preview-choice-btn {
+    width: 100%;
+    padding: 14px 18px;
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .preview-choice-btn:hover {
+    border-color: #6366f1;
+    background: #f8fafc;
+    transform: translateX(4px);
+  }
+  
+  .preview-choice-btn.placeholder {
+    border-style: dashed;
+    opacity: 0.6;
+  }
+  
+  .preview-choice-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: #1e293b;
+  }
+  
+  .preview-choice-desc {
+    font-size: 13px;
+    color: #64748b;
+  }
+  
+  .preview-choice-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  
+  .preview-choice-minutes {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: #dbeafe;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #1e40af;
+    font-weight: 500;
+  }
+  
+  .preview-choice-tag {
+    display: inline-flex;
+    padding: 2px 8px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #475569;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA FASE 4.1: Indicadores de campos obligatorios y estado
+   * ============================================================================
+   */
+  
+  .required-badge {
+    color: #e74c3c;
+    font-weight: bold;
+    margin-left: 4px;
+    cursor: help;
+  }
+  
+  .publish-status {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .publish-status--ready {
+    background: #27ae60;
+    color: #fff;
+  }
+  
+  .publish-status--draft {
+    background: #f39c12;
+    color: #fff;
+  }
+  
+  .publish-status--invalid {
+    background: #e74c3c;
+    color: #fff;
+  }
+  
+  /* ============================================================================
+   * ESTILOS PARA FASE 4.2: Badge de handlers especiales
+   * ============================================================================
+   */
+  
+  .handler-badge {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    background: #34495e;
+    color: #ecf0f1;
+    cursor: help;
+    display: inline-block;
+    vertical-align: middle;
+  }
+</style>
+
+<!-- Script module para cargar registry de handlers -->
+<script type="module">
+  import { HANDLER_INFO } from '/js/recorridos/step-handler-registry.js';
+  window.HANDLER_INFO = HANDLER_INFO;
+</script>
+
+<script>
+  // ============================================================================
+  // ESTADO GLOBAL DEL EDITOR (BLINDAJE v2)
+  // ============================================================================
+  // 
+  // PRINCIPIOS:
+  // 1. El editor puede estar en estado editable pero inválido (eso NO es un error)
+  // 2. El error es intentar persistir basura
+  // 3. guardarDraft() solo se llama si valid === true
+  // 4. Los IDs son slugs técnicos (generados automáticamente)
+  //
+  let editorState = {
+    recorridoId: null,
+    definition: null,
+    selectedStepId: null,
+    registry: null,
+    
+    // BLINDAJE v2: Estado de draft
+    dirty: false,           // ¿Hay cambios sin guardar?
+    valid: false,           // ¿La definición es válida para guardar?
+    validationErrors: [],   // Errores de validación actuales
+    lastSavedAt: null,      // Última vez que se guardó
+    saveTimeout: null,      // Timeout para debounce (ya no agresivo)
+    isSaving: false         // ¿Está guardando ahora mismo?
+  };
+  
+  // ============================================================================
+  // UTILIDADES DE BLINDAJE
+  // ============================================================================
+  
+  /**
+   * Genera un slug técnico a partir de un texto
+   * - Sin espacios (usa _)
+   * - Sin acentos
+   * - Solo minúsculas, números, guiones bajos
+   */
+  function generateSlug(text) {
+    if (!text || typeof text !== 'string') return '';
+    
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\s\-]+/g, '_')
+      .replace(/[^a-z0-9_]/g, '')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .substring(0, 64);
+  }
+  
+  /**
+   * Valida que un ID sea un slug técnico válido
+   */
+  function validateSlugId(id) {
+    if (!id || typeof id !== 'string') {
+      return { valid: false, error: 'El ID es requerido' };
+    }
+    if (id.length < 3) {
+      return { valid: false, error: 'El ID debe tener al menos 3 caracteres' };
+    }
+    if (id.length > 64) {
+      return { valid: false, error: 'El ID no puede tener más de 64 caracteres' };
+    }
+    const slugPattern = /^[a-z][a-z0-9_]*$/;
+    if (!slugPattern.test(id)) {
+      return { valid: false, error: 'El ID solo puede contener letras minúsculas, números y guiones bajos. Debe empezar con letra.' };
+    }
+    return { valid: true };
+  }
+  
+  /**
+   * Valida la definición ANTES de guardar draft (validación rápida, sin registry)
+   * Devuelve { valid: boolean, errors: Array<string> }
+   */
+  function validateDefinitionForDraft(definition) {
+    const errors = [];
+    
+    if (!definition || typeof definition !== 'object') {
+      return { valid: false, errors: ['La definición debe ser un objeto'] };
+    }
+    
+    if (!definition.id) {
+      errors.push('Falta el ID del recorrido');
+    }
+    
+    if (!definition.entry_step_id) {
+      errors.push('Falta entry_step_id');
+    }
+    
+    if (!definition.steps || typeof definition.steps !== 'object') {
+      errors.push('Falta el objeto steps');
+    } else {
+      const stepIds = Object.keys(definition.steps);
+      
+      if (stepIds.length === 0) {
+        errors.push('Debe haber al menos un step');
+      }
+      
+      if (definition.entry_step_id && !definition.steps[definition.entry_step_id]) {
+        errors.push(`entry_step_id "${definition.entry_step_id}" no existe en steps`);
+      }
+      
+      for (const stepId of stepIds) {
+        const step = definition.steps[stepId];
+        if (!step || typeof step !== 'object') {
+          errors.push(`Step "${stepId}": debe ser un objeto`);
+          continue;
+        }
+        if (!step.screen_template_id) {
+          errors.push(`Step "${stepId}": falta screen_template_id`);
+        }
+      }
+    }
+    
+    if (!definition.edges || !Array.isArray(definition.edges)) {
+      errors.push('edges debe ser un array');
+    } else {
+      const stepIds = new Set(Object.keys(definition.steps || {}));
+      
+      for (let i = 0; i < definition.edges.length; i++) {
+        const edge = definition.edges[i];
+        if (!edge || typeof edge !== 'object') {
+          errors.push(`Edge ${i}: debe ser un objeto`);
+          continue;
+        }
+        if (!edge.from_step_id) {
+          errors.push(`Edge ${i}: falta from_step_id`);
+        } else if (!stepIds.has(edge.from_step_id)) {
+          errors.push(`Edge ${i}: from_step_id "${edge.from_step_id}" no existe`);
+        }
+        if (!edge.to_step_id) {
+          errors.push(`Edge ${i}: falta to_step_id`);
+        } else if (!stepIds.has(edge.to_step_id)) {
+          errors.push(`Edge ${i}: to_step_id "${edge.to_step_id}" no existe`);
+        }
+      }
+    }
+    
+    return { valid: errors.length === 0, errors };
+  }
+  
+  /**
+   * Calcula el estado del draft para publicar (ready/draft/invalid)
+   * @returns {string} 'ready' | 'draft' | 'invalid'
+   */
+  function calculatePublishStatus() {
+    // Si hay errores de validación → invalid
+    if (!editorState.valid || editorState.validationErrors.length > 0) {
+      return 'invalid';
+    }
+    
+    // Verificar campos publish_required en todos los steps
+    const definition = editorState.definition;
+    if (!definition || !definition.steps) {
+      return 'invalid';
+    }
+    
+    const registry = editorState.registry;
+    if (!registry || !registry.screenTemplates) {
+      // Si no hay registry, no podemos verificar publish_required
+      // Fail-open: asumimos que está listo si es válido
+      return 'ready';
+    }
+    
+    // Verificar cada step
+    for (const stepId of Object.keys(definition.steps)) {
+      const step = definition.steps[stepId];
+      if (!step || !step.screen_template_id) {
+        continue;
+      }
+      
+      // Buscar template en registry
+      const template = registry.screenTemplates.find(st => st.id === step.screen_template_id);
+      if (!template || !template.editor_config || !template.editor_config.publish_required) {
+        continue;
+      }
+      
+      const publishRequired = template.editor_config.publish_required || [];
+      const props = step.props || {};
+      
+      // Verificar cada campo publish_required
+      for (const requiredProp of publishRequired) {
+        const value = props[requiredProp];
+        
+        // Verificar si el campo está vacío o no definido
+        if (value === undefined || value === null || value === '') {
+          return 'draft'; // Faltan campos requeridos
+        }
+        
+        // Para arrays (como choices), verificar que tenga elementos válidos
+        if (Array.isArray(value)) {
+          if (value.length === 0) {
+            return 'draft';
+          }
+          // Para choices, verificar que cada elemento tenga choice_id y label válidos
+          if (requiredProp === 'choices') {
+            const hasValidChoices = value.every(c => 
+              c && c.choice_id && /^[a-z][a-z0-9_]*$/.test(c.choice_id) && c.label && c.label.trim()
+            );
+            if (!hasValidChoices) {
+              return 'draft';
+            }
+          }
+        }
+        
+        // Para strings, verificar que no esté vacío después de trim
+        if (typeof value === 'string' && value.trim() === '') {
+          return 'draft';
+        }
+      }
+    }
+    
+    // Si llegamos aquí, todos los campos publish_required están completos
+    return 'ready';
+  }
+  
+  /**
+   * Actualiza el estado de validación y UI del editor
+   */
+  function updateValidationState() {
+    const validation = validateDefinitionForDraft(editorState.definition);
+    editorState.valid = validation.valid;
+    editorState.validationErrors = validation.errors;
+    
+    // Actualizar indicador visual de estado
+    updateStatusIndicator();
+  }
+  
+  /**
+   * Actualiza el indicador visual de estado (dirty/valid/saving)
+   */
+  function updateStatusIndicator() {
+    const statusEl = document.getElementById('recorrido-status');
+    if (!statusEl) return;
+    
+    if (editorState.isSaving) {
+      statusEl.textContent = '💾 Guardando...';
+      statusEl.className = 'px-2 py-1 bg-blue-900 text-blue-200 rounded text-xs';
+    } else if (editorState.dirty && !editorState.valid) {
+      statusEl.textContent = '⚠️ Cambios sin guardar (inválido)';
+      statusEl.className = 'px-2 py-1 bg-red-900 text-red-200 rounded text-xs';
+    } else if (editorState.dirty) {
+      statusEl.textContent = '● Cambios sin guardar';
+      statusEl.className = 'px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs';
+    } else {
+      statusEl.textContent = '✓ Guardado';
+      statusEl.className = 'px-2 py-1 bg-green-900 text-green-200 rounded text-xs';
+    }
+    
+    // Actualizar badge de estado para publicar
+    updatePublishStatusBadge();
+  }
+  
+  /**
+   * Actualiza el badge de estado para publicar (ready/draft/invalid)
+   */
+  function updatePublishStatusBadge() {
+    const badgeEl = document.getElementById('publish-status-badge');
+    if (!badgeEl) return;
+    
+    // Solo mostrar si hay definición cargada
+    if (!editorState.definition) {
+      badgeEl.style.display = 'none';
+      return;
+    }
+    
+    const status = calculatePublishStatus();
+    badgeEl.style.display = 'inline-flex';
+    
+    // Remover todas las clases de estado
+    badgeEl.classList.remove('publish-status--ready', 'publish-status--draft', 'publish-status--invalid');
+    
+    // Añadir la clase correspondiente y actualizar texto
+    if (status === 'ready') {
+      badgeEl.classList.add('publish-status--ready');
+      badgeEl.textContent = '🟢 Listo para publicar';
+      badgeEl.title = 'Todos los campos obligatorios están completos';
+    } else if (status === 'draft') {
+      badgeEl.classList.add('publish-status--draft');
+      badgeEl.textContent = '🟡 Válido pero incompleto';
+      badgeEl.title = 'Faltan campos obligatorios para publicar';
+    } else {
+      badgeEl.classList.add('publish-status--invalid');
+      badgeEl.textContent = '🔴 Inválido';
+      badgeEl.title = 'El recorrido tiene errores que deben corregirse';
+    }
+  }
+  
+  /**
+   * Marca el estado como dirty y valida
+   */
+  function markDirty() {
+    editorState.dirty = true;
+    updateValidationState();
+    
+    // BLINDAJE v2: Solo programar guardado si es válido
+    // Ya no hay autosave agresivo, solo después de acciones completas
+  }
+  
+  /**
+   * Intenta guardar el draft si es válido
+   * Llamar después de acciones completas (no en cada keypress)
+   */
+  function tryScheduleSave() {
+    // Cancelar timeout anterior si existe
+    if (editorState.saveTimeout) {
+      clearTimeout(editorState.saveTimeout);
+      editorState.saveTimeout = null;
+    }
+    
+    // Solo guardar si es válido
+    if (!editorState.valid) {
+      console.log('Draft no válido, no se guarda:', editorState.validationErrors);
+      return false;
+    }
+    
+    // Programar guardado con debounce de 2 segundos
+    editorState.saveTimeout = setTimeout(() => {
+      guardarDraft();
+    }, 2000);
+    
+    return true;
+  }
+  
+  // Inicializar editor
+  async function initEditor() {
+    const editor = document.getElementById('recorridos-editor');
+    editorState.recorridoId = editor.dataset.recorridoId;
+    
+    // Cargar registry
+    await cargarRegistry();
+    
+    // Cargar o crear recorrido
+    if (editorState.recorridoId === 'new') {
+      await crearNuevoRecorrido();
+    } else {
+      await cargarRecorrido();
+    }
+  }
+  
+  // Cargar registry
+  async function cargarRegistry() {
+    try {
+      const response = await fetch('/admin/api/registry', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+      
+      editorState.registry = await response.json();
+      console.log('Registry cargado:', editorState.registry);
+      
+      // Actualizar badge de estado después de cargar registry
+      updatePublishStatusBadge();
+    } catch (error) {
+      console.error('Error cargando registry:', error);
+      alert(`Error cargando registry: ${error.message}`);
+    }
+  }
+  
+  // Crear nuevo recorrido
+  // BLINDAJE v2: Genera slug técnico automáticamente desde el nombre
+  async function crearNuevoRecorrido() {
+    const name = prompt('Nombre del recorrido (ej: "Limpieza Energética Diaria"):');
+    if (!name || !name.trim()) {
+      window.location.href = '/admin/recorridos';
+      return;
+    }
+    
+    // Generar slug automáticamente
+    const autoSlug = generateSlug(name);
+    
+    // Mostrar al usuario el slug generado y permitir edición
+    const id = prompt(
+      `ID técnico generado (puedes editarlo):\n\n` +
+      `⚠️ El ID debe ser:\n` +
+      `- Solo letras minúsculas, números y guiones bajos\n` +
+      `- Sin espacios ni acentos\n` +
+      `- Empezar con letra`,
+      autoSlug
+    );
+    
+    if (!id || !id.trim()) {
+      window.location.href = '/admin/recorridos';
+      return;
+    }
+    
+    // Validar el slug antes de enviar
+    const validation = validateSlugId(id);
+    if (!validation.valid) {
+      alert(`❌ ID inválido: ${validation.error}\n\nIntenta de nuevo.`);
+      return crearNuevoRecorrido(); // Reintentar
+    }
+    
+    try {
+      const response = await fetch('/admin/api/recorridos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ id, name })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      editorState.definition = data.draft.definition_json;
+      editorState.recorridoId = data.recorrido.id;
+      editorState.dirty = false;
+      editorState.valid = true;
+      editorState.lastSavedAt = new Date();
+      
+      // Actualizar URL sin recargar (usando el ID técnico)
+      window.history.replaceState({}, '', `/admin/recorridos/${encodeURIComponent(editorState.recorridoId)}/edit`);
+      
+      actualizarUI();
+    } catch (error) {
+      console.error('Error creando recorrido:', error);
+      alert(`Error creando recorrido: ${error.message}`);
+      window.location.href = '/admin/recorridos';
+    }
+  }
+  
+  // Cargar recorrido existente
+  // BLINDAJE v2: Inicializa estado correctamente
+  async function cargarRecorrido() {
+    try {
+      const response = await fetch(`/admin/api/recorridos/${encodeURIComponent(editorState.recorridoId)}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      editorState.definition = data.draft?.definition_json || data.published_version?.definition_json;
+      
+      // LOG TEMPORAL: Mostrar order cargado desde servidor
+      if (editorState.definition?.steps) {
+        const stepsLoaded = editorState.definition.steps;
+        const orderLoaded = Object.keys(stepsLoaded).reduce((acc, stepId) => {
+          const step = stepsLoaded[stepId];
+          acc[stepId] = typeof step?.order === 'number' ? step.order : 'undefined';
+          return acc;
+        }, {});
+        console.log('📥 Order cargado desde servidor:', orderLoaded);
+      }
+      
+      if (!editorState.definition) {
+        alert('El recorrido no tiene definición. Se creará una nueva.');
+        editorState.definition = {
+          id: editorState.recorridoId,
+          entry_step_id: 'step1',
+          steps: {
+            step1: {
+              screen_template_id: 'blank',
+              props: {},
+              order: 0
+            }
+          },
+          edges: []
+        };
+        // Marcar como dirty porque es nuevo
+        editorState.dirty = true;
+      } else {
+        // Cargado desde servidor, no está dirty
+        editorState.dirty = false;
+        editorState.lastSavedAt = data.draft?.updated_at ? new Date(data.draft.updated_at) : null;
+      }
+      
+      // BLINDAJE v2: Validar el estado inicial
+      updateValidationState();
+      
+      // Actualizar nombre y estado
+      document.getElementById('recorrido-name').textContent = data.recorrido.name || editorState.recorridoId;
+      document.getElementById('recorrido-version').textContent = data.recorrido.current_published_version 
+        ? `v${data.recorrido.current_published_version}` 
+        : 'v-';
+      
+      actualizarUI();
+      updateStatusIndicator();
+      
+    } catch (error) {
+      console.error('Error cargando recorrido:', error);
+      alert(`Error cargando recorrido: ${error.message}`);
+    }
+  }
+  
+  // Actualizar UI completa
+  function actualizarUI() {
+    renderStepsList();
+    if (editorState.selectedStepId) {
+      renderStepConfig();
+      renderPreview();
+    }
+    // Actualizar badge de estado
+    updatePublishStatusBadge();
+  }
+  
+  // Inicializar campo order en steps si no existe
+  function initializeStepsOrder() {
+    const steps = editorState.definition?.steps || {};
+    const stepIds = Object.keys(steps);
+    
+    // CRÍTICO: Solo asignar order si NO existe. NUNCA pisar un order existente.
+    // Esto preserva el orden establecido por el usuario mediante drag & drop.
+    const hasAnyOrder = stepIds.some(stepId => typeof steps[stepId].order === 'number');
+    
+    if (!hasAnyOrder) {
+      // Si ningún step tiene order, inicializar todos
+      stepIds.forEach((stepId, index) => {
+        // Solo asignar si NO existe (doble verificación defensiva)
+        if (typeof steps[stepId].order !== 'number') {
+          steps[stepId].order = index;
+        }
+      });
+    } else {
+      // Si algunos tienen order y otros no, asignar order solo a los que no lo tienen
+      let maxOrder = -1;
+      stepIds.forEach(stepId => {
+        if (typeof steps[stepId].order === 'number') {
+          maxOrder = Math.max(maxOrder, steps[stepId].order);
+        }
+      });
+      
+      stepIds.forEach(stepId => {
+        // CRÍTICO: Solo asignar si NO existe. NUNCA pisar.
+        if (typeof steps[stepId].order !== 'number') {
+          steps[stepId].order = ++maxOrder;
+        }
+      });
+    }
+  }
+  
+  // Renderizar lista de steps
+  function renderStepsList() {
+    const container = document.getElementById('steps-list');
+    const steps = editorState.definition?.steps || {};
+    
+    // Asegurar que todos los steps tengan campo order
+    initializeStepsOrder();
+    
+    const stepIds = Object.keys(steps);
+    
+    if (stepIds.length === 0) {
+      container.innerHTML = '<p class="text-slate-400 text-sm">No hay steps. Haz clic en ➕ para añadir uno.</p>';
+      return;
+    }
+    
+    // Ordenar steps por order (arriba → abajo)
+    const sortedStepIds = stepIds.sort((a, b) => {
+      const orderA = steps[a].order ?? 0;
+      const orderB = steps[b].order ?? 0;
+      return orderA - orderB;
+    });
+    
+    container.innerHTML = sortedStepIds.map(stepId => {
+      const step = steps[stepId];
+      const isActive = stepId === editorState.selectedStepId;
+      const stepType = step.step_type || 'N/A';
+      const screenTemplate = step.screen_template_id || 'N/A';
+      
+      // Detectar si el step tiene handler_id y mostrar badge
+      const handlerId = step.handler_id;
+      const handler = window.HANDLER_INFO?.[handlerId];
+      const handlerBadge = handler
+        ? `<span class="handler-badge" title="${handler.description}">${handler.icon} ${handler.label}</span>`
+        : '';
+      
+      return `
+        <div class="step-item ${isActive ? 'active' : ''}" 
+             draggable="true"
+             data-step-id="${stepId}"
+             ondragstart="handleDragStart(event, '${stepId}')"
+             ondragover="handleDragOver(event)"
+             ondrop="handleDrop(event, '${stepId}')"
+             ondragend="handleDragEnd(event)"
+             onclick="seleccionarStep('${stepId}')">
+          <div class="step-header">
+            <span class="step-id">${stepId}${handlerBadge}</span>
+            <div class="step-actions" onclick="event.stopPropagation()">
+              <button onclick="previewStep('${stepId}')" title="Preview">👁️</button>
+              <button onclick="eliminarStep('${stepId}')" title="Eliminar">🗑️</button>
+              <button onclick="duplicarStep('${stepId}')" title="Duplicar">📋</button>
+            </div>
+          </div>
+          <div class="step-type">${stepType} → ${screenTemplate}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  // Variables para drag & drop
+  let draggedStepId = null;
+  let draggedElement = null;
+  
+  // Manejar inicio de drag
+  function handleDragStart(event, stepId) {
+    draggedStepId = stepId;
+    draggedElement = event.currentTarget;
+    draggedElement.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', stepId);
+  }
+  
+  // Manejar drag over
+  function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    
+    const targetElement = event.currentTarget;
+    if (targetElement && targetElement !== draggedElement) {
+      // Remover clase de otros elementos
+      document.querySelectorAll('.step-item.drag-over').forEach(el => {
+        if (el !== targetElement) el.classList.remove('drag-over');
+      });
+      targetElement.classList.add('drag-over');
+    }
+  }
+  
+  // Manejar drop
+  function handleDrop(event, targetStepId) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!draggedStepId || draggedStepId === targetStepId) {
+      return;
+    }
+    
+    try {
+      const steps = editorState.definition?.steps || {};
+      const stepIds = Object.keys(steps);
+      
+      // Ordenar steps por order actual
+      const sortedStepIds = [...stepIds].sort((a, b) => {
+        const orderA = steps[a].order ?? 0;
+        const orderB = steps[b].order ?? 0;
+        return orderA - orderB;
+      });
+      
+      // Obtener índices actuales en el array ordenado
+      const draggedIndex = sortedStepIds.findIndex(id => id === draggedStepId);
+      const targetIndex = sortedStepIds.findIndex(id => id === targetStepId);
+      
+      if (draggedIndex === -1 || targetIndex === -1) {
+        return;
+      }
+      
+      // Remover el elemento arrastrado de su posición
+      sortedStepIds.splice(draggedIndex, 1);
+      
+      // Calcular la nueva posición de inserción
+      // Queremos insertar el elemento arrastrado justo antes del objetivo
+      // Después de remover el arrastrado:
+      // - Si el arrastrado estaba antes del objetivo, el objetivo ahora está en (targetIndex - 1)
+      // - Si el arrastrado estaba después del objetivo, el objetivo sigue en targetIndex
+      let insertIndex;
+      if (draggedIndex < targetIndex) {
+        // El objetivo se movió una posición hacia arriba
+        insertIndex = targetIndex - 1;
+      } else {
+        // El objetivo no cambió de posición
+        insertIndex = targetIndex;
+      }
+      
+      // Insertar en la nueva posición (antes del objetivo)
+      sortedStepIds.splice(insertIndex, 0, draggedStepId);
+      
+      // Recalcular order para todos los steps
+      sortedStepIds.forEach((stepId, index) => {
+        steps[stepId].order = index;
+      });
+      
+      // Mantener el step seleccionado si existe
+      const selectedStepId = editorState.selectedStepId;
+      
+      // Marcar como dirty y programar guardado inmediato
+      markDirty();
+      updateValidationState();
+      tryScheduleSave();
+      
+      // Re-renderizar
+      actualizarUI();
+      
+      // Restaurar selección
+      if (selectedStepId) {
+        editorState.selectedStepId = selectedStepId;
+        actualizarUI();
+      }
+      
+    } catch (error) {
+      console.error('Error reordenando steps:', error);
+      // Fail-open: mantener orden original
+      actualizarUI();
+    }
+  }
+  
+  // Manejar fin de drag
+  function handleDragEnd(event) {
+    // Remover clases de drag
+    document.querySelectorAll('.step-item.dragging, .step-item.drag-over').forEach(el => {
+      el.classList.remove('dragging', 'drag-over');
+    });
+    
+    draggedStepId = null;
+    draggedElement = null;
+  }
+  
+  // Seleccionar step
+  function seleccionarStep(stepId) {
+    editorState.selectedStepId = stepId;
+    actualizarUI();
+  }
+  
+  // Añadir step
+  // BLINDAJE v2: Valida ID de step como slug
+  function añadirStep() {
+    const stepIdRaw = prompt('ID del step (ej: step_bienvenida, paso_2):');
+    if (!stepIdRaw) return;
+    
+    // Generar slug del ID
+    const stepId = generateSlug(stepIdRaw) || stepIdRaw.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    
+    if (!stepId || stepId.length < 2) {
+      alert('El ID del step debe tener al menos 2 caracteres válidos');
+      return;
+    }
+    
+    if (editorState.definition.steps[stepId]) {
+      alert(`Ya existe un step con el ID "${stepId}"`);
+      return;
+    }
+    
+    // Calcular el order máximo actual
+    const existingSteps = Object.values(editorState.definition.steps || {});
+    const maxOrder = existingSteps.length > 0
+      ? Math.max(...existingSteps.map(s => typeof s.order === 'number' ? s.order : -1))
+      : -1;
+    
+    editorState.definition.steps[stepId] = {
+      screen_template_id: 'blank',
+      props: {},
+      order: maxOrder + 1
+    };
+    
+    // Si es el primer step, establecerlo como entry
+    if (Object.keys(editorState.definition.steps).length === 1) {
+      editorState.definition.entry_step_id = stepId;
+    }
+    
+    // BLINDAJE v2: Marcar dirty y validar, luego intentar guardar
+    markDirty();
+    tryScheduleSave();
+    seleccionarStep(stepId);
+  }
+  
+  // Eliminar step
+  function eliminarStep(stepId) {
+    if (!confirm(`¿Eliminar el step "${stepId}"?\n\nTambién se eliminarán los edges que lo referencian.`)) return;
+    
+    delete editorState.definition.steps[stepId];
+    
+    // Eliminar edges que referencian este step
+    editorState.definition.edges = editorState.definition.edges.filter(edge => 
+      edge.from_step_id !== stepId && edge.to_step_id !== stepId
+    );
+    
+    // Si era el entry step, cambiar a otro
+    if (editorState.definition.entry_step_id === stepId) {
+      const remainingSteps = Object.keys(editorState.definition.steps);
+      editorState.definition.entry_step_id = remainingSteps[0] || null;
+    }
+    
+    if (editorState.selectedStepId === stepId) {
+      editorState.selectedStepId = null;
+    }
+    
+    // BLINDAJE v2: Marcar dirty y validar, luego intentar guardar
+    markDirty();
+    tryScheduleSave();
+    actualizarUI();
+  }
+  
+  // Duplicar step
+  // BLINDAJE v2: Valida nuevo ID como slug
+  function duplicarStep(stepId) {
+    const defaultNewId = `${stepId}_copia`;
+    const newStepIdRaw = prompt('ID del nuevo step:', defaultNewId);
+    if (!newStepIdRaw) return;
+    
+    // Generar slug del ID
+    const newStepId = generateSlug(newStepIdRaw) || newStepIdRaw.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    
+    if (!newStepId || newStepId.length < 2) {
+      alert('El ID del step debe tener al menos 2 caracteres válidos');
+      return;
+    }
+    
+    if (editorState.definition.steps[newStepId]) {
+      alert(`Ya existe un step con el ID "${newStepId}"`);
+      return;
+    }
+    
+    editorState.definition.steps[newStepId] = JSON.parse(JSON.stringify(editorState.definition.steps[stepId]));
+    
+    // Asignar un nuevo order al step duplicado (al final)
+    const existingSteps = Object.values(editorState.definition.steps || {});
+    const maxOrder = existingSteps.length > 0
+      ? Math.max(...existingSteps.map(s => typeof s.order === 'number' ? s.order : -1))
+      : -1;
+    editorState.definition.steps[newStepId].order = maxOrder + 1;
+    
+    // BLINDAJE v2: Marcar dirty y validar, luego intentar guardar
+    markDirty();
+    tryScheduleSave();
+    seleccionarStep(newStepId);
+  }
+  
+  // Renderizar configuración del step
+  function renderStepConfig() {
+    const panel = document.getElementById('config-panel');
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step) return;
+    
+    const stepTypes = editorState.registry?.stepTypes || [];
+    const screenTemplates = editorState.registry?.screenTemplates || [];
+    
+    // Filtrar screen templates compatibles con el step type seleccionado
+    const compatibleTemplates = step.screen_template_id 
+      ? screenTemplates.filter(t => t.id === step.screen_template_id || !step.step_type)
+      : screenTemplates;
+    
+    panel.innerHTML = `
+      <h2 class="text-xl font-bold text-white mb-4">Configuración: ${editorState.selectedStepId}</h2>
+      
+      <div class="config-section">
+        <h3>Step Type</h3>
+        <div class="form-group">
+          <label>Step Type</label>
+          <select id="config-step-type" onchange="actualizarStepType()">
+            <option value="">Seleccionar...</option>
+            ${stepTypes.map(st => `
+              <option value="${st.id}" ${step.step_type === st.id ? 'selected' : ''}>${st.name || st.id}</option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>Screen Template</h3>
+        <div class="form-group">
+          <label>Screen Template</label>
+          <select id="config-screen-template" onchange="actualizarScreenTemplate()">
+            <option value="">Seleccionar...</option>
+            ${screenTemplates.map(st => `
+              <option value="${st.id}" ${step.screen_template_id === st.id ? 'selected' : ''}>${st.name || st.id}</option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>Props</h3>
+        <div id="config-props">
+          ${renderPropsEditor(step)}
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>Capture</h3>
+        <div class="form-group">
+          <label>Capture Variable</label>
+          <input type="text" id="config-capture" value="${step.capture || ''}" 
+                 onchange="actualizarCapture()" placeholder="variable_name">
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>Branches (Edges)</h3>
+        <div id="config-branches">
+          ${renderBranchesEditor(step)}
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>Emit Events</h3>
+        <div id="config-events">
+          ${renderEventsEditor(step)}
+        </div>
+      </div>
+    `;
+    
+    // Actualizar badge de estado después de renderizar
+    updatePublishStatusBadge();
+  }
+  
+  // ============================================================================
+  // EDITOR DE PROPS - Screen Templates
+  // ============================================================================
+  // 
+  // Renderiza campos visuales específicos según el template
+  // screen_text: título, subtítulo, contenido (textarea grande)
+  // Otros: editor genérico basado en schema
+  //
+  
+  /**
+   * Renderiza el editor de screen_video con campos visuales específicos
+   * Campos bien delimitados como en Typeform
+   */
+  function renderScreenVideoEditor(step) {
+    const props = step.props || {};
+    const videoSource = props.video_source || '';
+    const displayMode = props.display_mode || 'inline';
+    
+    // Obtener template y campos publish_required
+    const template = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    const publishRequired = template?.editor_config?.publish_required || [];
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    // Placeholder dinámico según el origen del vídeo
+    const videoRefPlaceholder = videoSource === 'internal' 
+      ? 'ID del vídeo en el banco interno' 
+      : 'ID o URL del vídeo de YouTube';
+    
+    // Estado de completitud para publicar
+    const isReadyToPublish = videoSource && props.video_ref;
+    
+    return `
+      <div class="screen-video-editor">
+        <!-- Título -->
+        <div class="form-group">
+          <label>
+            🎬 Título${getRequiredBadge('title')}
+            ${!publishRequired.includes('title') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-video-title"
+                 value="${escapeHtml(props.title || '')}" 
+                 onchange="actualizarVideoPropConDebounce('title', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Introducción al módulo"
+                 maxlength="200"
+                 class="screen-video-input">
+          <p class="text-xs text-slate-500 mt-1">Título opcional de la pantalla</p>
+        </div>
+        
+        <!-- Descripción -->
+        <div class="form-group">
+          <label>
+            📝 Descripción${getRequiredBadge('description')}
+            ${!publishRequired.includes('description') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <textarea id="prop-video-description"
+                    onchange="actualizarVideoPropConDebounce('description', this.value)"
+                    oninput="markDirtyOnly()"
+                    placeholder="Texto opcional antes o después del vídeo"
+                    maxlength="500"
+                    rows="3"
+                    class="screen-video-textarea">${escapeHtml(props.description || '')}</textarea>
+          <p class="text-xs text-slate-500 mt-1">Texto descriptivo que acompaña al vídeo</p>
+        </div>
+        
+        <!-- Origen del vídeo -->
+        <div class="form-group">
+          <label>
+            📺 Origen del vídeo${getRequiredBadge('video_source')}
+            ${publishRequired.includes('video_source') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <select id="prop-video-source"
+                  onchange="actualizarVideoSource(this.value)"
+                  class="screen-video-select">
+            <option value="" ${!videoSource ? 'selected' : ''}>Seleccionar origen...</option>
+            <option value="youtube" ${videoSource === 'youtube' ? 'selected' : ''}>📺 YouTube</option>
+            <option value="internal" ${videoSource === 'internal' ? 'selected' : ''}>🎥 Vídeo interno</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">¿De dónde proviene el vídeo?</p>
+        </div>
+        
+        <!-- Referencia del vídeo -->
+        <div class="form-group">
+          <label>
+            🔗 Referencia del vídeo${getRequiredBadge('video_ref')}
+            ${publishRequired.includes('video_ref') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-video-ref"
+                 value="${escapeHtml(props.video_ref || '')}" 
+                 onchange="actualizarVideoPropConDebounce('video_ref', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="${videoRefPlaceholder}"
+                 maxlength="500"
+                 class="screen-video-input">
+          <p class="text-xs text-slate-500 mt-1">
+            ${videoSource === 'youtube' 
+              ? 'Puedes pegar la URL completa o solo el ID del vídeo (ej: dQw4w9WgXcQ)' 
+              : videoSource === 'internal'
+                ? 'ID del vídeo en el banco de vídeos interno'
+                : 'Selecciona primero el origen del vídeo'}
+          </p>
+        </div>
+        
+        <!-- Modo de visualización -->
+        <div class="form-group">
+          <label>
+            👁️ Modo de visualización
+            <span class="text-slate-500 text-xs font-normal ml-2">(por defecto: inline)</span>
+          </label>
+          <div class="screen-video-radio-group">
+            <div class="screen-video-radio-item ${displayMode === 'inline' ? 'active' : ''}"
+                 onclick="actualizarVideoDisplayMode('inline')">
+              <input type="radio" name="display_mode" value="inline" 
+                     ${displayMode === 'inline' ? 'checked' : ''} id="display-inline">
+              <label for="display-inline">▶️ Inline</label>
+            </div>
+            <div class="screen-video-radio-item ${displayMode === 'collapsed' ? 'active' : ''}"
+                 onclick="actualizarVideoDisplayMode('collapsed')">
+              <input type="radio" name="display_mode" value="collapsed" 
+                     ${displayMode === 'collapsed' ? 'checked' : ''} id="display-collapsed">
+              <label for="display-collapsed">📦 Colapsado</label>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mt-2">
+            <strong>Inline:</strong> El vídeo se muestra directamente visible<br>
+            <strong>Colapsado:</strong> El usuario debe hacer click para ver el vídeo
+          </p>
+        </div>
+        
+        <!-- Duración declarada (para futuro) -->
+        <div class="form-group">
+          <label>
+            ⏱️ Duración estimada
+            <span class="text-slate-500 text-xs font-normal ml-2">(opcional, para reloj futuro)</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <input type="number" 
+                   id="prop-video-duration"
+                   value="${props.declared_duration_minutes || ''}" 
+                   onchange="actualizarVideoPropConDebounce('declared_duration_minutes', this.value ? parseFloat(this.value) : null)"
+                   oninput="markDirtyOnly()"
+                   placeholder="0"
+                   min="0"
+                   max="240"
+                   class="screen-video-number">
+            <span class="text-slate-400 text-sm">minutos</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Se usará en el futuro para el reloj del recorrido (no se muestra aún)</p>
+        </div>
+        
+        <!-- Indicador de estado -->
+        <div class="screen-video-status mt-4 p-3 rounded ${isReadyToPublish ? 'bg-green-900/30 border border-green-700' : 'bg-amber-900/30 border border-amber-700'}">
+          ${isReadyToPublish 
+            ? '<span class="text-green-400">✅ Listo para publicar</span>' 
+            : '<span class="text-amber-400">⚠️ Selecciona origen y referencia del vídeo para poder publicar</span>'}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Actualiza prop de video con debounce
+   */
+  let videoPropDebounceTimer = null;
+  function actualizarVideoPropConDebounce(key, value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props[key] = value;
+    
+    markDirty();
+    renderPreview();
+    
+    if (videoPropDebounceTimer) {
+      clearTimeout(videoPropDebounceTimer);
+    }
+    videoPropDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+    }, 1500);
+  }
+  
+  /**
+   * Actualiza el origen del vídeo (YouTube o interno)
+   */
+  function actualizarVideoSource(value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props.video_source = value || undefined;
+    
+    markDirty();
+    renderStepConfig(); // Re-render para actualizar placeholder
+    renderPreview();
+    tryScheduleSave();
+  }
+  
+  /**
+   * Actualiza el modo de visualización (inline o collapsed)
+   */
+  function actualizarVideoDisplayMode(mode) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props.display_mode = mode;
+    
+    markDirty();
+    renderStepConfig(); // Re-render para actualizar radio buttons
+    renderPreview();
+    tryScheduleSave();
+  }
+  
+  // ============================================================================
+  // EDITOR DE screen_audio
+  // ============================================================================
+  
+  /**
+   * Renderiza el editor de screen_audio con campos visuales específicos
+   * Campos bien delimitados siguiendo el patrón de screen_video
+   */
+  function renderScreenAudioEditor(step) {
+    const props = step.props || {};
+    const audioSource = props.audio_source || '';
+    
+    // Obtener template y campos publish_required
+    const template = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    const publishRequired = template?.editor_config?.publish_required || [];
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    // Placeholder dinámico según el origen del audio
+    const audioRefPlaceholder = audioSource === 'internal' 
+      ? 'ID del audio en el banco interno' 
+      : 'URL del audio externo';
+    
+    // Estado de completitud para publicar
+    const isReadyToPublish = audioSource && props.audio_ref;
+    
+    return `
+      <div class="screen-audio-editor">
+        <!-- Título -->
+        <div class="form-group">
+          <label>
+            🎵 Título${getRequiredBadge('title')}
+            ${!publishRequired.includes('title') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-audio-title"
+                 value="${escapeHtml(props.title || '')}" 
+                 onchange="actualizarAudioPropConDebounce('title', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Meditación guiada"
+                 maxlength="200"
+                 class="screen-audio-input">
+          <p class="text-xs text-slate-500 mt-1">Título opcional de la pantalla</p>
+        </div>
+        
+        <!-- Subtítulo -->
+        <div class="form-group">
+          <label>
+            📝 Subtítulo${getRequiredBadge('subtitle')}
+            ${!publishRequired.includes('subtitle') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-audio-subtitle"
+                 value="${escapeHtml(props.subtitle || '')}" 
+                 onchange="actualizarAudioPropConDebounce('subtitle', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: 5 minutos de relajación"
+                 maxlength="500"
+                 class="screen-audio-input">
+          <p class="text-xs text-slate-500 mt-1">Texto descriptivo debajo del título</p>
+        </div>
+        
+        <!-- Origen del audio -->
+        <div class="form-group">
+          <label>
+            📻 Origen del audio${getRequiredBadge('audio_source')}
+            ${publishRequired.includes('audio_source') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <select id="prop-audio-source"
+                  onchange="actualizarAudioSource(this.value)"
+                  class="screen-audio-select">
+            <option value="" ${!audioSource ? 'selected' : ''}>Seleccionar origen...</option>
+            <option value="internal" ${audioSource === 'internal' ? 'selected' : ''}>🎧 Audio interno</option>
+            <option value="external" ${audioSource === 'external' ? 'selected' : ''}>🌐 Audio externo (URL)</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">¿De dónde proviene el audio?</p>
+        </div>
+        
+        <!-- Referencia del audio -->
+        <div class="form-group">
+          <label>
+            🔗 Referencia del audio${getRequiredBadge('audio_ref')}
+            ${publishRequired.includes('audio_ref') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-audio-ref"
+                 value="${escapeHtml(props.audio_ref || '')}" 
+                 onchange="actualizarAudioPropConDebounce('audio_ref', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="${audioRefPlaceholder}"
+                 maxlength="500"
+                 class="screen-audio-input">
+          <p class="text-xs text-slate-500 mt-1">
+            ${audioSource === 'internal'
+              ? 'ID del audio en el banco de audios interno'
+              : audioSource === 'external'
+                ? 'URL completa del archivo de audio'
+                : 'Selecciona primero el origen del audio'}
+          </p>
+        </div>
+        
+        <!-- Duración declarada (para futuro) -->
+        <div class="form-group">
+          <label>
+            ⏱️ Duración estimada
+            <span class="text-slate-500 text-xs font-normal ml-2">(opcional, para reloj futuro)</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <input type="number" 
+                   id="prop-audio-duration"
+                   value="${props.declared_duration_minutes || ''}" 
+                   onchange="actualizarAudioPropConDebounce('declared_duration_minutes', this.value ? parseFloat(this.value) : null)"
+                   oninput="markDirtyOnly()"
+                   placeholder="0"
+                   min="0"
+                   max="240"
+                   class="screen-audio-number">
+            <span class="text-slate-400 text-sm">minutos</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Se usará en el futuro para el reloj del recorrido (no se muestra aún)</p>
+        </div>
+        
+        <!-- Indicador de estado -->
+        <div class="screen-audio-status mt-4 p-3 rounded ${isReadyToPublish ? 'bg-green-900/30 border border-green-700' : 'bg-amber-900/30 border border-amber-700'}">
+          ${isReadyToPublish 
+            ? '<span class="text-green-400">✅ Listo para publicar</span>' 
+            : '<span class="text-amber-400">⚠️ Selecciona origen y referencia del audio para poder publicar</span>'}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Actualiza prop de audio con debounce
+   */
+  let audioPropDebounceTimer = null;
+  function actualizarAudioPropConDebounce(key, value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props[key] = value;
+    
+    markDirty();
+    renderPreview();
+    
+    if (audioPropDebounceTimer) {
+      clearTimeout(audioPropDebounceTimer);
+    }
+    audioPropDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+    }, 1500);
+  }
+  
+  /**
+   * Actualiza el origen del audio (interno o externo)
+   */
+  function actualizarAudioSource(value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props.audio_source = value || undefined;
+    
+    markDirty();
+    renderStepConfig(); // Re-render para actualizar placeholder
+    renderPreview();
+    tryScheduleSave();
+  }
+  
+  // ============================================================================
+  // EDITOR DE screen_choice
+  // ============================================================================
+  
+  /**
+   * Genera un slug a partir de un texto (para choice_id)
+   * Reutiliza la función generateSlug ya existente
+   */
+  function generateChoiceSlug(text) {
+    return generateSlug(text);
+  }
+  
+  /**
+   * Valida si un string es un slug válido
+   */
+  function isValidChoiceSlug(slug) {
+    if (!slug || typeof slug !== 'string') return false;
+    return /^[a-z][a-z0-9_]*$/.test(slug);
+  }
+  
+  /**
+   * Renderiza el editor de screen_choice con campos visuales específicos
+   * Campos cuadrados: Título / Subtítulo / Pregunta / Opciones
+   */
+  function renderScreenChoiceEditor(step) {
+    const props = step.props || {};
+    const choices = props.choices || [];
+    
+    // Obtener template y campos publish_required
+    const template = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    const publishRequired = template?.editor_config?.publish_required || [];
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    // Verificar si está listo para publicar
+    const hasQuestion = props.question && props.question.trim();
+    const hasValidChoices = choices.length > 0 && choices.every(c => 
+      c.choice_id && isValidChoiceSlug(c.choice_id) && c.label && c.label.trim()
+    );
+    const isReadyToPublish = hasQuestion && hasValidChoices;
+    
+    return `
+      <div class="screen-choice-editor">
+        <!-- Título -->
+        <div class="form-group">
+          <label>
+            📝 Título${getRequiredBadge('title')}
+            ${!publishRequired.includes('title') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-choice-title"
+                 value="${escapeHtml(props.title || '')}" 
+                 onchange="actualizarChoicePropConDebounce('title', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Personaliza tu práctica"
+                 maxlength="200"
+                 class="screen-choice-input">
+          <p class="text-xs text-slate-500 mt-1">Título opcional de la pantalla</p>
+        </div>
+        
+        <!-- Subtítulo -->
+        <div class="form-group">
+          <label>
+            📌 Subtítulo${getRequiredBadge('subtitle')}
+            ${!publishRequired.includes('subtitle') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-choice-subtitle"
+                 value="${escapeHtml(props.subtitle || '')}" 
+                 onchange="actualizarChoicePropConDebounce('subtitle', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Elige las opciones que más resuenen contigo"
+                 maxlength="500"
+                 class="screen-choice-input">
+          <p class="text-xs text-slate-500 mt-1">Texto secundario debajo del título</p>
+        </div>
+        
+        <!-- Pregunta (obligatoria para publicar) -->
+        <div class="form-group">
+          <label>
+            ❓ Pregunta${getRequiredBadge('question')}
+            ${publishRequired.includes('question') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <textarea id="prop-choice-question"
+                    onchange="actualizarChoicePropConDebounce('question', this.value)"
+                    oninput="markDirtyOnly()"
+                    placeholder="¿Qué te gustaría trabajar hoy?"
+                    maxlength="500"
+                    rows="2"
+                    class="screen-choice-textarea">${escapeHtml(props.question || '')}</textarea>
+          <p class="text-xs text-slate-500 mt-1">La pregunta que verá el usuario</p>
+        </div>
+        
+        <!-- Opciones (choices) -->
+        <div class="form-group">
+          <label>
+            🎯 Opciones${getRequiredBadge('choices')}
+            ${publishRequired.includes('choices') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Mínimo 1 opción para publicar</span>' : ''}
+          </label>
+          
+          <div class="choices-list" id="choices-list">
+            ${choices.map((choice, idx) => renderChoiceCard(choice, idx)).join('')}
+          </div>
+          
+          <button type="button" 
+                  onclick="añadirChoice()"
+                  class="add-choice-btn mt-3">
+            ➕ Añadir opción
+          </button>
+          
+          <p class="text-xs text-slate-500 mt-2">
+            Cada opción necesita un <strong>ID técnico</strong> (slug) y un <strong>texto visible</strong> para publicar
+          </p>
+        </div>
+        
+        <!-- Indicador de estado -->
+        <div class="screen-choice-status mt-4 p-3 rounded ${isReadyToPublish ? 'bg-green-900/30 border border-green-700' : 'bg-amber-900/30 border border-amber-700'}">
+          ${isReadyToPublish 
+            ? '<span class="text-green-400">✅ Listo para publicar</span>' 
+            : '<span class="text-amber-400">⚠️ Completa la pregunta y al menos 1 opción válida para publicar</span>'}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Renderiza una tarjeta de opción individual
+   */
+  function renderChoiceCard(choice, idx) {
+    const choiceId = choice.choice_id || '';
+    const label = choice.label || '';
+    const description = choice.description || '';
+    const minutes = choice.estimated_minutes || '';
+    const tags = (choice.tags || []).join(', ');
+    
+    // Determinar si la opción está incompleta
+    const isIncomplete = !choiceId || !isValidChoiceSlug(choiceId) || !label.trim();
+    const slugIsInvalid = choiceId && !isValidChoiceSlug(choiceId);
+    
+    return `
+      <div class="choice-card ${isIncomplete ? 'incomplete' : ''}" data-choice-idx="${idx}">
+        <div class="choice-card-header">
+          <span class="choice-card-number">Opción ${idx + 1}</span>
+          <div class="choice-card-actions">
+            <button type="button" onclick="moverChoice(${idx}, -1)" title="Mover arriba" ${idx === 0 ? 'disabled style="opacity:0.5"' : ''}>⬆️</button>
+            <button type="button" onclick="moverChoice(${idx}, 1)" title="Mover abajo">⬇️</button>
+            <button type="button" onclick="eliminarChoice(${idx})" title="Eliminar" class="delete-btn">🗑️</button>
+          </div>
+        </div>
+        
+        <!-- ID técnico (slug) -->
+        <div class="choice-field">
+          <label>ID técnico (slug) *</label>
+          <div class="choice-field-row">
+            <input type="text" 
+                   class="slug-input ${slugIsInvalid ? 'invalid' : ''}"
+                   value="${escapeHtml(choiceId)}"
+                   onchange="actualizarChoiceField(${idx}, 'choice_id', this.value)"
+                   oninput="markDirtyOnly()"
+                   placeholder="limpieza_hogar"
+                   maxlength="64">
+            <button type="button" 
+                    class="auto-slug-btn"
+                    onclick="autoGenerarSlugChoice(${idx})"
+                    title="Generar desde el texto visible">
+              🔄 Auto
+            </button>
+          </div>
+          <p class="choice-field-hint">Solo letras minúsculas, números y guiones bajos (a-z0-9_)</p>
+        </div>
+        
+        <!-- Texto visible (label) -->
+        <div class="choice-field">
+          <label>Texto visible *</label>
+          <input type="text" 
+                 value="${escapeHtml(label)}"
+                 onchange="actualizarChoiceField(${idx}, 'label', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Limpieza del hogar"
+                 maxlength="200">
+        </div>
+        
+        <!-- Descripción (opcional) -->
+        <div class="choice-field">
+          <label>Descripción (opcional)</label>
+          <textarea rows="2"
+                    onchange="actualizarChoiceField(${idx}, 'description', this.value)"
+                    oninput="markDirtyOnly()"
+                    placeholder="Una descripción breve de esta opción"
+                    maxlength="500">${escapeHtml(description)}</textarea>
+        </div>
+        
+        <!-- Minutos estimados y Tags en fila -->
+        <div class="choice-field" style="display: flex; gap: 16px;">
+          <div style="flex: 1;">
+            <label>Minutos estimados (opcional)</label>
+            <input type="number" 
+                   class="choice-minutes-input"
+                   value="${minutes}"
+                   onchange="actualizarChoiceField(${idx}, 'estimated_minutes', this.value ? parseFloat(this.value) : null)"
+                   oninput="markDirtyOnly()"
+                   placeholder="5"
+                   min="0"
+                   max="240">
+            <p class="choice-field-hint">Para el reloj futuro</p>
+          </div>
+          <div style="flex: 2;">
+            <label>Tags (opcional)</label>
+            <input type="text" 
+                   value="${escapeHtml(tags)}"
+                   onchange="actualizarChoiceTags(${idx}, this.value)"
+                   oninput="markDirtyOnly()"
+                   placeholder="limpieza, hogar, energia">
+            <p class="choice-field-hint">Separados por coma</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Añadir una nueva opción vacía
+   */
+  function añadirChoice() {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props) step.props = {};
+    if (!step.props.choices) step.props.choices = [];
+    
+    step.props.choices.push({
+      choice_id: '',
+      label: '',
+      description: '',
+      estimated_minutes: null,
+      tags: []
+    });
+    
+    markDirty();
+    renderStepConfig();
+    renderPreview();
+  }
+  
+  /**
+   * Eliminar una opción
+   */
+  function eliminarChoice(idx) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props?.choices) return;
+    
+    step.props.choices.splice(idx, 1);
+    
+    markDirty();
+    tryScheduleSave();
+    renderStepConfig();
+    renderPreview();
+  }
+  
+  /**
+   * Mover una opción arriba o abajo
+   */
+  function moverChoice(idx, direction) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props?.choices) return;
+    
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= step.props.choices.length) return;
+    
+    // Intercambiar posiciones
+    const temp = step.props.choices[idx];
+    step.props.choices[idx] = step.props.choices[newIdx];
+    step.props.choices[newIdx] = temp;
+    
+    markDirty();
+    tryScheduleSave();
+    renderStepConfig();
+    renderPreview();
+  }
+  
+  /**
+   * Actualizar un campo de una opción
+   */
+  let choiceFieldDebounceTimer = null;
+  function actualizarChoiceField(idx, field, value) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props?.choices?.[idx]) return;
+    
+    step.props.choices[idx][field] = value;
+    
+    markDirty();
+    renderPreview();
+    
+    // Debounce el guardado
+    if (choiceFieldDebounceTimer) {
+      clearTimeout(choiceFieldDebounceTimer);
+    }
+    choiceFieldDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+      // Re-render para actualizar estado de completitud
+      renderStepConfig();
+    }, 1500);
+  }
+  
+  /**
+   * Actualizar tags de una opción (parseando desde string separado por comas)
+   */
+  function actualizarChoiceTags(idx, tagsString) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props?.choices?.[idx]) return;
+    
+    // Parsear tags: separar por comas, limpiar espacios, filtrar vacíos
+    const tags = tagsString
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+    
+    step.props.choices[idx].tags = tags;
+    
+    markDirty();
+    renderPreview();
+    
+    if (choiceFieldDebounceTimer) {
+      clearTimeout(choiceFieldDebounceTimer);
+    }
+    choiceFieldDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+    }, 1500);
+  }
+  
+  /**
+   * Auto-generar slug desde el label de la opción
+   */
+  function autoGenerarSlugChoice(idx) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.props?.choices?.[idx]) return;
+    
+    const label = step.props.choices[idx].label || '';
+    if (!label.trim()) {
+      alert('Primero escribe el texto visible para generar el ID automáticamente');
+      return;
+    }
+    
+    const generatedSlug = generateChoiceSlug(label);
+    if (!generatedSlug) {
+      alert('No se pudo generar un ID válido. Escribe uno manualmente.');
+      return;
+    }
+    
+    step.props.choices[idx].choice_id = generatedSlug;
+    
+    markDirty();
+    tryScheduleSave();
+    renderStepConfig();
+    renderPreview();
+  }
+  
+  /**
+   * Actualiza prop de choice con debounce (para campos simples)
+   */
+  let choicePropDebounceTimer = null;
+  function actualizarChoicePropConDebounce(key, value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props[key] = value;
+    
+    markDirty();
+    renderPreview();
+    
+    if (choicePropDebounceTimer) {
+      clearTimeout(choicePropDebounceTimer);
+    }
+    choicePropDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+    }, 1500);
+  }
+
+  /**
+   * Renderiza el editor de screen_text con campos visuales específicos
+   * NO es JSON, son campos claros para el usuario
+   */
+  function renderScreenTextEditor(step) {
+    const props = step.props || {};
+    
+    // Obtener template y campos publish_required
+    const template = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    const publishRequired = template?.editor_config?.publish_required || [];
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    return `
+      <div class="screen-text-editor">
+        <!-- Título -->
+        <div class="form-group">
+          <label>
+            📝 Título${getRequiredBadge('title')}
+            ${!publishRequired.includes('title') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-title"
+                 value="${escapeHtml(props.title || '')}" 
+                 onchange="actualizarPropConDebounce('title', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Bienvenido a tu recorrido"
+                 maxlength="200"
+                 class="screen-text-input">
+          <p class="text-xs text-slate-500 mt-1">El título principal de la pantalla</p>
+        </div>
+        
+        <!-- Subtítulo -->
+        <div class="form-group">
+          <label>
+            📌 Subtítulo${getRequiredBadge('subtitle')}
+            ${!publishRequired.includes('subtitle') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-subtitle"
+                 value="${escapeHtml(props.subtitle || '')}" 
+                 onchange="actualizarPropConDebounce('subtitle', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Un subtítulo descriptivo"
+                 maxlength="500"
+                 class="screen-text-input">
+          <p class="text-xs text-slate-500 mt-1">Texto secundario debajo del título</p>
+        </div>
+        
+        <!-- Contenido (Body) -->
+        <div class="form-group">
+          <label>
+            📄 Contenido${getRequiredBadge('body')}
+            ${publishRequired.includes('body') ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          <textarea id="prop-body"
+                    onchange="actualizarPropConDebounce('body', this.value)"
+                    oninput="markDirtyOnly()"
+                    placeholder="Escribe aquí el contenido principal del texto...
+
+Puedes escribir varios párrafos.
+El texto se mostrará tal como lo escribas."
+                    maxlength="5000"
+                    rows="10"
+                    class="screen-text-textarea">${escapeHtml(props.body || '')}</textarea>
+          <div class="flex justify-between items-center mt-1">
+            <p class="text-xs text-slate-500">El texto principal que verá el usuario</p>
+            <span class="text-xs text-slate-500" id="body-char-count">${(props.body || '').length}/5000</span>
+          </div>
+        </div>
+        
+        <!-- Indicador de estado -->
+        <div class="screen-text-status mt-4 p-3 rounded ${props.body ? 'bg-green-900/30 border border-green-700' : 'bg-amber-900/30 border border-amber-700'}">
+          ${props.body 
+            ? '<span class="text-green-400">✅ Listo para publicar</span>' 
+            : '<span class="text-amber-400">⚠️ Añade contenido para poder publicar</span>'}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Escapa HTML para prevenir XSS
+   */
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  
+  /**
+   * Solo marca dirty sin programar guardado
+   * Útil para oninput (cada keystroke)
+   */
+  function markDirtyOnly() {
+    editorState.dirty = true;
+    updateStatusIndicator();
+    
+    // Actualizar contador de caracteres si existe
+    const bodyTextarea = document.getElementById('prop-body');
+    const charCount = document.getElementById('body-char-count');
+    if (bodyTextarea && charCount) {
+      charCount.textContent = `${bodyTextarea.value.length}/5000`;
+    }
+  }
+  
+  /**
+   * Actualiza prop con debounce (para campos de texto)
+   * Solo guarda después de que el usuario deje de escribir
+   */
+  let propDebounceTimer = null;
+  function actualizarPropConDebounce(key, value) {
+    // Actualizar estado inmediatamente
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props[key] = value;
+    
+    markDirty();
+    renderPreview(); // Actualizar preview en tiempo real
+    
+    // Debounce el guardado
+    if (propDebounceTimer) {
+      clearTimeout(propDebounceTimer);
+    }
+    propDebounceTimer = setTimeout(() => {
+      tryScheduleSave();
+    }, 1500); // 1.5 segundos después de dejar de escribir
+  }
+  
+  // Renderizar editor de props
+  function renderPropsEditor(step) {
+    const screenTemplate = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    
+    // ============================================================================
+    // EDITOR ESPECÍFICO PARA screen_text
+    // ============================================================================
+    if (step.screen_template_id === 'screen_text') {
+      return renderScreenTextEditor(step);
+    }
+    
+    // ============================================================================
+    // EDITOR ESPECÍFICO PARA screen_video
+    // ============================================================================
+    if (step.screen_template_id === 'screen_video') {
+      return renderScreenVideoEditor(step);
+    }
+    
+    // ============================================================================
+    // EDITOR ESPECÍFICO PARA screen_audio
+    // ============================================================================
+    if (step.screen_template_id === 'screen_audio') {
+      return renderScreenAudioEditor(step);
+    }
+    
+    // ============================================================================
+    // EDITOR ESPECÍFICO PARA screen_choice
+    // ============================================================================
+    if (step.screen_template_id === 'screen_choice') {
+      return renderScreenChoiceEditor(step);
+    }
+    
+    // ============================================================================
+    // EDITOR GENÉRICO PARA OTROS TEMPLATES
+    // ============================================================================
+    const schema = screenTemplate?.props_schema || {};
+    const props = step.props || {};
+    const publishRequired = screenTemplate?.editor_config?.publish_required || [];
+    
+    if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
+      return '<p class="text-slate-400 text-sm">Este screen template no requiere props.</p>';
+    }
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    return Object.keys(schema.properties).map(propKey => {
+      const propSchema = schema.properties[propKey];
+      const propValue = props[propKey] !== undefined ? props[propKey] : propSchema.default;
+      const propType = propSchema.type || 'string';
+      const isRequired = schema.required?.includes(propKey);
+      const isPublishRequired = publishRequired.includes(propKey);
+      
+      let inputHtml = '';
+      
+      if (propType === 'boolean') {
+        inputHtml = `
+          <select onchange="actualizarProp('${propKey}', this.value === 'true')">
+            <option value="true" ${propValue === true ? 'selected' : ''}>Sí</option>
+            <option value="false" ${propValue === false ? 'selected' : ''}>No</option>
+          </select>
+        `;
+      } else if (propType === 'number' || propType === 'integer') {
+        inputHtml = `
+          <input type="number" value="${propValue || ''}" 
+                 onchange="actualizarProp('${propKey}', parseFloat(this.value))" 
+                 placeholder="${propSchema.default || ''}">
+        `;
+      } else if (propType === 'array') {
+        inputHtml = `
+          <textarea onchange="actualizarPropJson('${propKey}', this.value)" 
+                    class="font-mono text-xs" rows="4">${JSON.stringify(propValue || [], null, 2)}</textarea>
+          <p class="text-xs text-slate-500 mt-1">Formato JSON</p>
+        `;
+      } else {
+        inputHtml = `
+          <input type="text" value="${escapeHtml((propValue || '').toString())}" 
+                 onchange="actualizarProp('${propKey}', this.value)" 
+                 placeholder="${propSchema.default || ''}">
+        `;
+      }
+      
+      return `
+        <div class="form-group">
+          <label>
+            ${propKey}${getRequiredBadge(propKey)}
+            ${isRequired ? '<span class="text-red-400">*</span>' : ''}
+            ${isPublishRequired ? '<span class="text-amber-400 text-xs font-normal ml-2">⚠️ Obligatorio para publicar</span>' : ''}
+          </label>
+          ${inputHtml}
+          ${propSchema.description ? `<p class="text-xs text-slate-500 mt-1">${propSchema.description}</p>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+  
+  /**
+   * Actualiza prop que es un JSON (arrays, objetos)
+   */
+  function actualizarPropJson(key, jsonString) {
+    try {
+      const value = JSON.parse(jsonString);
+      actualizarProp(key, value);
+    } catch (e) {
+      console.error('JSON inválido:', e);
+      // No actualizar si el JSON es inválido
+    }
+  }
+  
+  // Renderizar editor de branches
+  function renderBranchesEditor(step) {
+    const stepId = editorState.selectedStepId;
+    const edges = editorState.definition.edges.filter(e => e.from_step_id === stepId);
+    const allSteps = Object.keys(editorState.definition.steps);
+    const conditions = editorState.registry?.conditions || [];
+    
+    let html = edges.map((edge, idx) => {
+      return `
+        <div class="bg-slate-800 p-3 rounded mb-2">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-white">Branch ${idx + 1}</span>
+            <button onclick="eliminarBranch(${idx})" class="text-red-400 text-xs">Eliminar</button>
+          </div>
+          <div class="form-group">
+            <label>To Step</label>
+            <select onchange="actualizarBranchTo(${idx}, this.value)">
+              <option value="">Seleccionar...</option>
+              ${allSteps.map(sid => `
+                <option value="${sid}" ${edge.to_step_id === sid ? 'selected' : ''}>${sid}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Condition</label>
+            <select onchange="actualizarBranchCondition(${idx}, this.value)">
+              <option value="">Siempre (sin condición)</option>
+              ${conditions.map(c => `
+                <option value="${c.id}" ${edge.condition?.type === c.id ? 'selected' : ''}>${c.name || c.id}</option>
+              `).join('')}
+            </select>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    html += `
+      <button onclick="añadirBranch()" class="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">
+        ➕ Añadir Branch
+      </button>
+    `;
+    
+    return html;
+  }
+  
+  // Renderizar editor de events
+  function renderEventsEditor(step) {
+    const events = step.emit_events || [];
+    const eventTypes = editorState.registry?.events || [];
+    
+    let html = events.map((event, idx) => {
+      return `
+        <div class="bg-slate-800 p-3 rounded mb-2">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-white">Event ${idx + 1}</span>
+            <button onclick="eliminarEvent(${idx})" class="text-red-400 text-xs">Eliminar</button>
+          </div>
+          <div class="form-group">
+            <label>Event Type</label>
+            <select onchange="actualizarEventType(${idx}, this.value)">
+              <option value="">Seleccionar...</option>
+              ${eventTypes.map(et => `
+                <option value="${et.id}" ${event.type === et.id ? 'selected' : ''}>${et.name || et.id}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Payload (JSON)</label>
+            <textarea onchange="actualizarEventPayload(${idx}, this.value)" 
+                      class="font-mono text-xs" rows="3">${JSON.stringify(event.payload || {}, null, 2)}</textarea>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    html += `
+      <button onclick="añadirEvent()" class="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">
+        ➕ Añadir Event
+      </button>
+    `;
+    
+    return html;
+  }
+  
+  // ============================================================================
+  // PREVIEW DE STEPS
+  // ============================================================================
+  // 
+  // Renderiza una vista previa visual del step según su template
+  // screen_text: muestra título, subtítulo y body como se vería en runtime
+  // Otros: muestra un preview básico con los props
+  //
+  
+  /**
+   * Renderiza preview específico para screen_text
+   */
+  function renderScreenTextPreview(step) {
+    const props = step.props || {};
+    
+    return `
+      <div class="screen-text-preview">
+        <!-- Simulación de pantalla móvil -->
+        <div class="mobile-frame">
+          <div class="mobile-content">
+            ${props.title ? `
+              <h1 class="preview-title">${escapeHtml(props.title)}</h1>
+            ` : `
+              <h1 class="preview-title preview-placeholder">Sin título</h1>
+            `}
+            
+            ${props.subtitle ? `
+              <h2 class="preview-subtitle">${escapeHtml(props.subtitle)}</h2>
+            ` : ''}
+            
+            ${props.body ? `
+              <div class="preview-body">${escapeHtml(props.body).replace(/\n/g, '<br>')}</div>
+            ` : `
+              <div class="preview-body preview-placeholder">
+                <p>El contenido aparecerá aquí...</p>
+                <p class="text-amber-500 text-sm mt-4">⚠️ Añade contenido para ver el preview</p>
+              </div>
+            `}
+            
+            <!-- Botón de acción simulado -->
+            <button class="preview-action-btn">Continuar</button>
+          </div>
+        </div>
+        
+        <!-- Info del template -->
+        <div class="preview-info mt-4">
+          <span class="text-xs text-slate-500">
+            Template: <code>screen_text</code> • 
+            Step: <code>${editorState.selectedStepId}</code>
+          </span>
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Extrae el ID de YouTube de una URL o devuelve el string si ya es un ID
+   */
+  function extractYouTubeId(urlOrId) {
+    if (!urlOrId) return null;
+    
+    // Si ya es un ID corto (11 caracteres), devolverlo
+    if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) {
+      return urlOrId;
+    }
+    
+    // Intentar extraer de URL completa
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = urlOrId.match(pattern);
+      if (match) return match[1];
+    }
+    
+    // Si no coincide con nada, devolver el string original (podría ser un ID)
+    return urlOrId;
+  }
+  
+  /**
+   * Renderiza preview específico para screen_choice
+   */
+  function renderScreenChoicePreview(step) {
+    const props = step.props || {};
+    const choices = props.choices || [];
+    
+    return `
+      <div class="screen-choice-preview">
+        <!-- Simulación de pantalla móvil -->
+        <div class="mobile-frame">
+          <div class="mobile-content">
+            ${props.title ? `
+              <h1 class="preview-title">${escapeHtml(props.title)}</h1>
+            ` : ''}
+            
+            ${props.subtitle ? `
+              <h2 class="preview-subtitle">${escapeHtml(props.subtitle)}</h2>
+            ` : ''}
+            
+            ${props.question ? `
+              <div class="preview-question">${escapeHtml(props.question)}</div>
+            ` : `
+              <div class="preview-question preview-placeholder" style="opacity: 0.5; border-left-color: #64748b;">
+                (Escribe una pregunta...)
+              </div>
+            `}
+            
+            <div class="preview-choices">
+              ${choices.length > 0 ? choices.map((choice, idx) => `
+                <button type="button" class="preview-choice-btn ${(!choice.label || !choice.label.trim()) ? 'placeholder' : ''}">
+                  <span class="preview-choice-label">
+                    ${choice.label && choice.label.trim() ? escapeHtml(choice.label) : `(Opción ${idx + 1} sin texto)`}
+                  </span>
+                  ${choice.description && choice.description.trim() ? `
+                    <span class="preview-choice-desc">${escapeHtml(choice.description)}</span>
+                  ` : ''}
+                  ${(choice.estimated_minutes || (choice.tags && choice.tags.length > 0)) ? `
+                    <div class="preview-choice-meta">
+                      ${choice.estimated_minutes ? `
+                        <span class="preview-choice-minutes">⏱️ +${choice.estimated_minutes} min</span>
+                      ` : ''}
+                      ${(choice.tags || []).slice(0, 3).map(tag => `
+                        <span class="preview-choice-tag">${escapeHtml(tag)}</span>
+                      `).join('')}
+                    </div>
+                  ` : ''}
+                </button>
+              `).join('') : `
+                <button type="button" class="preview-choice-btn placeholder">
+                  <span class="preview-choice-label">(Añade opciones...)</span>
+                </button>
+              `}
+            </div>
+            
+            <!-- Botón de acción simulado -->
+            <button class="preview-action-btn">Continuar</button>
+          </div>
+        </div>
+        
+        <!-- Info del template -->
+        <div class="preview-info mt-4">
+          <span class="text-xs text-slate-500">
+            Template: <code>screen_choice</code> • 
+            Step: <code>${editorState.selectedStepId}</code> • 
+            Opciones: <code>${choices.length}</code>
+          </span>
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Renderiza preview específico para screen_audio
+   */
+  function renderScreenAudioPreview(step) {
+    const props = step.props || {};
+    const audioSource = props.audio_source || '';
+    const audioRef = props.audio_ref || '';
+    
+    // Contenido del audio según configuración
+    let audioContent = '';
+    
+    if (!audioSource || !audioRef) {
+      // Sin audio configurado
+      audioContent = `
+        <div class="audio-preview-container">
+          <div class="audio-preview-placeholder">
+            <span class="icon">🎵</span>
+            <span class="text">Configura el origen y referencia del audio para ver el preview</span>
+          </div>
+        </div>
+      `;
+    } else {
+      // Audio configurado - mostrar reproductor simulado
+      audioContent = `
+        <div class="audio-preview-container">
+          <div class="audio-preview-icon">🎧</div>
+          <div style="width: 100%;">
+            <div class="audio-progress-bar"></div>
+            <div class="audio-controls">
+              <button class="audio-play-btn" onclick="alert('Preview visual - el audio no se reproduce en editor')">
+                ▶️
+              </button>
+              <span class="audio-time">0:00 / --:--</span>
+            </div>
+          </div>
+          <code style="background: #334155; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-top: 12px; color: #94a3b8;">
+            ${audioSource === 'internal' ? '🎧 Interno: ' : '🌐 Externo: '}${escapeHtml(audioRef.substring(0, 40))}${audioRef.length > 40 ? '...' : ''}
+          </code>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="screen-audio-preview">
+        <!-- Simulación de pantalla móvil -->
+        <div class="mobile-frame">
+          <div class="mobile-content">
+            ${props.title ? `
+              <h1 class="preview-title">${escapeHtml(props.title)}</h1>
+            ` : ''}
+            
+            ${props.subtitle ? `
+              <p class="preview-subtitle" style="font-size: 15px; margin-bottom: 16px;">${escapeHtml(props.subtitle)}</p>
+            ` : ''}
+            
+            ${audioContent}
+            
+            ${props.declared_duration_minutes ? `
+              <div class="audio-duration-badge">
+                <span>⏱️</span>
+                <span>${props.declared_duration_minutes} min</span>
+              </div>
+            ` : ''}
+            
+            <!-- Botón de acción simulado -->
+            <button class="preview-action-btn">Continuar</button>
+          </div>
+        </div>
+        
+        <!-- Info del template -->
+        <div class="preview-info mt-4">
+          <span class="text-xs text-slate-500">
+            Template: <code>screen_audio</code> • 
+            Step: <code>${editorState.selectedStepId}</code> • 
+            ${audioSource ? `Origen: <code>${audioSource}</code>` : 'Sin configurar'}
+          </span>
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Renderiza preview específico para screen_video
+   */
+  function renderScreenVideoPreview(step) {
+    const props = step.props || {};
+    const displayMode = props.display_mode || 'inline';
+    const videoSource = props.video_source || '';
+    const videoRef = props.video_ref || '';
+    
+    // Extraer ID de YouTube si aplica
+    const youtubeId = videoSource === 'youtube' ? extractYouTubeId(videoRef) : null;
+    
+    // Contenido del vídeo según modo y origen
+    let videoContent = '';
+    
+    if (!videoSource || !videoRef) {
+      // Sin vídeo configurado
+      videoContent = `
+        <div class="video-preview-container">
+          <div class="video-preview-placeholder">
+            <span class="icon">🎬</span>
+            <span class="text">Configura el origen y referencia del vídeo para ver el preview</span>
+          </div>
+        </div>
+      `;
+    } else if (displayMode === 'collapsed') {
+      // Modo colapsado: mostrar botón
+      videoContent = `
+        <div class="video-preview-container" style="background: linear-gradient(135deg, #1e1e2f 0%, #0a0a0f 100%);">
+          <button class="video-collapsed-btn" onclick="alert('En runtime, esto expandiría el vídeo')">
+            ▶️ Ver vídeo
+          </button>
+          <p class="text-xs text-slate-500 mt-3">Click para ver (modo colapsado)</p>
+        </div>
+      `;
+    } else if (videoSource === 'youtube' && youtubeId) {
+      // YouTube inline
+      videoContent = `
+        <div class="video-preview-container" style="padding: 0;">
+          <iframe 
+            class="video-preview-youtube"
+            src="https://www.youtube.com/embed/${youtubeId}?rel=0"
+            title="YouTube video player"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen>
+          </iframe>
+        </div>
+      `;
+    } else if (videoSource === 'internal') {
+      // Vídeo interno: placeholder con ID
+      videoContent = `
+        <div class="video-preview-container">
+          <div class="video-preview-placeholder">
+            <span class="icon">🎥</span>
+            <span class="text">Vídeo interno</span>
+            <code style="background: #334155; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-top: 8px;">${escapeHtml(videoRef)}</code>
+          </div>
+        </div>
+      `;
+    } else {
+      // Fallback
+      videoContent = `
+        <div class="video-preview-container">
+          <div class="video-preview-placeholder">
+            <span class="icon">❓</span>
+            <span class="text">Origen desconocido: ${escapeHtml(videoSource)}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="screen-video-preview">
+        <!-- Simulación de pantalla móvil -->
+        <div class="mobile-frame">
+          <div class="mobile-content">
+            ${props.title ? `
+              <h1 class="preview-title">${escapeHtml(props.title)}</h1>
+            ` : ''}
+            
+            ${props.description ? `
+              <p class="preview-subtitle" style="font-size: 15px; margin-bottom: 16px;">${escapeHtml(props.description)}</p>
+            ` : ''}
+            
+            ${videoContent}
+            
+            ${props.declared_duration_minutes ? `
+              <div class="video-duration-badge">
+                <span>⏱️</span>
+                <span>${props.declared_duration_minutes} min</span>
+              </div>
+            ` : ''}
+            
+            <!-- Botón de acción simulado -->
+            <button class="preview-action-btn">Continuar</button>
+          </div>
+        </div>
+        
+        <!-- Info del template -->
+        <div class="preview-info mt-4">
+          <span class="text-xs text-slate-500">
+            Template: <code>screen_video</code> • 
+            Step: <code>${editorState.selectedStepId}</code> • 
+            Modo: <code>${displayMode}</code>
+            ${videoSource ? ` • Origen: <code>${videoSource}</code>` : ''}
+          </span>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Renderizar preview
+  async function renderPreview() {
+    const container = document.getElementById('preview-container');
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    
+    if (!step) {
+      container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>Selecciona un step para ver el preview</p></div>';
+      return;
+    }
+    
+    // ============================================================================
+    // PREVIEW ESPECÍFICO PARA screen_text
+    // ============================================================================
+    if (step.screen_template_id === 'screen_text') {
+      container.innerHTML = renderScreenTextPreview(step);
+      return;
+    }
+    
+    // ============================================================================
+    // PREVIEW ESPECÍFICO PARA screen_video
+    // ============================================================================
+    if (step.screen_template_id === 'screen_video') {
+      container.innerHTML = renderScreenVideoPreview(step);
+      return;
+    }
+    
+    // ============================================================================
+    // PREVIEW ESPECÍFICO PARA screen_audio
+    // ============================================================================
+    if (step.screen_template_id === 'screen_audio') {
+      container.innerHTML = renderScreenAudioPreview(step);
+      return;
+    }
+    
+    // ============================================================================
+    // PREVIEW ESPECÍFICO PARA screen_choice
+    // ============================================================================
+    if (step.screen_template_id === 'screen_choice') {
+      container.innerHTML = renderScreenChoicePreview(step);
+      return;
+    }
+    
+    // ============================================================================
+    // PREVIEW GENÉRICO PARA OTROS TEMPLATES
+    // ============================================================================
+    container.innerHTML = `
+      <div class="p-8">
+        <h3 class="text-lg font-semibold mb-4">Preview: ${editorState.selectedStepId}</h3>
+        <div class="bg-slate-100 p-4 rounded">
+          <p class="text-sm text-slate-600 mb-2"><strong>Screen Template:</strong> ${step.screen_template_id || 'N/A'}</p>
+          <p class="text-sm text-slate-600 mb-2"><strong>Step Type:</strong> ${step.step_type || 'N/A'}</p>
+          <pre class="text-xs bg-slate-200 p-3 rounded overflow-auto">${JSON.stringify(step.props || {}, null, 2)}</pre>
+        </div>
+        <p class="text-xs text-slate-500 mt-4">Nota: El preview completo con renderHtml se implementará en la siguiente fase.</p>
+      </div>
+    `;
+  }
+  
+  // ============================================================================
+  // FUNCIONES DE ACTUALIZACIÓN (BLINDAJE v2)
+  // ============================================================================
+  // 
+  // PRINCIPIO: markDirty() + tryScheduleSave() en lugar de guardarDraft() directo
+  // Esto permite que el editor esté en estado inválido sin romper nada.
+  //
+  
+  function actualizarStepType() {
+    const stepTypeId = document.getElementById('config-step-type').value;
+    editorState.definition.steps[editorState.selectedStepId].step_type = stepTypeId || undefined;
+    markDirty();
+    tryScheduleSave();
+    renderStepConfig();
+  }
+  
+  function actualizarScreenTemplate() {
+    const screenTemplateId = document.getElementById('config-screen-template').value;
+    editorState.definition.steps[editorState.selectedStepId].screen_template_id = screenTemplateId;
+    markDirty();
+    tryScheduleSave();
+    renderStepConfig();
+    renderPreview();
+  }
+  
+  function actualizarProp(key, value) {
+    if (!editorState.definition.steps[editorState.selectedStepId].props) {
+      editorState.definition.steps[editorState.selectedStepId].props = {};
+    }
+    editorState.definition.steps[editorState.selectedStepId].props[key] = value;
+    markDirty();
+    tryScheduleSave();
+    renderPreview();
+  }
+  
+  function actualizarCapture() {
+    const capture = document.getElementById('config-capture').value;
+    editorState.definition.steps[editorState.selectedStepId].capture = capture || undefined;
+    markDirty();
+    tryScheduleSave();
+  }
+  
+  // BLINDAJE v2: añadirBranch NO guarda inmediatamente porque el edge está incompleto
+  function añadirBranch() {
+    const stepId = editorState.selectedStepId;
+    editorState.definition.edges.push({
+      from_step_id: stepId,
+      to_step_id: '',  // ⚠️ Incompleto - NO intentar guardar
+      condition: null
+    });
+    markDirty(); // Marcamos dirty pero NO llamamos tryScheduleSave()
+    renderStepConfig();
+    
+    // Mostrar aviso visual
+    mostrarAvisoEdgeIncompleto();
+  }
+  
+  function mostrarAvisoEdgeIncompleto() {
+    const messagesContainer = document.getElementById('validation-messages');
+    if (messagesContainer) {
+      messagesContainer.innerHTML = `
+        <div class="validation-warning">
+          ⚠️ Branch incompleto: selecciona un "To Step" para poder guardar
+        </div>
+      `;
+    }
+  }
+  
+  function actualizarBranchTo(idx, toStepId) {
+    const stepId = editorState.selectedStepId;
+    const edges = editorState.definition.edges.filter(e => e.from_step_id === stepId);
+    if (edges[idx]) {
+      edges[idx].to_step_id = toStepId;
+      markDirty();
+      // Ahora sí, el edge puede estar completo
+      if (toStepId) {
+        tryScheduleSave();
+        // Limpiar aviso
+        document.getElementById('validation-messages').innerHTML = '';
+      }
+    }
+  }
+  
+  function actualizarBranchCondition(idx, conditionType) {
+    const stepId = editorState.selectedStepId;
+    const edges = editorState.definition.edges.filter(e => e.from_step_id === stepId);
+    if (edges[idx]) {
+      edges[idx].condition = conditionType ? { type: conditionType } : null;
+      markDirty();
+      tryScheduleSave();
+    }
+  }
+  
+  function eliminarBranch(idx) {
+    const stepId = editorState.selectedStepId;
+    const edges = editorState.definition.edges.filter(e => e.from_step_id === stepId);
+    const edgeToRemove = edges[idx];
+    if (edgeToRemove) {
+      const globalIdx = editorState.definition.edges.indexOf(edgeToRemove);
+      editorState.definition.edges.splice(globalIdx, 1);
+      markDirty();
+      tryScheduleSave();
+      renderStepConfig();
+    }
+  }
+  
+  // BLINDAJE v2: añadirEvent NO guarda inmediatamente porque el event está incompleto
+  function añadirEvent() {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step.emit_events) {
+      step.emit_events = [];
+    }
+    step.emit_events.push({
+      type: '',  // ⚠️ Incompleto
+      payload: {}
+    });
+    markDirty(); // NO llamamos tryScheduleSave()
+    renderStepConfig();
+  }
+  
+  function actualizarEventType(idx, eventType) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (step.emit_events && step.emit_events[idx]) {
+      step.emit_events[idx].type = eventType;
+      markDirty();
+      if (eventType) {
+        tryScheduleSave();
+      }
+    }
+  }
+  
+  function actualizarEventPayload(idx, payloadJson) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (step.emit_events && step.emit_events[idx]) {
+      try {
+        step.emit_events[idx].payload = JSON.parse(payloadJson);
+        markDirty();
+        tryScheduleSave();
+      } catch (e) {
+        console.error('Error parseando JSON:', e);
+        // NO guardamos si el JSON es inválido
+      }
+    }
+  }
+  
+  function eliminarEvent(idx) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (step.emit_events) {
+      step.emit_events.splice(idx, 1);
+      markDirty();
+      tryScheduleSave();
+      renderStepConfig();
+    }
+  }
+  
+  // ============================================================================
+  // GUARDAR DRAFT (BLINDAJE v2)
+  // ============================================================================
+  // 
+  // PRINCIPIOS:
+  // 1. SIEMPRE validar antes de intentar guardar
+  // 2. Si no es válido, NO enviar a la API
+  // 3. Mostrar errores claros al usuario
+  // 4. Actualizar estado del editor
+  //
+  
+  async function guardarDraft() {
+    // BLINDAJE v2: Verificar validez antes de guardar
+    const validation = validateDefinitionForDraft(editorState.definition);
+    if (!validation.valid) {
+      console.warn('No se puede guardar draft inválido:', validation.errors);
+      editorState.valid = false;
+      editorState.validationErrors = validation.errors;
+      updateStatusIndicator();
+      
+      // Mostrar errores en UI
+      const messagesContainer = document.getElementById('validation-messages');
+      if (messagesContainer) {
+        messagesContainer.innerHTML = validation.errors.map(e => 
+          `<div class="validation-error">❌ ${e}</div>`
+        ).join('');
+      }
+      return false;
+    }
+    
+    // Evitar guardados concurrentes
+    if (editorState.isSaving) {
+      console.log('Ya hay un guardado en progreso, esperando...');
+      return false;
+    }
+    
+    editorState.isSaving = true;
+    updateStatusIndicator();
+    
+    // LOG TEMPORAL: Mostrar order enviado
+    const stepsSent = editorState.definition?.steps || {};
+    const orderSent = Object.keys(stepsSent).reduce((acc, stepId) => {
+      const step = stepsSent[stepId];
+      acc[stepId] = typeof step?.order === 'number' ? step.order : 'undefined';
+      return acc;
+    }, {});
+    console.log('📤 Order enviado al servidor:', orderSent);
+    
+    try {
+      const response = await fetch(`/admin/api/recorridos/${encodeURIComponent(editorState.recorridoId)}/draft`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          definition_json: editorState.definition
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.error || `Error ${response.status}`;
+        const details = errorData.details?.errors || [];
+        
+        throw new Error(errorMsg + (details.length ? `\n${details.join('\n')}` : ''));
+      }
+      
+      const data = await response.json();
+      
+      // Comparar order enviado vs recibido para detectar modificaciones del servidor
+      const stepsReceived = data.draft?.definition_json?.steps || {};
+      const orderReceived = Object.keys(stepsReceived).reduce((acc, stepId) => {
+        const step = stepsReceived[stepId];
+        acc[stepId] = typeof step?.order === 'number' ? step.order : 'undefined';
+        return acc;
+      }, {});
+      
+      // Comparar order enviado vs recibido
+      const orderChanged = Object.keys(orderSent).some(stepId => {
+        const sent = orderSent[stepId];
+        const received = orderReceived[stepId];
+        return sent !== received;
+      });
+      
+      if (orderChanged) {
+        console.warn('⚠️ ADVERTENCIA: El servidor modificó el order de los steps:', {
+          enviado: orderSent,
+          recibido: orderReceived,
+          mensaje: 'Esto no debería ocurrir. Verificar normalizeRecorridoDefinition() en el servidor.'
+        });
+      } else {
+        console.log('✅ Order preservado correctamente:', orderReceived);
+      }
+      
+      // Actualizar estado
+      editorState.dirty = false;
+      editorState.lastSavedAt = new Date();
+      editorState.validationErrors = [];
+      
+      // Actualizar definition con la versión normalizada del servidor
+      if (data.draft?.definition_json) {
+        editorState.definition = data.draft.definition_json;
+      }
+      
+      console.log('✅ Draft guardado exitosamente:', data.draft?.draft_id);
+      
+      // Limpiar mensajes de error
+      const messagesContainer = document.getElementById('validation-messages');
+      if (messagesContainer) {
+        messagesContainer.innerHTML = `
+          <div class="validation-success">✅ Guardado a las ${new Date().toLocaleTimeString()}</div>
+        `;
+        // Limpiar mensaje después de 3 segundos
+        setTimeout(() => {
+          if (messagesContainer.querySelector('.validation-success')) {
+            messagesContainer.innerHTML = '';
+          }
+        }, 3000);
+      }
+      
+      updateStatusIndicator();
+      return true;
+      
+    } catch (error) {
+      console.error('Error guardando draft:', error);
+      
+      // Mostrar error en UI
+      const messagesContainer = document.getElementById('validation-messages');
+      if (messagesContainer) {
+        messagesContainer.innerHTML = `
+          <div class="validation-error">
+            ❌ Error guardando: ${error.message.replace(/\n/g, '<br>')}
+          </div>
+        `;
+      }
+      
+      updateStatusIndicator();
+      return false;
+      
+    } finally {
+      editorState.isSaving = false;
+      updateStatusIndicator();
+    }
+  }
+  
+  // Botón para forzar guardado manual
+  async function forzarGuardado() {
+    const validation = validateDefinitionForDraft(editorState.definition);
+    if (!validation.valid) {
+      alert(
+        '❌ No se puede guardar porque hay errores:\n\n' + 
+        validation.errors.join('\n')
+      );
+      return;
+    }
+    
+    const success = await guardarDraft();
+    if (success) {
+      alert('✅ Guardado exitosamente');
+    }
+  }
+  
+  // ============================================================================
+  // VALIDAR RECORRIDO (BLINDAJE v2)
+  // ============================================================================
+  // 
+  // Muestra errores y warnings de forma clara.
+  // Usa validación completa del backend (con registries)
+  //
+  async function validarRecorrido() {
+    const messagesContainer = document.getElementById('validation-messages');
+    messagesContainer.innerHTML = '<p class="text-slate-400">🔄 Validando con el servidor...</p>';
+    
+    // Primero validación local rápida
+    const localValidation = validateDefinitionForDraft(editorState.definition);
+    if (!localValidation.valid) {
+      let html = '<div class="validation-error">✗ Errores locales (no se envió al servidor):</div>';
+      localValidation.errors.forEach(error => {
+        html += `<div class="validation-error">❌ ${error}</div>`;
+      });
+      messagesContainer.innerHTML = html;
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/admin/api/recorridos/${encodeURIComponent(editorState.recorridoId)}/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          definition_json: editorState.definition
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${response.status}`);
+      }
+      
+      const validation = await response.json();
+      
+      let html = '';
+      
+      if (validation.valid) {
+        html += '<div class="validation-success">✅ El recorrido es válido y listo para publicar</div>';
+      } else {
+        html += '<div class="validation-error">❌ El recorrido tiene errores y NO se puede publicar</div>';
+      }
+      
+      if (validation.errors && validation.errors.length > 0) {
+        html += '<div class="mt-2 text-sm text-white font-semibold">Errores:</div>';
+        validation.errors.forEach(error => {
+          html += `<div class="validation-error">• ${error}</div>`;
+        });
+      }
+      
+      if (validation.warnings && validation.warnings.length > 0) {
+        html += '<div class="mt-2 text-sm text-white font-semibold">Warnings (no bloqueantes):</div>';
+        validation.warnings.forEach(warning => {
+          html += `<div class="validation-warning">• ${warning}</div>`;
+        });
+      }
+      
+      messagesContainer.innerHTML = html;
+      
+    } catch (error) {
+      console.error('Error validando:', error);
+      messagesContainer.innerHTML = `<div class="validation-error">Error validando: ${error.message}</div>`;
+    }
+  }
+  
+  // Preview con runtime
+  async function previewRecorrido() {
+    // Por ahora abrimos en nueva ventana
+    // En el futuro, esto usará el runtime real en sandbox
+    window.open(`/api/recorridos/${editorState.recorridoId}/preview`, '_blank');
+  }
+  
+  // ============================================================================
+  // PUBLICAR RECORRIDO (BLINDAJE v2)
+  // ============================================================================
+  // 
+  // PRINCIPIO: El backend MANDA
+  // - Validación completa en backend con validateRecorridoDefinition(isPublish: true)
+  // - Frontend muestra errores estructurados
+  // - NO intenta "arreglar" nada
+  //
+  async function publicarRecorrido() {
+    // Primero, asegurarse de que no hay cambios sin guardar
+    if (editorState.dirty) {
+      const validation = validateDefinitionForDraft(editorState.definition);
+      if (!validation.valid) {
+        alert(
+          '❌ Hay cambios sin guardar que contienen errores:\n\n' +
+          validation.errors.join('\n') +
+          '\n\nCorrige los errores antes de publicar.'
+        );
+        return;
+      }
+      
+      // Intentar guardar primero
+      const saved = await guardarDraft();
+      if (!saved) {
+        alert('❌ No se pudo guardar el draft. Corrige los errores antes de publicar.');
+        return;
+      }
+    }
+    
+    const releaseNotes = prompt('Release notes (opcional):');
+    
+    try {
+      const response = await fetch(`/admin/api/recorridos/${encodeURIComponent(editorState.recorridoId)}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          release_notes: releaseNotes || null
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        // BLINDAJE v2: Mostrar errores estructurados del backend
+        let errorMessage = data.error || `Error ${response.status}`;
+        
+        if (data.details?.errors?.length > 0) {
+          errorMessage += '\n\n📋 Errores de validación:\n';
+          errorMessage += data.details.errors.map(e => `• ${e}`).join('\n');
+        }
+        
+        if (data.details?.warnings?.length > 0) {
+          errorMessage += '\n\n⚠️ Warnings:\n';
+          errorMessage += data.details.warnings.map(w => `• ${w}`).join('\n');
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      // Éxito
+      let successMessage = `✅ Recorrido publicado exitosamente como versión ${data.version.version}`;
+      
+      if (data.validation?.warnings?.length > 0) {
+        successMessage += '\n\n⚠️ Warnings (no bloqueantes):\n';
+        successMessage += data.validation.warnings.map(w => `• ${w}`).join('\n');
+      }
+      
+      alert(successMessage);
+      
+      // Recargar para actualizar estado
+      await cargarRecorrido();
+      
+    } catch (error) {
+      console.error('Error publicando:', error);
+      alert(`❌ Error publicando:\n\n${error.message}`);
+    }
+  }
+  
+  /* ============================================================================
+   * FUNCIONALIDAD DE REDIMENSIONAMIENTO DEL PANEL DE STEPS
+   * ============================================================================
+   */
+  
+  let isResizing = false;
+  let previousPanelWidth = null;
+  
+  function initPanelResizer() {
+    const resizer = document.getElementById('panel-resizer');
+    const panel = document.getElementById('steps-panel');
+    
+    if (!resizer || !panel) return;
+    
+    // Cargar ancho guardado
+    const savedWidth = localStorage.getItem('stepsPanelWidth');
+    if (savedWidth) {
+      const width = parseInt(savedWidth, 10);
+      if (width >= 200 && width <= 500) {
+        panel.style.setProperty('--steps-panel-width', `${width}px`);
+        panel.style.width = `${width}px`;
+      }
+    }
+    
+    // Cargar estado colapsado
+    const isCollapsed = localStorage.getItem('stepsPanelCollapsed') === 'true';
+    if (isCollapsed) {
+      previousPanelWidth = savedWidth ? parseInt(savedWidth, 10) : 280;
+      panel.classList.add('collapsed');
+      updateToggleButton(true);
+    }
+    
+    // Event listeners para drag
+    resizer.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', handleResize);
+    document.addEventListener('mouseup', stopResize);
+  }
+  
+  function startResize(e) {
+    if (e.button !== 0) return; // Solo botón izquierdo
+    
+    const panel = document.getElementById('steps-panel');
+    if (!panel || panel.classList.contains('collapsed')) return; // No redimensionar si está colapsado
+    
+    isResizing = true;
+    const resizer = document.getElementById('panel-resizer');
+    
+    if (resizer && panel) {
+      resizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    
+    e.preventDefault();
+  }
+  
+  function handleResize(e) {
+    if (!isResizing) return;
+    
+    const panel = document.getElementById('steps-panel');
+    if (!panel) return;
+    
+    // Calcular nuevo ancho basado en la posición del mouse
+    const rect = panel.getBoundingClientRect();
+    const newWidth = e.clientX - rect.left;
+    
+    // Aplicar límites
+    const minWidth = 200;
+    const maxWidth = 500;
+    const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+    
+    // Actualizar ancho
+    panel.style.setProperty('--steps-panel-width', `${clampedWidth}px`);
+    panel.style.width = `${clampedWidth}px`;
+    
+    // Guardar en localStorage
+    localStorage.setItem('stepsPanelWidth', clampedWidth.toString());
+  }
+  
+  function stopResize() {
+    if (!isResizing) return;
+    
+    isResizing = false;
+    const resizer = document.getElementById('panel-resizer');
+    
+    if (resizer) {
+      resizer.classList.remove('resizing');
+    }
+    
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+  
+  function toggleStepsPanel() {
+    const panel = document.getElementById('steps-panel');
+    if (!panel) return;
+    
+    const isCollapsed = panel.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+      // Expandir: restaurar ancho previo
+      panel.classList.remove('collapsed');
+      const width = previousPanelWidth || 280;
+      panel.style.setProperty('--steps-panel-width', `${width}px`);
+      panel.style.width = `${width}px`;
+      localStorage.setItem('stepsPanelWidth', width.toString());
+      localStorage.setItem('stepsPanelCollapsed', 'false');
+      updateToggleButton(false);
+    } else {
+      // Colapsar: guardar ancho actual y reducir a 48px
+      const currentWidth = panel.offsetWidth;
+      previousPanelWidth = currentWidth;
+      panel.classList.add('collapsed');
+      localStorage.setItem('stepsPanelCollapsed', 'true');
+      updateToggleButton(true);
+    }
+  }
+  
+  function updateToggleButton(isCollapsed) {
+    const btn = document.getElementById('toggle-steps-panel-btn');
+    if (btn) {
+      btn.textContent = isCollapsed ? '▶' : '◀';
+      btn.title = isCollapsed ? 'Expandir panel' : 'Colapsar panel';
+    }
+  }
+  
+  // ============================================================================
+  // PREVIEW DE STEPS
+  // ============================================================================
+  
+  /**
+   * Preview de un step específico
+   */
+  async function previewStep(stepId) {
+    if (!editorState.definition || !editorState.definition.steps || !editorState.definition.steps[stepId]) {
+      alert('Step no encontrado');
+      return;
+    }
+    
+    const step = editorState.definition.steps[stepId];
+    mostrarModalPreview(stepId, step);
+  }
+  
+  /**
+   * Muestra modal con preview del step
+   */
+  function mostrarModalPreview(stepId, step) {
+    let modal = document.getElementById('preview-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'preview-modal';
+      modal.className = 'preview-modal';
+      modal.innerHTML = `
+        <div class="preview-modal-overlay" onclick="cerrarModalPreview()"></div>
+        <div class="preview-modal-content">
+          <div class="preview-modal-header">
+            <h2>Preview: ${stepId}</h2>
+            <div class="preview-modal-actions">
+              <select id="preview-mock-mode" class="preview-mock-select">
+                <option value="">Sin mock</option>
+                <option value="rapida">Rápida</option>
+                <option value="basica">Básica</option>
+                <option value="profunda">Profunda</option>
+                <option value="maestro">Maestro</option>
+              </select>
+              <button onclick="cerrarModalPreview()" class="preview-close-btn">✕</button>
+            </div>
+          </div>
+          <div class="preview-modal-body">
+            <div id="preview-loading" class="preview-loading">Cargando preview...</div>
+            <div id="preview-content" class="preview-content"></div>
+            <div id="preview-warnings" class="preview-warnings"></div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      
+      if (!document.getElementById('preview-modal-styles')) {
+        const style = document.createElement('style');
+        style.id = 'preview-modal-styles';
+        style.textContent = `
+          .preview-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+          .preview-modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); }
+          .preview-modal-content { position: relative; background: #1e293b; border-radius: 12px; width: 90%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
+          .preview-modal-header { padding: 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+          .preview-modal-header h2 { color: #fff; font-size: 18px; margin: 0; }
+          .preview-modal-actions { display: flex; gap: 10px; align-items: center; }
+          .preview-mock-select { padding: 6px 12px; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 6px; font-size: 14px; }
+          .preview-close-btn { padding: 6px 12px; background: #7f1d1d; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 18px; }
+          .preview-close-btn:hover { background: #991b1b; }
+          .preview-modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+          .preview-loading { text-align: center; color: #94a3b8; padding: 40px; }
+          .preview-content { background: #fff; border-radius: 8px; padding: 20px; min-height: 200px; }
+          .preview-warnings { margin-top: 16px; padding: 12px; background: #78350f; border-radius: 6px; color: #fcd34d; font-size: 14px; }
+          .preview-warnings:empty { display: none; }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+    
+    modal.style.display = 'flex';
+    cargarPreviewStep(stepId);
+    
+    const mockSelect = document.getElementById('preview-mock-mode');
+    if (mockSelect) {
+      mockSelect.onchange = () => cargarPreviewStep(stepId);
+    }
+  }
+  
+  /**
+   * Carga el preview del step desde el servidor
+   */
+  async function cargarPreviewStep(stepId) {
+    const loadingEl = document.getElementById('preview-loading');
+    const contentEl = document.getElementById('preview-content');
+    const warningsEl = document.getElementById('preview-warnings');
+    
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (contentEl) contentEl.innerHTML = '';
+    if (warningsEl) warningsEl.innerHTML = '';
+    
+    try {
+      const mockSelect = document.getElementById('preview-mock-mode');
+      const mockMode = mockSelect ? mockSelect.value : '';
+      
+      const mock = {};
+      if (mockMode) {
+        mock.nivel_efectivo = mockMode === 'rapida' ? 1 : mockMode === 'basica' ? 3 : mockMode === 'profunda' ? 5 : 7;
+        mock.tipo_limpieza = mockMode;
+      }
+      
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/preview-step`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          step_id: stepId,
+          mock: mock
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        throw new Error(data.error?.message || 'Error generando preview');
+      }
+      
+      if (contentEl && data.html) {
+        contentEl.innerHTML = data.html;
+      } else if (contentEl) {
+        contentEl.innerHTML = '<p class="text-muted">No hay HTML disponible. RenderSpec:</p><pre>' + JSON.stringify(data.render_spec, null, 2) + '</pre>';
+      }
+      
+      if (warningsEl && data.warnings && data.warnings.length > 0) {
+        warningsEl.innerHTML = '<strong>⚠️ Advertencias:</strong><ul>' + 
+          data.warnings.map(w => `<li>${w}</li>`).join('') + 
+          '</ul>';
+      }
+      
+    } catch (error) {
+      console.error('Error cargando preview:', error);
+      if (contentEl) {
+        contentEl.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+      }
+    } finally {
+      if (loadingEl) loadingEl.style.display = 'none';
+    }
+  }
+  
+  /**
+   * Cierra el modal de preview
+   */
+  function cerrarModalPreview() {
+    const modal = document.getElementById('preview-modal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  }
+  
+  // SPRINT AXE v0.3: Preview Harness Unificado
+  let previewHarness = null;
+  
+  function initPreviewHarness() {
+    const container = document.getElementById('preview-harness-container');
+    if (!container) return;
+    
+    // Cargar CSS del Preview Harness
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/css/preview-harness.css';
+    document.head.appendChild(link);
+    
+    // Cargar JS del Preview Harness
+    const script = document.createElement('script');
+    script.src = '/js/preview-harness.js';
+    script.onload = () => {
+      // Inicializar Preview Harness
+      if (window.PreviewHarness) {
+        previewHarness = new window.PreviewHarness('preview-harness-container', {
+          previewEndpoint: '/admin/api/recorridos',
+          recorridoId: editorState.recorridoId,
+          stepId: editorState.selectedStepId || null
+        });
+        
+        // Actualizar cuando cambie el step
+        const originalRenderPreview = renderPreview;
+        renderPreview = async function() {
+          if (previewHarness && editorState.selectedStepId) {
+            // Usar Preview Harness
+            container.style.display = 'block';
+            document.getElementById('preview-container').style.display = 'none';
+            
+            previewHarness.setStepId(editorState.selectedStepId);
+            previewHarness.setRecorridoId(editorState.recorridoId);
+            
+            // Auto-refresh si hay un step seleccionado
+            if (editorState.selectedStepId) {
+              await previewHarness.refreshPreview();
+            }
+          } else {
+            // Usar preview legacy
+            container.style.display = 'none';
+            document.getElementById('preview-container').style.display = 'block';
+            await originalRenderPreview();
+          }
+        };
+      }
+    };
+    document.head.appendChild(script);
+  }
+
+  // Inicializar al cargar
+  document.addEventListener('DOMContentLoaded', () => {
+    initEditor();
+    initPanelResizer();
+    initPreviewHarness();
+  });
+</script>
+

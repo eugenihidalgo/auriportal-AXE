@@ -231,3 +231,12 @@ sudo tail -f /var/log/nginx/error.log
 **Para documentación completa, ver:** `IMPLEMENTACION_ENTORNOS.md`
 
 
+
+
+
+
+
+
+
+
+

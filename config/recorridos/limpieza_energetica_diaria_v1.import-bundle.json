@@ -1,0 +1,226 @@
+{
+  "recorrido": {
+    "id": "limpieza_energetica_diaria_v1",
+    "name": "Limpieza Energética Diaria v1",
+    "status": "draft",
+    "current_published_version": null
+  },
+  "draft": {
+    "draft_id": null,
+    "definition_json": {
+      "id": "limpieza_energetica_diaria_v1",
+      "name": "Limpieza Energética Diaria v1",
+      "description": "Recorrido canónico de 9 steps para la limpieza energética diaria con handlers existentes",
+      "entry_step_id": "seleccion_tipo_limpieza",
+      "metadata": {
+        "version": "1.0.0",
+        "created_at": "2025-12-17",
+        "author": "AuriPortal System",
+        "handlers_required": [
+          "selection_handler_v1",
+          "practice_timer_handler_v1",
+          "limpieza_energetica_handler"
+        ]
+      },
+      "steps": {
+        "seleccion_tipo_limpieza": {
+          "screen_template_id": "screen_choice",
+          "step_type": "decision",
+          "props": {
+            "title": "Limpieza Energética Diaria",
+            "subtitle": "Elige el tipo de limpieza que mejor se adapte a tu tiempo y necesidades de hoy",
+            "question": "¿Qué tipo de limpieza quieres hacer hoy?",
+            "choices": [
+              {
+                "choice_id": "rapida",
+                "label": "🌀 Limpieza Rápida",
+                "description": "5-10 minutos. Ideal para días ocupados o cuando necesitas una limpieza express.",
+                "estimated_minutes": 5,
+                "tags": ["quick", "express"]
+              },
+              {
+                "choice_id": "basica",
+                "label": "✨ Limpieza Básica",
+                "description": "15-20 minutos. La práctica diaria recomendada para mantener tu campo energético limpio.",
+                "estimated_minutes": 15,
+                "tags": ["recommended", "daily"]
+              },
+              {
+                "choice_id": "profunda",
+                "label": "🔮 Limpieza Profunda",
+                "description": "30-45 minutos. Para cuando tienes más tiempo o sientes la necesidad de una limpieza más intensa.",
+                "estimated_minutes": 30,
+                "tags": ["deep", "intensive"]
+              },
+              {
+                "choice_id": "maestro",
+                "label": "👑 Limpieza Maestro",
+                "description": "60+ minutos. Sesión completa de sanación para días especiales o cuando necesitas un reset total.",
+                "estimated_minutes": 60,
+                "tags": ["master", "complete"]
+              }
+            ]
+          },
+          "capture": {
+            "tipo_limpieza": "choice_id"
+          }
+        },
+
+        "preparacion_seleccion": {
+          "screen_template_id": "screen_toggle_resources",
+          "step_type": "selection",
+          "props": {
+            "title": "Preparación para la Práctica",
+            "subtitle": "Selecciona las prácticas preparatorias que deseas realizar antes de la limpieza",
+            "selection_source": "preparacion",
+            "resources": []
+          }
+        },
+
+        "preparacion_practica": {
+          "screen_template_id": "screen_practice_timer",
+          "step_type": "practice",
+          "props": {
+            "title": "Prácticas de Preparación",
+            "instructions": "Realiza las prácticas que has seleccionado. El temporizador te guiará.",
+            "duration_seconds": 300,
+            "show_progress": true
+          }
+        },
+
+        "protecciones_energeticas": {
+          "screen_template_id": "screen_toggle_resources",
+          "step_type": "selection",
+          "props": {
+            "title": "Protecciones Energéticas",
+            "subtitle": "Activa las protecciones que desees para tu práctica",
+            "selection_source": "protecciones",
+            "resources": []
+          }
+        },
+
+        "limpieza_energetica": {
+          "screen_template_id": "screen_toggle_resources",
+          "step_type": "practice",
+          "props": {
+            "title": "Limpieza Energética",
+            "subtitle": "Es momento de realizar la transmutación de energías",
+            "instructions": "Marca cada transmutación a medida que la realizas. Usa las técnicas disponibles según tu nivel."
+          },
+          "emit": [
+            {
+              "event_type": "practice_completed",
+              "payload_template": {
+                "recorrido_id": "{{recorrido_id}}",
+                "step_id": "limpieza_energetica",
+                "user_id": "{{user_id}}",
+                "mode_id": "{{state.tipo_limpieza}}"
+              }
+            }
+          ]
+        },
+
+        "transicion_racha": {
+          "screen_template_id": "screen_text",
+          "step_type": "experience",
+          "props": {
+            "title": "¡Limpieza Completada! 🎉",
+            "subtitle": "Tu racha sigue creciendo",
+            "body": "Has completado tu limpieza energética del día.\n\nCada día que practicas, fortaleces tu conexión con tu esencia y elevas tu vibración.\n\n¡Sigue así!"
+          }
+        },
+
+        "post_limpieza_seleccion": {
+          "screen_template_id": "screen_toggle_resources",
+          "step_type": "selection",
+          "props": {
+            "title": "Prácticas de Integración",
+            "subtitle": "Selecciona las prácticas de cierre que deseas realizar",
+            "selection_source": "post_limpieza",
+            "resources": []
+          }
+        },
+
+        "post_limpieza_practica": {
+          "screen_template_id": "screen_practice_timer",
+          "step_type": "practice",
+          "props": {
+            "title": "Prácticas de Integración",
+            "instructions": "Realiza las prácticas de cierre para sellar los beneficios de tu limpieza.",
+            "duration_seconds": 180,
+            "show_progress": true
+          }
+        },
+
+        "cierre": {
+          "screen_template_id": "screen_outro_summary",
+          "step_type": "closure",
+          "props": {
+            "title": "¡Felicidades! 🌟",
+            "summary_text": "Has completado tu Limpieza Energética Diaria.\n\nRecuerda que esta práctica diaria te ayuda a mantener tu campo energético limpio, tu vibración elevada y tu conexión con tu esencia fortalecida.\n\n¡Nos vemos mañana!",
+            "show_completion_badge": true,
+            "next_action_text": "Volver al inicio"
+          },
+          "emit": [
+            {
+              "event_type": "recorrido_completed",
+              "payload_template": {
+                "recorrido_id": "{{recorrido_id}}",
+                "user_id": "{{user_id}}",
+                "tipo_limpieza": "{{state.tipo_limpieza}}"
+              }
+            }
+          ]
+        }
+      },
+
+      "edges": [
+        {
+          "from_step_id": "seleccion_tipo_limpieza",
+          "to_step_id": "preparacion_seleccion",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "preparacion_seleccion",
+          "to_step_id": "preparacion_practica",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "preparacion_practica",
+          "to_step_id": "protecciones_energeticas",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "protecciones_energeticas",
+          "to_step_id": "limpieza_energetica",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "limpieza_energetica",
+          "to_step_id": "transicion_racha",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "transicion_racha",
+          "to_step_id": "post_limpieza_seleccion",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "post_limpieza_seleccion",
+          "to_step_id": "post_limpieza_practica",
+          "condition": { "type": "always" }
+        },
+        {
+          "from_step_id": "post_limpieza_practica",
+          "to_step_id": "cierre",
+          "condition": { "type": "always" }
+        }
+      ]
+    }
+  },
+  "published_versions": [],
+  "exported_at": "2025-12-17T00:00:00.000Z"
+}
+
+
+
