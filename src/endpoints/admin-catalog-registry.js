@@ -15,7 +15,9 @@ function replace(html, placeholders) {
   let output = html;
   for (const key in placeholders) {
     const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
+    // Escapar caracteres especiales de regex en key para evitar errores
+    const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`{{${escapedKey}}}`, "g");
     output = output.replace(regex, value);
   }
   return output;

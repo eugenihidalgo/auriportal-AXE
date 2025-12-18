@@ -829,16 +829,18 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       }
     ];
 
-    // Estado del tema (draft)
-    let themeDraft = {
-      name: "",
-      values: {},
-      themeId: null // ID del tema (se genera desde el nombre o se obtiene del servidor)
+    // ============================================
+    // ESTADO CANÓNICO - Fuente única de verdad
+    // ============================================
+    window.themeState = {
+      meta: {
+        name: "",
+        themeId: null,
+        dirty: false,
+        publishedVersion: null
+      },
+      tokens: {}
     };
-    
-    // Estado de publicación
-    let publishedVersion = null; // Versión publicada actual
-    let hasUnpublishedChanges = false; // Si hay cambios sin publicar
 
     // Valores por defecto (desde theme-defaults si es necesario)
     const DEFAULT_VALUES = {
@@ -900,8 +902,163 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       }
     }
 
-    // FASE 5: Carga inicial de tokens (draft o published)
-    async function loadDraft() {
+    // ============================================
+    // API DE MUTACIÓN (OBLIGATORIA)
+    // ============================================
+    
+    /**
+     * FASE 2: API de mutación - setToken
+     * Modifica un token individual y propaga cambios
+     */
+    function setToken(key, value) {
+      window.themeState.tokens[key] = value;
+      window.themeState.meta.dirty = true;
+      propagateThemeChange();
+    }
+
+    /**
+     * FASE 2: API de mutación - applyPresetTokens
+     * Aplica un preset completo y propaga cambios
+     */
+    function applyPresetTokens(presetTokens) {
+      window.themeState.tokens = { ...presetTokens };
+      window.themeState.meta.dirty = true;
+      
+      // Actualizar pickr instances existentes (más eficiente que re-renderizar)
+      [...PALETA_PRINCIPAL, ...PALETA_SUPERFICIES].forEach(item => {
+        const token = item.token;
+        const newColor = presetTokens[token];
+        if (newColor && pickrInstances[token]) {
+          pickrInstances[token].setColor(newColor);
+          const trigger = document.getElementById(\`trigger-\${token}\`);
+          if (trigger) {
+            const colorDisplay = trigger.querySelector('.color-display');
+            if (colorDisplay) {
+              colorDisplay.style.backgroundColor = newColor;
+            }
+          }
+        }
+      });
+      
+      // Actualizar sliders de sombra
+      PALETA_SOMBRAS.forEach(item => {
+        const token = item.token;
+        const newShadow = presetTokens[token];
+        if (newShadow) {
+          const shadowType = token === '--shadow-sm' ? 'sm' : 'md';
+          const intensity = shadowToIntensity(newShadow, shadowType);
+          
+          const slider = document.getElementById(\`slider-\${token}\`);
+          if (slider) {
+            slider.value = intensity;
+            const intensityDisplay = document.getElementById(\`intensity-\${token}\`);
+            if (intensityDisplay) {
+              intensityDisplay.textContent = \`\${intensity}%\`;
+            }
+            
+            const previewBox = document.getElementById(\`preview-\${token}\`);
+            if (previewBox) {
+              const previewShadow = shadowType === 'sm' 
+                ? \`0 2px 6px \${newShadow}\`
+                : \`0 4px 12px \${newShadow}\`;
+              previewBox.style.boxShadow = previewShadow;
+            }
+            
+            const cssDisplay = document.getElementById(\`css-\${token}\`);
+            if (cssDisplay) {
+              cssDisplay.textContent = newShadow;
+            }
+          }
+        }
+      });
+      
+      // Propagar cambios (envía postMessage y actualiza UI)
+      propagateThemeChange();
+    }
+
+    /**
+     * FASE 2: API de mutación - loadDraft
+     * Carga tokens desde servidor/localStorage y propaga cambios
+     */
+    function loadDraft(tokens) {
+      window.themeState.tokens = { ...tokens };
+      window.themeState.meta.dirty = false;
+      propagateThemeChange();
+      // Re-renderizar controles desde themeState
+      renderAllControls();
+    }
+
+    /**
+     * FASE 3: PROPAGACIÓN ÚNICA
+     * Regenera CSS, envía postMessage al preview y actualiza UI
+     */
+    function propagateThemeChange() {
+      // 1. Regenerar CSS desde themeState.tokens (si es necesario)
+      // Por ahora, los tokens se aplican directamente vía postMessage
+      
+      // 2. Enviar postMessage al preview
+      sendTokensToPreview();
+      
+      // 3. Actualizar UI (badges, botones, etc.)
+      updateUIFromState();
+    }
+
+    /**
+     * Envía tokens al preview vía postMessage
+     */
+    function sendTokensToPreview() {
+      const iframe = document.getElementById('themePreviewFrame');
+      if (!iframe || !iframe.contentWindow) return;
+      
+      try {
+        iframe.contentWindow.postMessage({
+          type: 'AP_THEME_TOKENS',
+          tokens: window.themeState.tokens
+        }, window.location.origin);
+        
+        console.log('[ThemeStudio] Tokens sent to preview:', Object.keys(window.themeState.tokens).length, 'tokens');
+      } catch (e) {
+        console.warn('[ThemeStudio] Error enviando tokens al preview:', e);
+      }
+    }
+
+    /**
+     * Actualiza UI desde themeState (badges, botones, etc.)
+     */
+    function updateUIFromState() {
+      // Actualizar nombre en input si existe
+      const nameInput = document.getElementById('themeNameInput');
+      if (nameInput && window.themeState.meta.name) {
+        nameInput.value = window.themeState.meta.name;
+      }
+      
+      // Actualizar estado del botón publicar
+      updatePublishButtonState();
+      
+      // Actualizar badge de publicado
+      const badge = document.getElementById('publishedBadge');
+      if (badge && window.themeState.meta.publishedVersion) {
+        badge.style.display = 'inline-flex';
+        badge.textContent = \`✓ Publicado (v\${window.themeState.meta.publishedVersion})\`;
+      }
+    }
+
+    /**
+     * FASE 1: Carga inicial de tokens (draft o published)
+     * Carga desde servidor/localStorage y hidrata themeState
+     */
+    async function initializeThemeState() {
+      // Inicializar themeState vacío
+      window.themeState = {
+        meta: {
+          name: "",
+          themeId: null,
+          dirty: false,
+          publishedVersion: null
+        },
+        tokens: {}
+      };
+
       // Intentar cargar desde servidor primero
       try {
         const response = await fetch('/admin/themes/draft', {
@@ -914,12 +1071,13 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         if (response.ok) {
           const data = await response.json();
           if (data.draft && data.draft.values) {
-            themeDraft = {
-              name: data.draft.name || "",
-              values: { ...data.draft.values }
-            };
-            if (themeDraft.name) {
-              document.getElementById('themeNameInput').value = themeDraft.name;
+            // Hidratar themeState con tokens del servidor
+            window.themeState.meta.name = data.draft.name || "";
+            window.themeState.meta.themeId = data.draft.themeId || null;
+            window.themeState.tokens = { ...data.draft.values };
+            
+            if (window.themeState.meta.name) {
+              document.getElementById('themeNameInput').value = window.themeState.meta.name;
             }
           }
         }
@@ -928,15 +1086,18 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       }
       
       // Fallback: cargar desde localStorage
-      if (!themeDraft.values || Object.keys(themeDraft.values).length === 0) {
+      if (!window.themeState.tokens || Object.keys(window.themeState.tokens).length === 0) {
         const saved = localStorage.getItem('themeStudioDraft');
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
             if (parsed.values) {
-              themeDraft = parsed;
-              if (themeDraft.name) {
-                document.getElementById('themeNameInput').value = themeDraft.name;
+              window.themeState.meta.name = parsed.name || "";
+              window.themeState.meta.themeId = parsed.themeId || null;
+              window.themeState.tokens = { ...parsed.values };
+              
+              if (window.themeState.meta.name) {
+                document.getElementById('themeNameInput').value = window.themeState.meta.name;
               }
             }
           } catch (e) {
@@ -947,24 +1108,31 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       
       // Inicializar valores faltantes con defaults
       [...PALETA_PRINCIPAL, ...PALETA_SUPERFICIES, ...PALETA_SOMBRAS].forEach(item => {
-        if (!themeDraft.values[item.token]) {
+        if (!window.themeState.tokens[item.token]) {
           if (item.type === 'shadow') {
-            themeDraft.values[item.token] = item.default || DEFAULT_VALUES[item.token] || "rgba(0,0,0,0.12)";
+            window.themeState.tokens[item.token] = item.default || DEFAULT_VALUES[item.token] || "rgba(0,0,0,0.12)";
           } else {
-            themeDraft.values[item.token] = DEFAULT_VALUES[item.token] || "#000000";
+            window.themeState.tokens[item.token] = DEFAULT_VALUES[item.token] || "#000000";
           }
         }
       });
+      
+      // Renderizar TODOS los controles desde themeState
+      renderAllControls();
     }
 
-    // Guardar draft en localStorage
-    function saveDraft() {
-      themeDraft.name = document.getElementById('themeNameInput').value || "";
-      localStorage.setItem('themeStudioDraft', JSON.stringify(themeDraft));
-      console.log('Draft guardado:', themeDraft);
+    /**
+     * Re-renderiza todos los controles desde themeState
+     */
+    function renderAllControls() {
+      renderPaletteTokens();
+      renderSuperficiesTokens();
+      renderShadowTokens();
     }
 
     // Renderizar tokens de la paleta
+    // ❌ No leer valores desde inputs
+    // ✅ Los inputs se pintan DESDE themeState
     function renderPaletteTokens() {
       const container = document.getElementById('paletteTokens');
       container.innerHTML = '';
@@ -972,7 +1140,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       PALETA_PRINCIPAL.forEach(item => {
         const tokenEl = document.createElement('div');
         tokenEl.className = 'color-token';
-        const currentColor = themeDraft.values[item.token] || DEFAULT_VALUES[item.token];
+        // Leer desde themeState, no desde inputs
+        const currentColor = window.themeState.tokens[item.token] || DEFAULT_VALUES[item.token];
         tokenEl.innerHTML = \`
           <div class="color-token-label">
             <span class="color-token-name">\${item.label}</span>
@@ -999,6 +1168,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     }
 
     // Renderizar tokens de superficies
+    // ❌ No leer valores desde inputs
+    // ✅ Los inputs se pintan DESDE themeState
     function renderSuperficiesTokens() {
       const container = document.getElementById('superficiesTokens');
       if (!container) return;
@@ -1008,7 +1179,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       PALETA_SUPERFICIES.forEach(item => {
         const tokenEl = document.createElement('div');
         tokenEl.className = 'color-token';
-        const currentColor = themeDraft.values[item.token] || DEFAULT_VALUES[item.token];
+        // Leer desde themeState, no desde inputs
+        const currentColor = window.themeState.tokens[item.token] || DEFAULT_VALUES[item.token];
         tokenEl.innerHTML = \`
           <div class="color-token-label">
             <span class="color-token-name">\${item.label}</span>
@@ -1035,6 +1207,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     }
 
     // Renderizar tokens de sombras (FASE 4: UI de controles con sliders)
+    // ❌ No leer valores desde inputs
+    // ✅ Los inputs se pintan DESDE themeState
     function renderShadowTokens() {
       const container = document.getElementById('sombrasTokens');
       if (!container) return;
@@ -1045,8 +1219,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         const tokenEl = document.createElement('div');
         tokenEl.className = 'shadow-token';
         
-        // Obtener valor actual o usar default
-        const currentShadow = themeDraft.values[item.token] || item.default;
+        // Obtener valor actual desde themeState o usar default
+        const currentShadow = window.themeState.tokens[item.token] || item.default;
         
         // Convertir sombra a intensidad para el slider
         const shadowType = item.token === '--shadow-sm' ? 'sm' : 'md';
@@ -1103,10 +1277,11 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
           const intensity = parseInt(e.target.value);
           const shadowValue = generateShadow(intensity, shadowType);
           
-          // Actualizar valor en themeDraft
-          themeDraft.values[item.token] = shadowValue;
+          // ❌ No modificar tokens directamente
+          // ✅ Usar API de mutación
+          setToken(item.token, shadowValue);
           
-          // Actualizar UI
+          // Actualizar UI local del slider
           const intensityDisplay = document.getElementById(\`intensity-\${item.token}\`);
           if (intensityDisplay) {
             intensityDisplay.textContent = \`\${intensity}%\`;
@@ -1125,32 +1300,11 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
           if (cssDisplay) {
             cssDisplay.textContent = shadowValue;
           }
-          
-          // Actualizar preview con debounce
-          debouncedUpdatePreview();
-        });
-        
-        // Guardar draft cuando se suelta el slider
-        slider.addEventListener('change', () => {
-          saveDraft();
-          updatePublishButtonState();
         });
       });
     }
 
-    // Debounce para updatePreview
-    let previewDebounceTimer = null;
-    function debouncedUpdatePreview() {
-      if (previewDebounceTimer) {
-        clearTimeout(previewDebounceTimer);
-      }
-      previewDebounceTimer = setTimeout(() => {
-        updatePreview();
-        // Actualizar estado del botón publicar cuando cambian los valores
-        hasUnpublishedChanges = true;
-        updatePublishButtonState();
-      }, 120); // 120ms de debounce
-    }
+    // Debounce eliminado - propagateThemeChange ya maneja todo
 
     // Inicializar color pickers con Pickr (FASE 2: Color picker PRO con mouse + alpha)
     const pickrInstances = {};
@@ -1159,7 +1313,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       // Inicializar pickers de Paleta Principal
       PALETA_PRINCIPAL.forEach(item => {
         const token = item.token;
-        const currentColor = themeDraft.values[token] || DEFAULT_VALUES[token];
+        // Leer desde themeState, no desde themeDraft
+        const currentColor = window.themeState.tokens[token] || DEFAULT_VALUES[token];
         const trigger = document.getElementById(\`trigger-\${token}\`);
         
         if (!trigger || pickrInstances[token]) return; // Evitar duplicados
@@ -1193,29 +1348,24 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         // Actualizar color cuando cambia
         pickr.on('change', (color) => {
           const hexColor = color.toHEXA().toString();
-          themeDraft.values[token] = hexColor;
+          
+          // ❌ No modificar tokens directamente
+          // ✅ Usar API de mutación
+          setToken(token, hexColor);
           
           // Actualizar display
           const colorDisplay = trigger.querySelector('.color-display');
           if (colorDisplay) {
             colorDisplay.style.backgroundColor = hexColor;
           }
-          
-          // Actualizar preview con debounce
-          debouncedUpdatePreview();
-        });
-        
-        // También actualizar en cada movimiento (para live preview)
-        pickr.on('changestop', () => {
-          // Guardar draft automáticamente en localStorage
-          saveDraft();
         });
       });
 
       // Inicializar pickers de Paleta Superficies
       PALETA_SUPERFICIES.forEach(item => {
         const token = item.token;
-        const currentColor = themeDraft.values[token] || DEFAULT_VALUES[token];
+        // Leer desde themeState, no desde themeDraft
+        const currentColor = window.themeState.tokens[token] || DEFAULT_VALUES[token];
         const trigger = document.getElementById(\`trigger-\${token}\`);
         
         if (!trigger || pickrInstances[token]) return; // Evitar duplicados
@@ -1249,55 +1399,33 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         // Actualizar color cuando cambia
         pickr.on('change', (color) => {
           const hexColor = color.toHEXA().toString();
-          themeDraft.values[token] = hexColor;
+          
+          // ❌ No modificar tokens directamente
+          // ✅ Usar API de mutación
+          setToken(token, hexColor);
           
           // Actualizar display
           const colorDisplay = trigger.querySelector('.color-display');
           if (colorDisplay) {
             colorDisplay.style.backgroundColor = hexColor;
           }
-          
-          // Actualizar preview con debounce
-          debouncedUpdatePreview();
-          // Actualizar estado del botón publicar
-          updatePublishButtonState();
-        });
-        
-        // También actualizar en cada movimiento (para live preview)
-        pickr.on('changestop', () => {
-          // Guardar draft automáticamente en localStorage
-          saveDraft();
         });
       });
     }
 
-    // Actualizar preview en tiempo real (FASE 4: Live Preview con debounce)
-    function updatePreview() {
-      sendTokensToPreview();
-    }
-    
-    function sendTokensToPreview() {
-      const iframe = document.getElementById('themePreviewFrame');
-      if (!iframe || !iframe.contentWindow) return;
-      
-      try {
-        // Enviar tokens vía postMessage
-        iframe.contentWindow.postMessage({
-          type: 'AP_THEME_TOKENS',
-          tokens: themeDraft.values
-        }, window.location.origin);
-        
-        // FASE 4: Log temporal para debug
-        console.log('[ThemeStudio] Tokens sent to preview:', Object.keys(themeDraft.values).length, 'tokens');
-      } catch (e) {
-        // Ignorar errores de cross-origin (no debería pasar, pero por seguridad)
-        console.warn('[ThemeStudio] Error enviando tokens al preview:', e);
-      }
-    }
+    // sendTokensToPreview ya está en propagateThemeChange
 
-    // FASE 6: Guardar Draft (sin publish)
+    // FASE 5: Guardar Draft (sin publish)
+    // ❌ No reconstruir tokens desde inputs
+    // ✅ Enviar themeState.tokens al backend
     async function saveDraftToServer() {
-      saveDraft(); // Guardar en localStorage también
+      // Guardar en localStorage también
+      const draftToSave = {
+        name: window.themeState.meta.name,
+        themeId: window.themeState.meta.themeId,
+        values: window.themeState.tokens
+      };
+      localStorage.setItem('themeStudioDraft', JSON.stringify(draftToSave));
       
       try {
         const response = await fetch('/admin/themes/draft', {
@@ -1305,12 +1433,16 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(themeDraft)
+          body: JSON.stringify(draftToSave)
         });
         
         if (response.ok) {
           const data = await response.json();
           console.log('Draft guardado en servidor:', data);
+          
+          // Si éxito: themeState.meta.dirty = false
+          window.themeState.meta.dirty = false;
+          
           // Mostrar feedback visual
           const btn = document.getElementById('saveDraftBtn');
           const originalText = btn.textContent;
@@ -1368,7 +1500,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       const missing = [];
       
       requiredTokens.forEach(token => {
-        if (!themeDraft.values[token] || themeDraft.values[token].trim() === '') {
+        if (!window.themeState.tokens[token] || window.themeState.tokens[token].trim() === '') {
           missing.push(token);
         }
       });
@@ -1402,11 +1534,11 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     }
 
     /**
-     * Construye definition_json desde themeDraft
+     * Construye definition_json desde themeState
      * Formato esperado por el endpoint de publish
      */
     function buildDefinitionJson() {
-      const themeId = themeDraft.themeId || generateThemeId(themeDraft.name);
+      const themeId = window.themeState.meta.themeId || generateThemeId(window.themeState.meta.name);
       
       if (!themeId) {
         throw new Error('No se puede generar un ID de tema. Por favor, ingresa un nombre válido.');
@@ -1414,8 +1546,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       
       return {
         id: themeId,
-        name: themeDraft.name || themeId,
-        tokens: themeDraft.values,
+        name: window.themeState.meta.name || themeId,
+        tokens: window.themeState.tokens,
         meta: {
           created_at: new Date().toISOString(),
           created_by: 'theme-studio'
@@ -1436,7 +1568,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       }
       
       // Validar que haya un nombre
-      if (!themeDraft.name || themeDraft.name.trim() === '') {
+      if (!window.themeState.meta.name || window.themeState.meta.name.trim() === '') {
         alert('Por favor, ingresa un nombre para el tema antes de publicar.');
         return;
       }
@@ -1559,8 +1691,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         const data = await response.json();
         
         // FASE 4: Feedback UX - Mostrar éxito
-        publishedVersion = data.version.version;
-        hasUnpublishedChanges = false;
+        window.themeState.meta.publishedVersion = data.version.version;
+        window.themeState.meta.dirty = false;
         
         // Cerrar modal
         closePublishModal();
@@ -1571,16 +1703,8 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         // Actualizar estado del botón
         updatePublishButtonState();
         
-        // Mostrar badge "Publicado"
-        const badge = document.getElementById('publishedBadge');
-        if (badge) {
-          badge.style.display = 'inline-flex';
-          badge.textContent = \`✓ Publicado (v\${data.version.version})\`;
-        }
-        
-        // Guardar themeId en el draft para futuras referencias
-        themeDraft.themeId = themeId;
-        saveDraft();
+        // Actualizar UI desde state
+        updateUIFromState();
         
       } catch (error) {
         console.error('Error publicando tema:', error);
@@ -1617,18 +1741,15 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
      * y detecta cambios para habilitar/deshabilitar
      */
     function setupPublishButtonState() {
-      // Detectar cambios en valores
-      const originalValues = JSON.stringify(themeDraft.values);
-      
       // Observar cambios en el nombre
       document.getElementById('themeNameInput').addEventListener('input', () => {
-        themeDraft.name = document.getElementById('themeNameInput').value;
-        hasUnpublishedChanges = true;
+        window.themeState.meta.name = document.getElementById('themeNameInput').value;
+        window.themeState.meta.dirty = true;
         updatePublishButtonState();
       });
       
-      // Observar cambios en valores (se hace en los event listeners de pickr y sliders)
-      // Se actualiza en updatePublishButtonState()
+      // Observar cambios en valores (se hace automáticamente vía setToken)
+      // Se actualiza en propagateThemeChange -> updateUIFromState
       
       // Actualizar estado inicial
       updatePublishButtonState();
@@ -1641,7 +1762,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     function updatePublishButtonState() {
       const publishBtn = document.getElementById('publishBtn');
       const validation = validateMinimumTokens();
-      const hasName = themeDraft.name && themeDraft.name.trim() !== '';
+      const hasName = window.themeState.meta.name && window.themeState.meta.name.trim() !== '';
       
       if (validation.valid && hasName) {
         publishBtn.disabled = false;
@@ -1655,8 +1776,10 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     // ============================================
 
     /**
-     * Aplica un preset al editor
-     * Reemplaza tokens, actualiza controles y preview
+     * FASE 6: Aplica un preset al editor
+     * ❌ No tocar inputs directamente
+     * ✅ Llamar SOLO a applyPresetTokens(preset.tokens)
+     * ✅ inputs se re-renderizan desde themeState
      */
     function applyPreset(presetId) {
       const preset = THEME_PRESETS.find(p => p.id === presetId);
@@ -1665,68 +1788,12 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
         return;
       }
 
-      // Reemplazar tokens en themeDraft
-      Object.keys(preset.tokens).forEach(token => {
-        themeDraft.values[token] = preset.tokens[token];
-      });
+      // Llamar SOLO a applyPresetTokens(preset.tokens)
+      // Esta función ya propaga cambios y re-renderiza controles
+      applyPresetTokens(preset.tokens);
 
-      // Actualizar controles de color (Pickr)
-      [...PALETA_PRINCIPAL, ...PALETA_SUPERFICIES].forEach(item => {
-        const token = item.token;
-        const newColor = preset.tokens[token];
-        if (newColor && pickrInstances[token]) {
-          pickrInstances[token].setColor(newColor);
-          const trigger = document.getElementById(\`trigger-\${token}\`);
-          if (trigger) {
-            const colorDisplay = trigger.querySelector('.color-display');
-            if (colorDisplay) {
-              colorDisplay.style.backgroundColor = newColor;
-            }
-          }
-        }
-      });
-
-      // Actualizar controles de sombra
-      PALETA_SOMBRAS.forEach(item => {
-        const token = item.token;
-        const newShadow = preset.tokens[token];
-        if (newShadow) {
-          const shadowType = token === '--shadow-sm' ? 'sm' : 'md';
-          const intensity = shadowToIntensity(newShadow, shadowType);
-          
-          const slider = document.getElementById(\`slider-\${token}\`);
-          if (slider) {
-            slider.value = intensity;
-            const intensityDisplay = document.getElementById(\`intensity-\${token}\`);
-            if (intensityDisplay) {
-              intensityDisplay.textContent = \`\${intensity}%\`;
-            }
-            
-            const previewBox = document.getElementById(\`preview-\${token}\`);
-            if (previewBox) {
-              const previewShadow = shadowType === 'sm' 
-                ? \`0 2px 6px \${newShadow}\`
-                : \`0 4px 12px \${newShadow}\`;
-              previewBox.style.boxShadow = previewShadow;
-            }
-            
-            const cssDisplay = document.getElementById(\`css-\${token}\`);
-            if (cssDisplay) {
-              cssDisplay.textContent = newShadow;
-            }
-          }
-        }
-      });
-
-      // FASE 4: Log de debug para presets
+      // Log de debug para presets
       console.log('[ThemeStudio] Preset applied:', presetId, preset.label);
-      
-      // Actualizar preview inmediatamente
-      updatePreview();
-
-      // Marcar como no guardado
-      hasUnpublishedChanges = true;
-      updatePublishButtonState();
 
       // Mostrar feedback
       showPresetToast(preset.label);
@@ -1808,16 +1875,14 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
 
     // Inicializar aplicación
     (async function init() {
-      // Cargar draft
-      await loadDraft();
-      
-      // Renderizar tokens
-      renderPaletteTokens();
-      renderSuperficiesTokens(); // Renderizar también superficies (aunque esté colapsada)
-      renderShadowTokens(); // Renderizar también sombras (aunque esté colapsada)
+      // FASE 1: Inicializar themeState (carga draft si existe)
+      await initializeThemeState();
       
       // Guardar draft al cambiar nombre
-      document.getElementById('themeNameInput').addEventListener('input', saveDraft);
+      document.getElementById('themeNameInput').addEventListener('input', () => {
+        window.themeState.meta.name = document.getElementById('themeNameInput').value;
+        window.themeState.meta.dirty = true;
+      });
       
       // Botón guardar draft
       document.getElementById('saveDraftBtn').addEventListener('click', saveDraftToServer);
@@ -1832,18 +1897,19 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       // Inicializar presets
       setupPresets();
       
-      // Inicializar preview cuando el iframe esté listo (FASE 5: Carga inicial)
+      // FASE 4: Inicializar preview cuando el iframe esté listo
+      // El preview SOLO escucha postMessage
       const iframe = document.getElementById('themePreviewFrame');
       iframe.addEventListener('load', () => {
-        // Enviar tokens iniciales al preview
+        // Enviar tokens iniciales al preview vía propagateThemeChange
         setTimeout(() => {
-          sendTokensToPreview();
+          propagateThemeChange();
         }, 150);
       });
       
       // También intentar enviar inmediatamente si el iframe ya está cargado
       setTimeout(() => {
-        sendTokensToPreview();
+        propagateThemeChange();
       }, 300);
     })();
   </script>

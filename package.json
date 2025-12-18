@@ -1,6 +1,6 @@
 {
   "name": "auriportal-server",
-  "version": "5.16.0-theme-studio-presets-v1",
+  "version": "5.18.0-theme-studio-state-canonical",
   "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
   "main": "server.js",
   "type": "module",

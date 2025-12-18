@@ -66,7 +66,9 @@ function resolveTemplate(template, context) {
   // Resolver {{state.xxx}}
   if (context.state) {
     for (const [key, value] of Object.entries(context.state)) {
-      const regex = new RegExp(`\\{\\{state\\.${key}\\}\\}`, 'g');
+      // Escapar caracteres especiales de regex en key para evitar errores
+      const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\{\\{state\\.${escapedKey}\\}\\}`, 'g');
       resolved = resolved.replace(regex, String(value));
     }
   }

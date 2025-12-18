@@ -273,8 +273,8 @@ export async function renderPreviewTheme(request, env) {
         // Actualizar contenido del style tag (solo vía textContent, nunca innerHTML)
         styleTag.textContent = cssText;
         
-        // Log temporal para debug (FASE 4)
-        console.log('[ThemePreview] Tokens received and applied');
+        // FASE 4: Log obligatorio
+        console.log('[ThemePreview] Applied tokens from themeState');
       } catch (error) {
         // NUNCA lanzar excepción - solo loggear y continuar
         console.warn('[ThemePreview] Error procesando postMessage:', error);

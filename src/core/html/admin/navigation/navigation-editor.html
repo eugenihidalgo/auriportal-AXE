@@ -77,8 +77,8 @@
       <!-- Vista MAPA (default) - CON MOTOR VISUAL AXE -->
       <div id="vista-mapa" class="vista-container flex-1 flex">
         <!-- Columna izquierda: Canvas visual (MOTOR AXE) -->
-        <div class="flex-1 bg-slate-900 p-6" style="display: flex; flex-direction: column; min-width: 0;">
-          <div class="bg-slate-800 rounded-lg p-4 mb-4">
+        <div class="flex-1 bg-slate-900 p-6" style="display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;">
+          <div class="bg-slate-800 rounded-lg p-4 mb-4" style="flex-shrink: 0;">
             <div class="flex justify-between items-center mb-2">
               <h4 class="text-white font-semibold">Editor Visual (Motor AXE)</h4>
               <div class="flex gap-2">
@@ -103,7 +103,7 @@
             <div 
               id="canvas-visual-container-nav" 
               class="relative bg-slate-900 rounded border border-slate-700 overflow-hidden"
-              style="width: 100%; height: calc(100vh - 450px); min-height: 600px; cursor: grab;"
+              style="flex: 1; position: relative; overflow: hidden; min-height: 400px; width: 100%; cursor: grab;"
               onmousedown="handleCanvasMouseDownNav(event)"
               onmousemove="handleCanvasMouseMoveNav(event)"
               onmouseup="handleCanvasMouseUpNav(event)"
@@ -334,13 +334,82 @@
   .editor-body {
     flex: 1;
     display: flex;
+    flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    position: relative;
   }
   
   .editor-body > div {
     height: 100%;
     min-height: 0;
+  }
+  
+  /* FIX CRÍTICO: Asegurar que el contenedor del canvas tenga altura efectiva */
+  #vista-mapa {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    height: 100%;
+  }
+  
+  #vista-mapa > div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  
+  #canvas-visual-container-nav {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 400px;
+    width: 100%;
+    background: #020617;
+  }
+  
+  /* ============================================================================
+   * ESTILOS BASE PARA MOTOR AXE - CONTRASTE MÍNIMO
+   * ============================================================================
+   */
+  
+  /* Nodos del canvas AXE */
+  .axe-node {
+    fill: #0f172a;
+    stroke: #38bdf8;
+    stroke-width: 2;
+  }
+  
+  .axe-node rect {
+    fill: #0f172a;
+    stroke: #38bdf8;
+    stroke-width: 2;
+  }
+  
+  /* Edges del canvas AXE */
+  .axe-edge {
+    stroke: #38bdf8;
+    stroke-width: 2;
+  }
+  
+  .axe-edge path {
+    stroke: #38bdf8;
+    stroke-width: 2;
+  }
+  
+  /* Asegurar que el SVG sea visible */
+  #canvas-edges-svg-nav {
+    background: transparent;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  /* Contenedor de nodos debe estar por encima del SVG */
+  #canvas-nodes-container-nav {
+    z-index: 10;
+    position: relative;
   }
   
   @media (max-width: 1024px) {
@@ -1347,12 +1416,65 @@
       return;
     }
     
+    // 🔥 FIX DEFINITIVO: Obtener contenedor explícito
+    const container = document.getElementById('canvas-visual-container-nav');
+    
+    if (!container) {
+      console.error('[AXE][NAV_EDITOR] container no encontrado');
+      return;
+    }
+    
+    // Verificar tamaño del contenedor
+    const width = container.offsetWidth;
+    const height = container.offsetHeight;
+    console.log('[AXE][NAV_EDITOR] container size:', width, height);
+    
+    if (width === 0 || height === 0) {
+      console.warn('[AXE][NAV_EDITOR] WARNING: container tiene tamaño 0, esperando resize...');
+      setTimeout(() => renderNodesMap(), 100);
+      return;
+    }
+    
     // Convertir NavigationDefinition → CanvasDefinition
     const canvas = navigationDefinitionToCanvas(editorState.definition);
     console.log('[NavigationEditor] renderNodesMap - canvas convertido:', canvas);
+    console.log('[AXE][NAV_EDITOR] nodes:', canvas.nodes?.length, 'edges:', canvas.edges?.length);
     
-    // Renderizar canvas visual
-    renderCanvasViewerNav(canvas);
+    // Opciones del motor AXE
+    const axeOptions = {
+      panX: window.canvasVisualStateNav?.panX || 0,
+      panY: window.canvasVisualStateNav?.panY || 0,
+      zoom: window.canvasVisualStateNav?.zoom || 1,
+      snappingEnabled: window.canvasVisualStateNav?.snappingEnabled || false,
+      snapGrid: window.canvasVisualStateNav?.snapGrid || 20
+    };
+    
+    // 🔥 CRÍTICO: Pasar contenedor explícito al motor AXE
+    axeRender({
+      container, // 🔥 CRÍTICO: contenedor explícito
+      nodes: canvas.nodes || [],
+      edges: canvas.edges || [],
+      options: axeOptions
+    });
+    
+    // Verificar que el SVG se insertó correctamente
+    setTimeout(() => {
+      const svgCount = container.querySelectorAll('svg').length;
+      console.log('[AXE][NAV_EDITOR] svg children:', svgCount);
+      
+      if (svgCount === 0) {
+        console.error('[AXE][NAV_EDITOR] ERROR: No se encontró SVG después del render');
+      } else {
+        // Forzar estilos visibles para debug
+        const svg = container.querySelector('svg');
+        if (svg) {
+          svg.style.background = '#020617';
+          svg.style.border = '2px solid red';
+          svg.style.zIndex = '1';
+          console.log('[AXE][NAV_EDITOR] SVG estilos aplicados para debug');
+        }
+      }
+    }, 50);
     
     // Actualizar panel contextual si hay nodo seleccionado
     const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId;
@@ -2753,11 +2875,130 @@
   }
   
   /**
-   * Renderiza el canvas viewer con motor visual AXE
+   * Motor AXE: Renderiza nodos y edges en el contenedor especificado
+   * @param {Object} params - Parámetros del render
+   * @param {HTMLElement} params.container - Contenedor explícito (REQUERIDO)
+   * @param {Array} params.nodes - Array de nodos
+   * @param {Array} params.edges - Array de edges
+   * @param {Object} params.options - Opciones del motor (pan, zoom, etc.)
+   */
+  function axeRender({ container, nodes, edges, options = {} }) {
+    console.log('[AXE][NAV_EDITOR] axeRender - INICIO');
+    console.log('[AXE][NAV_EDITOR] container:', container?.id);
+    console.log('[AXE][NAV_EDITOR] nodes:', nodes?.length, 'edges:', edges?.length);
+    
+    if (!container) {
+      console.error('[AXE][NAV_EDITOR] ERROR: container es requerido');
+      return;
+    }
+    
+    // Obtener contenedor de nodos dentro del contenedor principal
+    let nodesContainer = container.querySelector('#canvas-nodes-container-nav');
+    if (!nodesContainer) {
+      // Si no existe, crearlo
+      nodesContainer = document.createElement('div');
+      nodesContainer.id = 'canvas-nodes-container-nav';
+      nodesContainer.className = 'absolute inset-0';
+      nodesContainer.style.cssText = 'transform: translate(0px, 0px) scale(1); transform-origin: 0 0;';
+      container.appendChild(nodesContainer);
+      console.log('[AXE][NAV_EDITOR] nodesContainer creado');
+    }
+    
+    // Obtener o crear SVG para edges
+    let svg = container.querySelector('#canvas-edges-svg-nav');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.id = 'canvas-edges-svg-nav';
+      svg.className = 'absolute inset-0 pointer-events-none';
+      svg.style.cssText = 'z-index: 1;';
+      container.insertBefore(svg, nodesContainer);
+      console.log('[AXE][NAV_EDITOR] SVG creado');
+    }
+    
+    // Aplicar transform de pan/zoom al contenedor de nodos
+    const panX = options.panX || 0;
+    const panY = options.panY || 0;
+    const zoom = options.zoom || 1;
+    nodesContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    nodesContainer.style.transformOrigin = '0 0';
+    
+    // Renderizar nodos
+    const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId ?? null;
+    let html = '';
+    
+    for (const node of nodes || []) {
+      const pos = node.position || { x: 0, y: 0 };
+      const isSelected = selectedNodeId === node.id;
+      
+      // Badge de tipo
+      let typeBadge = '';
+      let nodeColor = 'bg-slate-700';
+      if (node.type === 'start' || node.kind === 'system_entry') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-green-600 text-white text-xs rounded">START</span>';
+        nodeColor = 'bg-green-700';
+      } else if (node.type === 'section' || node.kind === 'section') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded">SECTION</span>';
+        nodeColor = 'bg-blue-700';
+      } else if (node.type === 'hub' || node.kind === 'hub') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded">HUB</span>';
+        nodeColor = 'bg-purple-700';
+      }
+      
+      const borderClass = isSelected 
+        ? 'border-2 border-indigo-400 shadow-lg shadow-indigo-500/50' 
+        : 'border border-slate-600';
+      
+      html += `
+        <div 
+          id="node-nav-${node.id}"
+          data-node-id="${node.id}"
+          class="absolute ${nodeColor} ${borderClass} rounded-lg p-3 min-w-[120px] cursor-move select-none axe-node"
+          style="left: ${pos.x}px; top: ${pos.y}px; z-index: 10;"
+          onmousedown="handleNodeMouseDownNav(event, '${node.id}')"
+          onclick="handleNodeClickNav(event, '${node.id}')"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="text-white font-semibold text-sm truncate">${(node.label || node.id).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${typeBadge}
+          </div>
+          <div class="text-slate-300 text-xs">${(node.kind || node.type || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+          ${node.subtitle ? `<div class="text-slate-200 text-xs mt-1 truncate">${(node.subtitle || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    nodesContainer.innerHTML = html;
+    
+    // Renderizar edges después
+    setTimeout(() => {
+      renderCanvasEdgesNav({ nodes, edges }, container);
+    }, 0);
+    
+    console.log('[AXE][NAV_EDITOR] axeRender - FIN');
+  }
+  
+  /**
+   * Renderiza el canvas viewer con motor visual AXE (LEGACY - usa axeRender internamente)
    */
   function renderCanvasViewerNav(canvas) {
-    const container = document.getElementById('canvas-nodes-container-nav');
+    const container = document.getElementById('canvas-visual-container-nav');
     if (!container || !canvas) return;
+    
+    // Usar motor AXE con contenedor explícito
+    const axeOptions = {
+      panX: window.canvasVisualStateNav?.panX || 0,
+      panY: window.canvasVisualStateNav?.panY || 0,
+      zoom: window.canvasVisualStateNav?.zoom || 1,
+      snappingEnabled: window.canvasVisualStateNav?.snappingEnabled || false,
+      snapGrid: window.canvasVisualStateNav?.snapGrid || 20
+    };
+    
+    axeRender({
+      container,
+      nodes: canvas.nodes || [],
+      edges: canvas.edges || [],
+      options: axeOptions
+    });
     
     const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId ?? null;
     
@@ -2816,14 +3057,51 @@
   /**
    * Renderiza edges como líneas SVG
    */
-  function renderCanvasEdgesNav(canvas) {
-    const svg = document.getElementById('canvas-edges-svg-nav');
-    if (!svg || !canvas) return;
+  function renderCanvasEdgesNav(canvas, container = null) {
+    // Si no se pasa contenedor, buscarlo
+    if (!container) {
+      container = document.getElementById('canvas-visual-container-nav');
+    }
+    
+    if (!container) {
+      console.error('[AXE][NAV_EDITOR] renderCanvasEdgesNav: container no encontrado');
+      return;
+    }
+    
+    // Obtener SVG del contenedor
+    let svg = container.querySelector('#canvas-edges-svg-nav');
+    if (!svg) {
+      console.warn('[AXE][NAV_EDITOR] renderCanvasEdgesNav: SVG no encontrado, creando...');
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.id = 'canvas-edges-svg-nav';
+      svg.className = 'absolute inset-0 pointer-events-none';
+      svg.style.cssText = 'z-index: 1;';
+      container.insertBefore(svg, container.firstChild);
+    }
+    
+    // Extraer nodes y edges del canvas (soporta ambos formatos)
+    let nodes = [];
+    let edges = [];
+    
+    if (canvas) {
+      // Formato nuevo: { nodes: [], edges: [] }
+      if (canvas.nodes && Array.isArray(canvas.nodes)) {
+        nodes = canvas.nodes;
+        edges = canvas.edges || [];
+      }
+      // Formato antiguo: canvas con nodes y edges como propiedades
+      else if (canvas.nodes || canvas.edges) {
+        nodes = canvas.nodes || [];
+        edges = canvas.edges || [];
+      }
+    }
+    
+    if (!canvas || (!nodes.length && !edges.length)) {
+      svg.innerHTML = '';
+      return;
+    }
     
     svg.innerHTML = '';
-    
-    const container = document.getElementById('canvas-visual-container-nav');
-    if (!container) return;
     
     const containerRect = container.getBoundingClientRect();
     svg.setAttribute('width', containerRect.width);
@@ -2843,7 +3121,7 @@
       
       const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polygon.setAttribute('points', '0 0, 10 3, 0 6');
-      polygon.setAttribute('fill', '#64748b');
+      polygon.setAttribute('fill', '#38bdf8');
       
       marker.appendChild(polygon);
       defs.appendChild(marker);
@@ -2851,7 +3129,7 @@
     }
     
     // Renderizar cada edge
-    for (const edge of canvas.edges || []) {
+    for (const edge of edges || []) {
       const fromNodeEl = document.getElementById(`node-nav-${edge.from_node_id}`);
       const toNodeEl = document.getElementById(`node-nav-${edge.to_node_id}`);
       
@@ -2871,12 +3149,15 @@
       line.setAttribute('y1', fromCenterY);
       line.setAttribute('x2', toCenterX);
       line.setAttribute('y2', toCenterY);
-      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke', '#38bdf8');
       line.setAttribute('stroke-width', '2');
       line.setAttribute('marker-end', 'url(#arrowhead-nav)');
+      line.classList.add('axe-edge');
       
       svg.appendChild(line);
     }
+    
+    console.log('[AXE][NAV_EDITOR] renderCanvasEdgesNav: renderizados', edges.length, 'edges');
   }
   
   /**

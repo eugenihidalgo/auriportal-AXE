@@ -47,7 +47,9 @@ function replace(html, placeholders) {
     // Reemplazar condicionales negativos {{^KEY}}...{{/KEY}}
     for (const key in placeholders) {
       const value = placeholders[key];
-      const regexNegativo = new RegExp(`{{\\^${key}}}([\\s\\S]*?){{/${key}}}`, 'g');
+      // Escapar caracteres especiales de regex en key para evitar errores
+      const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regexNegativo = new RegExp(`{{\\^${escapedKey}}}([\\s\\S]*?){{/${escapedKey}}}`, 'g');
       const matches = output.match(regexNegativo);
       if (matches) {
         const newOutput = output.replace(regexNegativo, (match, content) => {
@@ -66,7 +68,9 @@ function replace(html, placeholders) {
     // Reemplazar condicionales positivos {{#KEY}}...{{/KEY}}
     for (const key in placeholders) {
       const value = placeholders[key];
-      const regex = new RegExp(`{{#${key}}}([\\s\\S]*?){{/${key}}}`, 'g');
+      // Escapar caracteres especiales de regex en key para evitar errores
+      const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`{{#${escapedKey}}}([\\s\\S]*?){{/${escapedKey}}}`, 'g');
       const matches = output.match(regex);
       if (matches) {
         const newOutput = output.replace(regex, (match, content) => {
@@ -86,7 +90,9 @@ function replace(html, placeholders) {
   // Reemplazar placeholders normales
   for (const key in placeholders) {
     const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
+    // Escapar caracteres especiales de regex en key para evitar errores
+    const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`{{${escapedKey}}}`, "g");
     
     // Si es un booleano, convertirlo a string JavaScript
     let replacement = value;

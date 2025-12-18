@@ -111,7 +111,9 @@ function sanitizeHTML(html) {
   const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input'];
   let sanitized = html;
   for (const tag of dangerousTags) {
-    const regex = new RegExp(`<${tag}[^>]*>.*?</${tag}>`, 'gis');
+    // Escapar caracteres especiales de regex en tag para evitar errores
+    const escapedTag = String(tag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`<${escapedTag}[^>]*>.*?</${escapedTag}>`, 'gis');
     sanitized = sanitized.replace(regex, '');
   }
 
