@@ -155,8 +155,13 @@ export default async function adminThemesUIHandler(request, env, ctx) {
     
     .main-content {
       display: grid;
-      grid-template-columns: 350px 1fr;
+      grid-template-columns: 400px 1fr;
       gap: 20px;
+      min-height: calc(100vh - 200px);
+    }
+    
+    .main-content.editor-mode {
+      grid-template-columns: 450px 1fr;
     }
     
     .sidebar {
@@ -402,6 +407,30 @@ export default async function adminThemesUIHandler(request, env, ctx) {
       pointer-events: none;
     }
     
+    .editor-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    
+    .editor-container.has-preview {
+      grid-template-columns: 1fr 1fr;
+    }
+    
+    @media (max-width: 1400px) {
+      .main-content.editor-mode {
+        grid-template-columns: 1fr;
+      }
+      
+      .editor-container.has-preview {
+        grid-template-columns: 1fr;
+      }
+      
+      .preview-container {
+        min-height: 600px;
+      }
+    }
+    
     @media (max-width: 1024px) {
       .main-content {
         grid-template-columns: 1fr;
@@ -431,10 +460,20 @@ export default async function adminThemesUIHandler(request, env, ctx) {
         </ul>
       </div>
       
-      <div class="editor" id="editor">
-        <div class="editor-header">
-          <h2>Selecciona un tema para editar</h2>
-          <p style="color: #666;">O crea uno nuevo desde cero o con IA</p>
+      <div class="editor-container">
+        <div class="editor" id="editor">
+          <div class="editor-header">
+            <h2>Selecciona un tema para editar</h2>
+            <p style="color: #666;">O crea uno nuevo desde cero o con IA</p>
+          </div>
+        </div>
+        
+        <div class="preview-container" id="preview-container" style="display: none;">
+          <div class="preview-header">
+            <h3>👁️ Preview en Vivo</h3>
+            <button onclick="cerrarPreview()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">✕</button>
+          </div>
+          <iframe id="themePreviewFrame" class="preview-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
         </div>
       </div>
     </div>

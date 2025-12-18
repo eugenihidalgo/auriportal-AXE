@@ -622,38 +622,17 @@ async function handlePreview(request, env, ctx, themeId) {
     };
 
     // Renderizar pantalla con el tema aplicado
-    // SPRINT AXE v0.4: Pasar theme_id explícitamente para que el resolver lo use
-    // applyTheme() se llama internamente en renderHtml() dentro de renderPantalla1
+    // v5.10.0: Usar renderHtml directamente con theme_id para que applyTheme() inyecte tokens dinámicos
+    // renderPantalla1() internamente llama a renderHtml(), pero necesitamos pasar theme_id
+    // Solución: renderizar HTML base y luego aplicar tema con theme_id explícito
+    const { renderPantalla1 } = await import('../core/responses.js');
+    
+    // renderPantalla1 devuelve un Response, obtenemos el HTML
     const htmlResponse = renderPantalla1(mockStudent, mockCtx);
     let html = await htmlResponse.text();
     
-    // SPRINT AXE v0.4: Aplicar tema con theme_id explícito y inyectar variables CSS
-    // Resolver tema para obtener variables CSS
-    const { resolveThemeAsync } = await import('../core/theme/theme-resolver.js');
-    const themeEffective = await resolveThemeAsync({ theme_id: themeId });
-    
-    // Inyectar variables CSS del tema en el HTML
-    // Crear <style> tag con todas las variables del tema
-    const cssVariables = Object.entries(themeEffective)
-      .filter(([key]) => key.startsWith('--') && !key.startsWith('_')) // Solo variables CSS, excluir metadata
-      .map(([key, value]) => `  ${key}: ${value};`)
-      .join('\n');
-    
-    const themeStyle = `
-<style id="theme-preview-variables">
-:root {
-${cssVariables}
-}
-</style>`;
-    
-    // Inyectar antes de </head> o después de <head>
-    if (html.includes('</head>')) {
-      html = html.replace('</head>', themeStyle + '\n</head>');
-    } else if (html.includes('<head>')) {
-      html = html.replace('<head>', '<head>' + themeStyle);
-    }
-    
-    // Aplicar tema usando applyTheme (para clases y scripts)
+    // Aplicar tema con theme_id explícito
+    // applyTheme() ahora inyecta automáticamente <style id="ap-theme-tokens"> con todos los tokens
     const { applyTheme } = await import('../core/responses.js');
     html = applyTheme(html, mockStudent, themeId);
 

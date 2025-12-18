@@ -7,6 +7,7 @@ import { buildTypeformUrl } from './typeform-utils.js';
 import { versionAsset } from './asset-version.js';
 import { renderHtml } from './html-response.js';
 import { resolveTheme, getThemeId } from './theme/theme-resolver.js';
+import { buildThemeStyleTag, injectOrReplaceThemeStyleTag } from './theme/theme-css-materializer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -67,6 +68,24 @@ export function applyTheme(html, student = null, theme_id = null) {
   
   // Obtener ID del tema (legacy: 'dark' o 'light') para compatibilidad
   const tema = getThemeId(themeEffective);
+  
+  // MATERIALIZACIÓN CANÓNICA: Inyectar tokens CSS dinámicos
+  // Obtener metadata del tema resuelto (si está disponible)
+  // _resolvedKey es una propiedad no-enumerable añadida por el resolver
+  const resolvedThemeId = themeEffective._resolvedKey || theme_id || null;
+  // Por ahora, la versión no está en el resolver (se añadirá en v2)
+  // Usamos 'system' para temas del sistema o el theme_id si es personalizado
+  const resolvedThemeVersion = resolvedThemeId ? 'system' : null;
+  
+  // Construir style tag canónico con todos los tokens
+  const themeStyleTag = buildThemeStyleTag({
+    themeId: resolvedThemeId,
+    themeVersion: resolvedThemeVersion,
+    tokens: themeEffective
+  });
+  
+  // Inyectar o reemplazar el style tag en el HTML (antes de otros estilos)
+  html = injectOrReplaceThemeStyleTag(html, themeStyleTag);
   
   // Reemplazar placeholder {{TEMA_PREFERIDO}} si existe
   if (html.includes('{{TEMA_PREFERIDO}}')) {
