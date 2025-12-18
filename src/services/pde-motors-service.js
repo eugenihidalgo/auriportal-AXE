@@ -8,14 +8,15 @@
 // - Preparar motores para consumo futuro por AXE
 
 import { getDefaultPdeMotorsRepo } from '../infra/repos/pde-motors-repo-pg.js';
+import { isValidCatalogForMotors, getCatalogByKey } from './pde-catalog-registry-service.js';
 
 /**
  * Valida la estructura de la definición de un motor
  * 
  * @param {Object} definition - Definición a validar
- * @returns {Object} { valid: boolean, error: string|null }
+ * @returns {Promise<Object>} { valid: boolean, error: string|null }
  */
-export function validateMotorDefinition(definition) {
+export async function validateMotorDefinition(definition) {
   if (!definition || typeof definition !== 'object') {
     return { valid: false, error: 'La definición debe ser un objeto' };
   }
@@ -33,12 +34,36 @@ export function validateMotorDefinition(definition) {
     if (!input.type || typeof input.type !== 'string') {
       return { valid: false, error: 'Cada input debe tener un "type" de tipo string' };
     }
-    const validTypes = ['enum', 'number', 'string', 'boolean'];
+    const validTypes = ['enum', 'number', 'string', 'boolean', 'pde_catalog'];
     if (!validTypes.includes(input.type)) {
       return { valid: false, error: `El tipo de input debe ser uno de: ${validTypes.join(', ')}` };
     }
     if (input.type === 'enum' && (!Array.isArray(input.options) || input.options.length === 0)) {
       return { valid: false, error: 'Los inputs de tipo "enum" deben tener un array "options" no vacío' };
+    }
+    // Validar pde_catalog
+    if (input.type === 'pde_catalog') {
+      if (!input.catalog_key || typeof input.catalog_key !== 'string') {
+        return { valid: false, error: `Input "${input.key}": los inputs de tipo "pde_catalog" deben tener un "catalog_key"` };
+      }
+      // Validar que el catálogo existe y es usable_for_motors
+      const isValid = await isValidCatalogForMotors(input.catalog_key);
+      if (!isValid) {
+        return { valid: false, error: `Input "${input.key}": el catálogo "${input.catalog_key}" no existe o no es usable para motores` };
+      }
+      // Obtener el catálogo para copiar capabilities si no están presentes
+      const catalog = await getCatalogByKey(input.catalog_key);
+      if (catalog) {
+        // Autocompletar capabilities si no están presentes
+        if (!input.capabilities) {
+          input.capabilities = {
+            supports_level: catalog.supports_level || false,
+            supports_priority: catalog.supports_priority || false,
+            supports_obligatory: catalog.supports_obligatory || false,
+            supports_duration: catalog.supports_duration || false
+          };
+        }
+      }
     }
   }
 
@@ -108,7 +133,7 @@ export async function getMotorByKey(motorKey) {
  */
 export async function createMotor(motorData) {
   // Validar definición
-  const validation = validateMotorDefinition(motorData.definition);
+  const validation = await validateMotorDefinition(motorData.definition);
   if (!validation.valid) {
     throw new Error(`Definición inválida: ${validation.error}`);
   }
@@ -146,7 +171,7 @@ export async function updateMotor(id, patch) {
 
   // Si se actualiza la definición, validarla
   if (patch.definition) {
-    const validation = validateMotorDefinition(patch.definition);
+    const validation = await validateMotorDefinition(patch.definition);
     if (!validation.valid) {
       throw new Error(`Definición inválida: ${validation.error}`);
     }
@@ -206,7 +231,7 @@ export async function publishMotor(id) {
   }
 
   // Validar definición antes de publicar
-  const validation = validateMotorDefinition(motor.definition);
+  const validation = await validateMotorDefinition(motor.definition);
   if (!validation.valid) {
     throw new Error(`No se puede publicar un motor con definición inválida: ${validation.error}`);
   }

@@ -12,28 +12,30 @@ import { requireAdminContext } from '../core/auth-context.js';
  * Usa requireAdminContext para obtener el contexto de autenticación admin.
  */
 export default async function adminThemesStudioUIHandler(request, env, ctx) {
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:14',message:'Handler entry',data:{url:request?.url,method:request?.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  
-  // Obtener contexto de autenticación admin (patrón estándar)
-  // Si no está autenticado, requireAdminContext devuelve Response HTML (login)
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:18',message:'Before requireAdminContext',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  
-  let authCtx;
   try {
-    authCtx = await requireAdminContext(request, env);
     // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:25',message:'After requireAdminContext',data:{isResponse:authCtx instanceof Response,hasAuthCtx:!!authCtx},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:14',message:'Handler entry',data:{url:request?.url,method:request?.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-  } catch (authError) {
+    
+    // Obtener contexto de autenticación admin (patrón estándar)
+    // Si no está autenticado, requireAdminContext devuelve Response HTML (login)
     // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:30',message:'Error in requireAdminContext',data:{error:authError?.message,stack:authError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:18',message:'Before requireAdminContext',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    throw authError;
-  }
+    
+    let authCtx;
+    try {
+      authCtx = await requireAdminContext(request, env);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:25',message:'After requireAdminContext',data:{isResponse:authCtx instanceof Response,hasAuthCtx:!!authCtx},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    } catch (authError) {
+      console.error('[ThemeStudio] Error in requireAdminContext:', authError);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:30',message:'Error in requireAdminContext',data:{error:authError?.message,stack:authError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      throw authError;
+    }
   
   if (authCtx instanceof Response) {
     // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
@@ -2300,19 +2302,27 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2271',message:'Before renderHtml',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
   // #endregion
   
-  let response;
-  try {
-    response = renderHtml(html);
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2278',message:'After renderHtml',data:{isResponse:response instanceof Response,status:response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-  } catch (renderError) {
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2282',message:'Error in renderHtml',data:{error:renderError?.message,stack:renderError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    throw renderError;
+    let response;
+    try {
+      response = renderHtml(html);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2278',message:'After renderHtml',data:{isResponse:response instanceof Response,status:response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+    } catch (renderError) {
+      console.error('[ThemeStudio] Error in renderHtml:', renderError);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2282',message:'Error in renderHtml',data:{error:renderError?.message,stack:renderError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      throw renderError;
+    }
+    
+    return response;
+  } catch (err) {
+    console.error('[ThemeStudio] render error:', err);
+    return new Response('Theme Studio error: ' + (err.message || 'Unknown error'), {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
-  
-  return response;
 }
 

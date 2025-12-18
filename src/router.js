@@ -386,6 +386,14 @@ async function routerFunction(request, env, ctx) {
         return await renderMasterView(request, env, alumnoId);
       }
       
+      // Endpoint de prueba para verificar routing básico
+      if (path === "/admin/test-html") {
+        return new Response('<h1>TEST OK</h1>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+      }
+
       // Endpoints API de energía (antes de delegar a admin-panel-v4)
       if (path === "/admin/api/energy/clean" && request.method === "POST") {
         const { handleEnergyClean } = await import("./endpoints/admin-energy-api.js");
@@ -396,7 +404,24 @@ async function routerFunction(request, env, ctx) {
         return handleEnergyIlluminate(request, env, ctx);
       }
       
-      // Endpoints API de temas (antes de delegar a admin-panel-v4)
+      // Theme Studio v2 - Nueva UI de temas (ANTES del catch-all /admin/themes)
+      if (path === "/admin/themes/studio") {
+        let adminThemesStudioUIHandler;
+        try {
+          adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+        } catch (importError) {
+          console.error('[Router] Error importing admin-themes-studio-ui:', importError);
+          throw importError;
+        }
+        try {
+          return await adminThemesStudioUIHandler(request, env, ctx);
+        } catch (handlerError) {
+          console.error('[Router] Error in adminThemesStudioUIHandler:', handlerError);
+          throw handlerError;
+        }
+      }
+      
+      // Endpoints API de temas (después de rutas específicas)
       if (path.startsWith("/admin/themes")) {
         const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
         return adminThemesHandler(request, env, ctx);
@@ -836,6 +861,14 @@ async function routerFunction(request, env, ctx) {
   if (path.startsWith("/google-apis")) {
     const googleApiManagerHandler = (await import("./endpoints/google-api-manager.js")).default;
     return googleApiManagerHandler(request, env, ctx);
+  }
+
+  // Endpoint de prueba para verificar routing básico
+  if (path === "/admin/test-html") {
+    return new Response('<h1>TEST OK</h1>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
   }
 
   // UI del editor de temas (DEPRECATED - redirigir a Theme Studio v2)

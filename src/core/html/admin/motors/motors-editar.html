@@ -2,8 +2,11 @@
   <div class="mb-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-white mb-2">🧠 {{MOTOR_ID === 'nuevo' ? 'Nuevo Motor' : 'Editar Motor'}}</h1>
-        <p class="text-slate-400">Define la estructura reutilizable que generará este motor.</p>
+        <h1 class="text-3xl font-bold text-white mb-2">🧠 Diseñador de Motores</h1>
+        <p class="text-slate-400">
+          {{MOTOR_ID === 'nuevo' ? 'Creando nuevo motor' : `Editando motor: ${NAME || 'Sin nombre'}`}}
+        </p>
+        <p class="text-slate-500 text-sm mt-1">Define la estructura reutilizable que generará este motor.</p>
       </div>
       <div>
         <a href="/admin/motors" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
@@ -231,6 +234,7 @@ function cargarInputs() {
             <select data-input-index="${index}" data-field="type" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm">
               <option value="enum" ${input.type === 'enum' ? 'selected' : ''}>enum</option>
               <option value="select" ${input.type === 'select' ? 'selected' : ''}>select (catálogo)</option>
+              <option value="pde_catalog" ${input.type === 'pde_catalog' ? 'selected' : ''}>🧩 Catálogo PDE</option>
               <option value="number" ${input.type === 'number' ? 'selected' : ''}>number</option>
               <option value="string" ${input.type === 'string' ? 'selected' : ''}>string</option>
               <option value="boolean" ${input.type === 'boolean' ? 'selected' : ''}>boolean</option>
@@ -270,6 +274,32 @@ function cargarInputs() {
             </div>
           </div>
         ` : ''}
+        ${input.type === 'pde_catalog' ? `
+          <div class="space-y-2">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Catálogo PDE</label>
+              <select data-input-index="${index}" data-field="catalog_key" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm">
+                <option value="">-- Seleccionar catálogo --</option>
+                ${catalogsAvailable.map(cat => {
+                  const selected = input.catalog_key === cat.catalog_key;
+                  return `<option value="${cat.catalog_key}" ${selected ? 'selected' : ''}>${cat.label} (${cat.catalog_key})</option>`;
+                }).join('')}
+              </select>
+            </div>
+            ${input.capabilities ? `
+              <div class="mt-2 p-2 bg-slate-800 rounded border border-slate-700">
+                <label class="block text-xs text-slate-400 mb-1">Capacidades del Catálogo (read-only)</label>
+                <div class="flex flex-wrap gap-2">
+                  ${input.capabilities.supports_level ? '<span class="px-2 py-1 bg-blue-600 text-white text-xs rounded">Nivel</span>' : ''}
+                  ${input.capabilities.supports_priority ? '<span class="px-2 py-1 bg-purple-600 text-white text-xs rounded">Prioridad</span>' : ''}
+                  ${input.capabilities.supports_obligatory ? '<span class="px-2 py-1 bg-orange-600 text-white text-xs rounded">Obligatorio</span>' : ''}
+                  ${input.capabilities.supports_duration ? '<span class="px-2 py-1 bg-cyan-600 text-white text-xs rounded">Duración</span>' : ''}
+                  ${!input.capabilities.supports_level && !input.capabilities.supports_priority && !input.capabilities.supports_obligatory && !input.capabilities.supports_duration ? '<span class="text-slate-500 text-xs">Sin capacidades especiales</span>' : ''}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       </div>
     `;
     container.innerHTML += inputHtml;
@@ -284,8 +314,47 @@ function cargarInputs() {
   container.querySelectorAll('[data-field="type"]').forEach(select => {
     select.addEventListener('change', function() {
       const index = parseInt(this.dataset.inputIndex);
-      if (this.value === 'select') {
+      if (this.value === 'select' || this.value === 'pde_catalog') {
         // Recargar para mostrar el selector de catálogos
+        cargarInputs();
+      }
+    });
+  });
+  
+  // Manejar selección de catálogo para pde_catalog
+  container.querySelectorAll('[data-field="catalog_key"]').forEach(select => {
+    select.addEventListener('change', async function() {
+      const index = parseInt(this.dataset.inputIndex);
+      const catalogKey = this.value;
+      const input = currentDefinition.inputs[index];
+      
+      if (catalogKey && input && input.type === 'pde_catalog') {
+        // Cargar información del catálogo para autocompletar capabilities
+        try {
+          const response = await fetch(`/admin/pde/catalog-registry?format=json&usable_for_motors=true`);
+          const data = await response.json();
+          if (data.success) {
+            const catalog = data.catalogs.find(cat => cat.catalog_key === catalogKey);
+            if (catalog) {
+              // Autocompletar capabilities
+              input.catalog_key = catalogKey;
+              input.capabilities = {
+                supports_level: catalog.supports_level || false,
+                supports_priority: catalog.supports_priority || false,
+                supports_obligatory: catalog.supports_obligatory || false,
+                supports_duration: catalog.supports_duration || false
+              };
+              // Recargar para mostrar las capabilities
+              cargarInputs();
+            }
+          }
+        } catch (error) {
+          console.error('Error al cargar catálogo:', error);
+        }
+      } else if (!catalogKey && input && input.type === 'pde_catalog') {
+        // Limpiar si se deselecciona
+        delete input.catalog_key;
+        delete input.capabilities;
         cargarInputs();
       }
     });
@@ -348,10 +417,29 @@ function actualizarInput(e) {
       delete currentDefinition.inputs[index].options_source;
       delete currentDefinition.inputs[index]._selected_catalog_key;
     }
-  } else if (field === 'type' && value === 'select') {
-    // Al cambiar a select, inicializar options_source si no existe
-    if (!currentDefinition.inputs[index].options_source) {
-      // No inicializar aquí, dejar que el usuario seleccione
+  } else if (field === 'catalog_key') {
+    // Para pde_catalog, el catalog_key se maneja en el event listener del select
+    // Solo actualizar aquí si es necesario
+    if (value) {
+      currentDefinition.inputs[index].catalog_key = value;
+    } else {
+      delete currentDefinition.inputs[index].catalog_key;
+      delete currentDefinition.inputs[index].capabilities;
+    }
+  } else if (field === 'type') {
+    currentDefinition.inputs[index].type = value;
+    // Si cambia el tipo, limpiar campos específicos
+    if (value !== 'pde_catalog') {
+      delete currentDefinition.inputs[index].catalog_key;
+      delete currentDefinition.inputs[index].capabilities;
+    }
+    if (value !== 'select') {
+      delete currentDefinition.inputs[index].options_source;
+      delete currentDefinition.inputs[index]._selected_catalog_key;
+    }
+    if (value === 'select' || value === 'pde_catalog') {
+      // Recargar para mostrar el selector de catálogos
+      cargarInputs();
     }
   } else {
     currentDefinition.inputs[index][field] = value;
@@ -378,7 +466,7 @@ async function guardarMotor() {
   document.querySelectorAll('[data-input-index]').forEach(el => {
     const index = parseInt(el.dataset.inputIndex);
     if (!inputs[index]) {
-      // Copiar el input actual para mantener options_source y otros campos
+      // Copiar el input actual para mantener options_source, catalog_key, capabilities y otros campos
       inputs[index] = currentDefinition.inputs[index] ? { ...currentDefinition.inputs[index] } : {};
     }
     const field = el.dataset.field;
@@ -389,12 +477,18 @@ async function guardarMotor() {
     } else if (field === 'options_source_catalog') {
       // Ya está actualizado en currentDefinition.inputs por actualizarInput()
       // No hacer nada aquí
+    } else if (field === 'catalog_key') {
+      // Para pde_catalog, el catalog_key ya está en currentDefinition.inputs
+      // Solo asegurar que se mantiene
+      if (el.value) {
+        inputs[index].catalog_key = el.value;
+      }
     } else {
       inputs[index][field] = el.value;
     }
   });
   
-  // Limpiar campos internos antes de guardar
+  // Limpiar campos internos antes de guardar (pero mantener catalog_key y capabilities)
   inputs.forEach(input => {
     if (input._selected_catalog_key) {
       delete input._selected_catalog_key;
@@ -478,6 +572,12 @@ function validarMotor() {
     if (input.type === 'enum' && (!input.options || input.options.length === 0)) {
       validation.errors.push(`Input ${index + 1}: los enum deben tener opciones`);
       validation.valid = false;
+    }
+    if (input.type === 'pde_catalog') {
+      if (!input.catalog_key) {
+        validation.errors.push(`Input ${index + 1}: los pde_catalog deben tener un "catalog_key"`);
+        validation.valid = false;
+      }
     }
   });
 

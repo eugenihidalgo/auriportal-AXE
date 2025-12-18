@@ -141,7 +141,7 @@ export async function renderEditarMotor(request, env, motorId) {
   });
 
   const html = replace(baseTemplate, {
-    TITLE: motor ? `Editar Motor: ${motor.name}` : 'Nuevo Motor',
+    TITLE: 'Diseñador de Motores',
     CONTENT: content,
     CURRENT_PATH: '/admin/motors'
   });
