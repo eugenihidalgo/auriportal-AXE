@@ -92,7 +92,10 @@ export async function crearProteccion(datos) {
       usage_context = '',
       recommended_moment = 'transversal',
       tags = [],
-      status = 'active'
+      status = 'active',
+      nivel_minimo = 1,
+      prioridad = 'media',
+      is_obligatoria = false
     } = datos;
     
     // Validaciones mínimas: solo key y name son requeridos
@@ -132,9 +135,9 @@ export async function crearProteccion(datos) {
     
     const result = await query(`
       INSERT INTO protecciones_energeticas (
-        key, name, description, usage_context, recommended_moment, tags, status
+        key, name, description, usage_context, recommended_moment, tags, status, nivel_minimo, prioridad, is_obligatoria
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id
     `, [
       key.trim(), 
@@ -143,7 +146,10 @@ export async function crearProteccion(datos) {
       usage_context || '', 
       recommendedMomentFinal, 
       tagsJson, 
-      statusFinal
+      statusFinal,
+      nivel_minimo,
+      prioridad,
+      is_obligatoria
     ]);
     
     return result.rows[0].id;
@@ -162,7 +168,7 @@ export async function crearProteccion(datos) {
 export async function actualizarProteccion(proteccionId, datos) {
   try {
     const { 
-      key, name, description, usage_context, recommended_moment, tags, status 
+      key, name, description, usage_context, recommended_moment, tags, status, nivel_minimo, prioridad, is_obligatoria
     } = datos;
     
     // Validar recommended_moment si se proporciona
@@ -205,6 +211,18 @@ export async function actualizarProteccion(proteccionId, datos) {
     if (status !== undefined) {
       updates.push(`status = $${paramIndex++}`);
       params.push(status);
+    }
+    if (nivel_minimo !== undefined) {
+      updates.push(`nivel_minimo = $${paramIndex++}`);
+      params.push(nivel_minimo);
+    }
+    if (prioridad !== undefined) {
+      updates.push(`prioridad = $${paramIndex++}`);
+      params.push(prioridad);
+    }
+    if (is_obligatoria !== undefined) {
+      updates.push(`is_obligatoria = $${paramIndex++}`);
+      params.push(is_obligatoria);
     }
     
     if (updates.length === 0) return false;

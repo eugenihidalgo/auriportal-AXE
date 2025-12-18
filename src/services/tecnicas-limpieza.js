@@ -33,7 +33,7 @@ export async function obtenerTecnicasPorNivel(nivelAlumno, soloEnergiasIndeseabl
       SELECT * FROM tecnicas_limpieza
       WHERE activo = true
         AND nivel <= $1
-        AND es_energias_indeseables = $2
+        AND aplica_energias_indeseables = $2
       ORDER BY nivel ASC, nombre ASC
     `, [nivelAlumno, soloEnergiasIndeseables]);
     return result.rows;
@@ -68,13 +68,23 @@ export async function obtenerTecnica(tecnicaId) {
  */
 export async function crearTecnica(datos) {
   try {
-    const { nombre, descripcion = '', nivel = 1, orden = 0, activo = true, es_energias_indeseables = false } = datos;
+    const { 
+      nombre, 
+      descripcion = '', 
+      nivel = 1, 
+      orden = 0, 
+      activo = true, 
+      aplica_energias_indeseables = false,
+      aplica_limpiezas_recurrentes = false,
+      prioridad = 'media',
+      is_obligatoria = false
+    } = datos;
     
     const result = await query(`
-      INSERT INTO tecnicas_limpieza (nombre, descripcion, nivel, orden, activo, es_energias_indeseables)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO tecnicas_limpieza (nombre, descripcion, nivel, orden, activo, aplica_energias_indeseables, aplica_limpiezas_recurrentes, prioridad, is_obligatoria)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id
-    `, [nombre, descripcion, nivel, orden, activo, es_energias_indeseables]);
+    `, [nombre, descripcion, nivel, orden, activo, aplica_energias_indeseables, aplica_limpiezas_recurrentes, prioridad, is_obligatoria]);
     
     return result.rows[0].id;
   } catch (error) {
@@ -91,7 +101,7 @@ export async function crearTecnica(datos) {
  */
 export async function actualizarTecnica(tecnicaId, datos) {
   try {
-    const { nombre, descripcion, nivel, orden, activo, es_energias_indeseables } = datos;
+    const { nombre, descripcion, nivel, orden, activo, aplica_energias_indeseables, aplica_limpiezas_recurrentes, prioridad, is_obligatoria } = datos;
     
     const updates = [];
     const params = [];
@@ -117,9 +127,21 @@ export async function actualizarTecnica(tecnicaId, datos) {
       updates.push(`activo = $${paramIndex++}`);
       params.push(activo);
     }
-    if (es_energias_indeseables !== undefined) {
-      updates.push(`es_energias_indeseables = $${paramIndex++}`);
-      params.push(es_energias_indeseables);
+    if (aplica_energias_indeseables !== undefined) {
+      updates.push(`aplica_energias_indeseables = $${paramIndex++}`);
+      params.push(aplica_energias_indeseables);
+    }
+    if (aplica_limpiezas_recurrentes !== undefined) {
+      updates.push(`aplica_limpiezas_recurrentes = $${paramIndex++}`);
+      params.push(aplica_limpiezas_recurrentes);
+    }
+    if (prioridad !== undefined) {
+      updates.push(`prioridad = $${paramIndex++}`);
+      params.push(prioridad);
+    }
+    if (is_obligatoria !== undefined) {
+      updates.push(`is_obligatoria = $${paramIndex++}`);
+      params.push(is_obligatoria);
     }
     
     if (updates.length === 0) return false;

@@ -1776,6 +1776,32 @@ export async function createTables() {
       console.error('⚠️ Error creando tabla decretos:', error.message);
     }
 
+    // E) Crear nueva tabla: pde_motors
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS pde_motors (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          motor_key TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          description TEXT,
+          category TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'draft',
+          definition JSONB NOT NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT now(),
+          updated_at TIMESTAMP NOT NULL DEFAULT now(),
+          deleted_at TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_pde_motors_motor_key ON pde_motors(motor_key);
+        CREATE INDEX IF NOT EXISTS idx_pde_motors_status ON pde_motors(status);
+        CREATE INDEX IF NOT EXISTS idx_pde_motors_category ON pde_motors(category);
+        CREATE INDEX IF NOT EXISTS idx_pde_motors_deleted_at ON pde_motors(deleted_at);
+      `);
+      console.log('✅ Tabla pde_motors creada/verificada');
+    } catch (error) {
+      console.error('⚠️ Error creando tabla pde_motors:', error.message);
+    }
+
   } catch (error) {
     console.error('❌ Error creando tablas PostgreSQL:', error);
     // No lanzar error para permitir que el servidor inicie aunque falle la creación
@@ -3083,6 +3109,18 @@ export async function runMigrations() {
           )) {
             continue;
           }
+          // Si es error de permisos pero la tabla/objeto ya existe, continuar
+          if (stmtError.message && (
+            stmtError.message.includes('must be owner') ||
+            stmtError.message.includes('permission denied')
+          )) {
+            // Verificar si el objeto ya existe antes de continuar
+            const objectName = stmt.match(/CREATE\s+(?:TABLE|INDEX|CONSTRAINT)\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+            if (objectName) {
+              console.log(`ℹ️  Objeto ${objectName[1]} ya existe (permisos limitados, continuando...)`);
+              continue;
+            }
+          }
           throw stmtError;
         }
       }
@@ -3091,6 +3129,25 @@ export async function runMigrations() {
       if (error.code !== 'ENOENT') {
         if (error.message && error.message.includes('already exists')) {
           console.log('ℹ️  Migración v5.1.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('recorridos', 'recorrido_drafts', 'recorrido_versions')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 2) {
+              console.log('ℹ️  Migración v5.1.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.1.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.1.0:', error.message);
+          }
         } else {
           console.warn('⚠️  Error ejecutando migración v5.1.0:', error.message);
         }
@@ -3132,6 +3189,18 @@ export async function runMigrations() {
               (stmt.includes('INDEX') || stmt.includes('CONSTRAINT'))) {
             continue;
           }
+          // Si es error de permisos pero la tabla/objeto ya existe, continuar
+          if (stmtError.message && (
+            stmtError.message.includes('must be owner') ||
+            stmtError.message.includes('permission denied')
+          )) {
+            // Verificar si el objeto ya existe antes de continuar
+            const objectName = stmt.match(/CREATE\s+(?:TABLE|INDEX|CONSTRAINT)\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+            if (objectName) {
+              console.log(`ℹ️  Objeto ${objectName[1]} ya existe (permisos limitados, continuando...)`);
+              continue;
+            }
+          }
           // Para otros errores, lanzar
           throw stmtError;
         }
@@ -3143,8 +3212,139 @@ export async function runMigrations() {
         // Si es error de tabla ya existe, es OK (idempotente)
         if (error.message && error.message.includes('already exists')) {
           console.log('ℹ️  Migración v5.2.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('recorrido_runs', 'recorrido_step_results', 'recorrido_events')
+              );
+            `);
+            if (checkResult.rows[0].exists) {
+              console.log('ℹ️  Migración v5.2.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.2.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.2.0:', error.message);
+          }
         } else {
           console.warn('⚠️  Error ejecutando migración v5.2.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.6.0: Añadir flags de clasificación a técnicas de limpieza
+    const migration56Path = join(__dirname, 'migrations', 'v5.6.0-tecnicas-clasificacion-flags.sql');
+    try {
+      const migrationSQL = readFileSync(migration56Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.6.0 ejecutada: aplica_energias_indeseables, aplica_limpiezas_recurrentes');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de columna ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate column')
+        )) {
+          console.log('ℹ️  Migración v5.6.0 ya aplicada (columnas existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.6.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.7.0: Añadir campo descripción a preparaciones_practica
+    const migration57Path = join(__dirname, 'migrations', 'v5.7.0-preparaciones-descripcion.sql');
+    try {
+      const migrationSQL = readFileSync(migration57Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.7.0 ejecutada: descripcion en preparaciones_practica');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de columna ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate column')
+        )) {
+          console.log('ℹ️  Migración v5.7.0 ya aplicada (columna existente)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.7.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.9.0: Editor WYSIWYG para Biblioteca de Decretos
+    const migration59Path = join(__dirname, 'migrations', 'v5.9.0-decretos-editor-v1.sql');
+    try {
+      // Verificar que la tabla decretos existe antes de ejecutar
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'decretos'
+        );
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        console.log('ℹ️  Tabla decretos no existe, creándola primero...');
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS decretos (
+            id SERIAL PRIMARY KEY,
+            titulo TEXT NOT NULL,
+            content_html TEXT,
+            activo BOOLEAN DEFAULT true,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+        console.log('✅ Tabla decretos creada');
+      }
+      
+      const migrationSQL = readFileSync(migration59Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.9.0 ejecutada: editor WYSIWYG para decretos');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de columna ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate column')
+        )) {
+          console.log('ℹ️  Migración v5.9.0 ya aplicada (columnas existentes)');
+        } else if (error.message && error.message.includes('does not exist')) {
+          console.log('ℹ️  Tabla decretos no existe, se creará automáticamente en el próximo inicio');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.9.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.11.0: Normalización de Catálogos PDE para Motores
+    const migration511Path = join(__dirname, 'migrations', 'v5.11.0-normalize-pde-catalogs-for-motors.sql');
+    try {
+      const migrationSQL = readFileSync(migration511Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.11.0 ejecutada: normalización de catálogos PDE para motores');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de columna ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate column')
+        )) {
+          console.log('ℹ️  Migración v5.11.0 ya aplicada (columnas existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.11.0:', error.message);
         }
       }
     }

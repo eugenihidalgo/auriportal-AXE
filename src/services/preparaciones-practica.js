@@ -131,7 +131,8 @@ export async function crearPreparacion(datos) {
       obligatoria_por_nivel = {},
       minutos = null,
       tiene_video = false,
-      contenido_html = null
+      contenido_html = null,
+      prioridad = 'media'
     } = datos;
     
     const obligatoriaPorNivelJson = typeof obligatoria_por_nivel === 'string' 
@@ -141,13 +142,13 @@ export async function crearPreparacion(datos) {
     const result = await query(`
       INSERT INTO preparaciones_practica (
         nombre, descripcion, nivel, video_url, orden, activo, activar_reloj, musica_id,
-        tipo, posicion, obligatoria_global, obligatoria_por_nivel, minutos, tiene_video, contenido_html
+        tipo, posicion, obligatoria_global, obligatoria_por_nivel, minutos, tiene_video, contenido_html, prioridad
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING id
     `, [
       nombre, descripcion, nivel, video_url, orden, activo, activar_reloj, musica_id,
-      tipo, posicion, obligatoria_global, obligatoriaPorNivelJson, minutos, tiene_video, contenido_html
+      tipo, posicion, obligatoria_global, obligatoriaPorNivelJson, minutos, tiene_video, contenido_html, prioridad
     ]);
     
     return result.rows[0].id;
@@ -170,7 +171,7 @@ export async function actualizarPreparacion(preparacionId, datos) {
     
     const { 
       nombre, descripcion, nivel, video_url, orden, activo, activar_reloj, musica_id,
-      tipo, posicion, obligatoria_global, obligatoria_por_nivel, minutos, tiene_video, contenido_html
+      tipo, posicion, obligatoria_global, obligatoria_por_nivel, minutos, tiene_video, contenido_html, prioridad
     } = datos;
     
     const updates = [];
@@ -239,6 +240,10 @@ export async function actualizarPreparacion(preparacionId, datos) {
     if (contenido_html !== undefined) {
       updates.push(`contenido_html = $${paramIndex++}`);
       params.push(contenido_html);
+    }
+    if (prioridad !== undefined) {
+      updates.push(`prioridad = $${paramIndex++}`);
+      params.push(prioridad);
     }
     
     if (updates.length === 0) return false;
