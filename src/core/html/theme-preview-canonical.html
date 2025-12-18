@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="theme-color" content="#ffd86b">
+  <title>Theme Preview — AuriPortal</title>
+  <style id="ap-theme-tokens"></style>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-main, #faf7f2);
+      color: var(--text-primary, #333333);
+      padding: 20px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: var(--text-primary, #333333);
+      margin-bottom: 30px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border-soft, #e3d2b8);
+      border-radius: 20px;
+      padding: 30px 25px;
+      box-shadow: 0 6px 14px var(--shadow-sm, rgba(0, 0, 0, 0.08));
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .card-elevated {
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border-soft, #e3d2b8);
+      border-radius: 20px;
+      padding: 30px 25px;
+      box-shadow: 0 8px 20px var(--shadow-md, rgba(0, 0, 0, 0.12));
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 14px 28px;
+      background: var(--accent-primary, #ffd86b);
+      color: var(--text-primary, #333333);
+      border: none;
+      border-radius: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      text-decoration: none;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px var(--shadow-md, rgba(0, 0, 0, 0.12));
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .preview-info {
+      font-size: 0.9rem;
+      color: var(--text-primary, #333333);
+      opacity: 0.7;
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Theme Preview</h1>
+    
+    <div class="card">
+      <h2 style="font-size: 1.3rem; margin-bottom: 15px; color: var(--text-primary, #333333);">
+        Card Normal
+      </h2>
+      <p style="color: var(--text-primary, #333333); margin-bottom: 15px;">
+        Esta card usa <code>--bg-card</code>, <code>--border-soft</code> y <code>--shadow-sm</code>
+      </p>
+      <button class="button">Botón con Acento</button>
+    </div>
+
+    <div class="card-elevated">
+      <h2 style="font-size: 1.3rem; margin-bottom: 15px; color: var(--text-primary, #333333);">
+        Card Elevada
+      </h2>
+      <p style="color: var(--text-primary, #333333); margin-bottom: 15px;">
+        Esta card usa <code>--shadow-md</code> para mayor elevación
+      </p>
+      <button class="button">Otro Botón</button>
+    </div>
+
+    <div class="preview-info">
+      Preview canónico — Cambia los tokens en el editor para ver los cambios en tiempo real
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+      
+      // Obtener el style tag canónico
+      const styleTag = document.getElementById('ap-theme-tokens');
+      if (!styleTag) {
+        console.warn('[ThemePreview] Style tag #ap-theme-tokens no encontrado');
+        return;
+      }
+
+      /**
+       * Genera CSS desde tokens recibidos
+       * @param {Object<string, string>} tokens - Objeto con tokens CSS
+       * @returns {string} CSS con formato :root { --var: value; ... }
+       */
+      function generateCssFromTokens(tokens) {
+        if (!tokens || typeof tokens !== 'object') {
+          return ':root {}';
+        }
+
+        // Filtrar solo variables CSS (que empiezan con --) y ordenar alfabéticamente
+        const cssVars = Object.entries(tokens)
+          .filter(([key]) => key.startsWith('--'))
+          .sort(([a], [b]) => a.localeCompare(b));
+
+        if (cssVars.length === 0) {
+          return ':root {}';
+        }
+
+        // Construir CSS
+        const cssLines = cssVars.map(([key, value]) => {
+          // Sanitizar valor básico (prevenir inyección)
+          const sanitized = String(value || '').replace(/<\/style/gi, '\\3C /style');
+          return `  ${key}: ${sanitized};`;
+        });
+
+        return `:root {\n${cssLines.join('\n')}\n}`;
+      }
+
+      /**
+       * Listener de postMessage para recibir tokens
+       */
+      function handlePostMessage(event) {
+        try {
+          // Validar tipo de mensaje
+          if (!event.data || event.data.type !== 'AP_THEME_TOKENS') {
+            return; // Ignorar mensajes que no son de tokens
+          }
+
+          // Validar que hay tokens
+          if (!event.data.tokens || typeof event.data.tokens !== 'object') {
+            console.warn('[ThemePreview] Tokens inválidos en postMessage');
+            return;
+          }
+
+          // Generar CSS desde tokens
+          const cssText = generateCssFromTokens(event.data.tokens);
+
+          // Escribir en el style tag
+          styleTag.textContent = cssText;
+
+          console.log('[ThemePreview] Tokens actualizados', {
+            tokenCount: Object.keys(event.data.tokens).length
+          });
+        } catch (error) {
+          // Nunca lanzar excepción - solo loggear
+          console.error('[ThemePreview] Error procesando postMessage:', error);
+        }
+      }
+
+      // Registrar listener de postMessage
+      window.addEventListener('message', handlePostMessage);
+
+      // Log de inicialización
+      console.log('[ThemePreview] Preview canónico inicializado');
+    })();
+  </script>
+</body>
+</html>
+

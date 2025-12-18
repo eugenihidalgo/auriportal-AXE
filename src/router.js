@@ -58,6 +58,11 @@ async function routerFunction(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     const host = url.hostname;
+    // #region agent log
+    if (path.includes('catalog-registry') || path.includes('admin/pde')) {
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:59',message:'Router: petición recibida (catalog-registry)',data:{path,method:request.method,host,fullUrl:request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    }
+    // #endregion
     
     // Log forense mínimo para / y /enter
     if (DEBUG_FORENSIC && (path === '/' || path === '/enter')) {
@@ -471,8 +476,36 @@ async function routerFunction(request, env, ctx) {
       
       // Theme Studio v2 - Nueva UI de temas
       if (path === "/admin/themes/studio") {
-        const adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
-        return adminThemesStudioUIHandler(request, env, ctx);
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:478',message:'Before importing admin-themes-studio-ui (admin host)',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        let adminThemesStudioUIHandler;
+        try {
+          adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:483',message:'After importing admin-themes-studio-ui (admin host)',data:{hasHandler:!!adminThemesStudioUIHandler,isFunction:typeof adminThemesStudioUIHandler === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+        } catch (importError) {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:488',message:'Error importing admin-themes-studio-ui (admin host)',data:{error:importError?.message,stack:importError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          throw importError;
+        }
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:493',message:'Before calling adminThemesStudioUIHandler (admin host)',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        try {
+          const result = await adminThemesStudioUIHandler(request, env, ctx);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:498',message:'After calling adminThemesStudioUIHandler (admin host)',data:{isResponse:result instanceof Response,status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          return result;
+        } catch (handlerError) {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:503',message:'Error calling adminThemesStudioUIHandler (admin host)',data:{error:handlerError?.message,stack:handlerError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          throw handlerError;
+        }
       }
       
       // Endpoints API de temas (antes de delegar a admin-panel-v4)
@@ -509,6 +542,23 @@ async function routerFunction(request, env, ctx) {
         const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
         return adminNavigationPagesHandler(request, env, ctx);
       }
+      
+      // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
+      // #region agent log
+      if (path.startsWith("/admin/pde/catalog-registry")) {
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:517',message:'Router: ruta catalog-registry detectada (admin.pdeeugenihidalgo.org)',data:{path,method:request.method,host},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:521',message:'Router: llamando handler catalog-registry',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        const response = await adminCatalogRegistryHandler(request, env, ctx);
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:525',message:'Router: respuesta de catalog-registry',data:{path,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        return response;
+      }
+      // #endregion
       
       // Delegar TODAS las rutas al Admin Panel v4
       // - Rutas explícitas /admin/* (incluye /admin/progreso-v4)
@@ -797,8 +847,60 @@ async function routerFunction(request, env, ctx) {
   
   // Theme Studio v2 - Nueva UI de temas
   if (path === "/admin/themes/studio") {
-    const adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
-    return adminThemesStudioUIHandler(request, env, ctx);
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:478',message:'Before importing admin-themes-studio-ui',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    let adminThemesStudioUIHandler;
+    try {
+      adminThemesStudioUIHandler = (await import("./endpoints/admin-themes-studio-ui.js")).default;
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:483',message:'After importing admin-themes-studio-ui',data:{hasHandler:!!adminThemesStudioUIHandler,isFunction:typeof adminThemesStudioUIHandler === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    } catch (importError) {
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:488',message:'Error importing admin-themes-studio-ui',data:{error:importError?.message,stack:importError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      throw importError;
+    }
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:493',message:'Before calling adminThemesStudioUIHandler',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    try {
+      const result = await adminThemesStudioUIHandler(request, env, ctx);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:498',message:'After calling adminThemesStudioUIHandler',data:{isResponse:result instanceof Response,status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return result;
+    } catch (handlerError) {
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:503',message:'Error calling adminThemesStudioUIHandler',data:{error:handlerError?.message,stack:handlerError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      throw handlerError;
+    }
+  }
+  
+  // Preview canónico de temas - HTML limpio sin modificaciones
+  if (path === "/admin/themes/preview-canonical" && request.method === "GET") {
+    const { readFileSync } = await import('fs');
+    const { fileURLToPath } = await import('url');
+    const { dirname, join } = await import('path');
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const projectRoot = join(__dirname, '..');
+    const previewPath = join(projectRoot, 'core', 'html', 'theme-preview-canonical.html');
+    
+    try {
+      const html = readFileSync(previewPath, 'utf-8');
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      });
+    } catch (error) {
+      console.error('[Router] Error sirviendo preview canónico:', error);
+      return new Response('Error cargando preview canónico', { status: 500 });
+    }
   }
   
   // Endpoints API de temas (antes de delegar a admin-panel-v4)
@@ -897,16 +999,25 @@ async function routerFunction(request, env, ctx) {
   }
 
   // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
+  // #region agent log
   if (path.startsWith("/admin/pde/catalog-registry")) {
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:900',message:'Router: ruta catalog-registry detectada',data:{path,method:request.method,host:url.hostname},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
-    return adminCatalogRegistryHandler(request, env, ctx);
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:902',message:'Router: llamando handler catalog-registry',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    const response = await adminCatalogRegistryHandler(request, env, ctx);
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:905',message:'Router: respuesta de catalog-registry',data:{path,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    return response;
   }
+  // #endregion
 
   // Panel de control administrativo
+  // #region agent log
   if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:906',message:'Router: ruta admin genérica detectada',data:{path,method:request.method,matchesAdmin:path === "/admin",matchesControl:path === "/control",startsWithAdmin:path.startsWith("/admin/")},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
     return adminPanelV4Handler(request, env, ctx);
   }
+  // #endregion
 
   // Panel SQL de administración
   if (path === "/sql-admin" || path.startsWith("/sql-admin/")) {

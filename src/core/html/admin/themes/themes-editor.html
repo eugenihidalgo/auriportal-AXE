@@ -98,11 +98,14 @@
       <!-- Preview -->
       <div class="p-4">
         <h2 class="text-lg font-semibold text-white mb-2">Preview</h2>
-        <!-- SPRINT AXE v0.4: Preview Harness Unificado -->
-        <div id="preview-harness-container" style="display: none;"></div>
-        <!-- Preview legacy (fallback) -->
-        <div id="preview-container" class="bg-white rounded-lg shadow-lg p-4 min-h-[200px]">
-          <p class="text-slate-400 text-sm text-center">Haz clic en "Preview" para ver el tema aplicado</p>
+        <!-- Preview canónico v1 -->
+        <div id="preview-container" class="bg-white rounded-lg shadow-lg overflow-hidden" style="min-height: 400px;">
+          <iframe 
+            id="preview-iframe" 
+            src="/admin/themes/preview-canonical" 
+            style="width: 100%; height: 400px; border: none;"
+            title="Theme Preview"
+          ></iframe>
         </div>
       </div>
       
@@ -219,29 +222,21 @@
     sendTokensToPreview();
   }
   
-  // UX MÍNIMA: Enviar tokens al preview vía postMessage
+  // Enviar tokens al preview canónico vía postMessage
   function sendTokensToPreview() {
     if (!currentDefinition || !currentDefinition.tokens) return;
     
-    // Buscar iframe del preview
+    // Buscar iframe del preview canónico
     if (!previewIframe) {
-      const previewContainer = document.getElementById('preview-harness-container');
-      if (previewContainer) {
-        previewIframe = previewContainer.querySelector('iframe');
-      }
+      previewIframe = document.getElementById('preview-iframe');
     }
     
-    // Si hay iframe, enviar tokens
+    // Si hay iframe, enviar TODOS los tokens (no solo los clave)
     if (previewIframe && previewIframe.contentWindow) {
-      const tokens = {
-        '--bg-main': currentDefinition.tokens['--bg-main'] || '',
-        '--text-primary': currentDefinition.tokens['--text-primary'] || '',
-        '--accent-primary': currentDefinition.tokens['--accent-primary'] || ''
-      };
-      
+      // Enviar todos los tokens del tema
       previewIframe.contentWindow.postMessage({
         type: 'AP_THEME_TOKENS',
-        tokens: tokens
+        tokens: currentDefinition.tokens || {}
       }, '*');
     }
   }
@@ -388,171 +383,29 @@
     }
   }
   
-  // SPRINT AXE v0.4: Preview usando Preview Harness Unificado
-  let previewHarness = null;
-  
-  // Inicializar Preview Harness
-  function initPreviewHarness() {
-    if (!themeId || themeId === 'null') {
-      return; // No inicializar si no hay tema
-    }
-    
-    const container = document.getElementById('preview-harness-container');
-    if (!container) return;
-    
-    // Cargar CSS del Preview Harness
-    if (!document.getElementById('preview-harness-css')) {
-      const link = document.createElement('link');
-      link.id = 'preview-harness-css';
-      link.rel = 'stylesheet';
-      link.href = '/css/preview-harness.css';
-      document.head.appendChild(link);
-    }
-    
-    // Cargar JS del Preview Harness
-    if (window.PreviewHarness) {
-      initHarnessInstance();
-    } else {
-      const script = document.createElement('script');
-      script.src = '/js/preview-harness.js';
-      script.onload = () => {
-        initHarnessInstance();
-      };
-      document.head.appendChild(script);
-    }
-  }
-  
-  function initHarnessInstance() {
-    const container = document.getElementById('preview-harness-container');
-    if (!container || !window.PreviewHarness) return;
-    
-    // SPRINT AXE v0.4: Adaptar Preview Harness para temas
-    // Usar un endpoint personalizado que renderiza con el tema
-    previewHarness = new window.PreviewHarness('preview-harness-container', {
-      previewEndpoint: '/admin/api/themes',
-      recorridoId: themeId, // Reutilizar recorridoId para themeId
-      stepId: 'preview', // StepId fijo para temas
-      onError: (error) => {
-        console.error('Error en Preview Harness:', error);
-        mostrarMensaje(`❌ Error en preview: ${error.message}`, 'error');
-      }
-    });
-    
-    // Sobrescribir refreshPreview para usar endpoint de temas
-    const originalRefreshPreview = previewHarness.refreshPreview.bind(previewHarness);
-    previewHarness.refreshPreview = async function() {
-      if (!this.options.recorridoId) { // recorridoId = themeId en este contexto
-        this.showError('Se requiere themeId para el preview');
-        return;
-      }
-      
-      const refreshBtn = document.getElementById('preview-refresh-btn');
-      if (refreshBtn) {
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = '⏳ Cargando...';
-      }
-      
-      try {
-        // SPRINT AXE v0.4: Inyectar theme_id en PreviewContext
-        const previewContext = this.currentContext || {};
-        // Asegurar que preview_mode siempre sea true (protección runtime)
-        previewContext.preview_mode = true;
-        // Inyectar theme_id en el PreviewContext
-        previewContext.theme_id = this.options.recorridoId; // recorridoId = themeId
-        
-        // Llamar al endpoint de preview de temas
-        const response = await fetch(
-          `${this.options.previewEndpoint}/${this.options.recorridoId}/preview`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              preview_context: previewContext,
-              use_draft: true
-            })
-          }
-        );
-        
-        const data = await response.json();
-        
-        if (!response.ok || !data.ok) {
-          throw new Error(data.error?.message || 'Error en preview');
-        }
-        
-        this.currentPreviewData = data;
-        this.renderPreview(data);
-        this.updateTechnicalPanel(data);
-        
-        if (data.warnings && data.warnings.length > 0) {
-          this.updateWarnings(data.warnings);
-        } else {
-          this.updateWarnings([]);
-        }
-      } catch (error) {
-        console.error('Error en preview:', error);
-        this.showError(error.message);
-      } finally {
-        if (refreshBtn) {
-          refreshBtn.disabled = false;
-          refreshBtn.textContent = '🔄 Actualizar Preview';
-        }
-      }
-    };
-  }
-  
-  // Preview tema (ahora usa Preview Harness)
+  // Preview tema usando preview canónico v1
   async function previewTema() {
-    if (!themeId || themeId === 'null') {
-      alert('Primero guarda el tema con un ID válido');
+    // El preview canónico ya está cargado en el iframe
+    // Solo necesitamos enviar los tokens actuales
+    previewIframe = document.getElementById('preview-iframe');
+    
+    if (!previewIframe) {
+      mostrarMensaje('❌ Error: iframe de preview no encontrado', 'error');
       return;
     }
     
-    // Guardar draft primero si hay cambios
-    try {
-      await guardarDraft();
-    } catch (error) {
-      console.warn('Error guardando draft antes de preview:', error);
+    // Esperar a que el iframe esté listo
+    previewIframe.onload = () => {
+      // Enviar tokens iniciales al preview
+      sendTokensToPreview();
+    };
+    
+    // Si el iframe ya está cargado, enviar tokens inmediatamente
+    if (previewIframe.contentDocument && previewIframe.contentDocument.readyState === 'complete') {
+      sendTokensToPreview();
     }
     
-    // Inicializar Preview Harness si no está inicializado
-    if (!previewHarness) {
-      initPreviewHarness();
-      // Esperar un momento para que se inicialice
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    if (!previewHarness) {
-      mostrarMensaje('❌ Error inicializando Preview Harness', 'error');
-      return;
-    }
-    
-    // Mostrar Preview Harness y ocultar preview legacy
-    const harnessContainer = document.getElementById('preview-harness-container');
-    const legacyContainer = document.getElementById('preview-container');
-    
-    if (harnessContainer) {
-      harnessContainer.style.display = 'block';
-    }
-    if (legacyContainer) {
-      legacyContainer.style.display = 'none';
-    }
-    
-    // Refrescar preview
-    await previewHarness.refreshPreview();
-    
-    // UX MÍNIMA: Buscar iframe del preview después de refrescar
-    setTimeout(() => {
-      const previewContainer = document.getElementById('preview-harness-container');
-      if (previewContainer) {
-        previewIframe = previewContainer.querySelector('iframe');
-        // Enviar tokens iniciales al preview
-        sendTokensToPreview();
-      }
-    }, 500);
-    
-    mostrarMensaje('✅ Preview generado', 'success');
+    mostrarMensaje('✅ Preview actualizado', 'success');
   }
   
   // Publicar tema
@@ -621,6 +474,8 @@
         currentDefinition = parsed;
         // UX MÍNIMA: Sincronizar inputs cuando cambia el JSON
         syncTokenInputsFromDefinition();
+        // Enviar tokens al preview cuando cambia el JSON
+        sendTokensToPreview();
       } catch (e) {
         // JSON inválido, no hacer nada (el usuario puede estar escribiendo)
       }
@@ -637,6 +492,8 @@
         clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {
           updateDefinitionFromTokenInputs();
+          // Enviar tokens al preview cuando cambian los inputs
+          sendTokensToPreview();
         }, 300); // Debounce de 300ms para evitar demasiadas actualizaciones
       });
     }
@@ -644,9 +501,18 @@
   
   // Cargar al iniciar
   cargarTema().then(() => {
-    // Inicializar Preview Harness después de cargar el tema
-    if (themeId && themeId !== 'null') {
-      initPreviewHarness();
+    // Inicializar preview canónico
+    previewIframe = document.getElementById('preview-iframe');
+    if (previewIframe) {
+      // Enviar tokens cuando el iframe esté listo
+      previewIframe.onload = () => {
+        sendTokensToPreview();
+      };
+      
+      // Si ya está cargado, enviar tokens inmediatamente
+      setTimeout(() => {
+        sendTokensToPreview();
+      }, 500);
     }
   });
 </script>

@@ -100,6 +100,62 @@ export class PdeCatalogRegistryRepoPg extends PdeCatalogRegistryRepo {
   }
 
   /**
+   * Crea un nuevo catálogo
+   * 
+   * @param {Object} catalogData - Datos del catálogo a crear
+   * @param {string} catalogData.catalog_key - Clave canónica única
+   * @param {string} catalogData.label - Etiqueta legible
+   * @param {string} catalogData.source_table - Nombre de la tabla
+   * @param {string} [catalogData.description] - Descripción opcional
+   * @param {string} [catalogData.source_endpoint] - Endpoint API opcional
+   * @param {boolean} [catalogData.usable_for_motors=true] - Si es usable para motores
+   * @param {boolean} [catalogData.supports_level=false] - Si soporta nivel
+   * @param {boolean} [catalogData.supports_priority=false] - Si soporta prioridad
+   * @param {boolean} [catalogData.supports_obligatory=false] - Si soporta obligatorio
+   * @param {boolean} [catalogData.supports_duration=false] - Si soporta duración
+   * @param {string} [catalogData.status='active'] - Estado (active/archived)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object>} Catálogo creado
+   * @throws {Error} Si catalog_key ya existe o hay error de validación
+   */
+  async createCatalog(catalogData, client = null) {
+    if (!catalogData.catalog_key || !catalogData.label || !catalogData.source_table) {
+      throw new Error('catalog_key, label y source_table son requeridos');
+    }
+
+    // Verificar que catalog_key no exista
+    const existing = await this.getCatalogByKey(catalogData.catalog_key, client);
+    if (existing) {
+      throw new Error(`El catalog_key "${catalogData.catalog_key}" ya existe`);
+    }
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      `INSERT INTO pde_catalog_registry (
+        catalog_key, label, description, source_table, source_endpoint,
+        usable_for_motors, supports_level, supports_priority,
+        supports_obligatory, supports_duration, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *`,
+      [
+        catalogData.catalog_key,
+        catalogData.label,
+        catalogData.description || null,
+        catalogData.source_table,
+        catalogData.source_endpoint || null,
+        catalogData.usable_for_motors !== undefined ? catalogData.usable_for_motors : true,
+        catalogData.supports_level || false,
+        catalogData.supports_priority || false,
+        catalogData.supports_obligatory || false,
+        catalogData.supports_duration || false,
+        catalogData.status || 'active'
+      ]
+    );
+
+    return result.rows[0];
+  }
+
+  /**
    * Actualiza metadata de un catálogo
    * 
    * @param {string} id - UUID del catálogo

@@ -1411,6 +1411,10 @@
   function renderNodesMap() {
     console.log('[NavigationEditor] renderNodesMap - INICIO (MOTOR AXE)');
     
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:1411',message:'renderNodesMap ENTRY',data:{canvasVisualStateNav:window.canvasVisualStateNav,hasDefinition:!!editorState.definition},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+    
     if (!editorState.definition) {
       console.warn('[NavigationEditor] renderNodesMap - WARNING: definition es falsy');
       return;
@@ -1429,6 +1433,10 @@
     const height = container.offsetHeight;
     console.log('[AXE][NAV_EDITOR] container size:', width, height);
     
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:1427',message:'container size BEFORE render',data:{width,height,innerHTMLBefore:container.innerHTML.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
     if (width === 0 || height === 0) {
       console.warn('[AXE][NAV_EDITOR] WARNING: container tiene tamaño 0, esperando resize...');
       setTimeout(() => renderNodesMap(), 100);
@@ -1440,14 +1448,28 @@
     console.log('[NavigationEditor] renderNodesMap - canvas convertido:', canvas);
     console.log('[AXE][NAV_EDITOR] nodes:', canvas.nodes?.length, 'edges:', canvas.edges?.length);
     
+    // Inicializar estado de pan/zoom de forma segura
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    // Asegurar valores válidos (evitar NaN o <= 0)
+    const panX = (typeof window.canvasVisualStateNav.panX === 'number' && !isNaN(window.canvasVisualStateNav.panX)) ? window.canvasVisualStateNav.panX : 0;
+    const panY = (typeof window.canvasVisualStateNav.panY === 'number' && !isNaN(window.canvasVisualStateNav.panY)) ? window.canvasVisualStateNav.panY : 0;
+    const zoom = (typeof window.canvasVisualStateNav.zoom === 'number' && !isNaN(window.canvasVisualStateNav.zoom) && window.canvasVisualStateNav.zoom > 0) ? window.canvasVisualStateNav.zoom : 1;
+    
     // Opciones del motor AXE
     const axeOptions = {
-      panX: window.canvasVisualStateNav?.panX || 0,
-      panY: window.canvasVisualStateNav?.panY || 0,
-      zoom: window.canvasVisualStateNav?.zoom || 1,
-      snappingEnabled: window.canvasVisualStateNav?.snappingEnabled || false,
-      snapGrid: window.canvasVisualStateNav?.snapGrid || 20
+      panX,
+      panY,
+      zoom,
+      snappingEnabled: window.canvasVisualStateNav.snappingEnabled || false,
+      snapGrid: window.canvasVisualStateNav.snapGrid || 20
     };
+    
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:1443',message:'axeOptions BEFORE axeRender (FIXED)',data:axeOptions,timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     
     // 🔥 CRÍTICO: Pasar contenedor explícito al motor AXE
     axeRender({
@@ -1457,16 +1479,27 @@
       options: axeOptions
     });
     
-    // Verificar que el SVG se insertó correctamente
+    // Verificar que el SVG se insertó correctamente y los nodos están visibles
     setTimeout(() => {
       const svgCount = container.querySelectorAll('svg').length;
       console.log('[AXE][NAV_EDITOR] svg children:', svgCount);
+      
+      // #region agent log
+      const svg = container.querySelector('svg');
+      const nodesContainer = container.querySelector('#canvas-nodes-container-nav');
+      const nodeElements = nodesContainer?.querySelectorAll('[id^="node-nav-"]') || [];
+      const visibleNodes = Array.from(nodeElements).filter(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:1461',message:'AFTER axeRender verification',data:{svgCount,hasSvg:!!svg,hasNodesContainer:!!nodesContainer,nodeCount:nodeElements.length,visibleNodesCount:visibleNodes.length,svgViewBox:svg?.getAttribute('viewBox'),svgWidth:svg?.getAttribute('width'),svgHeight:svg?.getAttribute('height'),nodesContainerTransform:nodesContainer?.style.transform,containerWidth:container.offsetWidth,containerHeight:container.offsetHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1,H2'})}).catch(()=>{});
+      // #endregion
       
       if (svgCount === 0) {
         console.error('[AXE][NAV_EDITOR] ERROR: No se encontró SVG después del render');
       } else {
         // Forzar estilos visibles para debug
-        const svg = container.querySelector('svg');
         if (svg) {
           svg.style.background = '#020617';
           svg.style.border = '2px solid red';
@@ -1474,7 +1507,12 @@
           console.log('[AXE][NAV_EDITOR] SVG estilos aplicados para debug');
         }
       }
-    }, 50);
+      
+      // Verificar visibilidad de nodos
+      if (nodeElements.length > 0 && visibleNodes.length === 0) {
+        console.warn('[AXE][NAV_EDITOR] WARNING: Nodos renderizados pero ninguno visible');
+      }
+    }, 100);
     
     // Actualizar panel contextual si hay nodo seleccionado
     const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId;
@@ -2887,6 +2925,10 @@
     console.log('[AXE][NAV_EDITOR] container:', container?.id);
     console.log('[AXE][NAV_EDITOR] nodes:', nodes?.length, 'edges:', edges?.length);
     
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:2885',message:'axeRender ENTRY',data:{nodesCount:nodes?.length,edgesCount:edges?.length,options},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3,H4'})}).catch(()=>{});
+    // #endregion
+    
     if (!container) {
       console.error('[AXE][NAV_EDITOR] ERROR: container es requerido');
       return;
@@ -2915,10 +2957,19 @@
       console.log('[AXE][NAV_EDITOR] SVG creado');
     }
     
-    // Aplicar transform de pan/zoom al contenedor de nodos
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:2917',message:'SVG BEFORE transform',data:{svgExists:!!svg,svgViewBox:svg?.getAttribute('viewBox'),svgWidth:svg?.getAttribute('width'),svgHeight:svg?.getAttribute('height'),nodesContainerExists:!!nodesContainer},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+    
+    // Aplicar transform de pan/zoom al contenedor de nodos (valores ya validados en renderNodesMap)
     const panX = options.panX || 0;
     const panY = options.panY || 0;
     const zoom = options.zoom || 1;
+    
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:2919',message:'pan/zoom values BEFORE apply (FIXED)',data:{panX,panY,zoom,isValid:!(isNaN(panX)||isNaN(panY)||isNaN(zoom)||zoom<=0)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3,H4'})}).catch(()=>{});
+    // #endregion
+    
     nodesContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
     nodesContainer.style.transformOrigin = '0 0';
     
@@ -2969,6 +3020,55 @@
     
     nodesContainer.innerHTML = html;
     
+    // #region agent log
+    const nodePositions = (nodes || []).map(n => ({id:n.id,position:n.position || {x:0,y:0}}));
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:2970',message:'nodes rendered in axeRender',data:{nodesCount:nodes?.length,nodePositions,appliedTransform:nodesContainer.style.transform},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    
+    // FIX: Ajustar viewBox del SVG al contenido renderizado (NOTA: los nodos son DIVs, no están en el SVG)
+    // El viewBox solo afecta a las edges/líneas SVG. Los nodos deberían ser visibles siempre.
+    setTimeout(() => {
+      try {
+        if (svg && nodesContainer && nodes && nodes.length > 0) {
+          // Calcular bounding box de los nodos usando sus posiciones (coordenadas absolutas del contenedor)
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          
+          for (const node of nodes) {
+            const pos = node.position || { x: 0, y: 0 };
+            // Tamaño aproximado de nodo
+            const nodeWidth = 150;
+            const nodeHeight = 80;
+            
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x + nodeWidth);
+            maxY = Math.max(maxY, pos.y + nodeHeight);
+          }
+          
+          // Agregar padding de 50px y asegurar que el viewBox cubra al menos el contenedor visible
+          const padding = 50;
+          const containerWidth = container.offsetWidth || 800;
+          const containerHeight = container.offsetHeight || 400;
+          
+          const viewBoxX = 0; // SVG viewBox siempre empieza en 0 para simplificar
+          const viewBoxY = 0;
+          const viewBoxWidth = Math.max(containerWidth, maxX - minX + (padding * 2));
+          const viewBoxHeight = Math.max(containerHeight, maxY - minY + (padding * 2));
+          
+          // Solo aplicar viewBox si los valores son válidos
+          if (isFinite(viewBoxWidth) && isFinite(viewBoxHeight) && viewBoxWidth > 0 && viewBoxHeight > 0) {
+            svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
+            
+            // #region agent log
+            fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:2980',message:'viewBox set on SVG',data:{viewBox:`${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`,minX,minY,maxX,maxY,containerWidth,containerHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H2'})}).catch(()=>{});
+            // #endregion
+          }
+        }
+      } catch (err) {
+        console.error('[AXE][NAV_EDITOR] Error setting viewBox:', err);
+      }
+    }, 10);
+    
     // Renderizar edges después
     setTimeout(() => {
       renderCanvasEdgesNav({ nodes, edges }, container);
@@ -2978,19 +3078,34 @@
   }
   
   /**
-   * Renderiza el canvas viewer con motor visual AXE (LEGACY - usa axeRender internamente)
+   * Renderiza el canvas viewer con motor visual AXE
+   * FIX: Ya no borra el SVG y nodesContainer creados por axeRender
    */
   function renderCanvasViewerNav(canvas) {
     const container = document.getElementById('canvas-visual-container-nav');
     if (!container || !canvas) return;
     
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:3018',message:'renderCanvasViewerNav ENTRY (FIXED)',data:{nodesCount:canvas.nodes?.length,edgesCount:canvas.edges?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
+    // Inicializar estado de pan/zoom de forma segura
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    // Asegurar valores válidos (evitar NaN o <= 0)
+    const panX = (typeof window.canvasVisualStateNav.panX === 'number' && !isNaN(window.canvasVisualStateNav.panX)) ? window.canvasVisualStateNav.panX : 0;
+    const panY = (typeof window.canvasVisualStateNav.panY === 'number' && !isNaN(window.canvasVisualStateNav.panY)) ? window.canvasVisualStateNav.panY : 0;
+    const zoom = (typeof window.canvasVisualStateNav.zoom === 'number' && !isNaN(window.canvasVisualStateNav.zoom) && window.canvasVisualStateNav.zoom > 0) ? window.canvasVisualStateNav.zoom : 1;
+    
     // Usar motor AXE con contenedor explícito
     const axeOptions = {
-      panX: window.canvasVisualStateNav?.panX || 0,
-      panY: window.canvasVisualStateNav?.panY || 0,
-      zoom: window.canvasVisualStateNav?.zoom || 1,
-      snappingEnabled: window.canvasVisualStateNav?.snappingEnabled || false,
-      snapGrid: window.canvasVisualStateNav?.snapGrid || 20
+      panX,
+      panY,
+      zoom,
+      snappingEnabled: window.canvasVisualStateNav.snappingEnabled || false,
+      snapGrid: window.canvasVisualStateNav.snapGrid || 20
     };
     
     axeRender({
@@ -3000,58 +3115,9 @@
       options: axeOptions
     });
     
-    const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId ?? null;
-    
-    let html = '';
-    
-    // Renderizar nodos
-    for (const node of canvas.nodes || []) {
-      const pos = node.position || { x: 0, y: 0 };
-      const isSelected = selectedNodeId === node.id;
-      
-      // Badge de tipo
-      let typeBadge = '';
-      let nodeColor = 'bg-slate-700';
-      if (node.type === 'start' || node.kind === 'system_entry') {
-        typeBadge = '<span class="px-1.5 py-0.5 bg-green-600 text-white text-xs rounded">START</span>';
-        nodeColor = 'bg-green-700';
-      } else if (node.type === 'section' || node.kind === 'section') {
-        typeBadge = '<span class="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded">SECTION</span>';
-        nodeColor = 'bg-blue-700';
-      } else if (node.type === 'hub' || node.kind === 'hub') {
-        typeBadge = '<span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded">HUB</span>';
-        nodeColor = 'bg-purple-700';
-      }
-      
-      const borderClass = isSelected 
-        ? 'border-2 border-indigo-400 shadow-lg shadow-indigo-500/50' 
-        : 'border border-slate-600';
-      
-      html += `
-        <div 
-          id="node-nav-${node.id}"
-          data-node-id="${node.id}"
-          class="absolute ${nodeColor} ${borderClass} rounded-lg p-3 min-w-[120px] cursor-move select-none"
-          style="left: ${pos.x}px; top: ${pos.y}px; z-index: 10;"
-          onmousedown="handleNodeMouseDownNav(event, '${node.id}')"
-          onclick="handleNodeClickNav(event, '${node.id}')"
-        >
-          <div class="flex items-center justify-between gap-2 mb-1">
-            <div class="text-white font-semibold text-sm truncate">${(node.label || node.id).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-            ${typeBadge}
-          </div>
-          <div class="text-slate-300 text-xs">${(node.kind || node.type || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-          ${node.subtitle ? `<div class="text-slate-200 text-xs mt-1 truncate">${(node.subtitle || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
-        </div>
-      `;
-    }
-    
-    container.innerHTML = html;
-    
-    // Renderizar edges después
-    setTimeout(() => {
-      renderCanvasEdgesNav(canvas);
-    }, 0);
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:3042',message:'renderCanvasViewerNav AFTER axeRender (FIXED)',data:{hasSvg:!!container.querySelector('svg'),hasNodesContainer:!!container.querySelector('#canvas-nodes-container-nav')},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
   }
   
   /**
@@ -3106,6 +3172,10 @@
     const containerRect = container.getBoundingClientRect();
     svg.setAttribute('width', containerRect.width);
     svg.setAttribute('height', containerRect.height);
+    
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'navigation-editor.html:3106',message:'SVG dimensions set',data:{width:containerRect.width,height:containerRect.height,svgViewBox:svg.getAttribute('viewBox'),hasViewBox:!!svg.getAttribute('viewBox')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     
     // Agregar defs con marcador de flecha
     let defs = svg.querySelector('defs');

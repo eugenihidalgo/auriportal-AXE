@@ -12,16 +12,43 @@ import { requireAdminContext } from '../core/auth-context.js';
  * Usa requireAdminContext para obtener el contexto de autenticación admin.
  */
 export default async function adminThemesStudioUIHandler(request, env, ctx) {
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:14',message:'Handler entry',data:{url:request?.url,method:request?.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
   // Obtener contexto de autenticación admin (patrón estándar)
   // Si no está autenticado, requireAdminContext devuelve Response HTML (login)
-  const authCtx = await requireAdminContext(request, env);
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:18',message:'Before requireAdminContext',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
+  let authCtx;
+  try {
+    authCtx = await requireAdminContext(request, env);
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:25',message:'After requireAdminContext',data:{isResponse:authCtx instanceof Response,hasAuthCtx:!!authCtx},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+  } catch (authError) {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:30',message:'Error in requireAdminContext',data:{error:authError?.message,stack:authError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    throw authError;
+  }
+  
   if (authCtx instanceof Response) {
     // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:36',message:'Returning auth response (login)',data:{status:authCtx?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return authCtx;
   }
   
   // Si llegamos aquí, el usuario está autenticado como admin
   // authCtx contiene: { user: { isAdmin: true }, isAdmin: true, isAuthenticated: true, request, requestId }
+
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:44',message:'Before HTML construction',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 
   const html = `
 <!DOCTYPE html>
@@ -290,7 +317,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       min-width: 100px;
     }
     
-    /* Layout principal en 2 columnas */
+    /* Layout principal en 3 columnas */
     .main-layout {
       display: flex;
       flex: 1;
@@ -307,6 +334,134 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       padding: 24px;
       overflow-y: auto;
       flex-shrink: 0;
+    }
+    
+    /* Columna derecha - Theme Manager */
+    .theme-manager-panel {
+      width: 280px;
+      min-width: 280px;
+      max-width: 320px;
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      padding: 24px;
+      overflow-y: auto;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .theme-manager-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #334155;
+    }
+    
+    .theme-manager-header h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin: 0;
+    }
+    
+    .theme-manager-toggle {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 4px 8px;
+      transition: color 0.2s;
+    }
+    
+    .theme-manager-toggle:hover {
+      color: #e2e8f0;
+    }
+    
+    .theme-manager-content {
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .theme-manager-panel.collapsed {
+      width: 0;
+      min-width: 0;
+      padding: 0;
+      border-left: none;
+      overflow: hidden;
+    }
+    
+    .theme-manager-panel.collapsed .theme-manager-content {
+      display: none;
+    }
+    
+    .theme-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .theme-item {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .theme-item:hover {
+      background: #1e293b;
+      border-color: #475569;
+      transform: translateX(2px);
+    }
+    
+    .theme-item.active {
+      background: #1e293b;
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+    
+    .theme-item-name {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #f1f5f9;
+      margin-bottom: 8px;
+    }
+    
+    .theme-item-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    
+    .theme-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .theme-status.draft {
+      background: rgba(251, 191, 36, 0.15);
+      color: #fbbf24;
+    }
+    
+    .theme-status.published {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+    
+    .theme-version {
+      color: #64748b;
     }
     
     .controls-panel h2 {
@@ -583,6 +738,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     }
     
     /* Columna derecha - Preview */
+    /* Columna central: Preview */
     .preview-panel {
       flex: 1;
       display: flex;
@@ -653,10 +809,10 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     </div>
   </div>
   
-  <!-- Layout principal en 2 columnas -->
-  <div class="main-layout">
-    <!-- Columna izquierda: Controles -->
-    <div class="controls-panel">
+    <!-- Layout principal en 3 columnas -->
+    <div class="main-layout">
+      <!-- Columna izquierda: Controles -->
+      <div class="controls-panel">
       <h2>🎨 Paleta Principal</h2>
       
       <div class="palette-section">
@@ -696,7 +852,7 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       </div>
     </div>
     
-    <!-- Columna derecha: Preview -->
+    <!-- Columna central: Preview -->
     <div class="preview-panel">
       <div class="preview-container">
         <iframe 
@@ -704,6 +860,21 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
           class="preview-iframe"
           src="/admin/themes/preview?screen=pantalla1"
         ></iframe>
+      </div>
+    </div>
+    
+    <!-- Columna derecha: Theme Manager -->
+    <div class="theme-manager-panel" id="themeManagerPanel">
+      <div class="theme-manager-header">
+        <h2>🗂️ Themes</h2>
+        <button class="theme-manager-toggle" id="themeManagerToggle" title="Colapsar/Expandir">×</button>
+      </div>
+      <div class="theme-manager-content">
+        <ul class="theme-list" id="themeList">
+          <li style="color: #94a3b8; padding: 12px; text-align: center; font-size: 0.9rem;">
+            Cargando temas...
+          </li>
+        </ul>
       </div>
     </div>
   </div>
@@ -1119,6 +1290,14 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       
       // Renderizar TODOS los controles desde themeState
       renderAllControls();
+      
+      // Si hay un themeId cargado, actualizar el Theme Manager después de un breve delay
+      // para asegurar que el DOM esté listo
+      if (window.themeState.meta.themeId) {
+        setTimeout(() => {
+          refreshThemesList();
+        }, 500);
+      }
     }
 
     /**
@@ -1772,6 +1951,199 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     }
 
     // ============================================
+    // THEME MANAGER v1 - Gestión de múltiples temas
+    // ============================================
+    
+    /**
+     * Carga la lista de temas desde el backend
+     */
+    async function loadThemesList() {
+      try {
+        const response = await fetch('/admin/api/themes', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error ${response.status} al cargar temas`);
+        }
+        
+        const data = await response.json();
+        return data.themes || [];
+      } catch (error) {
+        console.error('[ThemeManager] Error cargando lista de temas:', error);
+        return [];
+      }
+    }
+    
+    /**
+     * Renderiza la lista de temas en el panel
+     */
+    function renderThemesList(themes) {
+      const themeList = document.getElementById('themeList');
+      if (!themeList) return;
+      
+      if (themes.length === 0) {
+        themeList.innerHTML = '<li style="color: #94a3b8; padding: 12px; text-align: center; font-size: 0.9rem;">No hay temas disponibles</li>';
+        return;
+      }
+      
+      const currentThemeId = window.themeState.meta.themeId;
+      
+      themeList.innerHTML = themes.map(theme => {
+        const isActive = theme.id === currentThemeId;
+        const status = theme.current_published_version ? 'published' : 'draft';
+        const statusLabel = status === 'published' ? '✅ Published' : '📝 Draft';
+        const versionText = theme.current_published_version ? `v${theme.current_published_version}` : '';
+        
+        return \`
+          <li class="theme-item \${isActive ? 'active' : ''}" data-theme-id="\${theme.id}">
+            <div class="theme-item-name">\${theme.name || theme.id}</div>
+            <div class="theme-item-meta">
+              <span class="theme-status \${status}">\${statusLabel}</span>
+              \${versionText ? \`<span class="theme-version">\${versionText}</span>\` : ''}
+            </div>
+          </li>
+        \`;
+      }).join('');
+      
+      // Añadir event listeners a cada item
+      themeList.querySelectorAll('.theme-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const themeId = item.getAttribute('data-theme-id');
+          if (themeId) {
+            loadThemeIntoStudio(themeId);
+          }
+        });
+      });
+    }
+    
+    /**
+     * Carga un tema en el Studio
+     * Obtiene el draft del tema y lo carga en themeState
+     */
+    async function loadThemeIntoStudio(themeId) {
+      try {
+        // Mostrar indicador de carga
+        const themeList = document.getElementById('themeList');
+        const originalContent = themeList.innerHTML;
+        themeList.innerHTML = '<li style="color: #94a3b8; padding: 12px; text-align: center; font-size: 0.9rem;">Cargando tema...</li>';
+        
+        // Obtener el tema completo (incluye draft)
+        const response = await fetch(\`/admin/api/themes/\${themeId}\`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(\`Error \${response.status} al cargar el tema\`);
+        }
+        
+        const data = await response.json();
+        const theme = data.theme;
+        
+        if (!theme) {
+          throw new Error('Tema no encontrado');
+        }
+        
+        // Cargar draft en themeState
+        // El endpoint devuelve: { theme: {...}, draft: {...}, published_version: {...} }
+        if (data.draft && data.draft.definition_json) {
+          const definition = data.draft.definition_json;
+          
+          // Actualizar themeState
+          window.themeState.meta.name = definition.name || theme.name || themeId;
+          window.themeState.meta.themeId = theme.id;
+          window.themeState.meta.dirty = false;
+          window.themeState.meta.publishedVersion = theme.current_published_version || null;
+          
+          // Cargar tokens desde definition_json
+          if (definition.tokens && typeof definition.tokens === 'object') {
+            window.themeState.tokens = { ...definition.tokens };
+          } else {
+            // Si no hay tokens, usar valores por defecto
+            window.themeState.tokens = { ...DEFAULT_VALUES };
+          }
+          
+          // Actualizar nombre en input
+          const nameInput = document.getElementById('themeNameInput');
+          if (nameInput) {
+            nameInput.value = window.themeState.meta.name;
+          }
+          
+          // Re-renderizar controles desde themeState
+          renderAllControls();
+          
+          // Propagar cambios al preview
+          propagateThemeChange();
+          
+          // Actualizar UI
+          updateUIFromState();
+          
+          // Recargar lista de temas para actualizar indicador activo
+          refreshThemesList();
+          
+          console.log('[ThemeManager] Tema cargado:', themeId);
+        } else {
+          // Si no hay draft, crear uno vacío
+          window.themeState.meta.name = theme.name || themeId;
+          window.themeState.meta.themeId = themeId;
+          window.themeState.meta.dirty = false;
+          window.themeState.meta.publishedVersion = theme.current_published_version || null;
+          window.themeState.tokens = { ...DEFAULT_VALUES };
+          
+          const nameInput = document.getElementById('themeNameInput');
+          if (nameInput) {
+            nameInput.value = window.themeState.meta.name;
+          }
+          
+          renderAllControls();
+          propagateThemeChange();
+          updateUIFromState();
+          refreshThemesList();
+        }
+        
+      } catch (error) {
+        console.error('[ThemeManager] Error cargando tema:', error);
+        alert(\`Error al cargar el tema: \${error.message}\`);
+        
+        // Restaurar lista
+        refreshThemesList();
+      }
+    }
+    
+    /**
+     * Recarga la lista de temas
+     */
+    async function refreshThemesList() {
+      const themes = await loadThemesList();
+      renderThemesList(themes);
+    }
+    
+    /**
+     * Inicializa el Theme Manager
+     */
+    async function initializeThemeManager() {
+      // Cargar lista inicial
+      await refreshThemesList();
+      
+      // Configurar toggle de colapsar/expandir
+      const toggleBtn = document.getElementById('themeManagerToggle');
+      const panel = document.getElementById('themeManagerPanel');
+      
+      if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', () => {
+          panel.classList.toggle('collapsed');
+          toggleBtn.textContent = panel.classList.contains('collapsed') ? '☰' : '×';
+        });
+      }
+    }
+
+    // ============================================
     // PRESETS v1 - Funcionalidad de presets
     // ============================================
 
@@ -1897,6 +2269,9 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       // Inicializar presets
       setupPresets();
       
+      // Inicializar Theme Manager (después de initializeThemeState para que detecte tema activo)
+      await initializeThemeManager();
+      
       // FASE 4: Inicializar preview cuando el iframe esté listo
       // El preview SOLO escucha postMessage
       const iframe = document.getElementById('themePreviewFrame');
@@ -1917,6 +2292,27 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
 </html>
   `;
 
-  return renderHtml(html);
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2268',message:'After HTML construction',data:{htmlLength:html?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2271',message:'Before renderHtml',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  
+  let response;
+  try {
+    response = renderHtml(html);
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2278',message:'After renderHtml',data:{isResponse:response instanceof Response,status:response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+  } catch (renderError) {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:2282',message:'Error in renderHtml',data:{error:renderError?.message,stack:renderError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    throw renderError;
+  }
+  
+  return response;
 }
 

@@ -74,6 +74,18 @@ export async function updateCatalogMeta(id, patch) {
 }
 
 /**
+ * Crea un nuevo catálogo
+ * 
+ * @param {Object} catalogData - Datos del catálogo a crear
+ * @returns {Promise<Object>} Catálogo creado
+ * @throws {Error} Si catalog_key ya existe o hay error de validación
+ */
+export async function createCatalog(catalogData) {
+  const repo = getDefaultPdeCatalogRegistryRepo();
+  return await repo.createCatalog(catalogData);
+}
+
+/**
  * Valida que un catalog_key existe y es usable para motores
  * 
  * @param {string} catalogKey - Clave canónica del catálogo

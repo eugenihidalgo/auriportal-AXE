@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
-import { listCatalogs, getCatalogById, updateCatalogMeta } from '../services/pde-catalog-registry-service.js';
+import { listCatalogs, getCatalogById, updateCatalogMeta, createCatalog } from '../services/pde-catalog-registry-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,9 +99,92 @@ export async function renderCatalogList(request, env) {
  * Handler principal del endpoint
  */
 export default async function adminCatalogRegistryHandler(request, env, ctx) {
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-catalog-registry.js:101',message:'Handler catalog-registry: entrada',data:{url:request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-catalog-registry.js:105',message:'Handler catalog-registry: path y method extraídos',data:{path,method,searchParams:Object.fromEntries(url.searchParams)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+
+  // POST /admin/pde/catalog-registry - Crear catálogo (API)
+  if (path === '/admin/pde/catalog-registry' && method === 'POST') {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+
+    try {
+      const body = await request.json();
+      
+      // Validación de campos requeridos
+      if (!body.catalog_key || !body.label || !body.source_table) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'catalog_key, label y source_table son requeridos' 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validar catalog_key (solo letras, números, guiones bajos)
+      if (!/^[a-z0-9_]+$/.test(body.catalog_key)) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'catalog_key solo puede contener letras minúsculas, números y guiones bajos' 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Preparar datos del catálogo
+      const catalogData = {
+        catalog_key: body.catalog_key.trim(),
+        label: body.label.trim(),
+        description: body.description?.trim() || null,
+        source_table: body.source_table.trim(),
+        source_endpoint: body.source_endpoint?.trim() || null,
+        usable_for_motors: body.usable_for_motors !== undefined ? Boolean(body.usable_for_motors) : true,
+        supports_level: Boolean(body.supports_level || false),
+        supports_priority: Boolean(body.supports_priority || false),
+        supports_obligatory: Boolean(body.supports_obligatory || false),
+        supports_duration: Boolean(body.supports_duration || false),
+        status: body.status || 'active'
+      };
+
+      const created = await createCatalog(catalogData);
+
+      return new Response(JSON.stringify({ success: true, catalog: created }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      console.error('Error al crear catálogo:', error);
+      
+      // Si es error de duplicado, devolver 409
+      if (error.message.includes('ya existe')) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: error.message 
+        }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Error al crear catálogo' 
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
 
   // GET /admin/pde/catalog-registry/:id - Obtener catálogo (API)
   if (path.match(/^\/admin\/pde\/catalog-registry\/([^\/]+)$/) && method === 'GET') {
@@ -208,10 +291,16 @@ export default async function adminCatalogRegistryHandler(request, env, ctx) {
   }
 
   // GET /admin/pde/catalog-registry - Lista de catálogos (HTML)
+  // #region agent log
   if (path === '/admin/pde/catalog-registry' && method === 'GET') {
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-catalog-registry.js:211',message:'Handler catalog-registry: ruta HTML detectada',data:{path,method,matches:path === '/admin/pde/catalog-registry'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
     return await renderCatalogList(request, env);
   }
+  // #endregion
 
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-catalog-registry.js:215',message:'Handler catalog-registry: ninguna ruta coincidió, devolviendo 404',data:{path,method,matchedId:path.match(/^\/admin\/pde\/catalog-registry\/([^\/]+)$/) !== null,matchedJson:path === '/admin/pde/catalog-registry' && method === 'GET' && url.searchParams.get('format') === 'json',matchedHtml:path === '/admin/pde/catalog-registry' && method === 'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   return new Response('Not Found', { status: 404 });
 }
 

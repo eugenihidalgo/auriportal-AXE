@@ -3348,6 +3348,48 @@ export async function runMigrations() {
         }
       }
     }
+    
+    // Migración v5.12.0: Registro Canónico de Catálogos PDE
+    const migration512Path = join(__dirname, 'migrations', 'v5.12.0-create-pde-catalog-registry.sql');
+    try {
+      const migrationSQL = readFileSync(migration512Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.12.0 ejecutada: registro canónico de catálogos PDE');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.12.0 ya aplicada (tabla existente)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si la tabla ya existe (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'pde_catalog_registry'
+              );
+            `);
+            if (checkResult.rows[0].exists) {
+              console.log('ℹ️  Migración v5.12.0 ya aplicada (tabla existente con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.12.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.12.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.12.0:', error.message);
+        }
+      }
+    }
   } catch (error) {
     console.warn('⚠️  Error ejecutando migraciones:', error.message);
   }
