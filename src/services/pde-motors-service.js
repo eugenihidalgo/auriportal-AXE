@@ -28,8 +28,13 @@ export async function validateMotorDefinition(definition) {
 
   // Validar cada input
   for (const input of definition.inputs) {
-    if (!input.key || typeof input.key !== 'string') {
-      return { valid: false, error: 'Cada input debe tener un "key" de tipo string' };
+    if (!input.key || typeof input.key !== 'string' || input.key.trim() === '') {
+      return { valid: false, error: 'Cada input debe tener un "key" de tipo string no vacío' };
+    }
+    // Validar formato de key: ^[a-z][a-z0-9_]*$
+    const keyRegex = /^[a-z][a-z0-9_]*$/;
+    if (!keyRegex.test(input.key.trim())) {
+      return { valid: false, error: `Input "${input.key}": la key debe empezar con letra minúscula y contener solo letras minúsculas, números y guiones bajos` };
     }
     if (!input.type || typeof input.type !== 'string') {
       return { valid: false, error: 'Cada input debe tener un "type" de tipo string' };
