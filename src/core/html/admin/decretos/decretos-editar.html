@@ -4,6 +4,7 @@
   <div class="bg-slate-800 rounded-lg shadow-lg p-6 mb-6 border border-slate-700">
     <form id="formDecreto" onsubmit="guardarDecreto(event)">
       <input type="hidden" id="decretoId" value="{{DECRETO_ID}}">
+      <input type="hidden" id="contentDelta" value="">
       
       <div class="mb-4">
         <label class="block text-white font-medium mb-2">Nombre del Decreto *</label>
@@ -18,6 +19,16 @@
       </div>
       
       <div class="mb-4">
+        <label class="block text-white font-medium mb-2">Descripción (opcional)</label>
+        <textarea 
+          id="descripcion" 
+          rows="2"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Descripción breve del decreto..."
+        >{{DESCRIPCION}}</textarea>
+      </div>
+      
+      <div class="mb-4">
         <label class="block text-white font-medium mb-2">Nivel Mínimo</label>
         <select 
           id="nivelMinimo" 
@@ -28,6 +39,10 @@
           <option value="3" {{NIVEL_MINIMO == 3 ? 'selected' : ''}}>Nivel 3</option>
           <option value="4" {{NIVEL_MINIMO == 4 ? 'selected' : ''}}>Nivel 4</option>
           <option value="5" {{NIVEL_MINIMO == 5 ? 'selected' : ''}}>Nivel 5</option>
+          <option value="6" {{NIVEL_MINIMO == 6 ? 'selected' : ''}}>Nivel 6</option>
+          <option value="7" {{NIVEL_MINIMO == 7 ? 'selected' : ''}}>Nivel 7</option>
+          <option value="8" {{NIVEL_MINIMO == 8 ? 'selected' : ''}}>Nivel 8</option>
+          <option value="9" {{NIVEL_MINIMO == 9 ? 'selected' : ''}}>Nivel 9</option>
         </select>
       </div>
       
@@ -66,23 +81,46 @@
       </div>
       
       <div class="mb-4">
-        <label class="block text-white font-medium mb-2">Contenido HTML *</label>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-white font-medium">Contenido del Decreto *</label>
+          <button 
+            type="button" 
+            onclick="mostrarVistaPrevia()" 
+            class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded transition-colors"
+          >
+            👁️ Vista Previa
+          </button>
+        </div>
+        
+        <!-- Editor Quill WYSIWYG -->
+        <div id="editor-container" class="bg-white rounded" style="min-height: 400px;">
+          <!-- Quill se inicializará aquí -->
+        </div>
+        <input type="hidden" id="contenidoHtml" required>
+        <p class="text-slate-400 text-xs mt-1">Editor visual WYSIWYG. Escribe el contenido del decreto con formato.</p>
+        
+        <!-- Fallback textarea (oculto, solo para validación HTML5) -->
         <textarea 
-          id="contenidoHtml" 
-          rows="15"
+          id="contenidoHtmlFallback" 
+          style="display: none;"
           required
-          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="<p>Contenido del decreto en HTML...</p>"
         >{{CONTENIDO_HTML}}</textarea>
-        <p class="text-slate-400 text-xs mt-1">Editor visual aún no implementado. Usa HTML directamente.</p>
       </div>
       
       <div class="flex gap-2">
         <button 
           type="submit" 
+          id="btnGuardar"
           class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors"
         >
           💾 Guardar
+        </button>
+        <button 
+          type="button" 
+          onclick="mostrarVistaPrevia()" 
+          class="px-6 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded transition-colors"
+        >
+          👁️ Vista Previa
         </button>
         <a 
           href="/admin/decretos" 
@@ -91,23 +129,137 @@
           ← Volver
         </a>
       </div>
+      
+      <!-- Mensaje de feedback -->
+      <div id="feedback" class="mt-4 hidden">
+        <div id="feedbackContent" class="p-3 rounded"></div>
+      </div>
     </form>
   </div>
 </div>
 
+<!-- Modal de Vista Previa -->
+<div id="modalPreview" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-white">Vista Previa del Decreto</h2>
+      <button 
+        onclick="cerrarVistaPrevia()" 
+        class="text-slate-400 hover:text-white text-2xl"
+      >
+        ×
+      </button>
+    </div>
+    <div id="previewContent" class="prose prose-invert max-w-none text-white">
+      <!-- Contenido de preview se inyectará aquí -->
+    </div>
+    <div class="mt-4 flex justify-end">
+      <button 
+        onclick="cerrarVistaPrevia()" 
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Quill CSS -->
+<link href="/vendor/quill/quill.snow.css" rel="stylesheet">
+
+<!-- Scripts -->
+<script src="/js/admin-default-level.js"></script>
+<script src="/vendor/quill/quill.min.js"></script>
 <script src="/js/admin-decretos.js"></script>
 
+<script>
+// Inicializar Quill cuando el DOM esté listo
+window.quill = null;
 
+document.addEventListener('DOMContentLoaded', function() {
+  // Verificar que Quill esté disponible
+  if (typeof Quill === 'undefined') {
+    console.error('Quill no está disponible. Usando fallback textarea.');
+    document.getElementById('editor-container').innerHTML = '<textarea id="contenidoHtml" rows="15" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white font-mono text-sm" required>' + 
+      (document.getElementById('contenidoHtmlFallback').value || '') + 
+      '</textarea>';
+    return;
+  }
+  
+  // Inicializar Quill
+  window.quill = new Quill('#editor-container', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        ['blockquote', 'link'],
+        ['clean']
+      ]
+    },
+    placeholder: 'Escribe el contenido del decreto aquí...'
+  });
+  
+  // Cargar contenido HTML existente si hay
+  const contenidoHtml = document.getElementById('contenidoHtmlFallback').value;
+  if (contenidoHtml && contenidoHtml.trim()) {
+    // Convertir HTML a Delta de Quill
+    try {
+      const delta = window.quill.clipboard.convert({ html: contenidoHtml });
+      window.quill.setContents(delta);
+    } catch (error) {
+      console.warn('Error cargando contenido en Quill:', error);
+      // Fallback: insertar HTML directamente
+      window.quill.root.innerHTML = contenidoHtml;
+    }
+  }
+  
+  // Guardar Delta cuando cambie el contenido
+  window.quill.on('text-change', function() {
+    const delta = window.quill.getContents();
+    document.getElementById('contentDelta').value = JSON.stringify(delta);
+    
+    // Actualizar HTML oculto para validación
+    const html = window.quill.root.innerHTML;
+    document.getElementById('contenidoHtml').value = html;
+    document.getElementById('contenidoHtmlFallback').value = html;
+  });
+});
 
+// Función para mostrar vista previa
+function mostrarVistaPrevia() {
+  let html = '';
+  
+  if (window.quill) {
+    html = window.quill.root.innerHTML;
+  } else {
+    html = document.getElementById('contenidoHtml').value || 
+            document.getElementById('contenidoHtmlFallback').value;
+  }
+  
+  if (!html || html.trim() === '' || html === '<p><br></p>') {
+    alert('No hay contenido para previsualizar');
+    return;
+  }
+  
+  const previewContent = document.getElementById('previewContent');
+  previewContent.innerHTML = html;
+  
+  const modal = document.getElementById('modalPreview');
+  modal.classList.remove('hidden');
+}
 
+// Función para cerrar vista previa
+function cerrarVistaPrevia() {
+  const modal = document.getElementById('modalPreview');
+  modal.classList.add('hidden');
+}
 
-
-
-
-
-
-
-
-
-
-
+// Cerrar modal con ESC
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    cerrarVistaPrevia();
+  }
+});
+</script>

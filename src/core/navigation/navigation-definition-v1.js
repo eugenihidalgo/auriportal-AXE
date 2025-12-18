@@ -14,6 +14,7 @@ import {
   LAYOUT_HINTS,
   NODE_DEFAULTS,
   EDGE_DEFAULTS,
+  NAVIGATION_DEFAULTS,
   isValidId,
 } from './navigation-constants.js';
 
@@ -22,6 +23,8 @@ import {
  * @property {string} navigation_id - ID único de la navegación
  * @property {string} name - Nombre legible de la navegación
  * @property {string} [description] - Descripción opcional
+ * @property {'global'|'contextual'} [type] - Tipo de navegación (FASE 4.1)
+ * @property {string|null} [context_key] - Clave de contexto (obligatorio si type === 'contextual')
  * @property {string} entry_node_id - ID del nodo de entrada
  * @property {Object.<string, NodeDefinition>} nodes - Mapa de nodos por ID
  * @property {EdgeDefinition[]} [edges] - Lista de edges (opcional si se usan children)
@@ -34,15 +37,19 @@ import {
  * @typedef {Object} NodeDefinition
  * @property {string} id - ID único del nodo
  * @property {string} kind - Tipo de nodo (section, group, item, hub, external_link, system_entry)
+ * @property {'home'|'section'|'view'|'external'|'overlay'|'return'} [type] - Tipo semántico (FASE 4.2)
  * @property {string} label - Etiqueta visible
  * @property {string} [subtitle] - Subtítulo opcional
  * @property {string} [icon] - Icono opcional
  * @property {string} [art_ref] - Referencia a arte opcional
  * @property {string} [layout_hint] - Hint de layout (list, grid, map, cards, tree)
  * @property {number} [order] - Orden de renderizado
- * @property {VisibilityConfig} [visibility] - Configuración de visibilidad
+ * @property {Object} [position] - Posición en canvas {x, y}
+ * @property {VisibilityRules} [visibility_rules] - Reglas de visibilidad (FASE 4.3 - pasivo)
+ * @property {VisibilityConfig} [visibility] - Configuración de visibilidad (legacy)
  * @property {TargetConfig} [target] - Configuración de target
  * @property {string[]} [children] - IDs de nodos hijos (alternativa a edges)
+ * @property {Object} [meta] - Metadatos opcionales
  */
 
 /**
@@ -50,6 +57,15 @@ import {
  * @property {number} [min_nivel_efectivo] - Nivel mínimo requerido
  * @property {string} [feature_flag] - Feature flag requerida
  * @property {string[]} [requires] - Lista de permisos requeridos
+ */
+
+/**
+ * Reglas de visibilidad (FASE 4.3 - pasivo, sin evaluación)
+ * @typedef {Object} VisibilityRules
+ * @property {number} [min_level] - Nivel mínimo requerido
+ * @property {number} [max_level] - Nivel máximo permitido
+ * @property {string[]} [flags] - Feature flags requeridas
+ * @property {string[]} [products] - Productos requeridos
  */
 
 /**
@@ -72,16 +88,18 @@ import {
  * @param {string} name - Nombre de la navegación
  * @returns {NavigationDefinition} Definición mínima
  */
-export function createMinimalNavigation(navigationId, name) {
+export function createMinimalNavigation(navigationId, name, type = 'global', contextKey = null) {
   const entryNodeId = 'root';
-  return {
+  const navDef = {
     navigation_id: navigationId,
     name: name || navigationId,
+    type: type || NAVIGATION_DEFAULTS.type,
     entry_node_id: entryNodeId,
     nodes: {
       [entryNodeId]: {
         id: entryNodeId,
         kind: 'section',
+        type: 'home', // FASE 4.2: tipo semántico por defecto para root
         label: name || 'Navegación',
         order: 0,
       },
@@ -91,6 +109,18 @@ export function createMinimalNavigation(navigationId, name) {
       created_at: new Date().toISOString(),
     },
   };
+  
+  // FASE 4.1: Añadir context_key si es contextual
+  if (type === 'contextual') {
+    if (!contextKey) {
+      console.warn(`[AXE][NAV_EDITOR] createMinimalNavigation: type='contextual' requiere context_key, usando 'default'`);
+      navDef.context_key = 'default';
+    } else {
+      navDef.context_key = contextKey;
+    }
+  }
+  
+  return navDef;
 }
 
 /**
@@ -137,11 +167,22 @@ export function normalizeNavigationDefinition(def) {
     navigation_id: def.navigation_id,
     name: def.name,
     description: def.description,
+    type: def.type || NAVIGATION_DEFAULTS.type, // FASE 4.1
+    context_key: def.context_key !== undefined ? def.context_key : null, // FASE 4.1
     entry_node_id: def.entry_node_id,
     nodes: {},
     edges: [],
     meta: def.meta || {},
   };
+  
+  // FASE 4.1: Validación ligera (warning, no bloqueo)
+  if (normalized.type === 'contextual' && !normalized.context_key) {
+    console.warn(`[AXE][NAV_EDITOR] normalizeNavigationDefinition: type='contextual' sin context_key en navegación '${normalized.navigation_id}'`);
+  }
+  if (normalized.type === 'global' && normalized.context_key !== null) {
+    console.warn(`[AXE][NAV_EDITOR] normalizeNavigationDefinition: type='global' con context_key no-null en navegación '${normalized.navigation_id}' (ignorado)`);
+    normalized.context_key = null;
+  }
 
   // Normalizar nodos
   const nodes = def.nodes || {};
@@ -320,14 +361,64 @@ export async function generateChecksum(def) {
 }
 
 /**
- * Verifica si un nodo requiere target según su kind
- * @param {string} kind - Tipo de nodo
+ * Verifica si un nodo requiere target según su kind o type
+ * @param {string} kind - Tipo de nodo (kind)
+ * @param {string} [type] - Tipo semántico (type) - FASE 4.2
  * @returns {boolean} true si requiere target
  */
-export function nodeRequiresTarget(kind) {
-  const NODES_REQUIRING_TARGET = ['item', 'hub', 'external_link', 'system_entry'];
-  return NODES_REQUIRING_TARGET.includes(kind);
+export function nodeRequiresTarget(kind, type) {
+  const NODES_REQUIRING_TARGET = ['item', 'hub', 'external_link', 'system_entry', 'view', 'external'];
+  if (NODES_REQUIRING_TARGET.includes(kind)) return true;
+  if (type && NODES_REQUIRING_TARGET.includes(type)) return true;
+  return false;
 }
+
+/**
+ * Verifica si un nodo puede ser entry según su type (FASE 4.2)
+ * @param {string} [type] - Tipo semántico del nodo
+ * @returns {boolean} true si puede ser entry
+ */
+export function nodeCanBeEntry(type) {
+  if (!type) return true; // Si no tiene type, se permite (compatibilidad)
+  const CANNOT_BE_ENTRY = ['overlay'];
+  return !CANNOT_BE_ENTRY.includes(type);
+}
+
+/**
+ * Valida visibility_rules como JSON (FASE 4.3 - pasivo)
+ * Solo valida estructura, no evalúa condiciones
+ * @param {Object} rules - Reglas de visibilidad
+ * @returns {{valid: boolean, error?: string}} Resultado de validación
+ */
+export function validateVisibilityRulesPassive(rules) {
+  if (!rules || typeof rules !== 'object') {
+    return { valid: true }; // Vacío es válido
+  }
+  
+  try {
+    // Validar estructura esperada
+    if (rules.min_level !== undefined && typeof rules.min_level !== 'number') {
+      return { valid: false, error: 'min_level debe ser número' };
+    }
+    if (rules.max_level !== undefined && typeof rules.max_level !== 'number') {
+      return { valid: false, error: 'max_level debe ser número' };
+    }
+    if (rules.flags !== undefined && !Array.isArray(rules.flags)) {
+      return { valid: false, error: 'flags debe ser array' };
+    }
+    if (rules.products !== undefined && !Array.isArray(rules.products)) {
+      return { valid: false, error: 'products debe ser array' };
+    }
+    
+    // Validar que sea JSON serializable
+    JSON.stringify(rules);
+    
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: `JSON inválido: ${error.message}` };
+  }
+}
+
 
 
 

@@ -203,6 +203,11 @@ function normalizeNode(node, nodeId) {
     normalized.metadata = { ...node.metadata };
   }
 
+  // Agregar meta si existe (AXE v0.6.8: metadatos pedagógicos de intención)
+  if (node.meta && typeof node.meta === 'object') {
+    normalized.meta = { ...node.meta };
+  }
+
   // Completar defaults según tipo de nodo
   if (normalized.type === 'screen') {
     if (!normalized.props.screen_template_id) {
@@ -307,4 +312,5 @@ function createDefaultCanvas() {
     }
   };
 }
+
 

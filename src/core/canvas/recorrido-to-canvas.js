@@ -68,13 +68,24 @@ export function recorridoToCanvas(recorrido, options = {}) {
     let nodeType = inferNodeType(step);
     const nodeProps = convertStepToNodeProps(step, nodeType);
 
-    nodes.push({
+    const node = {
       id: stepId,
       type: nodeType,
       label: stepId,
       position,
       props: nodeProps
-    });
+    };
+
+    // Preservar meta del step si existe (AXE v0.6.8: metadatos pedagógicos de intención)
+    // Extraer meta del step, excluyendo canvas_position que ya se maneja en position
+    if (step.meta && typeof step.meta === 'object') {
+      const { canvas_position, ...nodeMeta } = step.meta;
+      if (Object.keys(nodeMeta).length > 0) {
+        node.meta = nodeMeta;
+      }
+    }
+
+    nodes.push(node);
 
     // Avanzar posición (layout horizontal)
     if (generatePositions) {

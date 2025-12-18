@@ -203,3 +203,4 @@ Si el problema persiste después de seguir estos pasos:
 4. Verificar que el servidor Node.js está recibiendo las requests correctamente
 
 
+

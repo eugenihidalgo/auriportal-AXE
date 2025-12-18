@@ -182,3 +182,4 @@ Todas las funcionalidades de AXE v0.3 → v0.5 están:
 - `/docs/PROTECCIONES_RUNTIME_AXE_V0_5.md` - Protecciones críticas
 - `/docs/SCREEN_TEMPLATES_V1.md` - Documentación de Screen Templates
 
+

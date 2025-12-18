@@ -245,3 +245,4 @@ describe('catalog-validator', () => {
 
 
 
+

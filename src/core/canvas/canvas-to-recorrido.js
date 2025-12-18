@@ -213,6 +213,20 @@ function convertNodeToStep(node) {
     step.meta.canvas_position = { x: node.position.x, y: node.position.y };
   }
 
+  // Preservar meta del nodo si existe (AXE v0.6.8: metadatos pedagógicos de intención)
+  if (node.meta && typeof node.meta === 'object') {
+    if (!step.meta) {
+      step.meta = {};
+    }
+    // Fusionar meta del nodo con meta del step (preservando canvas_position si existe)
+    step.meta = {
+      ...step.meta,
+      ...node.meta,
+      canvas_position: step.meta.canvas_position // Preservar posición si ya existe
+    };
+  }
+
   return step;
 }
+
 

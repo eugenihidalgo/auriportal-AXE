@@ -34,6 +34,43 @@
   <div class="editor-body flex">
     <!-- Izquierda: Editor JSON -->
     <div class="flex-1 bg-slate-950 border-r border-slate-800 overflow-hidden flex flex-col">
+      <!-- UX MÍNIMA: Ajustes clave (preview en vivo) -->
+      <div class="p-4 border-b border-slate-700 bg-slate-900">
+        <h2 class="text-lg font-semibold text-white mb-3">🎨 Ajustes clave (preview en vivo)</h2>
+        <div class="space-y-3">
+          <!-- --bg-main -->
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1" for="token-bg-main">Fondo principal (--bg-main)</label>
+            <input 
+              type="text" 
+              id="token-bg-main" 
+              class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="#0a0a0a"
+            />
+          </div>
+          <!-- --text-primary -->
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1" for="token-text-primary">Texto principal (--text-primary)</label>
+            <input 
+              type="text" 
+              id="token-text-primary" 
+              class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="#ffffff"
+            />
+          </div>
+          <!-- --accent-primary -->
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1" for="token-accent-primary">Acento principal (--accent-primary)</label>
+            <input 
+              type="text" 
+              id="token-accent-primary" 
+              class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="#ffd86b"
+            />
+          </div>
+        </div>
+      </div>
+      
       <div class="p-4 border-b border-slate-700">
         <h2 class="text-lg font-semibold text-white">Definition JSON</h2>
         <p class="text-slate-400 text-sm mt-1">Edita la definición del tema en formato JSON</p>
@@ -132,6 +169,82 @@
 <script>
   const themeId = document.getElementById('themes-editor')?.dataset.themeId || null;
   let currentDefinition = null;
+  let previewIframe = null;
+  
+  // UX MÍNIMA: Sincronizar inputs de tokens clave con JSON
+  function syncTokenInputsFromDefinition() {
+    if (!currentDefinition || !currentDefinition.tokens) return;
+    
+    const tokens = currentDefinition.tokens;
+    const bgMainInput = document.getElementById('token-bg-main');
+    const textPrimaryInput = document.getElementById('token-text-primary');
+    const accentPrimaryInput = document.getElementById('token-accent-primary');
+    
+    if (bgMainInput) bgMainInput.value = tokens['--bg-main'] || '';
+    if (textPrimaryInput) textPrimaryInput.value = tokens['--text-primary'] || '';
+    if (accentPrimaryInput) accentPrimaryInput.value = tokens['--accent-primary'] || '';
+  }
+  
+  // UX MÍNIMA: Actualizar JSON desde inputs de tokens clave
+  function updateDefinitionFromTokenInputs() {
+    if (!currentDefinition) {
+      currentDefinition = {
+        id: '',
+        name: '',
+        description: '',
+        tokens: {},
+        meta: {}
+      };
+    }
+    
+    if (!currentDefinition.tokens) {
+      currentDefinition.tokens = {};
+    }
+    
+    const bgMainInput = document.getElementById('token-bg-main');
+    const textPrimaryInput = document.getElementById('token-text-primary');
+    const accentPrimaryInput = document.getElementById('token-accent-primary');
+    
+    if (bgMainInput) currentDefinition.tokens['--bg-main'] = bgMainInput.value.trim();
+    if (textPrimaryInput) currentDefinition.tokens['--text-primary'] = textPrimaryInput.value.trim();
+    if (accentPrimaryInput) currentDefinition.tokens['--accent-primary'] = accentPrimaryInput.value.trim();
+    
+    // Actualizar JSON editor
+    const jsonEditor = document.getElementById('theme-json-editor');
+    if (jsonEditor) {
+      jsonEditor.value = JSON.stringify(currentDefinition, null, 2);
+    }
+    
+    // Enviar tokens al preview vía postMessage
+    sendTokensToPreview();
+  }
+  
+  // UX MÍNIMA: Enviar tokens al preview vía postMessage
+  function sendTokensToPreview() {
+    if (!currentDefinition || !currentDefinition.tokens) return;
+    
+    // Buscar iframe del preview
+    if (!previewIframe) {
+      const previewContainer = document.getElementById('preview-harness-container');
+      if (previewContainer) {
+        previewIframe = previewContainer.querySelector('iframe');
+      }
+    }
+    
+    // Si hay iframe, enviar tokens
+    if (previewIframe && previewIframe.contentWindow) {
+      const tokens = {
+        '--bg-main': currentDefinition.tokens['--bg-main'] || '',
+        '--text-primary': currentDefinition.tokens['--text-primary'] || '',
+        '--accent-primary': currentDefinition.tokens['--accent-primary'] || ''
+      };
+      
+      previewIframe.contentWindow.postMessage({
+        type: 'AP_THEME_TOKENS',
+        tokens: tokens
+      }, '*');
+    }
+  }
   
   // Cargar tema al iniciar
   async function cargarTema() {
@@ -147,6 +260,7 @@
       document.getElementById('theme-json-editor').value = JSON.stringify(currentDefinition, null, 2);
       document.getElementById('theme-name').textContent = 'Nuevo Tema';
       document.getElementById('theme-status').textContent = 'Nuevo';
+      syncTokenInputsFromDefinition();
       return;
     }
     
@@ -176,6 +290,9 @@
       document.getElementById('theme-name').textContent = theme.name;
       document.getElementById('theme-status').textContent = theme.status;
       document.getElementById('theme-version').textContent = theme.current_published_version ? `v${theme.current_published_version}` : 'v-';
+      
+      // UX MÍNIMA: Sincronizar inputs de tokens clave
+      syncTokenInputsFromDefinition();
       
       // Mostrar info
       const infoHtml = `
@@ -425,6 +542,16 @@
     // Refrescar preview
     await previewHarness.refreshPreview();
     
+    // UX MÍNIMA: Buscar iframe del preview después de refrescar
+    setTimeout(() => {
+      const previewContainer = document.getElementById('preview-harness-container');
+      if (previewContainer) {
+        previewIframe = previewContainer.querySelector('iframe');
+        // Enviar tokens iniciales al preview
+        sendTokensToPreview();
+      }
+    }, 500);
+    
     mostrarMensaje('✅ Preview generado', 'success');
   }
   
@@ -490,11 +617,29 @@
     validationTimeout = setTimeout(() => {
       // Validar JSON básico
       try {
-        JSON.parse(document.getElementById('theme-json-editor').value);
+        const parsed = JSON.parse(document.getElementById('theme-json-editor').value);
+        currentDefinition = parsed;
+        // UX MÍNIMA: Sincronizar inputs cuando cambia el JSON
+        syncTokenInputsFromDefinition();
       } catch (e) {
         // JSON inválido, no hacer nada (el usuario puede estar escribiendo)
       }
     }, 1000);
+  });
+  
+  // UX MÍNIMA: Event listeners para inputs de tokens clave
+  const tokenInputs = ['token-bg-main', 'token-text-primary', 'token-accent-primary'];
+  tokenInputs.forEach(inputId => {
+    const input = document.getElementById(inputId);
+    if (input) {
+      let updateTimeout = null;
+      input.addEventListener('input', () => {
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+          updateDefinitionFromTokenInputs();
+        }, 300); // Debounce de 300ms para evitar demasiadas actualizaciones
+      });
+    }
   });
   
   // Cargar al iniciar

@@ -1,9 +1,55 @@
 <div class="p-6 bg-slate-900 min-h-screen">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-3xl font-bold text-white">🗺️ Recorridos</h1>
-    <a href="/admin/recorridos/new" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
+    <button onclick="mostrarModalPresets()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
       ➕ Nuevo recorrido
-    </a>
+    </button>
+  </div>
+  
+  <!-- Modal de selección de preset -->
+  <div id="modal-presets" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold text-white">Crear Nuevo Recorrido</h2>
+          <button onclick="cerrarModalPresets()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        
+        <p class="text-slate-400 mb-6">Elige un preset pedagógico para comenzar o crea un recorrido vacío:</p>
+        
+        <!-- Formulario básico -->
+        <div class="mb-6">
+          <label class="block text-slate-300 mb-2">ID del recorrido (slug técnico):</label>
+          <input type="text" id="recorrido-id" placeholder="ej: mi-recorrido" 
+                 class="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none" />
+          <p class="text-slate-500 text-sm mt-1">Solo letras, números, guiones y guiones bajos</p>
+        </div>
+        
+        <div class="mb-6">
+          <label class="block text-slate-300 mb-2">Nombre del recorrido:</label>
+          <input type="text" id="recorrido-name" placeholder="ej: Mi Recorrido Pedagógico" 
+                 class="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none" />
+        </div>
+        
+        <!-- Lista de presets -->
+        <div class="mb-6">
+          <label class="block text-slate-300 mb-3">Preset pedagógico (opcional):</label>
+          <div id="presets-list" class="space-y-3">
+            <div class="text-slate-400 text-center py-4">Cargando presets...</div>
+          </div>
+        </div>
+        
+        <!-- Botones -->
+        <div class="flex justify-end gap-3">
+          <button onclick="cerrarModalPresets()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded transition-colors">
+            Cancelar
+          </button>
+          <button onclick="crearRecorridoConPreset(null)" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors">
+            Crear vacío
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
   
   <div class="bg-slate-800 rounded-lg shadow-lg p-6 border border-slate-700">
@@ -259,6 +305,193 @@
       alert(`Error al borrar recorrido: ${error.message}`);
     }
   }
+  
+  // Modal de presets
+  function mostrarModalPresets() {
+    const modal = document.getElementById('modal-presets');
+    modal.classList.remove('hidden');
+    cargarPresets();
+  }
+  
+  function cerrarModalPresets() {
+    const modal = document.getElementById('modal-presets');
+    modal.classList.add('hidden');
+    // Limpiar formulario
+    document.getElementById('recorrido-id').value = '';
+    document.getElementById('recorrido-name').value = '';
+  }
+  
+  // Cargar lista de presets
+  async function cargarPresets() {
+    const presetsList = document.getElementById('presets-list');
+    
+    try {
+      const response = await fetch('/admin/api/recorridos/canvas/presets', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const presets = data.presets || [];
+      
+      if (presets.length === 0) {
+        presetsList.innerHTML = `
+          <div class="text-slate-400 text-center py-4">No hay presets disponibles.</div>
+        `;
+        return;
+      }
+      
+      presetsList.innerHTML = presets.map(preset => {
+        const escapedId = (preset.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const escapedName = (preset.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escapedDesc = (preset.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        return `
+          <div class="border border-slate-700 rounded-lg p-4 hover:bg-slate-700 transition-colors cursor-pointer" 
+               onclick="seleccionarPreset('${escapedId}')">
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <h3 class="text-white font-semibold mb-1">${escapedName}</h3>
+                <p class="text-slate-400 text-sm">${escapedDesc}</p>
+              </div>
+              <button onclick="event.stopPropagation(); crearRecorridoConPreset('${escapedId}')" 
+                      class="ml-4 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">
+                Usar
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+    } catch (error) {
+      console.error('Error cargando presets:', error);
+      presetsList.innerHTML = `
+        <div class="text-red-400 text-center py-4">
+          ❌ Error cargando presets: ${error.message}
+        </div>
+      `;
+    }
+  }
+  
+  let presetSeleccionado = null;
+  
+  function seleccionarPreset(presetId) {
+    presetSeleccionado = presetId;
+    // Resaltar el preset seleccionado
+    const presets = document.querySelectorAll('#presets-list > div');
+    presets.forEach(p => {
+      if (p.onclick && p.onclick.toString().includes(presetId)) {
+        p.classList.add('ring-2', 'ring-indigo-500');
+      } else {
+        p.classList.remove('ring-2', 'ring-indigo-500');
+      }
+    });
+  }
+  
+  // Crear recorrido con preset
+  async function crearRecorridoConPreset(presetId) {
+    const recorridoId = document.getElementById('recorrido-id').value.trim();
+    const recorridoName = document.getElementById('recorrido-name').value.trim();
+    
+    if (!recorridoId) {
+      alert('Por favor, ingresa un ID para el recorrido');
+      return;
+    }
+    
+    if (!recorridoName) {
+      alert('Por favor, ingresa un nombre para el recorrido');
+      return;
+    }
+    
+    // Validar formato de ID (slug)
+    const slugRegex = /^[a-z0-9_-]+$/;
+    if (!slugRegex.test(recorridoId)) {
+      alert('El ID debe contener solo letras minúsculas, números, guiones y guiones bajos');
+      return;
+    }
+    
+    try {
+      // Crear recorrido
+      const createResponse = await fetch('/admin/api/recorridos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          id: recorridoId,
+          name: recorridoName
+        })
+      });
+      
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${createResponse.status}`);
+      }
+      
+      const createData = await createResponse.json();
+      
+      // Si hay preset, cargar el canvas y guardarlo
+      if (presetId) {
+        const presetResponse = await fetch(`/admin/api/recorridos/canvas/presets/${encodeURIComponent(presetId)}`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (!presetResponse.ok) {
+          throw new Error(`Error cargando preset: ${presetResponse.status}`);
+        }
+        
+        const presetData = await presetResponse.json();
+        let canvas = presetData.preset?.canvas;
+        
+        if (canvas) {
+          // Actualizar canvas_id y name para que coincidan con el recorrido
+          canvas = {
+            ...canvas,
+            canvas_id: recorridoId,
+            name: recorridoName
+          };
+          
+          // Guardar canvas en el draft (se normalizará automáticamente en el servidor)
+          const canvasResponse = await fetch(`/admin/api/recorridos/${encodeURIComponent(recorridoId)}/canvas`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({ canvas })
+          });
+          
+          if (!canvasResponse.ok) {
+            console.warn('No se pudo guardar el canvas del preset, pero el recorrido se creó correctamente');
+          }
+        }
+      }
+      
+      // Cerrar modal y redirigir al editor
+      cerrarModalPresets();
+      window.location.href = `/admin/recorridos/${encodeURIComponent(recorridoId)}/edit`;
+      
+    } catch (error) {
+      console.error('Error creando recorrido:', error);
+      alert(`❌ Error creando recorrido: ${error.message}`);
+    }
+  }
+  
+  // Cerrar modal al hacer clic fuera
+  document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('modal-presets');
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        cerrarModalPresets();
+      }
+    });
+  });
   
   // Cargar al iniciar
   document.addEventListener('DOMContentLoaded', cargarRecorridos);

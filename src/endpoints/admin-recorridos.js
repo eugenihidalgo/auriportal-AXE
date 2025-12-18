@@ -125,7 +125,7 @@ export async function renderEditorRecorrido(request, env, recorridoId) {
 
   // Cargar template del editor
   const editorTemplate = readFileSync(join(__dirname, '../core/html/admin/recorridos/recorridos-editor.html'), 'utf-8');
-  const content = replace(editorTemplate, {
+  const content = await replace(editorTemplate, {
     RECORRIDO_ID: recorridoId || 'new'
   });
 

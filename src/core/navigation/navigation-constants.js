@@ -8,6 +8,15 @@
 // - No contiene lógica runtime (solo declarativo)
 
 /**
+ * Tipos de navegación permitidos en NavigationDefinition v1
+ * @constant {string[]}
+ */
+export const NAVIGATION_TYPES = [
+  'global',      // Navegación global (única activa por entorno)
+  'contextual',  // Navegación contextual (activa según context_key)
+];
+
+/**
  * Tipos de nodos permitidos en NavigationDefinition v1
  * @constant {string[]}
  */
@@ -18,6 +27,19 @@ export const NODE_KINDS = [
   'hub',            // Hub de navegación (requiere target)
   'external_link',  // Link externo (requiere target tipo url)
   'system_entry',   // Entrada del sistema (requiere target)
+];
+
+/**
+ * Tipos de nodos semánticos (FASE 4.2 - Editorial)
+ * @constant {string[]}
+ */
+export const NODE_TYPES_SEMANTIC = [
+  'home',      // Nodo home (solo uno por navegación)
+  'section',   // Sección (puede agrupar, no es vista final)
+  'view',      // Vista (vista final, requiere target)
+  'external',  // Link externo (requiere URL)
+  'overlay',   // Overlay (no puede ser entry)
+  'return',    // Retorno (solo 1 edge saliente)
 ];
 
 /**
@@ -62,6 +84,24 @@ export const NODES_REQUIRING_TARGET = [
   'hub',
   'external_link',
   'system_entry',
+  'view',      // FASE 4.2: view requiere target
+  'external',  // FASE 4.2: external requiere URL
+];
+
+/**
+ * Tipos de nodos que NO pueden ser entry (nodo de entrada)
+ * @constant {string[]}
+ */
+export const NODES_CANNOT_BE_ENTRY = [
+  'overlay',   // FASE 4.2: overlay no puede ser entry
+];
+
+/**
+ * Tipos de nodos que solo permiten 1 edge saliente
+ * @constant {string[]}
+ */
+export const NODES_SINGLE_OUTGOING_EDGE = [
+  'return',    // FASE 4.2: return solo permite 1 edge saliente
 ];
 
 /**
@@ -146,6 +186,16 @@ export const NODE_DEFAULTS = {
 export const EDGE_DEFAULTS = {
   kind: 'child',
 };
+
+/**
+ * Valores por defecto para NavigationDefinition (FASE 4.1)
+ * @constant {Object}
+ */
+export const NAVIGATION_DEFAULTS = {
+  type: 'global',      // Por defecto global
+  context_key: null,   // null para global, string para contextual
+};
+
 
 
 

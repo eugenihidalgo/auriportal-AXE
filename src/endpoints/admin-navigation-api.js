@@ -17,6 +17,7 @@
 // - GET    /admin/api/navigation/:navId/published -> latest published
 // - GET    /admin/api/navigation/:navId/export   -> export JSON
 // - POST   /admin/api/navigation/:navId/import   -> import JSON as draft
+// - POST   /admin/api/navigation/preview-effective -> preview efectivo (FASE 5)
 
 import { requireAdminContext } from '../core/auth-context.js';
 import { isFeatureEnabled } from '../core/flags/feature-flags.js';
@@ -29,6 +30,7 @@ import {
   normalizeNavigationDefinition,
   createMinimalNavigation,
 } from '../core/navigation/navigation-definition-v1.js';
+import { resolveNavigationEffective } from '../core/navigation/navigation-effective-resolver.js';
 import { isValidId } from '../core/navigation/navigation-constants.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 
@@ -626,6 +628,118 @@ async function handleCreateNavigation(request, env, ctx) {
   }
 }
 
+/**
+ * POST /admin/api/navigation/preview-effective
+ * Resuelve una navegación efectiva desde global + contextuales (FASE 5)
+ */
+async function handlePreviewEffective(request, env, ctx) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) return authCtx;
+
+  try {
+    const body = await request.json();
+    const { global_navigation_id, context_navigation_ids = [] } = body;
+
+    if (!global_navigation_id) {
+      return errorResponse('MISSING_FIELD', 'Se requiere "global_navigation_id"');
+    }
+
+    if (!Array.isArray(context_navigation_ids)) {
+      return errorResponse('INVALID_FIELD', 'context_navigation_ids debe ser un array');
+    }
+
+    const repo = getDefaultNavigationRepo();
+
+    // Cargar navegación global (draft o published)
+    const globalNav = await repo.getNavigationById(global_navigation_id);
+    if (!globalNav) {
+      return errorResponse('NOT_FOUND', `Navegación global "${global_navigation_id}" no encontrada`, null, 404);
+    }
+
+    // Intentar cargar draft primero, si no existe usar published
+    let globalDef = null;
+    const globalDraft = await repo.getDraftLatest(global_navigation_id);
+    if (globalDraft && globalDraft.draft_json) {
+      globalDef = globalDraft.draft_json;
+    } else {
+      const globalPublished = await repo.getPublishedLatest(global_navigation_id);
+      if (globalPublished && globalPublished.definition_json) {
+        globalDef = globalPublished.definition_json;
+      }
+    }
+
+    if (!globalDef) {
+      return errorResponse('NOT_FOUND', `Navegación global "${global_navigation_id}" no tiene draft ni versión publicada`, null, 404);
+    }
+
+    // Validar que sea tipo global
+    if (globalDef.type !== 'global') {
+      return errorResponse('INVALID_TYPE', `Navegación "${global_navigation_id}" debe ser tipo 'global'`, {
+        actual_type: globalDef.type
+      });
+    }
+
+    // Cargar navegaciones contextuales
+    const contextDefs = [];
+    for (const contextNavId of context_navigation_ids) {
+      const contextNav = await repo.getNavigationById(contextNavId);
+      if (!contextNav) {
+        logWarn('NavigationAPI', 'Navegación contextual no encontrada', { contextNavId });
+        continue;
+      }
+
+      // Intentar cargar draft primero, si no existe usar published
+      let contextDef = null;
+      const contextDraft = await repo.getDraftLatest(contextNavId);
+      if (contextDraft && contextDraft.draft_json) {
+        contextDef = contextDraft.draft_json;
+      } else {
+        const contextPublished = await repo.getPublishedLatest(contextNavId);
+        if (contextPublished && contextPublished.definition_json) {
+          contextDef = contextPublished.definition_json;
+        }
+      }
+
+      if (!contextDef) {
+        logWarn('NavigationAPI', 'Navegación contextual sin draft ni published', { contextNavId });
+        continue;
+      }
+
+      // Validar que sea tipo contextual
+      if (contextDef.type !== 'contextual') {
+        logWarn('NavigationAPI', 'Navegación contextual con tipo incorrecto', {
+          contextNavId,
+          actual_type: contextDef.type
+        });
+        continue;
+      }
+
+      contextDefs.push(contextDef);
+    }
+
+    // Resolver navegación efectiva
+    const result = resolveNavigationEffective(globalDef, contextDefs, { strict: false });
+
+    logInfo('NavigationAPI', 'Preview efectivo resuelto', {
+      global_navigation_id,
+      context_count: contextDefs.length,
+      warnings_count: result.warnings.length
+    });
+
+    return jsonResponse({
+      effectiveDef: result.effectiveDef,
+      provenance: result.provenance,
+      warnings: result.warnings
+    });
+  } catch (error) {
+    logError('NavigationAPI', 'Error resolviendo preview efectivo', {
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('INTERNAL_ERROR', 'Error interno al resolver navegación efectiva', null, 500);
+  }
+}
+
 // ========================================================================
 // ROUTER PRINCIPAL
 // ========================================================================
@@ -665,6 +779,11 @@ export default async function adminNavigationApiHandler(request, env, ctx) {
   // POST /admin/api/navigation (crear nueva)
   if (method === 'POST' && path === '/admin/api/navigation') {
     return handleCreateNavigation(request, env, ctx);
+  }
+
+  // POST /admin/api/navigation/preview-effective (FASE 5)
+  if (method === 'POST' && path === '/admin/api/navigation/preview-effective') {
+    return handlePreviewEffective(request, env, ctx);
   }
 
   // Rutas que requieren navId

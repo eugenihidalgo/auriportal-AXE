@@ -125,7 +125,7 @@ export async function renderEditorNavegacion(request, env, navId) {
 
   // Cargar template del editor
   const editorTemplate = readFileSync(join(__dirname, '../core/html/admin/navigation/navigation-editor.html'), 'utf-8');
-  const content = replace(editorTemplate, {
+  const content = await replace(editorTemplate, {
     NAVIGATION_ID: navId || 'new'
   });
 

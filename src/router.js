@@ -896,6 +896,12 @@ async function routerFunction(request, env, ctx) {
     return recorridosRuntimeHandler(request, env, ctx);
   }
 
+  // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
+  if (path.startsWith("/admin/pde/catalog-registry")) {
+    const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
+    return adminCatalogRegistryHandler(request, env, ctx);
+  }
+
   // Panel de control administrativo
   if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {
     const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;

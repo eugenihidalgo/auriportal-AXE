@@ -37,3 +37,4 @@ COMMENT ON COLUMN signal_aggregates.last_updated IS 'Última vez que se actualiz
 
 
 
+

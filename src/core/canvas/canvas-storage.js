@@ -152,6 +152,11 @@ export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) 
     const draft = await draftRepo.getCurrentDraft(recorridoId, client);
 
     if (!draft) {
+      logWarn('CanvasStorage', '[AXE][PUT_CANVAS][DB] No hay draft para este recorrido', {
+        recorrido_id: recorridoId,
+        schema: 'public',
+        table: 'recorrido_drafts'
+      });
       return {
         ok: false,
         errors: ['No hay draft para este recorrido'],
@@ -160,18 +165,53 @@ export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) 
       };
     }
 
-    await draftRepo.updateCanvas(draft.draft_id, normalized, updated_by, client);
+    // Actualizar canvas y verificar rowCount
+    const updateResult = await draftRepo.updateCanvas(draft.draft_id, normalized, updated_by, client);
+    const { draft: updatedDraft, rowCount } = updateResult;
 
-    logInfo('CanvasStorage', '[AXE][PUT_CANVAS] Canvas guardado exitosamente (fail-open)', {
+    // REGLA CRÍTICA: rowCount === 0 significa que NO se persistió
+    if (rowCount === 0) {
+      logWarn('CanvasStorage', '[AXE][PUT_CANVAS][DB] UPDATE affected 0 rows', {
+        recorrido_id: recorridoId,
+        draft_id: draft.draft_id,
+        schema: 'public',
+        table: 'recorrido_drafts',
+        where_clause: 'draft_id = $3',
+        rowCount: 0,
+        error: 'canvas_not_persisted'
+      });
+
+      return {
+        ok: false,
+        saved: false,
+        source: 'derived',
+        errors: [
+          'canvas_not_persisted',
+          'El UPDATE no afectó ninguna fila. El draft_id puede ser incorrecto o el draft no existe.',
+          ...(validation.errors || [])
+        ],
+        warnings: validation.warnings || [],
+        canvas_normalized: normalized
+      };
+    }
+
+    // Log exitoso con detalles
+    logInfo('CanvasStorage', '[AXE][PUT_CANVAS] Canvas guardado exitosamente (persisted)', {
       recorrido_id: recorridoId,
       draft_id: draft.draft_id,
+      schema: 'public',
+      table: 'recorrido_drafts',
+      rowCount: rowCount,
       errors_count: validation.errors.length,
       warnings_count: validation.warnings?.length || 0,
-      saved: true
+      saved: true,
+      persisted: true
     });
 
     return {
       ok: validation.errors.length === 0,
+      saved: true,
+      source: 'persisted',
       canvas_normalized: normalized,
       errors: validation.errors || [],
       warnings: validation.warnings || []
@@ -179,11 +219,14 @@ export async function saveCanvasToDraft(recorridoId, canvasInput, options = {}) 
   } catch (error) {
     logWarn('CanvasStorage', '[AXE][PUT_CANVAS] Error guardando canvas', {
       recorrido_id: recorridoId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
 
     return {
       ok: false,
+      saved: false,
+      source: 'derived',
       errors: [`Error guardando canvas: ${error.message}`, ...(validation.errors || [])],
       warnings: validation.warnings || [],
       canvas_normalized: normalized

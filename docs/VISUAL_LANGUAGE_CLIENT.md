@@ -108,3 +108,4 @@ LVCC v1 es **puramente semántico visual** y no afecta la lógica ni el backend.
 
 
 
+

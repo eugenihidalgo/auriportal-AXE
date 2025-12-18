@@ -1,23 +1,21 @@
 // src/services/decretos-service.js
 // Servicio para gestionar decretos en la base de datos
+//
+// NOTA: Este servicio ahora usa el repositorio decretos-repo-pg.js
+// que encapsula todas las operaciones de base de datos y sanitización.
 
-import { query } from '../../database/pg.js';
+import { getDefaultDecretosRepo } from '../infra/repos/decretos-repo-pg.js';
+
+const repo = getDefaultDecretosRepo();
 
 /**
  * Lista todos los decretos (incluye inactivos para el admin)
- * @param {boolean} soloActivos - Si es true, solo muestra decretos activos
+ * @param {boolean} soloActivos - Si es true, solo muestra decretos activos (no eliminados)
  * @returns {Promise<Array>} Lista de decretos
  */
 export async function listarDecretos(soloActivos = false) {
   try {
-    let sql = 'SELECT * FROM decretos';
-    if (soloActivos) {
-      sql += ' WHERE activo = true';
-    }
-    sql += ' ORDER BY nivel_minimo ASC, orden ASC, nombre ASC';
-    
-    const result = await query(sql);
-    return result.rows || [];
+    return await repo.list({ includeDeleted: !soloActivos });
   } catch (error) {
     console.error('Error al listar decretos:', error);
     return [];
@@ -31,11 +29,7 @@ export async function listarDecretos(soloActivos = false) {
  */
 export async function obtenerDecreto(id) {
   try {
-    const result = await query(
-      'SELECT * FROM decretos WHERE id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
+    return await repo.getById(id);
   } catch (error) {
     console.error('Error al obtener decreto:', error);
     return null;
@@ -46,23 +40,31 @@ export async function obtenerDecreto(id) {
  * Crea un nuevo decreto
  * @param {Object} datos - Datos del decreto
  * @param {string} datos.nombre - Nombre del decreto
- * @param {string} datos.contenido_html - Contenido HTML del decreto
- * @param {number} datos.nivel_minimo - Nivel mínimo requerido
+ * @param {string} datos.contenido_html - Contenido HTML del decreto (será sanitizado)
+ * @param {string} [datos.content_delta] - Delta JSON del editor (opcional)
+ * @param {string} [datos.content_text] - Texto plano (opcional)
+ * @param {string} [datos.descripcion] - Descripción opcional
+ * @param {number} [datos.nivel_minimo] - Nivel mínimo requerido (default: 1)
+ * @param {string} [datos.posicion] - Posición (default: 'inicio')
+ * @param {boolean} [datos.obligatoria_global] - Obligatoria global (default: false)
+ * @param {Object} [datos.obligatoria_por_nivel] - Obligatoriedad por nivel (default: {})
+ * @param {number} [datos.orden] - Orden (default: 0)
  * @returns {Promise<Object>} Decreto creado
  */
 export async function crearDecreto(datos) {
   try {
-    const result = await query(
-      `INSERT INTO decretos (nombre, contenido_html, nivel_minimo, created_at, updated_at)
-       VALUES ($1, $2, $3, NOW(), NOW())
-       RETURNING *`,
-      [
-        datos.nombre || 'Decreto sin nombre',
-        datos.contenido_html || '',
-        datos.nivel_minimo || 1
-      ]
-    );
-    return result.rows[0];
+    return await repo.create({
+      nombre: datos.nombre || 'Decreto sin nombre',
+      contenido_html: datos.contenido_html || '',
+      content_delta: datos.content_delta,
+      content_text: datos.content_text,
+      descripcion: datos.descripcion,
+      nivel_minimo: datos.nivel_minimo || 1,
+      posicion: datos.posicion || 'inicio',
+      obligatoria_global: datos.obligatoria_global || false,
+      obligatoria_por_nivel: datos.obligatoria_por_nivel || {},
+      orden: datos.orden || 0
+    });
   } catch (error) {
     console.error('Error al crear decreto:', error);
     throw error;
@@ -72,64 +74,16 @@ export async function crearDecreto(datos) {
 /**
  * Actualiza un decreto existente
  * @param {number} id - ID del decreto
- * @param {Object} datos - Datos a actualizar
+ * @param {Object} datos - Datos a actualizar (parcial)
  * @returns {Promise<Object>} Decreto actualizado
  */
 export async function actualizarDecreto(id, datos) {
   try {
-    const campos = [];
-    const valores = [];
-    let paramIndex = 1;
-
-    if (datos.nombre !== undefined) {
-      campos.push(`nombre = $${paramIndex++}`);
-      valores.push(datos.nombre);
+    const resultado = await repo.update(id, datos);
+    if (!resultado) {
+      throw new Error(`Decreto con ID ${id} no encontrado`);
     }
-    if (datos.contenido_html !== undefined) {
-      campos.push(`contenido_html = $${paramIndex++}`);
-      valores.push(datos.contenido_html);
-    }
-    if (datos.nivel_minimo !== undefined) {
-      campos.push(`nivel_minimo = $${paramIndex++}`);
-      valores.push(datos.nivel_minimo);
-    }
-    if (datos.posicion !== undefined) {
-      campos.push(`posicion = $${paramIndex++}`);
-      valores.push(datos.posicion);
-    }
-    if (datos.obligatoria_global !== undefined) {
-      campos.push(`obligatoria_global = $${paramIndex++}`);
-      valores.push(datos.obligatoria_global);
-    }
-    if (datos.obligatoria_por_nivel !== undefined) {
-      campos.push(`obligatoria_por_nivel = $${paramIndex++}`);
-      valores.push(JSON.stringify(datos.obligatoria_por_nivel));
-    }
-    if (datos.orden !== undefined) {
-      campos.push(`orden = $${paramIndex++}`);
-      valores.push(datos.orden);
-    }
-    if (datos.activo !== undefined) {
-      campos.push(`activo = $${paramIndex++}`);
-      valores.push(datos.activo);
-    }
-
-    if (campos.length === 0) {
-      throw new Error('No hay campos para actualizar');
-    }
-
-    campos.push(`updated_at = NOW()`);
-    valores.push(id);
-
-    const result = await query(
-      `UPDATE decretos 
-       SET ${campos.join(', ')}
-       WHERE id = $${paramIndex}
-       RETURNING *`,
-      valores
-    );
-
-    return result.rows[0];
+    return resultado;
   } catch (error) {
     console.error('Error al actualizar decreto:', error);
     throw error;
@@ -143,13 +97,23 @@ export async function actualizarDecreto(id, datos) {
  */
 export async function eliminarDecreto(id) {
   try {
-    await query(
-      'UPDATE decretos SET activo = false, updated_at = NOW() WHERE id = $1',
-      [id]
-    );
-    return true;
+    return await repo.softDelete(id);
   } catch (error) {
     console.error('Error al eliminar decreto:', error);
+    throw error;
+  }
+}
+
+/**
+ * Restaura un decreto eliminado (soft delete)
+ * @param {number} id - ID del decreto
+ * @returns {Promise<Object|null>} Decreto restaurado o null si no existe
+ */
+export async function restaurarDecreto(id) {
+  try {
+    return await repo.restore(id);
+  } catch (error) {
+    console.error('Error al restaurar decreto:', error);
     throw error;
   }
 }

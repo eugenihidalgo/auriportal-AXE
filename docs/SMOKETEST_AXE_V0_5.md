@@ -87,3 +87,4 @@
 
 **Nota:** Los status codes 302, 401 y 405 son comportamientos esperados para endpoints protegidos sin autenticación.
 
+

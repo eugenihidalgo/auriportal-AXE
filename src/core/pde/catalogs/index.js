@@ -42,6 +42,11 @@ export {
   EMPTY_SPONSOR_BUNDLE 
 } from './sponsors-resolver.js';
 
+export { 
+  resolveFrasePersonalizada,
+  resolveFrasePersonalizadaByNivel
+} from './frases-personalizadas-resolver.js';
+
 // Re-export del catálogo de transmutaciones (ya existe)
 export { 
   resolveTransmutationBundle, 
@@ -84,13 +89,15 @@ export const CATALOG_IDS = {
   PLACES: 'places',
   PROJECTS: 'projects',
   SPONSORS: 'sponsors',
-  TRANSMUTATIONS: 'energy_transmutations'
+  TRANSMUTATIONS: 'energy_transmutations',
+  FRASES_PERSONALIZADAS: 'frases_personalizadas'
 };
 
 /**
  * Versión actual de los catálogos PDE
  */
 export const PDE_CATALOGS_VERSION = '1.0.0';
+
 
 
 

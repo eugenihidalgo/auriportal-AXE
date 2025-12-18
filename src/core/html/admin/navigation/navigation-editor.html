@@ -15,6 +15,21 @@
           <option>Cargando...</option>
         </select>
         <h1 class="text-xl font-bold text-white" id="navigation-name">Cargando...</h1>
+        <!-- FASE 4.1: Selector de tipo de navegación -->
+        <select id="navigation-type" onchange="actualizarTipoNavegacion(this.value)" class="px-3 py-1 bg-slate-700 text-white rounded text-sm border border-slate-600" title="Tipo de navegación">
+          <option value="global">🌐 Global</option>
+          <option value="contextual">🎯 Contextual</option>
+        </select>
+        <!-- FASE 4.1: Input context_key (solo si contextual) -->
+        <input 
+          type="text" 
+          id="navigation-context-key" 
+          onchange="actualizarContextKey(this.value)" 
+          placeholder="context_key (ej: producto:pde)"
+          class="px-3 py-1 bg-slate-700 text-white rounded text-sm border border-slate-600" 
+          style="display: none; width: 200px;"
+          title="Clave de contexto (obligatorio para navegación contextual)"
+        >
         <span id="publish-status-badge" class="publish-status publish-status--draft" style="display: none;"></span>
         <span id="navigation-status" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs">Cargando...</span>
         <span id="dirty-badge" class="px-2 py-1 bg-orange-900 text-orange-200 rounded text-xs font-semibold" style="display: none;">● Cambios sin guardar</span>
@@ -43,48 +58,95 @@
   <div class="editor-body flex flex-col">
     <!-- Tabs para cambiar vista -->
     <div class="bg-slate-800 border-b border-slate-700 px-6 py-2 flex gap-2">
-      <button onclick="cambiarVista('mapa')" id="tab-mapa" class="tab-button active px-4 py-2 text-sm font-medium rounded-t transition-colors">
+      <button onclick="setNavigationView('mapa')" id="tab-mapa" class="tab-button active px-4 py-2 text-sm font-medium rounded-t transition-colors">
         🗺️ Mapa
       </button>
-      <button onclick="cambiarVista('arbol')" id="tab-arbol" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
+      <button onclick="setNavigationView('arbol')" id="tab-arbol" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
         🌳 Árbol
       </button>
-      <button onclick="cambiarVista('json')" id="tab-json" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
+      <button onclick="setNavigationView('json')" id="tab-json" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
         📄 JSON
+      </button>
+      <button onclick="setNavigationView('preview')" id="tab-preview" class="tab-button px-4 py-2 text-sm font-medium rounded-t transition-colors">
+        👁️ Preview Efectivo
       </button>
     </div>
     
     <!-- Contenedor de vistas -->
     <div class="flex-1 flex overflow-hidden">
-      <!-- Vista MAPA (default) -->
+      <!-- Vista MAPA (default) - CON MOTOR VISUAL AXE -->
       <div id="vista-mapa" class="vista-container flex-1 flex">
-        <!-- Columna izquierda: Mapa visual jerárquico -->
-        <div class="w-80 bg-slate-950 border-r border-slate-800 overflow-y-auto">
-          <div class="p-4">
-            <div class="flex justify-between items-center mb-4">
-              <h2 class="text-lg font-semibold text-white">Mapa de Navegación</h2>
-              <button onclick="añadirNodo()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded" title="Añadir nodo">
-                ➕
-              </button>
+        <!-- Columna izquierda: Canvas visual (MOTOR AXE) -->
+        <div class="flex-1 bg-slate-900 p-6" style="display: flex; flex-direction: column; min-width: 0;">
+          <div class="bg-slate-800 rounded-lg p-4 mb-4">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-white font-semibold">Editor Visual (Motor AXE)</h4>
+              <div class="flex gap-2">
+                <button onclick="toggleSnappingNav()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" id="snap-toggle-btn-nav" title="Activar/Desactivar snapping">
+                  📐 Snap: OFF
+                </button>
+                <button onclick="resetCanvasViewNav()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Resetear vista">
+                  🔄 Reset Vista
+                </button>
+                <button onclick="zoomOutCanvasNav()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Alejar">
+                  ➖
+                </button>
+                <span class="text-slate-400 text-xs px-2 py-1" id="zoom-level-nav">100%</span>
+                <button onclick="zoomInCanvasNav()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Acercar">
+                  ➕
+                </button>
+                <button onclick="añadirNodo()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded" title="Añadir nodo">
+                  ➕ Nodo
+                </button>
+              </div>
             </div>
-            <div id="nodes-map" class="space-y-2">
-              <p class="text-slate-400 text-sm">Cargando mapa...</p>
+            <div 
+              id="canvas-visual-container-nav" 
+              class="relative bg-slate-900 rounded border border-slate-700 overflow-hidden"
+              style="width: 100%; height: calc(100vh - 450px); min-height: 600px; cursor: grab;"
+              onmousedown="handleCanvasMouseDownNav(event)"
+              onmousemove="handleCanvasMouseMoveNav(event)"
+              onmouseup="handleCanvasMouseUpNav(event)"
+              onmouseleave="handleCanvasMouseUpNav(event)"
+              onwheel="handleCanvasWheelNav(event)"
+            >
+              <!-- SVG para edges (debajo de nodos) -->
+              <svg 
+                id="canvas-edges-svg-nav" 
+                class="absolute inset-0 pointer-events-none"
+                style="z-index: 1;"
+              >
+              </svg>
+              
+              <!-- Contenedor de nodos con transform para pan/zoom -->
+              <div 
+                id="canvas-nodes-container-nav" 
+                class="absolute inset-0"
+                style="transform: translate(0px, 0px) scale(1); transform-origin: 0 0;"
+              >
+              </div>
             </div>
           </div>
         </div>
         
-        <!-- Columna centro: Propiedades del nodo seleccionado -->
-        <div class="flex-1 bg-slate-900 overflow-y-auto p-6">
-          <div id="node-properties" class="bg-slate-800 rounded-lg shadow-lg p-6">
-            <div class="text-center text-slate-400 py-8">
-              <p>Selecciona un nodo del mapa para editarlo</p>
+        <!-- Columna derecha: Panel contextual (propiedades + preview) -->
+        <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto" style="display: flex; flex-direction: column;">
+          <!-- Propiedades del nodo seleccionado -->
+          <div class="flex-1 bg-slate-900 overflow-y-auto p-6">
+            <div id="node-properties" class="bg-slate-800 rounded-lg shadow-lg p-6">
+              <div class="text-center text-slate-400 py-8">
+                <p>Selecciona un nodo del canvas para editarlo</p>
+                <p class="text-xs mt-2 text-slate-500">
+                  💡 Arrastra nodos para moverlos<br/>
+                  💡 Alt + rueda para zoom<br/>
+                  💡 Arrastra fondo para pan
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <!-- Columna derecha: Preview estructural -->
-        <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto">
-          <div class="p-4">
+          
+          <!-- Preview estructural -->
+          <div class="bg-slate-950 border-t border-slate-800 p-4" style="max-height: 300px; overflow-y: auto;">
             <h2 class="text-lg font-semibold text-white mb-4">Preview Estructural</h2>
             <div id="structural-preview" class="bg-slate-900 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-auto">
               <pre id="preview-json" class="whitespace-pre-wrap">Cargando...</pre>
@@ -141,6 +203,108 @@
           </div>
           <div class="bg-slate-950 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-auto">
             <pre id="preview-json-full" class="whitespace-pre-wrap">Cargando...</pre>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Vista PREVIEW EFECTIVO (FASE 5) -->
+      <div id="vista-preview" class="vista-container flex-1 flex hidden">
+        <!-- Columna izquierda: Selectores de navegación -->
+        <div class="w-96 bg-slate-950 border-r border-slate-800 overflow-y-auto p-6">
+          <h2 class="text-lg font-semibold text-white mb-4">👁️ Preview Efectivo</h2>
+          <p class="text-sm text-slate-400 mb-6">
+            Selecciona una navegación global base y 0..N navegaciones contextuales para componer la navegación efectiva.
+          </p>
+          
+          <!-- Selector de navegación global -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              🌐 Navegación Global (Base)
+            </label>
+            <select id="preview-global-select" class="w-full px-3 py-2 bg-slate-800 text-white rounded border border-slate-700">
+              <option value="">Seleccionar navegación global...</option>
+            </select>
+          </div>
+          
+          <!-- Selector de navegaciones contextuales -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              🎯 Navegaciones Contextuales (0..N)
+            </label>
+            <div id="preview-contexts-container" class="space-y-2 mb-2">
+              <!-- Se añadirán dinámicamente -->
+            </div>
+            <button onclick="añadirContextoPreview()" class="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">
+              ➕ Añadir Contexto
+            </button>
+          </div>
+          
+          <!-- Botón de generar preview -->
+          <button onclick="generarPreviewEfectivo()" class="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded mb-4">
+            🔄 Generar Preview
+          </button>
+          
+          <!-- Warnings -->
+          <div id="preview-warnings" class="hidden">
+            <h3 class="text-sm font-semibold text-yellow-300 mb-2">⚠️ Warnings</h3>
+            <div id="preview-warnings-list" class="space-y-1 text-xs text-yellow-200 bg-yellow-900/30 rounded p-3 max-h-48 overflow-y-auto">
+              <!-- Se añadirán dinámicamente -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Columna derecha: Canvas visual (MOTOR AXE) -->
+        <div class="flex-1 bg-slate-900 p-6" style="display: flex; flex-direction: column; min-width: 0;">
+          <div class="bg-slate-800 rounded-lg p-4 mb-4">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-white font-semibold">Preview Efectivo (Motor AXE)</h4>
+              <div class="flex gap-2">
+                <button onclick="resetCanvasViewPreview()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Resetear vista">
+                  🔄 Reset Vista
+                </button>
+                <button onclick="zoomOutCanvasPreview()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Alejar">
+                  ➖
+                </button>
+                <span class="text-slate-400 text-xs px-2 py-1" id="zoom-level-preview">100%</span>
+                <button onclick="zoomInCanvasPreview()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Acercar">
+                  ➕
+                </button>
+              </div>
+            </div>
+            <div 
+              id="canvas-visual-container-preview" 
+              class="relative bg-slate-900 rounded border border-slate-700 overflow-hidden"
+              style="width: 100%; height: calc(100vh - 450px); min-height: 600px; cursor: grab;"
+              onmousedown="handleCanvasMouseDownPreview(event)"
+              onmousemove="handleCanvasMouseMovePreview(event)"
+              onmouseup="handleCanvasMouseUpPreview(event)"
+              onmouseleave="handleCanvasMouseUpPreview(event)"
+              onwheel="handleCanvasWheelPreview(event)"
+            >
+              <!-- SVG para edges (debajo de nodos) -->
+              <svg 
+                id="canvas-edges-svg-preview" 
+                class="absolute inset-0 pointer-events-none"
+                style="z-index: 1;"
+              >
+              </svg>
+              
+              <!-- Contenedor de nodos con transform para pan/zoom -->
+              <div 
+                id="canvas-nodes-container-preview" 
+                class="absolute inset-0"
+                style="transform: translate(0px, 0px) scale(1); transform-origin: 0 0;"
+              >
+              </div>
+            </div>
+          </div>
+          
+          <!-- Panel de Provenance -->
+          <div class="bg-slate-800 rounded-lg p-4">
+            <h4 class="text-white font-semibold mb-2">📍 Provenance</h4>
+            <div id="preview-provenance" class="text-xs text-slate-300 bg-slate-900 rounded p-3 max-h-32 overflow-y-auto">
+              <p class="text-slate-500">Genera un preview para ver la procedencia de nodos y edges</p>
+            </div>
           </div>
         </div>
       </div>
@@ -475,6 +639,7 @@
 </style>
 
 <script>
+  console.log('BOOT NAV EDITOR', location.pathname);
   // Estado del editor
   const editorState = {
     navigationId: null,
@@ -531,14 +696,76 @@
   
   // Inicializar editor
   async function initEditor() {
+    console.log('[Editor] STEP 1: initEditor start');
+    
     const editor = document.getElementById('navigation-editor');
-    editorState.navigationId = editor.dataset.navigationId;
+    if (!editor) {
+      console.error('[Editor] STEP 1.1: ERROR - Elemento #navigation-editor no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const topbar = document.querySelector('.editor-topbar');
+      if (topbar) {
+        topbar.innerHTML = `
+          <div style="padding: 20px; background: #7f1d1d; color: #fca5a5; border-radius: 8px;">
+            <h2 style="color: #ef4444; margin-bottom: 10px;">⚠️ Error de inicialización</h2>
+            <p>No se pudo encontrar el contenedor del editor. Por favor, recarga la página.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    
+    console.log('[Editor] STEP 2: navigationId =', editor.dataset.navigationId);
+    const navigationId = editor.dataset.navigationId;
+    
+    if (!navigationId) {
+      console.error('[Editor] STEP 2.1: ERROR - data-navigation-id no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const topbar = document.querySelector('.editor-topbar');
+      if (topbar) {
+        topbar.innerHTML = `
+          <div style="padding: 20px; background: #7f1d1d; color: #fca5a5; border-radius: 8px;">
+            <h2 style="color: #ef4444; margin-bottom: 10px;">⚠️ Error de inicialización</h2>
+            <p>No se pudo determinar el ID de navegación. Por favor, recarga la página.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    
+    editorState.navigationId = navigationId;
+    console.log('[Editor] STEP 3: navigationId asignado =', editorState.navigationId);
     
     if (editorState.navigationId === 'new') {
-      await crearNuevaNavegacion();
+      console.log('[Editor] STEP 4: creating new navigation');
+      try {
+        await crearNuevaNavegacion();
+        console.log('[Editor] STEP 5: new navigation created');
+      } catch (error) {
+        console.error('[Editor] STEP 5.1: ERROR creando navegación:', error);
+        return;
+      }
     } else {
-      await cargarNavegacion();
+      console.log('[Editor] STEP 4: loading existing navigation');
+      try {
+        await cargarNavegacion();
+        console.log('[Editor] STEP 5: navigation loaded');
+      } catch (error) {
+        console.error('[Editor] STEP 5.1: ERROR cargando navegación:', error);
+        // Fail-open: mostrar mensaje visible
+        const mapEl = document.getElementById('nodes-map');
+        const treeEl = document.getElementById('nodes-tree');
+        if (mapEl) mapEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ Error cargando navegación. Por favor, recarga la página.</p>';
+        if (treeEl) treeEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ Error cargando navegación. Por favor, recarga la página.</p>';
+        return;
+      }
     }
+    
+    // FIX CRÍTICO: Inicialización obligatoria de vista
+    // Garantizar que el editor arranque SIEMPRE en vista "Mapa"
+    console.log('[AXE][NAV_EDITOR] initEditor complete → activating default view: mapa');
+    setNavigationView('mapa');
+    
+    console.log('[Editor] STEP 6: initEditor complete');
   }
   
   // Crear nueva navegación
@@ -654,49 +881,75 @@
   
   // Cargar navegación
   async function cargarNavegacion() {
+    console.log('[Editor] STEP 4.1: cargarNavegacion start');
     try {
       const encodedId = encodeURIComponent(editorState.navigationId);
+      console.log('[Editor] STEP 4.2: encodedId =', encodedId);
       
       // Cargar lista de navegaciones para selector
+      console.log('[Editor] STEP 4.3: loading navigation list');
       await cargarListaNavegaciones();
+      console.log('[Editor] STEP 4.4: navigation list loaded');
       
       // Intentar cargar draft primero
+      console.log('[Editor] STEP 4.5: fetching draft');
       let response = await fetch(`/admin/api/navigation/${encodedId}/draft`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
       
+      console.log('[Editor] STEP 4.6: draft response status =', response.status);
+      
       if (response.ok) {
+        console.log('[Editor] STEP 4.7: parsing draft JSON');
         const data = await response.json();
+        console.log('[Editor] STEP 4.8: draft data received, ok =', data.ok);
+        
         if (data.ok && data.data && data.data.draft_json) {
           editorState.definition = data.data.draft_json;
+          console.log('[Editor] STEP 4.9: definition assigned from draft, nodes =', editorState.definition?.nodes ? Object.keys(editorState.definition.nodes).length : 0);
+          
           // Construir tree desde definition al cargar
           editorState.tree = buildTreeFromDefinition(editorState.definition);
+          console.log('[Editor] STEP 4.10: tree built from draft');
+        } else {
+          console.warn('[Editor] STEP 4.9: WARNING - no draft_json in response');
         }
+      } else {
+        console.warn('[Editor] STEP 4.7: WARNING - draft fetch failed, status =', response.status);
       }
       
       // Cargar información de versión publicada
       let publishedVersion = null;
       let publishedAt = null;
       
+      console.log('[Editor] STEP 4.11: fetching published');
       response = await fetch(`/admin/api/navigation/${encodedId}/published`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
       
+      console.log('[Editor] STEP 4.12: published response status =', response.status);
+      
       if (response.ok) {
+        console.log('[Editor] STEP 4.13: parsing published JSON');
         const data = await response.json();
+        
         if (data.ok && data.data) {
           publishedVersion = data.data.version;
           publishedAt = data.data.published_at;
           
           // Si no hay draft, usar published como referencia
           if (!editorState.definition && data.data.definition_json) {
+            console.log('[Editor] STEP 4.14: using published as definition');
             editorState.definition = JSON.parse(JSON.stringify(data.data.definition_json));
             // Construir tree desde definition
             editorState.tree = buildTreeFromDefinition(editorState.definition);
+            console.log('[Editor] STEP 4.15: tree built from published');
           }
         }
+      } else {
+        console.warn('[Editor] STEP 4.13: WARNING - published fetch failed, status =', response.status);
       }
       
       // Actualizar indicador de versión publicada
@@ -718,55 +971,127 @@
         publishedInfoEl.style.display = 'inline-block';
       }
       
+      console.log('[Editor] STEP 4.16: checking definition before continue');
       if (!editorState.definition) {
+        console.error('[Editor] STEP 4.17: ERROR - definition es falsy, fail-open');
+        // Fail-open: mostrar mensaje visible
+        const mapEl = document.getElementById('nodes-map');
+        const treeEl = document.getElementById('nodes-tree');
+        if (mapEl) mapEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ No se pudo cargar la navegación (fail-open)</p>';
+        if (treeEl) treeEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ No se pudo cargar la navegación (fail-open)</p>';
         throw new Error('No se pudo cargar la navegación');
       }
       
       // Construir tree desde definition si no existe
       if (!editorState.tree) {
+        console.log('[Editor] STEP 4.18: building tree from definition');
         editorState.tree = buildTreeFromDefinition(editorState.definition);
+        console.log('[Editor] STEP 4.19: tree built');
       }
+      
+      console.log('[Editor] STEP 4.20: definition ready, nodes =', editorState.definition?.nodes ? Object.keys(editorState.definition.nodes).length : 0);
       
       editorState.dirty = false;
       editorState.lastSavedAt = null;
       updateDirtyBadge();
+      
+      console.log('[Editor] STEP 4.21: calling actualizarUI()');
       actualizarUI();
+      console.log('[Editor] STEP 4.22: actualizarUI() completed');
     } catch (error) {
-      console.error('Error cargando navegación:', error);
+      console.error('[Editor] STEP 4.23: ERROR cargando navegación:', error);
+      // Fail-open: mostrar mensaje visible
+      const mapEl = document.getElementById('nodes-map');
+      const treeEl = document.getElementById('nodes-tree');
+      if (mapEl) mapEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error cargando navegación: ${error.message}</p>`;
+      if (treeEl) treeEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error cargando navegación: ${error.message}</p>`;
       alert(`Error cargando navegación: ${error.message}`);
     }
+    console.log('[Editor] STEP 4.24: cargarNavegacion end');
   }
   
-  // Cambiar vista
-  function cambiarVista(vista) {
-    editorState.currentView = vista;
-    
-    // Ocultar todas las vistas
+  // ========================================================================
+  // SISTEMA CENTRALIZADO DE VISTAS (FIX CRÍTICO - Editor de Navegación)
+  // ========================================================================
+  
+  /**
+   * Oculta todas las vistas del editor
+   */
+  function hideAllNavigationViews() {
     document.querySelectorAll('.vista-container').forEach(el => el.classList.add('hidden'));
-    
+  }
+  
+  /**
+   * Actualiza el estado visual de los botones de vista
+   * @param {string} view - Vista activa ('mapa', 'arbol', 'json', 'preview')
+   */
+  function updateViewButtons(view) {
     // Desactivar todas las tabs
     document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
     
-    // Mostrar vista seleccionada
-    const vistaEl = document.getElementById(`vista-${vista}`);
-    if (vistaEl) {
-      vistaEl.classList.remove('hidden');
-    }
-    
     // Activar tab seleccionada
-    const tabEl = document.getElementById(`tab-${vista}`);
+    const tabEl = document.getElementById(`tab-${view}`);
     if (tabEl) {
       tabEl.classList.add('active');
     }
     
-    // Renderizar según la vista
-    if (vista === 'mapa') {
-      renderNodesMap();
-    } else if (vista === 'arbol') {
-      renderNodesTree();
-    } else if (vista === 'json') {
-      renderJSONView();
+    // Mostrar vista seleccionada
+    const vistaEl = document.getElementById(`vista-${view}`);
+    if (vistaEl) {
+      vistaEl.classList.remove('hidden');
     }
+  }
+  
+  /**
+   * Renderiza el contenido de una vista específica
+   * @param {string} view - Vista a renderizar ('mapa', 'arbol', 'json', 'preview')
+   */
+  function renderNavigationView(view) {
+    console.log('[AXE][NAV_EDITOR] renderNavigationView:', view);
+    
+    switch (view) {
+      case 'mapa':
+        renderNodesMap();
+        break;
+      case 'arbol':
+        renderNodesTree();
+        break;
+      case 'json':
+        renderJSONView();
+        break;
+      case 'preview':
+        renderPreviewView();
+        break;
+      default:
+        console.warn('[AXE][NAV_EDITOR] Vista desconocida:', view);
+    }
+  }
+  
+  /**
+   * Función central para cambiar de vista en el editor
+   * Único punto de entrada para cambiar vistas (source of truth)
+   * @param {string} view - Vista a activar ('mapa', 'arbol', 'json', 'preview')
+   */
+  function setNavigationView(view) {
+    console.log('[AXE][NAV_EDITOR] setNavigationView:', view);
+    
+    // Actualizar estado
+    editorState.currentView = view;
+    
+    // Ocultar todas las vistas
+    hideAllNavigationViews();
+    
+    // Actualizar botones y mostrar vista
+    updateViewButtons(view);
+    
+    // Renderizar contenido de la vista
+    renderNavigationView(view);
+  }
+  
+  // Mantener compatibilidad con código legacy (deprecado)
+  function cambiarVista(vista) {
+    console.warn('[AXE][NAV_EDITOR] cambiarVista() está deprecado, usar setNavigationView()');
+    setNavigationView(vista);
   }
   
   // Copiar JSON al portapapeles
@@ -793,7 +1118,19 @@
   
   // Actualizar UI completa
   function actualizarUI() {
-    if (!editorState.definition) return;
+    console.log('[Editor] STEP 4.21.1: actualizarUI start');
+    
+    if (!editorState.definition) {
+      console.warn('[Editor] STEP 4.21.2: WARNING - definition es falsy, fail-open');
+      // Fail-open: mostrar mensaje visible
+      const mapEl = document.getElementById('nodes-map');
+      const treeEl = document.getElementById('nodes-tree');
+      if (mapEl) mapEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ No hay datos para mostrar (fail-open)</p>';
+      if (treeEl) treeEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ No hay datos para mostrar (fail-open)</p>';
+      return;
+    }
+    
+    console.log('[Editor] STEP 4.21.3: definition exists, nodes =', editorState.definition?.nodes ? Object.keys(editorState.definition.nodes).length : 0);
     
     // Actualizar nombre
     const nameEl = document.getElementById('navigation-name');
@@ -801,30 +1138,61 @@
       nameEl.textContent = editorState.definition.name || editorState.navigationId;
     }
     
+    // FASE 4.1: Actualizar tipo de navegación y context_key
+    const typeEl = document.getElementById('navigation-type');
+    if (typeEl) {
+      typeEl.value = editorState.definition.type || 'global';
+    }
+    
+    const contextKeyEl = document.getElementById('navigation-context-key');
+    if (contextKeyEl) {
+      const navType = editorState.definition.type || 'global';
+      if (navType === 'contextual') {
+        contextKeyEl.style.display = 'inline-block';
+        contextKeyEl.value = editorState.definition.context_key || '';
+      } else {
+        contextKeyEl.style.display = 'none';
+        contextKeyEl.value = '';
+      }
+    }
+    
     // Renderizar según la vista actual
+    console.log('[Editor] STEP 4.21.4: rendering view =', editorState.currentView);
     if (editorState.currentView === 'mapa') {
+      console.log('[Editor] STEP 4.21.5: calling renderNodesMap()');
       renderNodesMap();
+      console.log('[Editor] STEP 4.21.6: renderNodesMap() completed');
     } else if (editorState.currentView === 'arbol') {
+      console.log('[Editor] STEP 4.21.5: calling renderNodesTree()');
       renderNodesTree();
+      console.log('[Editor] STEP 4.21.6: renderNodesTree() completed');
     } else if (editorState.currentView === 'json') {
+      console.log('[Editor] STEP 4.21.5: calling renderJSONView()');
       renderJSONView();
+      console.log('[Editor] STEP 4.21.6: renderJSONView() completed');
     }
     
     // Renderizar preview
+    console.log('[Editor] STEP 4.21.7: calling renderPreview()');
     renderPreview();
+    console.log('[Editor] STEP 4.21.8: renderPreview() completed');
     
-    // Si hay nodo seleccionado, mostrar propiedades
-    if (editorState.selectedNodeId) {
-      renderNodeProperties(editorState.selectedNodeId);
+    // Si hay nodo seleccionado en canvas, mostrar propiedades
+    const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId || editorState.selectedNodeId;
+    if (selectedNodeId) {
+      console.log('[Editor] STEP 4.21.9: rendering node properties');
+      renderNodeProperties(selectedNodeId);
     } else {
-      // Seleccionar nodo raíz por defecto
+      // Seleccionar nodo raíz por defecto en canvas
       if (editorState.definition.entry_node_id) {
-        seleccionarNodo(editorState.definition.entry_node_id);
+        console.log('[Editor] STEP 4.21.9: selecting entry node in canvas');
+        seleccionarNodoCanvasNav(editorState.definition.entry_node_id);
       }
     }
     
     // Actualizar estado
     updateStatusIndicator();
+    console.log('[Editor] STEP 4.21.10: actualizarUI complete');
   }
   
   // ========================================================================
@@ -970,95 +1338,61 @@
     };
   }
   
-  // Renderizar mapa visual jerárquico
+  // Renderizar mapa visual jerárquico (AHORA USA CANVAS AXE)
   function renderNodesMap() {
-    const mapEl = document.getElementById('nodes-map');
-    if (!mapEl || !editorState.tree) {
-      if (mapEl) {
-        mapEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
-      }
+    console.log('[NavigationEditor] renderNodesMap - INICIO (MOTOR AXE)');
+    
+    if (!editorState.definition) {
+      console.warn('[NavigationEditor] renderNodesMap - WARNING: definition es falsy');
       return;
     }
     
-    const tree = editorState.tree;
-    if (!tree) {
-      mapEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
-      return;
+    // Convertir NavigationDefinition → CanvasDefinition
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    console.log('[NavigationEditor] renderNodesMap - canvas convertido:', canvas);
+    
+    // Renderizar canvas visual
+    renderCanvasViewerNav(canvas);
+    
+    // Actualizar panel contextual si hay nodo seleccionado
+    const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId;
+    if (selectedNodeId) {
+      renderNodeProperties(selectedNodeId);
     }
     
-    let html = '';
-    
-    function renderMapNode(nodeTree, level = 0) {
-      if (!nodeTree || !nodeTree.node) return '';
-      
-      const node = nodeTree.node;
-      
-      // Ignorar nodo virtual raíz
-      if (node.id === '__root__' && node.kind === 'virtual') {
-        if (nodeTree.children) {
-          return nodeTree.children.map(child => renderMapNode(child, level)).join('');
-        }
-        return '';
-      }
-      
-      const isActive = editorState.selectedNodeId === node.id;
-      const escapedId = (node.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      
-      html += `
-        <div class="map-node ${isActive ? 'active' : ''}" 
-             draggable="true"
-             data-node-id="${escapedId}"
-             onclick="seleccionarNodo('${escapedId}')"
-             ondragstart="handleDragStart(event)"
-             ondragover="handleDragOver(event)"
-             ondrop="handleDrop(event)"
-             ondragend="handleDragEnd(event)">
-          <div class="flex justify-between items-center">
-            <div class="flex-1">
-              <div class="font-semibold text-white">${(node.label || node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-              <div class="text-xs text-slate-400 mt-1">${(node.id || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')} • ${(node.kind || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-            </div>
-            <div class="node-actions" onclick="event.stopPropagation()">
-              <button onclick="eliminarNodo('${escapedId}')" title="Eliminar" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded">🗑️</button>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      // Renderizar hijos
-      if (nodeTree.children && nodeTree.children.length > 0) {
-        html += '<div class="map-node-children">';
-        nodeTree.children.forEach(child => {
-          html += renderMapNode(child, level + 1);
-        });
-        html += '</div>';
-      }
-      
-      return '';
-    }
-    
-    html = renderMapNode(tree);
-    
-    if (html === '') {
-      html = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
-    }
-    
-    mapEl.innerHTML = html;
+    console.log('[NavigationEditor] renderNodesMap - FIN (MOTOR AXE)');
   }
   
   // Renderizar árbol de nodos con expand/collapse
   function renderNodesTree() {
+    console.log('[NavigationEditor] renderNodesTree - INICIO');
+    console.log('[NavigationEditor] renderNodesTree - editorState.tree:', editorState.tree);
+    console.log('[NavigationEditor] renderNodesTree - editorState.tree es undefined?', editorState.tree === undefined);
+    console.log('[NavigationEditor] renderNodesTree - editorState.tree es null?', editorState.tree === null);
+    
     const treeEl = document.getElementById('nodes-tree');
-    if (!treeEl || !editorState.tree) {
-      if (treeEl) {
-        treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
-      }
+    console.log('[NavigationEditor] renderNodesTree - treeEl:', treeEl);
+    console.log('[NavigationEditor] renderNodesTree - treeEl es null?', treeEl === null);
+    
+    if (!treeEl) {
+      console.error('[NavigationEditor] renderNodesTree - ERROR: treeEl no existe');
+      return;
+    }
+    
+    if (!editorState.tree) {
+      console.warn('[NavigationEditor] renderNodesTree - WARNING: editorState.tree es falsy, mostrando mensaje');
+      treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación (fail-open)</p>';
       return;
     }
     
     const tree = editorState.tree;
+    console.log('[NavigationEditor] renderNodesTree - tree:', tree);
+    console.log('[NavigationEditor] renderNodesTree - tree.node:', tree?.node);
+    console.log('[NavigationEditor] renderNodesTree - tree.children:', tree?.children);
+    
     if (!tree) {
-      treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      console.warn('[NavigationEditor] renderNodesTree - WARNING: tree es falsy después de asignar');
+      treeEl.innerHTML = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación (fail-open)</p>';
       return;
     }
     
@@ -1114,12 +1448,18 @@
     }
     
     html = renderTreeNode(tree);
+    console.log('[NavigationEditor] renderNodesTree - html generado:', html);
+    console.log('[NavigationEditor] renderNodesTree - html length:', html.length);
     
     if (html === '') {
-      html = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación</p>';
+      console.warn('[NavigationEditor] renderNodesTree - WARNING: html está vacío');
+      html = '<p class="text-slate-400 text-sm">No hay nodos en esta navegación (fail-open)</p>';
     }
     
+    console.log('[NavigationEditor] renderNodesTree - Asignando innerHTML al treeEl...');
     treeEl.innerHTML = html;
+    console.log('[NavigationEditor] renderNodesTree - innerHTML asignado');
+    console.log('[NavigationEditor] renderNodesTree - FIN');
   }
   
   // Toggle expand/collapse de nodo en árbol
@@ -1413,6 +1753,29 @@
         </select>
       </div>
       
+      <!-- FASE 4.2: Tipo semántico del nodo -->
+      <div class="property-group">
+        <label>Type (Semántico) 
+          <span class="text-xs text-slate-400" title="Tipo semántico del nodo para claridad editorial">ℹ️</span>
+        </label>
+        <select id="node-type" onchange="actualizarPropiedadNodo('type', this.value || null)">
+          <option value="">Ninguno</option>
+          <option value="home" ${node.type === 'home' ? 'selected' : ''}>🏠 Home</option>
+          <option value="section" ${node.type === 'section' ? 'selected' : ''}>📁 Section</option>
+          <option value="view" ${node.type === 'view' ? 'selected' : ''}>👁️ View</option>
+          <option value="external" ${node.type === 'external' ? 'selected' : ''}>🔗 External</option>
+          <option value="overlay" ${node.type === 'overlay' ? 'selected' : ''}>📋 Overlay</option>
+          <option value="return" ${node.type === 'return' ? 'selected' : ''}>↩️ Return</option>
+        </select>
+        <p class="text-xs text-slate-400 mt-1">
+          ${node.type === 'home' ? '⚠️ Solo uno por navegación' : ''}
+          ${node.type === 'return' ? '⚠️ Solo permite 1 edge saliente' : ''}
+          ${node.type === 'overlay' ? '⚠️ No puede ser entry' : ''}
+          ${node.type === 'external' ? '⚠️ Requiere URL' : ''}
+          ${!node.type ? 'Tipo semántico opcional para claridad editorial' : ''}
+        </p>
+      </div>
+      
       <div class="property-group">
         <label>Label</label>
         <input type="text" id="node-label" value="${(node.label || '').replace(/"/g, '&quot;')}" onchange="actualizarPropiedadNodo('label', this.value)" placeholder="Texto visible del nodo">
@@ -1465,10 +1828,71 @@
       
       ${node.visibility ? `
       <div class="property-group">
-        <label>Visibility (JSON)</label>
+        <label>Visibility (JSON - Legacy)</label>
         <textarea id="node-visibility" rows="3" onchange="actualizarPropiedadNodo('visibility', JSON.parse(this.value || '{}'))" class="font-mono text-xs">${JSON.stringify(node.visibility, null, 2)}</textarea>
       </div>
       ` : ''}
+      
+      <!-- FASE 4.3: Reglas de visibilidad (pasivo, sin evaluación) -->
+      <div class="property-group">
+        <details class="cursor-pointer">
+          <summary class="text-slate-300 font-semibold mb-2 select-none">
+            👁️ Visibilidad (Futuro)
+            <span class="text-xs text-slate-500 ml-2" title="No se evalúa todavía, solo se guarda">⚠️ No se evalúa todavía</span>
+          </summary>
+          <div class="mt-3 p-3 bg-slate-800 rounded border border-slate-700">
+            <p class="text-xs text-slate-400 mb-3">
+              💡 Estas reglas se guardan pero NO se evalúan todavía. Preparación para futuras funcionalidades.
+            </p>
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Min Level</label>
+                <input 
+                  type="number" 
+                  id="node-visibility-min-level" 
+                  value="${node.visibility_rules?.min_level !== undefined ? node.visibility_rules.min_level : ''}"
+                  onchange="actualizarVisibilityRules()"
+                  placeholder="Nivel mínimo"
+                  class="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                >
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Max Level</label>
+                <input 
+                  type="number" 
+                  id="node-visibility-max-level" 
+                  value="${node.visibility_rules?.max_level !== undefined ? node.visibility_rules.max_level : ''}"
+                  onchange="actualizarVisibilityRules()"
+                  placeholder="Nivel máximo"
+                  class="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                >
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Flags (separados por comas)</label>
+                <input 
+                  type="text" 
+                  id="node-visibility-flags" 
+                  value="${node.visibility_rules?.flags ? node.visibility_rules.flags.join(', ') : ''}"
+                  onchange="actualizarVisibilityRules()"
+                  placeholder="flag1, flag2, flag3"
+                  class="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                >
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Products (separados por comas)</label>
+                <input 
+                  type="text" 
+                  id="node-visibility-products" 
+                  value="${node.visibility_rules?.products ? node.visibility_rules.products.join(', ') : ''}"
+                  onchange="actualizarVisibilityRules()"
+                  placeholder="producto1, producto2"
+                  class="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                >
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
     `;
   }
   
@@ -1501,6 +1925,127 @@
     }
     
     const updated = updateNodeInTree(editorState.tree, editorState.selectedNodeId, prop, value);
+    if (!updated) return;
+    
+    // Reconstruir definition desde tree
+    editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
+    
+    markDirty();
+    updateStatusIndicator();
+    renderPreview();
+  }
+  
+  // FASE 4.1: Actualizar tipo de navegación
+  function actualizarTipoNavegacion(type) {
+    if (!editorState.definition) return;
+    
+    console.log('[AXE][NAV_EDITOR] actualizarTipoNavegacion:', type);
+    
+    editorState.definition.type = type;
+    
+    // Mostrar/ocultar context_key según tipo
+    const contextKeyEl = document.getElementById('navigation-context-key');
+    if (contextKeyEl) {
+      if (type === 'contextual') {
+        contextKeyEl.style.display = 'inline-block';
+        // Si no hay context_key y es contextual, mostrar warning pero no bloquear
+        if (!editorState.definition.context_key) {
+          console.warn('[AXE][NAV_EDITOR] actualizarTipoNavegacion: type=contextual sin context_key (warning, no bloqueo)');
+        }
+      } else {
+        contextKeyEl.style.display = 'none';
+        editorState.definition.context_key = null;
+      }
+    }
+    
+    markDirty();
+    updateStatusIndicator();
+    renderPreview();
+  }
+  
+  // FASE 4.1: Actualizar context_key
+  function actualizarContextKey(contextKey) {
+    if (!editorState.definition) return;
+    
+    console.log('[AXE][NAV_EDITOR] actualizarContextKey:', contextKey);
+    
+    const trimmedKey = contextKey?.trim() || null;
+    editorState.definition.context_key = trimmedKey;
+    
+    markDirty();
+    updateStatusIndicator();
+    renderPreview();
+  }
+  
+  // FASE 4.3: Actualizar reglas de visibilidad
+  function actualizarVisibilityRules() {
+    if (!editorState.tree || !editorState.selectedNodeId) return;
+    
+    console.log('[AXE][NAV_EDITOR] actualizarVisibilityRules');
+    
+    const minLevelEl = document.getElementById('node-visibility-min-level');
+    const maxLevelEl = document.getElementById('node-visibility-max-level');
+    const flagsEl = document.getElementById('node-visibility-flags');
+    const productsEl = document.getElementById('node-visibility-products');
+    
+    const rules = {};
+    
+    if (minLevelEl && minLevelEl.value) {
+      const minLevel = parseInt(minLevelEl.value);
+      if (!isNaN(minLevel)) {
+        rules.min_level = minLevel;
+      }
+    }
+    
+    if (maxLevelEl && maxLevelEl.value) {
+      const maxLevel = parseInt(maxLevelEl.value);
+      if (!isNaN(maxLevel)) {
+        rules.max_level = maxLevel;
+      }
+    }
+    
+    if (flagsEl && flagsEl.value) {
+      rules.flags = flagsEl.value.split(',').map(f => f.trim()).filter(f => f);
+    }
+    
+    if (productsEl && productsEl.value) {
+      rules.products = productsEl.value.split(',').map(p => p.trim()).filter(p => p);
+    }
+    
+    // Validar JSON (solo estructura, no evaluación)
+    try {
+      JSON.stringify(rules);
+    } catch (error) {
+      console.error('[AXE][NAV_EDITOR] actualizarVisibilityRules: JSON inválido', error);
+      alert('⚠️ Error: Las reglas de visibilidad no son válidas');
+      return;
+    }
+    
+    // Actualizar en tree (fuente de verdad)
+    function updateVisibilityRulesInTree(tree, nodeId, rules) {
+      if (!tree || !tree.node) return false;
+      
+      if (tree.node.id === nodeId) {
+        if (Object.keys(rules).length === 0) {
+          delete tree.node.visibility_rules;
+        } else {
+          tree.node.visibility_rules = rules;
+        }
+        return true;
+      }
+      
+      if (tree.children) {
+        for (const child of tree.children) {
+          if (updateVisibilityRulesInTree(child, nodeId, rules)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    const updated = updateVisibilityRulesInTree(editorState.tree, editorState.selectedNodeId, rules);
     if (!updated) return;
     
     // Reconstruir definition desde tree
@@ -1644,9 +2189,23 @@
     // Reconstruir definition desde tree
     editorState.definition = buildDefinitionFromTree(editorState.tree, editorState.definition?.entry_node_id);
     
+    // Asignar posición automática al nuevo nodo si no existe
+    if (editorState.definition.nodes[nodeId.trim()] && !editorState.definition.nodes[nodeId.trim()].position) {
+      // Generar posiciones para todos los nodos (incluyendo el nuevo)
+      const positions = generateNodePositions(editorState.definition);
+      if (positions[nodeId.trim()]) {
+        editorState.definition.nodes[nodeId.trim()].position = positions[nodeId.trim()];
+      }
+    }
+    
     markDirty();
     actualizarUI();
-    seleccionarNodo(nodeId.trim());
+    // Seleccionar en canvas si estamos en vista mapa
+    if (editorState.currentView === 'mapa') {
+      seleccionarNodoCanvasNav(nodeId.trim());
+    } else {
+      seleccionarNodo(nodeId.trim());
+    }
   }
   
   // Eliminar nodo
@@ -1694,7 +2253,7 @@
     actualizarUI();
   }
   
-  // Guardar navegación (asegura que edges estén sincronizados)
+  // Guardar navegación (asegura que edges estén sincronizados y posiciones del canvas)
   async function guardarNavegacion() {
     if (!editorState.definition || !editorState.navigationId) return;
     
@@ -1702,6 +2261,11 @@
     updateStatusIndicator();
     
     try {
+      // Sincronizar posiciones del canvas al definition antes de guardar
+      if (editorState.currentView === 'mapa') {
+        syncCanvasPositionsToDefinition();
+      }
+      
       // Asegurar que la definición esté normalizada
       // Si estamos en vista árbol/mapa, los edges ya deberían estar actualizados
       // Pero por si acaso, validar estructura básica
@@ -1983,7 +2547,1083 @@
     }
   }
   
+  // ========================================================================
+  // MOTOR VISUAL AXE - PORTADO DESDE EDITOR DE RECORRIDOS
+  // ========================================================================
+  
+  // Inicializar estado visual del canvas (AXE)
+  if (!window.canvasVisualStateNav) {
+    window.canvasVisualStateNav = {
+      panX: 0,
+      panY: 0,
+      zoom: 1,
+      isDragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragNodeId: null,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+      snappingEnabled: false,
+      snapGrid: 20
+    };
+  }
+  
+  // Estado de selección
+  if (!window.canvasSelectionStateNav) {
+    window.canvasSelectionStateNav = { selectedNodeId: null };
+  }
+  
+  /**
+   * Adaptador: NavigationDefinition → CanvasDefinition (AXE)
+   */
+  function navigationDefinitionToCanvas(navDef) {
+    if (!navDef || !navDef.nodes) {
+      return { nodes: [], edges: [] };
+    }
+    
+    const canvas = {
+      nodes: [],
+      edges: []
+    };
+    
+    // Convertir nodos
+    const nodePositions = generateNodePositions(navDef);
+    
+    Object.keys(navDef.nodes).forEach(nodeId => {
+      const node = navDef.nodes[nodeId];
+      const pos = nodePositions[nodeId] || { x: 0, y: 0 };
+      
+      canvas.nodes.push({
+        id: nodeId,
+        type: mapKindToType(node.kind || 'item'),
+        label: node.label || nodeId,
+        position: { x: pos.x, y: pos.y },
+        kind: node.kind,
+        subtitle: node.subtitle,
+        icon: node.icon,
+        target: node.target,
+        visibility: node.visibility
+      });
+    });
+    
+    // Convertir edges
+    (navDef.edges || []).forEach(edge => {
+      canvas.edges.push({
+        from_node_id: edge.from,
+        to_node_id: edge.to,
+        type: edge.kind || 'child',
+        order: edge.order || 0
+      });
+    });
+    
+    return canvas;
+  }
+  
+  /**
+   * Adaptador: CanvasDefinition → NavigationDefinition
+   */
+  function canvasToNavigationDefinition(canvas, originalNavDef) {
+    if (!canvas || !canvas.nodes) {
+      return originalNavDef || { nodes: {}, edges: [], entry_node_id: null };
+    }
+    
+    const navDef = {
+      nodes: {},
+      edges: [],
+      entry_node_id: originalNavDef?.entry_node_id || null
+    };
+    
+    // Convertir nodos
+    canvas.nodes.forEach(node => {
+      navDef.nodes[node.id] = {
+        id: node.id,
+        kind: node.kind || mapTypeToKind(node.type || 'item'),
+        label: node.label || node.id,
+        subtitle: node.subtitle,
+        icon: node.icon,
+        target: node.target,
+        visibility: node.visibility,
+        position: node.position // Guardar posición para siguiente conversión
+      };
+    });
+    
+    // Convertir edges
+    (canvas.edges || []).forEach(edge => {
+      navDef.edges.push({
+        from: edge.from_node_id,
+        to: edge.to_node_id,
+        kind: edge.type || 'child',
+        order: edge.order || 0
+      });
+    });
+    
+    return navDef;
+  }
+  
+  /**
+   * Mapea kind (NavigationDefinition) → type (CanvasDefinition)
+   */
+  function mapKindToType(kind) {
+    const mapping = {
+      'section': 'section',
+      'group': 'group',
+      'item': 'item',
+      'hub': 'hub',
+      'external_link': 'external',
+      'system_entry': 'start'
+    };
+    return mapping[kind] || 'item';
+  }
+  
+  /**
+   * Mapea type (CanvasDefinition) → kind (NavigationDefinition)
+   */
+  function mapTypeToKind(type) {
+    const mapping = {
+      'section': 'section',
+      'group': 'group',
+      'item': 'item',
+      'hub': 'hub',
+      'external': 'external_link',
+      'start': 'system_entry'
+    };
+    return mapping[type] || 'item';
+  }
+  
+  /**
+   * Genera posiciones automáticas basadas en el árbol jerárquico
+   */
+  function generateNodePositions(navDef) {
+    const positions = {};
+    const nodes = navDef.nodes || {};
+    const edges = navDef.edges || [];
+    const entryNodeId = navDef.entry_node_id;
+    
+    // Construir árbol de hijos
+    const childrenMap = {};
+    edges.forEach(edge => {
+      if (edge.kind === 'child' || !edge.kind) {
+        if (!childrenMap[edge.from]) {
+          childrenMap[edge.from] = [];
+        }
+        childrenMap[edge.from].push({
+          nodeId: edge.to,
+          order: edge.order || 0
+        });
+      }
+    });
+    
+    // Ordenar hijos
+    Object.keys(childrenMap).forEach(parentId => {
+      childrenMap[parentId].sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+    
+    // Layout automático: árbol horizontal
+    const NODE_WIDTH = 180;
+    const NODE_HEIGHT = 100;
+    const HORIZONTAL_SPACING = 250;
+    const VERTICAL_SPACING = 150;
+    
+    function layoutNode(nodeId, x, y, visited = new Set()) {
+      if (visited.has(nodeId) || !nodes[nodeId]) return;
+      visited.add(nodeId);
+      
+      positions[nodeId] = { x, y };
+      
+      const children = childrenMap[nodeId] || [];
+      let childY = y;
+      
+      children.forEach((child, idx) => {
+        const childX = x + HORIZONTAL_SPACING;
+        layoutNode(child.nodeId, childX, childY, new Set(visited));
+        childY += VERTICAL_SPACING;
+      });
+    }
+    
+    // Empezar desde entry_node_id o primer nodo
+    const rootId = entryNodeId || Object.keys(nodes)[0];
+    if (rootId) {
+      layoutNode(rootId, 50, 50, new Set());
+    }
+    
+    return positions;
+  }
+  
+  /**
+   * Renderiza el canvas viewer con motor visual AXE
+   */
+  function renderCanvasViewerNav(canvas) {
+    const container = document.getElementById('canvas-nodes-container-nav');
+    if (!container || !canvas) return;
+    
+    const selectedNodeId = window.canvasSelectionStateNav?.selectedNodeId ?? null;
+    
+    let html = '';
+    
+    // Renderizar nodos
+    for (const node of canvas.nodes || []) {
+      const pos = node.position || { x: 0, y: 0 };
+      const isSelected = selectedNodeId === node.id;
+      
+      // Badge de tipo
+      let typeBadge = '';
+      let nodeColor = 'bg-slate-700';
+      if (node.type === 'start' || node.kind === 'system_entry') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-green-600 text-white text-xs rounded">START</span>';
+        nodeColor = 'bg-green-700';
+      } else if (node.type === 'section' || node.kind === 'section') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded">SECTION</span>';
+        nodeColor = 'bg-blue-700';
+      } else if (node.type === 'hub' || node.kind === 'hub') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded">HUB</span>';
+        nodeColor = 'bg-purple-700';
+      }
+      
+      const borderClass = isSelected 
+        ? 'border-2 border-indigo-400 shadow-lg shadow-indigo-500/50' 
+        : 'border border-slate-600';
+      
+      html += `
+        <div 
+          id="node-nav-${node.id}"
+          data-node-id="${node.id}"
+          class="absolute ${nodeColor} ${borderClass} rounded-lg p-3 min-w-[120px] cursor-move select-none"
+          style="left: ${pos.x}px; top: ${pos.y}px; z-index: 10;"
+          onmousedown="handleNodeMouseDownNav(event, '${node.id}')"
+          onclick="handleNodeClickNav(event, '${node.id}')"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="text-white font-semibold text-sm truncate">${(node.label || node.id).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${typeBadge}
+          </div>
+          <div class="text-slate-300 text-xs">${(node.kind || node.type || 'item').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+          ${node.subtitle ? `<div class="text-slate-200 text-xs mt-1 truncate">${(node.subtitle || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    container.innerHTML = html;
+    
+    // Renderizar edges después
+    setTimeout(() => {
+      renderCanvasEdgesNav(canvas);
+    }, 0);
+  }
+  
+  /**
+   * Renderiza edges como líneas SVG
+   */
+  function renderCanvasEdgesNav(canvas) {
+    const svg = document.getElementById('canvas-edges-svg-nav');
+    if (!svg || !canvas) return;
+    
+    svg.innerHTML = '';
+    
+    const container = document.getElementById('canvas-visual-container-nav');
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    svg.setAttribute('width', containerRect.width);
+    svg.setAttribute('height', containerRect.height);
+    
+    // Agregar defs con marcador de flecha
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead-nav');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('points', '0 0, 10 3, 0 6');
+      polygon.setAttribute('fill', '#64748b');
+      
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+    }
+    
+    // Renderizar cada edge
+    for (const edge of canvas.edges || []) {
+      const fromNodeEl = document.getElementById(`node-nav-${edge.from_node_id}`);
+      const toNodeEl = document.getElementById(`node-nav-${edge.to_node_id}`);
+      
+      if (!fromNodeEl || !toNodeEl) continue;
+      
+      const fromRect = fromNodeEl.getBoundingClientRect();
+      const toRect = toNodeEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      const fromCenterX = fromRect.left - containerRect.left + fromRect.width / 2;
+      const fromCenterY = fromRect.top - containerRect.top + fromRect.height / 2;
+      const toCenterX = toRect.left - containerRect.left + toRect.width / 2;
+      const toCenterY = toRect.top - containerRect.top + toRect.height / 2;
+      
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', fromCenterX);
+      line.setAttribute('y1', fromCenterY);
+      line.setAttribute('x2', toCenterX);
+      line.setAttribute('y2', toCenterY);
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('marker-end', 'url(#arrowhead-nav)');
+      
+      svg.appendChild(line);
+    }
+  }
+  
+  /**
+   * Handlers de interacción del canvas (AXE)
+   */
+  function handleNodeMouseDownNav(event, nodeId) {
+    event.stopPropagation();
+    
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    const nodeEl = document.getElementById(`node-nav-${nodeId}`);
+    if (!nodeEl) return;
+    
+    const container = document.getElementById('canvas-visual-container-nav');
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    
+    window.canvasVisualStateNav.isDragging = true;
+    window.canvasVisualStateNav.dragNodeId = nodeId;
+    window.canvasVisualStateNav.dragStartX = event.clientX;
+    window.canvasVisualStateNav.dragStartY = event.clientY;
+    
+    const panX = window.canvasVisualStateNav.panX || 0;
+    const panY = window.canvasVisualStateNav.panY || 0;
+    const zoom = window.canvasVisualStateNav.zoom || 1;
+    
+    const nodePos = nodeEl.style.left ? parseInt(nodeEl.style.left) : 0;
+    const nodeTop = nodeEl.style.top ? parseInt(nodeEl.style.top) : 0;
+    
+    window.canvasVisualStateNav.dragOffsetX = (event.clientX - containerRect.left - panX) / zoom - nodePos;
+    window.canvasVisualStateNav.dragOffsetY = (event.clientY - containerRect.top - panY) / zoom - nodeTop;
+    
+    container.style.cursor = 'grabbing';
+    nodeEl.style.cursor = 'grabbing';
+  }
+  
+  function handleCanvasMouseMoveNav(event) {
+    if (!window.canvasVisualStateNav) return;
+    
+    // Si se está arrastrando un nodo
+    if (window.canvasVisualStateNav.isDragging && window.canvasVisualStateNav.dragNodeId) {
+      const container = document.getElementById('canvas-visual-container-nav');
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      
+      const panX = window.canvasVisualStateNav.panX || 0;
+      const panY = window.canvasVisualStateNav.panY || 0;
+      const zoom = window.canvasVisualStateNav.zoom || 1;
+      
+      let newX = (event.clientX - containerRect.left - panX) / zoom - window.canvasVisualStateNav.dragOffsetX;
+      let newY = (event.clientY - containerRect.top - panY) / zoom - window.canvasVisualStateNav.dragOffsetY;
+      
+      // Aplicar snapping
+      newX = applySnappingNav(newX);
+      newY = applySnappingNav(newY);
+      
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+      
+      const nodeEl = document.getElementById(`node-nav-${window.canvasVisualStateNav.dragNodeId}`);
+      if (nodeEl) {
+        nodeEl.style.left = `${newX}px`;
+        nodeEl.style.top = `${newY}px`;
+        
+        // Actualizar edges en tiempo real
+        const canvas = navigationDefinitionToCanvas(editorState.definition);
+        renderCanvasEdgesNav(canvas);
+      }
+    }
+    // Si se está haciendo pan del canvas
+    else if (window.canvasVisualStateNav.isPanning) {
+      window.canvasVisualStateNav.panX = event.clientX - window.canvasVisualStateNav.panStartX;
+      window.canvasVisualStateNav.panY = event.clientY - window.canvasVisualStateNav.panStartY;
+      
+      const container = document.getElementById('canvas-nodes-container-nav');
+      if (container) {
+        const panX = window.canvasVisualStateNav.panX || 0;
+        const panY = window.canvasVisualStateNav.panY || 0;
+        const zoom = window.canvasVisualStateNav.zoom || 1;
+        container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      }
+      
+      const canvas = navigationDefinitionToCanvas(editorState.definition);
+      renderCanvasEdgesNav(canvas);
+    }
+  }
+  
+  function handleCanvasMouseUpNav(event) {
+    if (!window.canvasVisualStateNav) return;
+    
+    const container = document.getElementById('canvas-visual-container-nav');
+    if (container) {
+      container.style.cursor = 'grab';
+    }
+    
+    // Si se estaba arrastrando un nodo
+    if (window.canvasVisualStateNav.isDragging && window.canvasVisualStateNav.dragNodeId) {
+      const nodeEl = document.getElementById(`node-nav-${window.canvasVisualStateNav.dragNodeId}`);
+      if (nodeEl) {
+        nodeEl.style.cursor = 'move';
+      }
+      
+      // Actualizar posición en definition
+      updateNodePositionInNavDefinition(window.canvasVisualStateNav.dragNodeId);
+      
+      window.canvasVisualStateNav.isDragging = false;
+      window.canvasVisualStateNav.dragNodeId = null;
+    }
+    
+    // Si se estaba haciendo pan
+    if (window.canvasVisualStateNav.isPanning) {
+      window.canvasVisualStateNav.isPanning = false;
+    }
+  }
+  
+  function handleCanvasMouseDownNav(event) {
+    if (event.target.id && event.target.id.startsWith('node-nav-')) {
+      return;
+    }
+    
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1 };
+    }
+    
+    window.canvasVisualStateNav.isPanning = true;
+    window.canvasVisualStateNav.panStartX = event.clientX - window.canvasVisualStateNav.panX;
+    window.canvasVisualStateNav.panStartY = event.clientY - window.canvasVisualStateNav.panY;
+  }
+  
+  function handleCanvasWheelNav(event) {
+    if (!event.altKey) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    const delta = event.deltaY > 0 ? 0.9 : 1.1;
+    window.canvasVisualStateNav.zoom = Math.max(0.3, Math.min(3, window.canvasVisualStateNav.zoom * delta));
+    
+    updateZoomDisplayNav();
+    
+    const container = document.getElementById('canvas-nodes-container-nav');
+    if (container) {
+      const panX = window.canvasVisualStateNav.panX || 0;
+      const panY = window.canvasVisualStateNav.panY || 0;
+      const zoom = window.canvasVisualStateNav.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    renderCanvasEdgesNav(canvas);
+  }
+  
+  function handleNodeClickNav(event, nodeId) {
+    if (window.canvasVisualStateNav && window.canvasVisualStateNav.isDragging) {
+      return;
+    }
+    
+    event.stopPropagation();
+    seleccionarNodoCanvasNav(nodeId);
+  }
+  
+  function seleccionarNodoCanvasNav(nodeId) {
+    if (!window.canvasSelectionStateNav) {
+      window.canvasSelectionStateNav = { selectedNodeId: null };
+    }
+    window.canvasSelectionStateNav.selectedNodeId = nodeId;
+    
+    // Actualizar canvas
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    renderCanvasViewerNav(canvas);
+    
+    // Actualizar panel de propiedades
+    renderNodeProperties(nodeId);
+  }
+  
+  function updateNodePositionInNavDefinition(nodeId) {
+    const nodeEl = document.getElementById(`node-nav-${nodeId}`);
+    if (!nodeEl || !editorState.definition) return;
+    
+    const x = parseInt(nodeEl.style.left) || 0;
+    const y = parseInt(nodeEl.style.top) || 0;
+    
+    // Guardar posición en el nodo (para preservarla en conversiones)
+    if (editorState.definition.nodes[nodeId]) {
+      if (!editorState.definition.nodes[nodeId].position) {
+        editorState.definition.nodes[nodeId].position = { x: 0, y: 0 };
+      }
+      editorState.definition.nodes[nodeId].position.x = x;
+      editorState.definition.nodes[nodeId].position.y = y;
+    }
+    
+    markDirty();
+    renderPreview();
+  }
+  
+  function toggleSnappingNav() {
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualStateNav.snappingEnabled = !window.canvasVisualStateNav.snappingEnabled;
+    
+    const snapBtn = document.getElementById('snap-toggle-btn-nav');
+    if (snapBtn) {
+      snapBtn.textContent = `📐 Snap: ${window.canvasVisualStateNav.snappingEnabled ? 'ON' : 'OFF'}`;
+      snapBtn.classList.toggle('bg-indigo-600', window.canvasVisualStateNav.snappingEnabled);
+    }
+  }
+  
+  function applySnappingNav(value) {
+    if (!window.canvasVisualStateNav || !window.canvasVisualStateNav.snappingEnabled) {
+      return value;
+    }
+    const grid = window.canvasVisualStateNav.snapGrid || 20;
+    return Math.round(value / grid) * grid;
+  }
+  
+  function resetCanvasViewNav() {
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualStateNav.panX = 0;
+    window.canvasVisualStateNav.panY = 0;
+    window.canvasVisualStateNav.zoom = 1;
+    updateZoomDisplayNav();
+    
+    const container = document.getElementById('canvas-nodes-container-nav');
+    if (container) {
+      container.style.transform = 'translate(0px, 0px) scale(1)';
+    }
+    
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    renderCanvasEdgesNav(canvas);
+  }
+  
+  function zoomInCanvasNav() {
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualStateNav.zoom = Math.min(3, (window.canvasVisualStateNav.zoom || 1) * 1.2);
+    updateZoomDisplayNav();
+    
+    const container = document.getElementById('canvas-nodes-container-nav');
+    if (container) {
+      const panX = window.canvasVisualStateNav.panX || 0;
+      const panY = window.canvasVisualStateNav.panY || 0;
+      const zoom = window.canvasVisualStateNav.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    renderCanvasEdgesNav(canvas);
+  }
+  
+  function zoomOutCanvasNav() {
+    if (!window.canvasVisualStateNav) {
+      window.canvasVisualStateNav = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualStateNav.zoom = Math.max(0.3, (window.canvasVisualStateNav.zoom || 1) * 0.8);
+    updateZoomDisplayNav();
+    
+    const container = document.getElementById('canvas-nodes-container-nav');
+    if (container) {
+      const panX = window.canvasVisualStateNav.panX || 0;
+      const panY = window.canvasVisualStateNav.panY || 0;
+      const zoom = window.canvasVisualStateNav.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    const canvas = navigationDefinitionToCanvas(editorState.definition);
+    renderCanvasEdgesNav(canvas);
+  }
+  
+  function updateZoomDisplayNav() {
+    const zoomLevel = document.getElementById('zoom-level-nav');
+    if (zoomLevel && window.canvasVisualStateNav) {
+      const zoom = Math.round((window.canvasVisualStateNav.zoom || 1) * 100);
+      zoomLevel.textContent = `${zoom}%`;
+    }
+  }
+  
+  /**
+   * Sincroniza todas las posiciones del canvas al definition (antes de guardar)
+   */
+  function syncCanvasPositionsToDefinition() {
+    if (!editorState.definition || !editorState.definition.nodes) return;
+    
+    // Actualizar posiciones de todos los nodos desde el DOM
+    Object.keys(editorState.definition.nodes).forEach(nodeId => {
+      const nodeEl = document.getElementById(`node-nav-${nodeId}`);
+      if (nodeEl) {
+        const x = parseInt(nodeEl.style.left) || 0;
+        const y = parseInt(nodeEl.style.top) || 0;
+        
+        if (!editorState.definition.nodes[nodeId].position) {
+          editorState.definition.nodes[nodeId].position = { x: 0, y: 0 };
+        }
+        editorState.definition.nodes[nodeId].position.x = x;
+        editorState.definition.nodes[nodeId].position.y = y;
+      }
+    });
+  }
+  
+  // ========================================================================
+  // FIN MOTOR VISUAL AXE
+  // ========================================================================
+  
   // Inicializar cuando se carga la página
-  initEditor();
+  document.addEventListener('DOMContentLoaded', () => {
+    const editor = document.getElementById('navigation-editor');
+    if (!editor) {
+      console.error('[Editor] DOMContentLoaded: ERROR - Elemento #navigation-editor no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const body = document.body;
+      if (body) {
+        body.innerHTML = `
+          <div style="padding: 40px; background: #1e293b; color: #fca5a5; font-family: sans-serif;">
+            <h1 style="color: #ef4444; margin-bottom: 20px;">⚠️ Error cargando editor de navegación</h1>
+            <p>No se pudo encontrar el contenedor del editor. Por favor, recarga la página.</p>
+            <p style="margin-top: 20px; font-size: 0.9em; color: #94a3b8;">Si el problema persiste, verifica la consola del navegador para más detalles.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    console.log('[Editor] DOMContentLoaded: calling initEditor()');
+    initEditor().catch(err => {
+      console.error('[Editor] DOMContentLoaded: ERROR in initEditor():', err);
+      // Fail-open: mostrar mensaje visible
+      const mapEl = document.getElementById('nodes-map');
+      const treeEl = document.getElementById('nodes-tree');
+      if (mapEl) mapEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error inicializando editor: ${err.message}</p>`;
+      if (treeEl) treeEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error inicializando editor: ${err.message}</p>`;
+    });
+  });
+  
+  // ========================================================================
+  // FUNCIONES DE PREVIEW EFECTIVO (FASE 5)
+  // ========================================================================
+  
+  // Estado del preview
+  let previewState = {
+    effectiveDef: null,
+    provenance: null,
+    warnings: []
+  };
+  
+  // Inicializar vista preview
+  async function renderPreviewView() {
+    console.log('[Preview] renderPreviewView start');
+    
+    // Cargar lista de navegaciones en selectores
+    await cargarNavegacionesParaPreview();
+  }
+  
+  // Cargar lista de navegaciones para los selectores
+  async function cargarNavegacionesParaPreview() {
+    try {
+      const response = await fetch('/admin/api/navigation', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        console.error('[Preview] Error cargando navegaciones:', response.status);
+        return;
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data || !Array.isArray(data.data)) {
+        console.error('[Preview] Respuesta inválida:', data);
+        return;
+      }
+      
+      const navigations = data.data;
+      
+      // Llenar selector de globales
+      const globalSelect = document.getElementById('preview-global-select');
+      if (globalSelect) {
+        globalSelect.innerHTML = '<option value="">Seleccionar navegación global...</option>';
+        navigations
+          .filter(nav => nav.type === 'global' || !nav.type) // Incluir sin tipo (legacy)
+          .forEach(nav => {
+            const option = document.createElement('option');
+            option.value = nav.navigation_id;
+            option.textContent = `${nav.name} (${nav.navigation_id})`;
+            globalSelect.appendChild(option);
+          });
+      }
+      
+      // Llenar selector de contextuales (se usará en añadirContextoPreview)
+      window.previewContextualNavigations = navigations.filter(nav => nav.type === 'contextual');
+      
+    } catch (error) {
+      console.error('[Preview] Error cargando navegaciones:', error);
+    }
+  }
+  
+  // Añadir selector de contexto
+  function añadirContextoPreview() {
+    const container = document.getElementById('preview-contexts-container');
+    if (!container) return;
+    
+    const contextualNavigations = window.previewContextualNavigations || [];
+    
+    const contextDiv = document.createElement('div');
+    contextDiv.className = 'flex gap-2 items-center';
+    
+    const select = document.createElement('select');
+    select.className = 'flex-1 px-3 py-2 bg-slate-800 text-white rounded border border-slate-700';
+    select.innerHTML = '<option value="">Seleccionar contexto...</option>';
+    contextualNavigations.forEach(nav => {
+      const option = document.createElement('option');
+      option.value = nav.navigation_id;
+      option.textContent = `${nav.name} (${nav.context_key || nav.navigation_id})`;
+      select.appendChild(option);
+    });
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded';
+    removeBtn.textContent = '✕';
+    removeBtn.onclick = () => contextDiv.remove();
+    
+    contextDiv.appendChild(select);
+    contextDiv.appendChild(removeBtn);
+    container.appendChild(contextDiv);
+  }
+  
+  // Generar preview efectivo
+  async function generarPreviewEfectivo() {
+    const globalSelect = document.getElementById('preview-global-select');
+    if (!globalSelect || !globalSelect.value) {
+      alert('⚠️ Por favor, selecciona una navegación global');
+      return;
+    }
+    
+    const globalNavId = globalSelect.value;
+    const contextContainer = document.getElementById('preview-contexts-container');
+    const contextNavIds = [];
+    
+    if (contextContainer) {
+      const selects = contextContainer.querySelectorAll('select');
+      selects.forEach(select => {
+        if (select.value) {
+          contextNavIds.push(select.value);
+        }
+      });
+    }
+    
+    console.log('[Preview] Generando preview efectivo:', {
+      global: globalNavId,
+      contexts: contextNavIds
+    });
+    
+    try {
+      const response = await fetch('/admin/api/navigation/preview-effective', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          global_navigation_id: globalNavId,
+          context_navigation_ids: contextNavIds
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Preview] Error generando preview:', response.status, errorText);
+        alert(`❌ Error generando preview: ${response.status}`);
+        return;
+      }
+      
+      const data = await response.json();
+      if (!data.ok || !data.data) {
+        console.error('[Preview] Respuesta inválida:', data);
+        alert('❌ Error: respuesta inválida del servidor');
+        return;
+      }
+      
+      previewState.effectiveDef = data.data.effectiveDef;
+      previewState.provenance = data.data.provenance;
+      previewState.warnings = data.data.warnings || [];
+      
+      console.log('[Preview] Preview generado:', {
+        nodes: Object.keys(previewState.effectiveDef.nodes || {}).length,
+        edges: (previewState.effectiveDef.edges || []).length,
+        warnings: previewState.warnings.length
+      });
+      
+      // Renderizar en canvas
+      renderPreviewCanvas();
+      
+      // Mostrar warnings
+      mostrarPreviewWarnings();
+      
+      // Mostrar provenance
+      mostrarPreviewProvenance();
+      
+    } catch (error) {
+      console.error('[Preview] Error generando preview:', error);
+      alert(`❌ Error: ${error.message}`);
+    }
+  }
+  
+  // Renderizar preview en canvas (reutilizando motor AXE)
+  function renderPreviewCanvas() {
+    if (!previewState.effectiveDef) return;
+    
+    // Usar la misma función de conversión que el editor normal
+    const canvas = navigationDefinitionToCanvas(previewState.effectiveDef);
+    
+    // Renderizar nodos
+    const nodesContainer = document.getElementById('canvas-nodes-container-preview');
+    if (nodesContainer) {
+      nodesContainer.innerHTML = '';
+      
+      canvas.nodes.forEach(node => {
+        const nodeEl = document.createElement('div');
+        nodeEl.id = `node-preview-${node.id}`;
+        nodeEl.className = 'absolute bg-slate-700 border-2 border-slate-500 rounded-lg p-3 cursor-move';
+        nodeEl.style.left = `${node.x}px`;
+        nodeEl.style.top = `${node.y}px`;
+        nodeEl.style.minWidth = '120px';
+        nodeEl.style.zIndex = '10';
+        
+        // Añadir badge de provenance
+        const provenance = previewState.provenance?.nodes?.[node.id] || 'unknown';
+        const provenanceColor = provenance === 'global' ? 'bg-blue-600' : 'bg-purple-600';
+        const provenanceLabel = provenance === 'global' ? '🌐' : `🎯 ${provenance}`;
+        
+        nodeEl.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs ${provenanceColor} text-white px-2 py-0.5 rounded">${provenanceLabel}</span>
+          </div>
+          <div class="text-white font-semibold text-sm">${node.label || node.id}</div>
+          ${node.subtitle ? `<div class="text-slate-400 text-xs mt-1">${node.subtitle}</div>` : ''}
+        `;
+        
+        nodesContainer.appendChild(nodeEl);
+      });
+    }
+    
+    // Renderizar edges
+    renderCanvasEdgesPreview(canvas);
+  }
+  
+  // Renderizar edges en canvas preview
+  function renderCanvasEdgesPreview(canvas) {
+    const svg = document.getElementById('canvas-edges-svg-preview');
+    if (!svg) return;
+    
+    svg.innerHTML = '';
+    
+    canvas.edges.forEach(edge => {
+      const fromNode = canvas.nodes.find(n => n.id === edge.from);
+      const toNode = canvas.nodes.find(n => n.id === edge.to);
+      
+      if (!fromNode || !toNode) return;
+      
+      // Calcular posición del edge
+      const x1 = fromNode.x + 60; // Centro del nodo
+      const y1 = fromNode.y + 40;
+      const x2 = toNode.x + 60;
+      const y2 = toNode.y + 40;
+      
+      // Color según provenance
+      const provenance = previewState.provenance?.edges?.[`${edge.from}:${edge.to}:${edge.kind || 'child'}`] || 'unknown';
+      const edgeColor = provenance === 'global' ? '#3b82f6' : '#a855f7';
+      
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.setAttribute('stroke', edgeColor);
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
+      
+      svg.appendChild(line);
+    });
+    
+    // Añadir marker para flechas si no existe
+    if (!svg.querySelector('#arrowhead')) {
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('points', '0 0, 10 3, 0 6');
+      polygon.setAttribute('fill', '#94a3b8');
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+    }
+  }
+  
+  // Mostrar warnings
+  function mostrarPreviewWarnings() {
+    const warningsEl = document.getElementById('preview-warnings');
+    const warningsListEl = document.getElementById('preview-warnings-list');
+    
+    if (!warningsEl || !warningsListEl) return;
+    
+    if (previewState.warnings.length === 0) {
+      warningsEl.classList.add('hidden');
+      return;
+    }
+    
+    warningsEl.classList.remove('hidden');
+    warningsListEl.innerHTML = '';
+    
+    previewState.warnings.forEach(warning => {
+      const warningDiv = document.createElement('div');
+      warningDiv.className = 'text-xs p-2 bg-yellow-800/50 rounded mb-1';
+      warningDiv.innerHTML = `
+        <div class="font-semibold">${warning.type}</div>
+        <div class="text-yellow-200">${warning.message}</div>
+        ${warning.node_id ? `<div class="text-yellow-300 mt-1">Nodo: ${warning.node_id}</div>` : ''}
+        ${warning.context_key ? `<div class="text-yellow-300 mt-1">Contexto: ${warning.context_key}</div>` : ''}
+      `;
+      warningsListEl.appendChild(warningDiv);
+    });
+  }
+  
+  // Mostrar provenance
+  function mostrarPreviewProvenance() {
+    const provenanceEl = document.getElementById('preview-provenance');
+    if (!provenanceEl || !previewState.provenance) return;
+    
+    const nodes = previewState.provenance.nodes || {};
+    const edges = previewState.provenance.edges || {};
+    const entrySource = previewState.provenance.entry_node_id_source || 'unknown';
+    
+    let html = `<div class="mb-2"><strong>Entry:</strong> ${entrySource}</div>`;
+    html += `<div class="mb-2"><strong>Nodos:</strong> ${Object.keys(nodes).length}</div>`;
+    html += `<div class="mb-2"><strong>Edges:</strong> ${Object.keys(edges).length}</div>`;
+    html += `<div class="mt-2 text-xs">`;
+    html += `<div>🌐 Global: ${Object.values(nodes).filter(v => v === 'global').length} nodos</div>`;
+    const contextCounts = {};
+    Object.values(nodes).forEach(v => {
+      if (v !== 'global') {
+        contextCounts[v] = (contextCounts[v] || 0) + 1;
+      }
+    });
+    Object.entries(contextCounts).forEach(([ctx, count]) => {
+      html += `<div>🎯 ${ctx}: ${count} nodos</div>`;
+    });
+    html += `</div>`;
+    
+    provenanceEl.innerHTML = html;
+  }
+  
+  // Funciones de canvas para preview (simplificadas)
+  let previewCanvasState = { panX: 0, panY: 0, zoom: 1, isPanning: false, startX: 0, startY: 0 };
+  
+  function handleCanvasMouseDownPreview(event) {
+    if (event.target.id && event.target.id.startsWith('node-preview-')) {
+      return;
+    }
+    previewCanvasState.isPanning = true;
+    previewCanvasState.startX = event.clientX - previewCanvasState.panX;
+    previewCanvasState.startY = event.clientY - previewCanvasState.panY;
+  }
+  
+  function handleCanvasMouseMovePreview(event) {
+    if (!previewCanvasState.isPanning) return;
+    previewCanvasState.panX = event.clientX - previewCanvasState.startX;
+    previewCanvasState.panY = event.clientY - previewCanvasState.startY;
+    const container = document.getElementById('canvas-nodes-container-preview');
+    if (container) {
+      container.style.transform = `translate(${previewCanvasState.panX}px, ${previewCanvasState.panY}px) scale(${previewCanvasState.zoom})`;
+    }
+  }
+  
+  function handleCanvasMouseUpPreview(event) {
+    previewCanvasState.isPanning = false;
+  }
+  
+  function handleCanvasWheelPreview(event) {
+    if (!event.altKey) return;
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? 0.9 : 1.1;
+    previewCanvasState.zoom = Math.max(0.1, Math.min(3, previewCanvasState.zoom * delta));
+    const container = document.getElementById('canvas-nodes-container-preview');
+    if (container) {
+      container.style.transform = `translate(${previewCanvasState.panX}px, ${previewCanvasState.panY}px) scale(${previewCanvasState.zoom})`;
+    }
+    const zoomLevel = document.getElementById('zoom-level-preview');
+    if (zoomLevel) {
+      zoomLevel.textContent = `${Math.round(previewCanvasState.zoom * 100)}%`;
+    }
+  }
+  
+  function resetCanvasViewPreview() {
+    previewCanvasState.panX = 0;
+    previewCanvasState.panY = 0;
+    previewCanvasState.zoom = 1;
+    const container = document.getElementById('canvas-nodes-container-preview');
+    if (container) {
+      container.style.transform = 'translate(0px, 0px) scale(1)';
+    }
+    const zoomLevel = document.getElementById('zoom-level-preview');
+    if (zoomLevel) {
+      zoomLevel.textContent = '100%';
+    }
+    if (previewState.effectiveDef) {
+      renderPreviewCanvas();
+    }
+  }
+  
+  function zoomInCanvasPreview() {
+    previewCanvasState.zoom = Math.min(3, previewCanvasState.zoom * 1.2);
+    const container = document.getElementById('canvas-nodes-container-preview');
+    if (container) {
+      container.style.transform = `translate(${previewCanvasState.panX}px, ${previewCanvasState.panY}px) scale(${previewCanvasState.zoom})`;
+    }
+    const zoomLevel = document.getElementById('zoom-level-preview');
+    if (zoomLevel) {
+      zoomLevel.textContent = `${Math.round(previewCanvasState.zoom * 100)}%`;
+    }
+  }
+  
+  function zoomOutCanvasPreview() {
+    previewCanvasState.zoom = Math.max(0.1, previewCanvasState.zoom / 1.2);
+    const container = document.getElementById('canvas-nodes-container-preview');
+    if (container) {
+      container.style.transform = `translate(${previewCanvasState.panX}px, ${previewCanvasState.panY}px) scale(${previewCanvasState.zoom})`;
+    }
+    const zoomLevel = document.getElementById('zoom-level-preview');
+    if (zoomLevel) {
+      zoomLevel.textContent = `${Math.round(previewCanvasState.zoom * 100)}%`;
+    }
+  }
 </script>
 

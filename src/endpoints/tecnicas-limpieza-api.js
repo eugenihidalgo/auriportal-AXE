@@ -37,7 +37,7 @@ export default async function tecnicasLimpiezaApiHandler(request, env, ctx) {
     // POST /api/tecnicas-limpieza - Crear nueva técnica
     if (normalizedPath === '/' && method === 'POST') {
       const body = await request.json();
-      const { nombre, descripcion, nivel, es_energias_indeseables } = body;
+      const { nombre, descripcion, nivel, aplica_energias_indeseables, aplica_limpiezas_recurrentes } = body;
       
       if (!nombre) {
         return renderError('El nombre es requerido', 400);
@@ -47,7 +47,8 @@ export default async function tecnicasLimpiezaApiHandler(request, env, ctx) {
         nombre, 
         descripcion: descripcion || '', 
         nivel: nivel || 1,
-        es_energias_indeseables: es_energias_indeseables || false
+        aplica_energias_indeseables: aplica_energias_indeseables || false,
+        aplica_limpiezas_recurrentes: aplica_limpiezas_recurrentes || false
       });
       const tecnica = await obtenerTecnica(id);
       return renderSuccess('Técnica creada', { tecnica });
@@ -73,14 +74,15 @@ export default async function tecnicasLimpiezaApiHandler(request, env, ctx) {
         return renderError('ID inválido', 400);
       }
       const body = await request.json();
-      const { nombre, descripcion, nivel, activo, es_energias_indeseables } = body;
+      const { nombre, descripcion, nivel, activo, aplica_energias_indeseables, aplica_limpiezas_recurrentes } = body;
       
       const actualizado = await actualizarTecnica(id, { 
         nombre, 
         descripcion, 
         nivel, 
         activo,
-        es_energias_indeseables
+        aplica_energias_indeseables,
+        aplica_limpiezas_recurrentes
       });
       if (!actualizado) {
         return renderError('Error actualizando técnica', 500);

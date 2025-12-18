@@ -420,6 +420,18 @@
             Biblioteca de Decretos
           </a>
           
+          <!-- Registro de Catálogos -->
+          <a href="/admin/pde/catalog-registry" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/pde/catalog-registry' || CURRENT_PATH.startsWith('/admin/pde/catalog-registry/') ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">📚</span>
+            Registro de Catálogos
+          </a>
+          
+          <!-- Diseñador de Motores -->
+          <a href="/admin/motors" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/motors' || CURRENT_PATH.startsWith('/admin/motors/') ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">🧠</span>
+            Diseñador de Motores
+          </a>
+          
           <!-- Frases PDE -->
           <a href="/admin/frases" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
             <span class="mr-3 text-lg">🪬</span>
@@ -462,11 +474,17 @@
             Editor de Pantallas
           </a>
           
-          <!-- Temas -->
-          <a href="/admin/themes/ui" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/themes/ui' || CURRENT_PATH === '/admin/apariencia/temas' ? 'menu-item-active' : ''}}">
+          <!-- Theme Studio v2 -->
+          <a href="/admin/themes/studio" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/themes/studio' ? 'menu-item-active' : ''}}">
+            <span class="mr-3 text-lg">🎨</span>
+            Theme Studio
+          </a>
+          
+          <!-- Temas (deprecated - oculto) -->
+          <!-- <a href="/admin/themes/ui" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors {{CURRENT_PATH === '/admin/themes/ui' || CURRENT_PATH === '/admin/apariencia/temas' ? 'menu-item-active' : ''}}">
             <span class="mr-3 text-lg">🎨</span>
             Temas
-          </a>
+          </a> -->
           
           <!-- Aspectos de Práctica -->
           <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">

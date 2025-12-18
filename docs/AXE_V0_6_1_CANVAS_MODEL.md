@@ -1210,3 +1210,4 @@ Ver sección **5.1** para ejemplo completo de serialización.
 
 **Fin del Documento - AXE v0.6.1**
 
+

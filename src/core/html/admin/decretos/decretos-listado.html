@@ -7,13 +7,24 @@
       <p class="text-slate-400 text-sm mb-4">Gestiona los decretos que se mostrarán a los alumnos durante las prácticas.</p>
     </div>
     
-    <div class="mb-4 flex gap-2">
+    <div class="mb-4 flex gap-2 flex-wrap">
       <a href="/admin/decretos/editar/nuevo" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors">
         ➕ Nuevo decreto
       </a>
       <button onclick="sincronizarDecretos()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
         🔄 Sincronizar con Drive + ClickUp
       </button>
+    </div>
+    
+    <!-- Búsqueda -->
+    <div class="mb-4">
+      <input 
+        type="text" 
+        id="busquedaDecretos" 
+        placeholder="🔍 Buscar por nombre..." 
+        class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        onkeyup="filtrarDecretos()"
+      >
     </div>
     
     <div class="overflow-x-auto">
@@ -28,7 +39,7 @@
             <th class="pb-3 px-4 text-slate-300 font-semibold">Acciones</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="tablaDecretos">
           {{DECRETOS_ROWS}}
         </tbody>
       </table>
@@ -36,7 +47,75 @@
   </div>
 </div>
 
+<!-- Modal de Preview Rápido -->
+<div id="modalPreviewRapido" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-white" id="previewTitulo">Vista Previa</h2>
+      <button 
+        onclick="cerrarPreviewRapido()" 
+        class="text-slate-400 hover:text-white text-2xl"
+      >
+        ×
+      </button>
+    </div>
+    <div id="previewRapidoContent" class="prose prose-invert max-w-none text-white">
+      <!-- Contenido de preview se inyectará aquí -->
+    </div>
+    <div class="mt-4 flex justify-end">
+      <button 
+        onclick="cerrarPreviewRapido()" 
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/admin-decretos.js"></script>
+<script>
+// Función para filtrar decretos por búsqueda
+function filtrarDecretos() {
+  const busqueda = document.getElementById('busquedaDecretos').value.toLowerCase();
+  const filas = document.querySelectorAll('#tablaDecretos tr');
+  
+  filas.forEach(fila => {
+    const texto = fila.textContent.toLowerCase();
+    if (texto.includes(busqueda)) {
+      fila.style.display = '';
+    } else {
+      fila.style.display = 'none';
+    }
+  });
+}
+
+// Función para mostrar preview rápido
+function mostrarPreviewRapido(decretoId, nombre, contenidoHtml) {
+  const modal = document.getElementById('modalPreviewRapido');
+  const titulo = document.getElementById('previewTitulo');
+  const content = document.getElementById('previewRapidoContent');
+  
+  titulo.textContent = nombre || 'Vista Previa';
+  content.innerHTML = contenidoHtml || '<p class="text-slate-400">No hay contenido disponible.</p>';
+  
+  modal.classList.remove('hidden');
+}
+
+// Función para cerrar preview rápido
+function cerrarPreviewRapido() {
+  const modal = document.getElementById('modalPreviewRapido');
+  modal.classList.add('hidden');
+}
+
+// Cerrar modal con ESC
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    cerrarPreviewRapido();
+  }
+});
+</script>
+
 
 
 

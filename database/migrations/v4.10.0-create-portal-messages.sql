@@ -39,3 +39,4 @@ COMMENT ON COLUMN portal_messages.read_at IS 'Fecha de lectura del mensaje (null
 
 
 
+

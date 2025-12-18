@@ -349,3 +349,4 @@ COMMENT ON COLUMN recorrido_audit_log.details_json IS
 
 
 
+

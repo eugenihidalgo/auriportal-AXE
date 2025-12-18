@@ -92,12 +92,31 @@ export function injectOrReplaceThemeStyleTag(html, styleTagHtml) {
   }
   
   // Buscar si ya existe un tag con id="ap-theme-tokens"
+  // NOTA: Este regex es necesario en el servidor (no hay DOM)
+  // Se mantiene simple y sin flags problemáticos para evitar errores
   const existingTagRegex = /<style\s+id=["']ap-theme-tokens["'][^>]*>[\s\S]*?<\/style>/i;
-  const hasExistingTag = existingTagRegex.test(html);
+  let hasExistingTag = false;
+  
+  try {
+    hasExistingTag = existingTagRegex.test(html);
+  } catch (e) {
+    // Si el regex falla (flags inválidos), asumir que no existe
+    console.warn('[ThemeCSS] Error en regex de búsqueda de style tag:', e.message);
+    hasExistingTag = false;
+  }
   
   if (hasExistingTag) {
-    // Reemplazar tag existente
-    return html.replace(existingTagRegex, styleTagHtml);
+    try {
+      // Reemplazar tag existente
+      return html.replace(existingTagRegex, styleTagHtml);
+    } catch (e) {
+      // Si el replace falla, insertar nuevo tag antes de </head>
+      console.warn('[ThemeCSS] Error reemplazando style tag, insertando nuevo:', e.message);
+      if (html.includes('</head>')) {
+        return html.replace('</head>', styleTagHtml + '\n</head>');
+      }
+      return styleTagHtml + '\n' + html;
+    }
   }
   
   // No existe, insertar antes de </head>

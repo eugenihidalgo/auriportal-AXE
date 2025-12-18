@@ -197,6 +197,211 @@ export default async function enterHandler(request, env, ctx) {
   // CRÍTICO: GET / y GET /enter NUNCA deben devolver 500
   console.log('[enter] GET /enter o GET / recibido');
   
+  // -----------------------------
+  // PREVIEW V1: Detectar preview=1 y recorrido=<ID>
+  // -----------------------------
+  const previewMode = url.searchParams.get("preview") === "1";
+  const recorridoId = url.searchParams.get("recorrido");
+  
+  if (previewMode && recorridoId) {
+    console.log('[enter] Preview mode detectado', { recorrido_id: recorridoId });
+    try {
+      // Importar repos necesarios
+      const { getDefaultRecorridoDraftRepo } = await import('../infra/repos/recorrido-draft-repo-pg.js');
+      const { getDefaultRecorridoVersionRepo } = await import('../infra/repos/recorrido-version-repo-pg.js');
+      const { getDefaultRecorridoRepo } = await import('../infra/repos/recorrido-repo-pg.js');
+      
+      // Verificar que el recorrido existe
+      const recorridoRepo = getDefaultRecorridoRepo();
+      const recorrido = await recorridoRepo.getRecorridoById(recorridoId);
+      if (!recorrido) {
+        console.warn('[enter] Preview: Recorrido no encontrado', { recorrido_id: recorridoId });
+        return new Response('Recorrido no encontrado', { status: 404 });
+      }
+      
+      // Intentar cargar draft primero (para usar definition_json del canvas actual)
+      const draftRepo = getDefaultRecorridoDraftRepo();
+      let definition = null;
+      let source = null;
+      
+      try {
+        const draft = await draftRepo.getCurrentDraft(recorridoId);
+        if (draft && draft.definition_json) {
+          definition = draft.definition_json;
+          source = 'draft';
+          console.log('[enter] Preview: Usando definition_json del draft', { recorrido_id: recorridoId });
+        }
+      } catch (draftError) {
+        console.warn('[enter] Preview: Error cargando draft, intentando versión publicada', {
+          error: draftError.message
+        });
+      }
+      
+      // Si no hay draft, usar versión publicada
+      if (!definition) {
+        try {
+          const versionRepo = getDefaultRecorridoVersionRepo();
+          const version = await versionRepo.getLatestVersion(recorridoId);
+          if (version && version.definition_json) {
+            definition = version.definition_json;
+            source = 'published';
+            console.log('[enter] Preview: Usando definition_json de versión publicada', {
+              recorrido_id: recorridoId,
+              version: version.version
+            });
+          }
+        } catch (versionError) {
+          console.warn('[enter] Preview: Error cargando versión publicada', {
+            error: versionError.message
+          });
+        }
+      }
+      
+      // Si no hay definition, fallar con mensaje claro
+      if (!definition) {
+        console.error('[enter] Preview: No se encontró definition_json (ni draft ni versión)', {
+          recorrido_id: recorridoId
+        });
+        return new Response('Recorrido sin definition_json disponible', { status: 404 });
+      }
+      
+      // Renderizar página HTML de preview
+      // Esta página ejecutará el runtime en modo preview (sin persistir)
+      const previewHtml = `<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview: ${recorrido.name || recorridoId}</title>
+  <link rel="stylesheet" href="/css/theme-variables.css" />
+  <link rel="stylesheet" href="/css/theme-overrides.css" />
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      padding: 20px;
+      margin: 0;
+    }
+    .preview-banner {
+      background: #ffd86b;
+      color: #000;
+      padding: 10px 20px;
+      text-align: center;
+      font-weight: 600;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    .preview-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    #runtime-container {
+      min-height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-banner">
+    🔍 MODO PREVIEW - No se persiste progreso, rachas ni métricas
+  </div>
+  <div class="preview-container">
+    <div id="runtime-container">
+      <p>Cargando preview del recorrido...</p>
+    </div>
+  </div>
+  <script>
+    // Preview Runtime V1
+    // Ejecuta el runtime en modo preview usando definition_json cargado
+    (function() {
+      const definition = ${JSON.stringify(definition)};
+      const recorridoId = ${JSON.stringify(recorridoId)};
+      const container = document.getElementById('runtime-container');
+      
+      // Estado del preview (sin persistir)
+      let currentStepId = definition.entry_step_id || Object.keys(definition.steps || {})[0];
+      let state = {};
+      
+      // Función para renderizar un step
+      async function renderStep(stepId) {
+        if (!definition.steps || !definition.steps[stepId]) {
+          container.innerHTML = '<p>Error: Step no encontrado: ' + stepId + '</p>';
+          return;
+        }
+        
+        const step = definition.steps[stepId];
+        const screenTemplateId = step.screen_template_id;
+        
+        // Por ahora, mostrar información básica del step
+        // En el futuro, esto cargará el screen template real
+        container.innerHTML = \`
+          <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+            <h2>Step: \${stepId}</h2>
+            <p><strong>Tipo:</strong> \${step.step_type || 'experience'}</p>
+            <p><strong>Screen Template:</strong> \${screenTemplateId || 'N/A'}</p>
+            <pre style="background: var(--bg-secondary); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px;">\${JSON.stringify(step.props || {}, null, 2)}</pre>
+          </div>
+          <div style="text-align: center;">
+            <button onclick="handleNext()" style="padding: 10px 20px; background: var(--gradient-primary); border: none; border-radius: 8px; color: var(--button-text-color); cursor: pointer; font-size: 16px;">
+              Siguiente Step
+            </button>
+          </div>
+        \`;
+      }
+      
+      // Función para calcular siguiente step
+      function getNextStep(currentStepId) {
+        const edges = definition.edges || [];
+        const outgoingEdges = edges.filter(e => e.from_step_id === currentStepId);
+        
+        if (outgoingEdges.length === 0) {
+          return null; // Recorrido completado
+        }
+        
+        // Por ahora, tomar el primer edge (sin evaluar condiciones)
+        // En el futuro, evaluar condiciones aquí
+        return outgoingEdges[0].to_step_id;
+      }
+      
+      // Función para avanzar al siguiente step
+      window.handleNext = function() {
+        const nextStepId = getNextStep(currentStepId);
+        if (nextStepId) {
+          currentStepId = nextStepId;
+          renderStep(currentStepId);
+        } else {
+          container.innerHTML = '<div style="background: var(--bg-card); padding: 20px; border-radius: 12px; text-align: center;"><h2>✅ Recorrido completado (Preview)</h2></div>';
+        }
+      };
+      
+      // Inicializar con el step de entrada
+      renderStep(currentStepId);
+    })();
+  </script>
+</body>
+</html>`;
+      
+      return new Response(previewHtml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=UTF-8',
+          'Cache-Control': 'no-store'
+        }
+      });
+    } catch (previewError) {
+      // FAIL-OPEN: Si falla el preview, mostrar error pero no romper
+      console.error('[enter] Preview: Error en modo preview', {
+        error: previewError.message,
+        stack: previewError.stack,
+        recorrido_id: recorridoId
+      });
+      return new Response(`Error en preview: ${previewError.message}`, {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+  }
+  
   // Construir contexto completo del estudiante
   const contextResult = await buildStudentContext(request, env);
   

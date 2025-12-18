@@ -107,3 +107,4 @@ export function getDefaultScreenTemplateAuditRepo() {
 // Exportar también la clase para permitir crear instancias personalizadas
 export default getDefaultScreenTemplateAuditRepo();
 
+

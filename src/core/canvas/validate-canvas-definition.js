@@ -166,6 +166,14 @@ function validateNode(node, canvas, isPublish = false) {
     warnings.push(`Node '${node.id}': no tiene props (se usará objeto vacío)`);
   }
 
+  // Validar meta si existe (AXE v0.6.8: metadatos pedagógicos de intención)
+  // Validación ligera: solo estructura, no contenido (no bloqueante)
+  if (node.meta !== undefined) {
+    if (typeof node.meta !== 'object' || node.meta === null || Array.isArray(node.meta)) {
+      warnings.push(`Node '${node.id}': meta debe ser un objeto (se ignorará)`);
+    }
+  }
+
   // Validaciones específicas por tipo de nodo
   if (node.type === 'start') {
     // StartNode no puede tener edges entrantes
@@ -477,4 +485,5 @@ function detectCycles(canvas) {
 
   return cycles;
 }
+
 

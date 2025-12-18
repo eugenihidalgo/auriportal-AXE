@@ -56,13 +56,14 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
                 <th class="pb-3 text-slate-300 font-semibold">Nombre</th>
                 <th class="pb-3 text-slate-300 font-semibold">Descripción</th>
                 <th class="pb-3 text-slate-300 font-semibold">Energías Indeseables</th>
+                <th class="pb-3 text-slate-300 font-semibold">Limpiezas Recurrentes</th>
                 <th class="pb-3 text-slate-300 font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr class="border-b border-slate-700 border-dashed bg-slate-800/50">
                 <td class="py-2">
-                  <input type="number" id="newTecnicaNivel" value="1" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  <input type="number" id="newTecnicaNivel" value="9" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
                 </td>
                 <td class="py-2">
                   <input type="text" id="newTecnicaNombre" placeholder="Nombre de la técnica *" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onkeydown="if(event.key === 'Enter') { event.preventDefault(); crearTecnicaRapido(); }">
@@ -71,7 +72,10 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
                   <input type="text" id="newTecnicaDescripcion" placeholder="Descripción" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onkeydown="if(event.key === 'Enter') { event.preventDefault(); crearTecnicaRapido(); }">
                 </td>
                 <td class="py-2">
-                  <input type="checkbox" id="newTecnicaEnergiasIndeseables" class="w-5 h-5 cursor-pointer">
+                  <input type="checkbox" id="newTecnicaEnergiasIndeseables" class="w-5 h-5 cursor-pointer" title="Aplica a energías indeseables">
+                </td>
+                <td class="py-2">
+                  <input type="checkbox" id="newTecnicaLimpiezasRecurrentes" class="w-5 h-5 cursor-pointer" title="Aplica a limpiezas recurrentes">
                 </td>
                 <td class="py-2">
                   <button onclick="crearTecnicaRapido()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">➕ Crear</button>
@@ -80,7 +84,7 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
               ${tecnicas.length > 0 ? tecnicas.map(tecnica => `
                 <tr class="border-b border-slate-700 hover:bg-slate-700" data-tecnica-id="${tecnica.id}">
                   <td class="py-3">
-                    <input type="number" value="${tecnica.nivel}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoTecnica(${tecnica.id}, 'nivel', this.value)">
+                    <input type="number" value="${tecnica.nivel}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoTecnica(${tecnica.id}, 'nivel', this.value); setDefaultLevel('tecnicas_limpieza', parseInt(this.value, 10));">
                   </td>
                   <td class="py-3">
                     <input type="text" value="${tecnica.nombre || ''}" class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onblur="guardarCampoTecnica(${tecnica.id}, 'nombre', this.value)">
@@ -89,7 +93,10 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
                     <input type="text" value="${tecnica.descripcion || ''}" class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onblur="guardarCampoTecnica(${tecnica.id}, 'descripcion', this.value)">
                   </td>
                   <td class="py-3">
-                    <input type="checkbox" ${tecnica.es_energias_indeseables ? 'checked' : ''} class="w-5 h-5 cursor-pointer" onchange="guardarCampoTecnica(${tecnica.id}, 'es_energias_indeseables', this.checked)">
+                    <input type="checkbox" ${tecnica.aplica_energias_indeseables ? 'checked' : ''} class="w-5 h-5 cursor-pointer" onchange="guardarCampoTecnica(${tecnica.id}, 'aplica_energias_indeseables', this.checked)" title="Aplica a energías indeseables">
+                  </td>
+                  <td class="py-3">
+                    <input type="checkbox" ${tecnica.aplica_limpiezas_recurrentes ? 'checked' : ''} class="w-5 h-5 cursor-pointer" onchange="guardarCampoTecnica(${tecnica.id}, 'aplica_limpiezas_recurrentes', this.checked)" title="Aplica a limpiezas recurrentes">
                   </td>
                   <td class="py-3">
                     <button onclick="eliminarTecnica(${tecnica.id})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors" title="Eliminar">🗑️</button>
@@ -97,7 +104,7 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
                 </tr>
               `).join('') : `
                 <tr>
-                  <td colspan="5" class="py-4 text-center text-slate-400">Crea tu primera técnica arriba 👆</td>
+                  <td colspan="6" class="py-4 text-center text-slate-400">Crea tu primera técnica arriba 👆</td>
                 </tr>
               `}
             </tbody>
@@ -106,8 +113,28 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
       </div>
     </div>
 
+    <script src="/js/admin-default-level.js"></script>
     <script>
       const API_BASE = '/api/tecnicas-limpieza';
+      
+      // Inicializar nivel por defecto persistente
+      document.addEventListener('DOMContentLoaded', function() {
+        initDefaultLevel('tecnicas_limpieza', '#newTecnicaNivel', 9);
+        
+        // También guardar cuando se cambia el nivel en filas existentes
+        document.querySelectorAll('input[type="number"][onchange*="guardarCampoTecnica"]').forEach(input => {
+          if (input.onchange && input.onchange.toString().includes('nivel')) {
+            const originalOnChange = input.onchange;
+            input.addEventListener('change', function() {
+              const level = parseInt(this.value, 10);
+              if (!isNaN(level) && level >= 1) {
+                setDefaultLevel('tecnicas_limpieza', level);
+              }
+              if (originalOnChange) originalOnChange.call(this);
+            });
+          }
+        });
+      });
 
       async function fetchWithAuth(url, options = {}) {
         return fetch(url, { 
@@ -125,13 +152,15 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
         const descripcionInput = document.getElementById('newTecnicaDescripcion');
         const nivelInput = document.getElementById('newTecnicaNivel');
         const energiasIndeseablesInput = document.getElementById('newTecnicaEnergiasIndeseables');
+        const limpiezasRecurrentesInput = document.getElementById('newTecnicaLimpiezasRecurrentes');
         
         if (!nombreInput || !nivelInput) return;
         
         const nombre = nombreInput.value?.trim();
         const descripcion = descripcionInput?.value?.trim() || '';
         const nivel = parseInt(nivelInput.value) || 1;
-        const es_energias_indeseables = energiasIndeseablesInput?.checked || false;
+        const aplica_energias_indeseables = energiasIndeseablesInput?.checked || false;
+        const aplica_limpiezas_recurrentes = limpiezasRecurrentesInput?.checked || false;
         
         if (!nombre) {
           alert('El nombre es requerido');
@@ -143,11 +172,12 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
         if (descripcionInput) descripcionInput.disabled = true;
         nivelInput.disabled = true;
         if (energiasIndeseablesInput) energiasIndeseablesInput.disabled = true;
+        if (limpiezasRecurrentesInput) limpiezasRecurrentesInput.disabled = true;
         
         try {
           const response = await fetchWithAuth(API_BASE, {
             method: 'POST',
-            body: JSON.stringify({ nombre, descripcion, nivel, es_energias_indeseables })
+            body: JSON.stringify({ nombre, descripcion, nivel, aplica_energias_indeseables, aplica_limpiezas_recurrentes })
           });
           
           const data = await response.json();
@@ -155,13 +185,17 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
           if (data.success) {
             nombreInput.value = '';
             if (descripcionInput) descripcionInput.value = '';
-            nivelInput.value = '1';
+            // Mantener el nivel por defecto guardado
+            const defaultLevel = getDefaultLevel('tecnicas_limpieza', 9);
+            nivelInput.value = defaultLevel.toString();
             if (energiasIndeseablesInput) energiasIndeseablesInput.checked = false;
+            if (limpiezasRecurrentesInput) limpiezasRecurrentesInput.checked = false;
             
             nombreInput.disabled = false;
             if (descripcionInput) descripcionInput.disabled = false;
             nivelInput.disabled = false;
             if (energiasIndeseablesInput) energiasIndeseablesInput.disabled = false;
+            if (limpiezasRecurrentesInput) limpiezasRecurrentesInput.disabled = false;
             
             location.reload();
           } else {
@@ -170,6 +204,7 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
             if (descripcionInput) descripcionInput.disabled = false;
             nivelInput.disabled = false;
             if (energiasIndeseablesInput) energiasIndeseablesInput.disabled = false;
+            if (limpiezasRecurrentesInput) limpiezasRecurrentesInput.disabled = false;
           }
         } catch (error) {
           alert('Error: ' + error.message);
@@ -177,6 +212,7 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
           if (descripcionInput) descripcionInput.disabled = false;
           nivelInput.disabled = false;
           if (energiasIndeseablesInput) energiasIndeseablesInput.disabled = false;
+          if (limpiezasRecurrentesInput) limpiezasRecurrentesInput.disabled = false;
         }
       }
 
@@ -192,7 +228,8 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
             nombre: tecnica.nombre,
             descripcion: tecnica.descripcion,
             nivel: tecnica.nivel,
-            es_energias_indeseables: tecnica.es_energias_indeseables || false
+            aplica_energias_indeseables: tecnica.aplica_energias_indeseables || false,
+            aplica_limpiezas_recurrentes: tecnica.aplica_limpiezas_recurrentes || false
           };
           
           if (campo === 'nivel') {
@@ -201,8 +238,10 @@ export default async function adminTecnicasLimpiezaHandler(request, env) {
             datos.nombre = valor.trim();
           } else if (campo === 'descripcion') {
             datos.descripcion = valor.trim();
-          } else if (campo === 'es_energias_indeseables') {
-            datos.es_energias_indeseables = valor === true || valor === 'true';
+          } else if (campo === 'aplica_energias_indeseables') {
+            datos.aplica_energias_indeseables = valor === true || valor === 'true';
+          } else if (campo === 'aplica_limpiezas_recurrentes') {
+            datos.aplica_limpiezas_recurrentes = valor === true || valor === 'true';
           }
           
           const updateResponse = await fetchWithAuth(API_BASE + '/' + tecnicaId, {

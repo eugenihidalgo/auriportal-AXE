@@ -23,25 +23,40 @@
         <span id="recorrido-version" class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">v-</span>
       </div>
       <div class="flex items-center gap-2">
-        <!-- Toggle Vista Lista/Canvas (AXE v0.6.3) -->
+        <!-- Toggle Vista Lista/Canvas (AXE v0.6.11) -->
         <div class="flex items-center gap-2 mr-2 border-r border-slate-700 pr-2">
-          <button onclick="toggleVistaCanvas()" id="toggle-vista-btn" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-colors" title="Cambiar entre Vista Lista y Vista Canvas">
+          <button onclick="toggleVistaCanvas()" id="toggle-vista-btn" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-colors" title="Cambiar entre Vista Canvas y Vista Lista">
             <span id="toggle-vista-label">📋 Lista</span>
           </button>
-          <span id="canvas-source-badge" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs" style="display: none;" title="Canvas derivado desde definition_json">DERIVED</span>
+          <span id="canvas-state-badge" class="px-2 py-1 rounded text-xs font-semibold" style="display: none;" title="Estado del canvas: DERIVED (derivado), PERSISTED (guardado), DIRTY (cambios sin guardar)"></span>
         </div>
-        <!-- Botón de guardar manual (BLINDAJE v2) -->
-        <button onclick="forzarGuardado()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors" title="Guardar ahora (si es válido)">
-          💾 Guardar
-        </button>
+        <!-- Panel Flujo AXE (AXE v0.6.11) -->
+        <div class="flex items-center gap-2 mr-2 border-r border-slate-700 pr-2">
+          <span class="text-slate-400 text-sm mr-1">Flujo AXE:</span>
+          <button onclick="editarRecorrido()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors" title="Editar recorrido">
+            ✏️ Editar
+          </button>
+          <button onclick="guardarRecorrido()" id="btn-guardar-flujo" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors" title="Guardar cambios">
+            💾 Guardar
+          </button>
+          <button onclick="publicarRecorrido()" id="btn-publicar-flujo" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors" title="Publicar recorrido">
+            🚀 Publicar
+          </button>
+        </div>
+        <!-- Selector de Tema para Preview (AXE v0.6.9) -->
+        <div class="flex items-center gap-2 mr-2 border-r border-slate-700 pr-2">
+          <label for="theme-selector" class="text-slate-400 text-sm">Tema Preview:</label>
+          <select id="theme-selector" onchange="cambiarTemaPreview(this.value)" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="dark-classic">🌙 Dark Classic</option>
+            <option value="light-classic">☀️ Light Classic</option>
+          </select>
+        </div>
+        <!-- Botones adicionales -->
         <button onclick="validarRecorrido()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
           ✓ Validar
         </button>
         <button onclick="previewRecorrido()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
           👁️ Preview
-        </button>
-        <button onclick="publicarRecorrido()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
-          🚀 Publicar
         </button>
       </div>
     </div>
@@ -50,51 +65,143 @@
   
   <!-- Contenido principal del editor (flex: 1, scroll interno) -->
   <div class="editor-body flex">
-    <!-- Vista Canvas v1 (AXE v0.6.3) - Oculto por defecto -->
-    <div id="canvas-view-container" class="flex-1 bg-slate-900 overflow-y-auto p-6" style="display: none;">
-      <div class="max-w-7xl mx-auto">
+    <!-- Vista Canvas v1 (AXE v0.6.11) - Vista por defecto -->
+    <!-- AXE v0.6.9: Grid de 3 columnas: canvas (centro) + panel contextual (derecha sticky) -->
+    <div id="canvas-view-container" class="flex-1 bg-slate-900 p-6" style="display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start;">
+      <!-- Columna principal: Canvas visual -->
+      <div class="canvas-main-column" style="min-width: 0;">
+        <div class="max-w-7xl mx-auto">
         <!-- Warnings -->
         <div id="canvas-warnings" class="mb-4"></div>
         
         <!-- Controles Canvas -->
-        <div class="bg-slate-800 rounded-lg p-4 mb-4 flex gap-2 flex-wrap">
-          <button onclick="cargarCanvas()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
-            📥 Cargar Canvas
-          </button>
-          <button onclick="validarCanvas()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded transition-colors">
-            ✓ Validar Canvas
-          </button>
-          <button onclick="guardarCanvas()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
-            💾 Guardar Canvas
-          </button>
-          <button onclick="convertirCanvasARecorrido()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
-            🔄 Convertir a Recorrido (Preview)
-          </button>
+        <div class="bg-slate-800 rounded-lg p-4 mb-4">
+          <div class="flex gap-2 flex-wrap mb-2">
+            <button onclick="cargarCanvas()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+              📥 Cargar Canvas
+            </button>
+            <button onclick="validarCanvas()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded transition-colors">
+              ✓ Validar Canvas
+            </button>
+            <button onclick="guardarCanvas()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
+              💾 Guardar Canvas
+            </button>
+            <button onclick="convertirCanvasARecorrido()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
+              🔄 Convertir a Recorrido (Preview)
+            </button>
+          </div>
+          <!-- Acciones Estructurales -->
+          <div class="flex gap-2 flex-wrap border-t border-slate-700 pt-2 mt-2">
+            <span class="text-slate-300 text-sm self-center mr-2">Acciones:</span>
+            <button onclick="añadirNodoCanvas()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">
+              ➕ Añadir Nodo
+            </button>
+            <button onclick="eliminarNodoCanvas()" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors">
+              ❌ Eliminar Nodo
+            </button>
+            <button onclick="añadirEdgeCanvas()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">
+              ➕ Añadir Edge
+            </button>
+            <button onclick="eliminarEdgeCanvas()" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors">
+              ❌ Eliminar Edge
+            </button>
+          </div>
+          <!-- Acciones Semánticas (AXE v0.6.4 - Legacy) -->
+          <!-- Nota: AXE v0.6.5 introduce UI contextual. Selecciona un nodo en el viewer para ver acciones disponibles. -->
+          <div class="flex gap-2 flex-wrap border-t border-slate-700 pt-2 mt-2">
+            <span class="text-slate-300 text-sm self-center mr-2">Acciones Semánticas (Legacy):</span>
+            <button onclick="insertNodeAfterAction()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors" title="Insertar nodo después de otro">
+              ➡️ Insertar Después
+            </button>
+            <button onclick="convertToDecisionAction()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded transition-colors" title="Convertir nodo a decisión">
+              ❓ Convertir a Decisión
+            </button>
+            <button onclick="markAsStartAction()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors" title="Marcar nodo como inicio">
+              🚀 Marcar como Inicio
+            </button>
+            <button onclick="markAsEndAction()" class="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded transition-colors" title="Marcar nodo como fin">
+              🏁 Marcar como Fin
+            </button>
+            <button onclick="duplicateSubgraphAction()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded transition-colors" title="Duplicar subgrafo completo">
+              📋 Duplicar Subgrafo
+            </button>
+          </div>
         </div>
         
-        <!-- Editor JSON Canvas -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="bg-slate-800 rounded-lg p-4">
-            <h3 class="text-white font-semibold mb-2">Canvas JSON</h3>
-            <textarea id="canvas-json-editor" class="w-full h-96 bg-slate-900 text-slate-100 font-mono text-sm p-4 rounded border border-slate-700" placeholder='{"version":"1.0","canvas_id":"...","nodes":[],"edges":[]}'></textarea>
-          </div>
-          
-          <!-- Canvas Viewer Simple -->
-          <div class="bg-slate-800 rounded-lg p-4">
-            <h3 class="text-white font-semibold mb-2">Canvas Viewer</h3>
-            <div id="canvas-viewer" class="bg-slate-900 rounded p-4 min-h-96">
-              <p class="text-slate-400 text-sm">Carga un canvas para verlo</p>
+        <!-- Editor Visual Principal (expandido) -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-4">
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="text-white font-semibold text-lg">Editor Visual</h3>
+            <div class="flex gap-2">
+              <button onclick="toggleFullscreenCanvas()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors" title="Pantalla completa">
+                ⛶ Pantalla Completa
+              </button>
+              <button onclick="toggleJsonPanel()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-colors" id="toggle-json-btn" title="Mostrar/Ocultar Canvas JSON">
+                📄 JSON
+              </button>
             </div>
+          </div>
+          <div id="canvas-viewer" class="bg-slate-900 rounded p-4" style="min-height: calc(100vh - 400px);">
+            <p class="text-slate-400 text-sm">Carga un canvas para verlo</p>
+          </div>
+        </div>
+        
+        <!-- Canvas JSON Colapsable (secundario) -->
+        <div id="canvas-json-panel" class="bg-slate-800 rounded-lg p-4 mb-4" style="display: none;">
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="text-white font-semibold mb-2">Canvas JSON</h3>
+            <button onclick="toggleJsonPanel()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Ocultar">
+              ✕
+            </button>
+          </div>
+          <textarea id="canvas-json-editor" class="w-full h-96 bg-slate-900 text-slate-100 font-mono text-sm p-4 rounded border border-slate-700" placeholder='{"version":"1.0","canvas_id":"...","nodes":[],"edges":[]}' oninput="detectarCambiosCanvas()"></textarea>
+        </div>
+        
+        <!-- Panel de Diagnóstico (AXE v0.6.9) -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-4">
+          <div class="flex justify-between items-center mb-3">
+            <h3 class="text-white font-semibold text-lg">🧠 Diagnóstico</h3>
+            <button onclick="actualizarDiagnostico()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors">
+              🔄 Actualizar
+            </button>
+          </div>
+          <div id="canvas-diagnostico" class="space-y-2">
+            <p class="text-slate-400 text-sm">Carga un canvas para ver diagnósticos</p>
+          </div>
+        </div>
+        
+        <!-- Panel de Sugerencias Pedagógicas (AXE v0.6.10) -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-4">
+          <div class="flex justify-between items-center mb-3">
+            <h3 class="text-white font-semibold text-lg">🧭 Sugerencias</h3>
+            <button onclick="actualizarSugerencias()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">
+              🔄 Actualizar
+            </button>
+          </div>
+          <div id="canvas-sugerencias" class="space-y-2">
+            <p class="text-slate-400 text-sm">Carga un canvas para ver sugerencias pedagógicas</p>
           </div>
         </div>
         
         <!-- Resultado de conversión (si aplica) -->
         <div id="canvas-conversion-result" class="bg-slate-800 rounded-lg p-4" style="display: none;"></div>
+        </div>
       </div>
+      
+      <!-- Columna derecha: Panel contextual sticky (AXE v0.6.9) -->
+      <aside id="canvas-contextual-panel" class="canvas-contextual-panel" style="position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #334155;">
+        <!-- El contenido se renderiza dinámicamente en actualizarPanelContextual() -->
+        <div id="canvas-contextual-panel-content">
+          <p class="text-slate-400 text-sm">Selecciona un nodo en el canvas para ver sus acciones y propiedades</p>
+        </div>
+      </aside>
     </div>
     
-    <!-- Vista Lista (por defecto) -->
-    <div id="lista-view-container" class="flex-1 flex">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2" style="display: none;"></div>
+    
+    <!-- Vista Lista (vista secundaria) -->
+    <div id="lista-view-container" class="flex-1 flex" style="display: none;">
       <!-- Columna izquierda: Lista de steps -->
       <div class="steps-panel bg-slate-950 border-r border-slate-800 overflow-y-auto" id="steps-panel">
       <div class="p-4">
@@ -130,8 +237,11 @@
       </div>
     </div>
     
-    <!-- Derecha: Panel de configuración -->
-    <div class="w-96 bg-slate-950 border-l border-slate-800 overflow-y-auto">
+    <!-- Divisor draggable para redimensionar panel derecho -->
+    <div class="panel-resizer-right" id="panel-resizer-right"></div>
+    
+    <!-- Derecha: Panel de configuración (redimensionable) -->
+    <div class="config-panel bg-slate-950 border-l border-slate-800 overflow-y-auto" id="config-panel-container">
       <div class="p-4" id="config-panel">
         <p class="text-slate-400 text-sm">Selecciona un step para configurarlo</p>
       </div>
@@ -183,6 +293,50 @@
     min-height: 0;
   }
   
+  /* AXE v0.6.9: Grid responsive para panel contextual */
+  #canvas-view-container {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 16px;
+    align-items: start;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  
+  /* Columna principal del canvas */
+  .canvas-main-column {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  
+  /* Canvas visual: no debe interferir con scroll del navegador */
+  #canvas-visual-container {
+    /* El canvas tiene overflow-hidden para que no interfiera con scroll */
+    /* El wheel event solo actúa con Alt, permitiendo scroll normal sin Alt */
+    touch-action: pan-x pan-y; /* Permitir pan táctil pero no zoom del navegador */
+  }
+  
+  /* Panel contextual: scroll independiente */
+  #canvas-contextual-panel {
+    height: 100%;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  
+  @media (max-width: 1024px) {
+    #canvas-view-container {
+      grid-template-columns: 1fr;
+    }
+    
+    #canvas-contextual-panel {
+      position: static !important;
+      max-height: none !important;
+    }
+  }
+  
   /* Responsive: en móvil, stack vertical */
   @media (max-width: 1024px) {
     .editor-layout {
@@ -214,6 +368,17 @@
     max-width: 500px;
     transition: width 0.2s ease;
     position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Contenedor interno del panel de steps con scroll */
+  .steps-panel > .p-4 {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
   
   .steps-panel.collapsed {
@@ -252,6 +417,47 @@
   }
   
   .panel-resizer.resizing {
+    background: rgba(79, 70, 229, 0.3);
+  }
+  
+  /* ============================================================================
+   * PANEL DERECHO DE CONFIGURACIÓN REDIMENSIONABLE (AXE)
+   * ============================================================================
+   */
+  
+  .config-panel {
+    width: var(--config-panel-width, 384px);
+    min-width: 320px;
+    max-width: 65vw;
+    transition: width 0.2s ease;
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Contenedor interno del panel de configuración con scroll */
+  .config-panel > #config-panel {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+  }
+  
+  .panel-resizer-right {
+    width: 6px;
+    cursor: col-resize;
+    background: rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+    user-select: none;
+  }
+  
+  .panel-resizer-right:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .panel-resizer-right.resizing {
     background: rgba(79, 70, 229, 0.3);
   }
   
@@ -1291,15 +1497,195 @@
     display: inline-block;
     vertical-align: middle;
   }
+  
+  /* ============================================================================
+   * ESTILOS PARA PANEL DE DIAGNÓSTICO Y SUGERENCIAS (AXE)
+   * ============================================================================
+   * Clases semánticas reutilizables para mejorar legibilidad en modo dark
+   * Texto principal siempre claro, colores semánticos solo en fondos/badges
+   */
+  
+  /* Clase base para items del panel */
+  .axe-panel-item {
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.875rem;
+    color: #e5e7eb; /* Texto principal siempre claro */
+    transition: all 0.2s ease;
+  }
+  
+  .axe-panel-item--clickable {
+    cursor: pointer;
+  }
+  
+  .axe-panel-item--clickable:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+  
+  /* Variantes por prioridad/tipo */
+  .axe-panel-item--high {
+    background-color: #7c2d12; /* Fondo alta prioridad */
+    border: 1px solid rgba(220, 38, 38, 0.3);
+  }
+  
+  .axe-panel-item--high:hover {
+    background-color: #991b1b;
+  }
+  
+  .axe-panel-item--medium {
+    background-color: #3f3f46; /* Fondo media prioridad */
+    border: 1px solid rgba(234, 179, 8, 0.3);
+  }
+  
+  .axe-panel-item--medium:hover {
+    background-color: #52525b;
+  }
+  
+  .axe-panel-item--low {
+    background-color: #1e293b; /* Fondo baja prioridad */
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  
+  .axe-panel-item--low:hover {
+    background-color: #334155;
+  }
+  
+  .axe-panel-item--warning {
+    background-color: #1f2937; /* Fondo warning */
+    border: 1px solid rgba(234, 179, 8, 0.3);
+  }
+  
+  .axe-panel-item--warning:hover {
+    background-color: #374151;
+  }
+  
+  .axe-panel-item--info {
+    background-color: #1e293b; /* Fondo info */
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  
+  .axe-panel-item--info:hover {
+    background-color: #334155;
+  }
+  
+  /* Texto dentro de los items */
+  .axe-panel-item__text {
+    color: #e5e7eb; /* Texto principal claro */
+    flex: 1;
+  }
+  
+  .axe-panel-item__text--strong {
+    color: #ffffff; /* Texto fuerte */
+  }
+  
+  /* Iconos y badges */
+  .axe-panel-item__icon {
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  
+  .axe-panel-item__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: monospace;
+  }
+  
+  .axe-panel-item__badge--high {
+    background-color: rgba(220, 38, 38, 0.4);
+    color: #fecaca;
+  }
+  
+  .axe-panel-item__badge--medium {
+    background-color: rgba(234, 179, 8, 0.4);
+    color: #fef3c7;
+  }
+  
+  .axe-panel-item__badge--low {
+    background-color: rgba(59, 130, 246, 0.4);
+    color: #dbeafe;
+  }
+  
+  .axe-panel-item__badge--warning {
+    background-color: rgba(234, 179, 8, 0.4);
+    color: #fef3c7;
+  }
+  
+  .axe-panel-item__badge--info {
+    background-color: rgba(59, 130, 246, 0.4);
+    color: #dbeafe;
+  }
+  
+  /* Títulos de sección */
+  .axe-panel-section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #e5e7eb;
+  }
+  
+  .axe-panel-section-title--high {
+    color: #fecaca; /* Tono claro para alta prioridad */
+  }
+  
+  .axe-panel-section-title--medium {
+    color: #fef3c7; /* Tono claro para media prioridad */
+  }
+  
+  .axe-panel-section-title--low {
+    color: #dbeafe; /* Tono claro para baja prioridad */
+  }
+  
+  .axe-panel-section-title--warning {
+    color: #fef3c7; /* Tono claro para warnings */
+  }
+  
+  .axe-panel-section-title--info {
+    color: #dbeafe; /* Tono claro para info */
+  }
+  
+  /* Contenedor de items */
+  .axe-panel-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .axe-panel-items--compact {
+    gap: 4px;
+  }
+  
+  /* Mensaje de estado vacío */
+  .axe-panel-empty {
+    color: #10b981; /* Verde claro para mensajes positivos */
+    font-size: 0.875rem;
+  }
+  
+  /* Mensaje de error */
+  .axe-panel-error {
+    color: #fca5a5; /* Rojo claro para errores */
+    font-size: 0.875rem;
+  }
 </style>
 
 <!-- Script module para cargar registry de handlers -->
 <script type="module">
-  import { HANDLER_INFO } from '/js/recorridos/step-handler-registry.js';
-  window.HANDLER_INFO = HANDLER_INFO;
+  (async () => {
+    try {
+      const { HANDLER_INFO } = await import('/js/recorridos/step-handler-registry.js');
+      window.HANDLER_INFO = HANDLER_INFO;
+    } catch (error) {
+      console.error('Error cargando HANDLER_INFO:', error);
+      window.HANDLER_INFO = {};
+    }
+  })();
 </script>
 
 <script>
+  console.log('BOOT REC EDITOR', location.pathname);
   // ============================================================================
   // ESTADO GLOBAL DEL EDITOR (BLINDAJE v2)
   // ============================================================================
@@ -1324,6 +1710,29 @@
     saveTimeout: null,      // Timeout para debounce (ya no agresivo)
     isSaving: false         // ¿Está guardando ahora mismo?
   };
+  
+  // ============================================================================
+  // INICIALIZACIÓN TEMPRANA DE ESTADO DEL CANVAS (AXE v0.7.0)
+  // ============================================================================
+  // Inicializar window.canvasSelectionState ANTES de cualquier uso
+  // para evitar ReferenceError: selectedNodeId is not defined
+  if (!window.canvasSelectionState) {
+    window.canvasSelectionState = { selectedNodeId: null };
+  }
+  
+  // ============================================================================
+  // FUNCIONES GLOBALES (definidas temprano para evitar errores de referencia)
+  // ============================================================================
+  
+  // Preview con runtime - Definida temprano para estar disponible globalmente
+  async function previewRecorrido() {
+    // Preview V1: Usa el runtime real con flag preview=1
+    if (!editorState.recorridoId) {
+      alert('No hay recorrido cargado');
+      return;
+    }
+    window.open(`/enter?recorrido=${editorState.recorridoId}&preview=1`, '_blank');
+  }
   
   // ============================================================================
   // UTILIDADES DE BLINDAJE
@@ -1625,18 +2034,83 @@
   
   // Inicializar editor
   async function initEditor() {
+    console.log('[Editor] STEP 1: initEditor start');
+    
     const editor = document.getElementById('recorridos-editor');
-    editorState.recorridoId = editor.dataset.recorridoId;
+    if (!editor) {
+      console.error('[Editor] STEP 1.1: ERROR - Elemento #recorridos-editor no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const topbar = document.querySelector('.editor-topbar');
+      if (topbar) {
+        topbar.innerHTML = `
+          <div style="padding: 20px; background: #7f1d1d; color: #fca5a5; border-radius: 8px;">
+            <h2 style="color: #ef4444; margin-bottom: 10px;">⚠️ Error de inicialización</h2>
+            <p>No se pudo encontrar el contenedor del editor. Por favor, recarga la página.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    
+    console.log('[Editor] STEP 2: recorridoId =', editor.dataset.recorridoId);
+    const recorridoId = editor.dataset.recorridoId;
+    
+    if (!recorridoId) {
+      console.error('[Editor] STEP 2.1: ERROR - data-recorrido-id no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const topbar = document.querySelector('.editor-topbar');
+      if (topbar) {
+        topbar.innerHTML = `
+          <div style="padding: 20px; background: #7f1d1d; color: #fca5a5; border-radius: 8px;">
+            <h2 style="color: #ef4444; margin-bottom: 10px;">⚠️ Error de inicialización</h2>
+            <p>No se pudo determinar el ID de recorrido. Por favor, recarga la página.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    
+    editorState.recorridoId = recorridoId;
+    console.log('[Editor] STEP 3: recorridoId asignado =', editorState.recorridoId);
     
     // Cargar registry
-    await cargarRegistry();
+    console.log('[Editor] STEP 4: fetching registry');
+    try {
+      await cargarRegistry();
+      console.log('[Editor] STEP 5: registry loaded');
+    } catch (error) {
+      console.error('[Editor] STEP 5.1: ERROR cargando registry:', error);
+      // Fail-open: continuar aunque falle el registry
+    }
     
     // Cargar o crear recorrido
+    console.log('[Editor] STEP 6: checking if new or existing');
     if (editorState.recorridoId === 'new') {
-      await crearNuevoRecorrido();
+      console.log('[Editor] STEP 7: creating new recorrido');
+      try {
+        await crearNuevoRecorrido();
+        console.log('[Editor] STEP 8: new recorrido created');
+      } catch (error) {
+        console.error('[Editor] STEP 8.1: ERROR creando recorrido:', error);
+        return;
+      }
     } else {
-      await cargarRecorrido();
+      console.log('[Editor] STEP 7: loading existing recorrido');
+      try {
+        await cargarRecorrido();
+        console.log('[Editor] STEP 8: recorrido loaded');
+      } catch (error) {
+        console.error('[Editor] STEP 8.1: ERROR cargando recorrido:', error);
+        // Fail-open: mostrar mensaje visible
+        const stepsListEl = document.getElementById('steps-list');
+        if (stepsListEl) {
+          stepsListEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ Error cargando recorrido. Por favor, recarga la página.</p>';
+        }
+        return;
+      }
     }
+    
+    console.log('[Editor] STEP 9: initEditor complete');
   }
   
   // Cargar registry
@@ -1721,7 +2195,7 @@
       // Actualizar URL sin recargar (usando el ID técnico)
       window.history.replaceState({}, '', `/admin/recorridos/${encodeURIComponent(editorState.recorridoId)}/edit`);
       
-      actualizarUI();
+      await actualizarUI();
     } catch (error) {
       console.error('Error creando recorrido:', error);
       alert(`Error creando recorrido: ${error.message}`);
@@ -1732,32 +2206,50 @@
   // Cargar recorrido existente
   // BLINDAJE v2: Inicializa estado correctamente
   async function cargarRecorrido() {
+    console.log('[Editor] STEP 7.1: cargarRecorrido start');
     try {
-      const response = await fetch(`/admin/api/recorridos/${encodeURIComponent(editorState.recorridoId)}`, {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      console.log('[Editor] STEP 7.2: encodedId =', encodedId);
+      console.log('[Editor] STEP 7.3: fetching recorrido from API');
+      
+      const response = await fetch(`/admin/api/recorridos/${encodedId}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
+      
+      console.log('[Editor] STEP 7.4: response status =', response.status);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Error ${response.status}`);
       }
       
+      console.log('[Editor] STEP 7.5: parsing response JSON');
       const data = await response.json();
+      console.log('[Editor] STEP 7.6: data received, draft =', !!data.draft, 'published =', !!data.published_version);
+      
       editorState.definition = data.draft?.definition_json || data.published_version?.definition_json;
+      console.log('[Editor] STEP 7.7: definition assigned =', !!editorState.definition);
       
       // LOG TEMPORAL: Mostrar order cargado desde servidor
       if (editorState.definition?.steps) {
         const stepsLoaded = editorState.definition.steps;
+        console.log('[RecorridosEditor] definition.steps:', stepsLoaded);
+        console.log('[RecorridosEditor] definition.steps es objeto?', typeof stepsLoaded === 'object');
+        console.log('[RecorridosEditor] definition.steps keys:', Object.keys(stepsLoaded));
+        
         const orderLoaded = Object.keys(stepsLoaded).reduce((acc, stepId) => {
           const step = stepsLoaded[stepId];
           acc[stepId] = typeof step?.order === 'number' ? step.order : 'undefined';
           return acc;
         }, {});
         console.log('📥 Order cargado desde servidor:', orderLoaded);
+      } else {
+        console.warn('[RecorridosEditor] definition.steps no existe o es falsy');
       }
       
       if (!editorState.definition) {
+        console.warn('[RecorridosEditor] No hay definition, creando nueva...');
         alert('El recorrido no tiene definición. Se creará una nueva.');
         editorState.definition = {
           id: editorState.recorridoId,
@@ -1771,41 +2263,90 @@
           },
           edges: []
         };
+        console.log('[RecorridosEditor] Nueva definition creada:', editorState.definition);
         // Marcar como dirty porque es nuevo
         editorState.dirty = true;
       } else {
         // Cargado desde servidor, no está dirty
         editorState.dirty = false;
         editorState.lastSavedAt = data.draft?.updated_at ? new Date(data.draft.updated_at) : null;
+        console.log('[RecorridosEditor] Definition cargada desde servidor, dirty=false');
       }
+      
+      console.log('[Editor] STEP 7.8: definition.steps =', !!editorState.definition?.steps, 'keys =', editorState.definition?.steps ? Object.keys(editorState.definition.steps).length : 0);
       
       // BLINDAJE v2: Validar el estado inicial
       updateValidationState();
       
       // Actualizar nombre y estado
-      document.getElementById('recorrido-name').textContent = data.recorrido.name || editorState.recorridoId;
-      document.getElementById('recorrido-version').textContent = data.recorrido.current_published_version 
-        ? `v${data.recorrido.current_published_version}` 
-        : 'v-';
+      const nameEl = document.getElementById('recorrido-name');
+      if (nameEl) {
+        nameEl.textContent = data.recorrido.name || editorState.recorridoId;
+      }
+      const versionEl = document.getElementById('recorrido-version');
+      if (versionEl) {
+        versionEl.textContent = data.recorrido.current_published_version 
+          ? `v${data.recorrido.current_published_version}` 
+          : 'v-';
+      }
       
-      actualizarUI();
+      console.log('[Editor] STEP 7.9: calling actualizarUI()');
+      await actualizarUI();
+      console.log('[Editor] STEP 7.10: actualizarUI() completed');
       updateStatusIndicator();
       
     } catch (error) {
-      console.error('Error cargando recorrido:', error);
+      console.error('[Editor] STEP 7.11: ERROR cargando recorrido:', error);
+      // Fail-open: mostrar mensaje visible
+      const stepsListEl = document.getElementById('steps-list');
+      if (stepsListEl) {
+        stepsListEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error cargando recorrido: ${error.message}</p>`;
+      }
       alert(`Error cargando recorrido: ${error.message}`);
     }
+    console.log('[Editor] STEP 7.12: cargarRecorrido end');
   }
   
   // Actualizar UI completa
-  function actualizarUI() {
-    renderStepsList();
-    if (editorState.selectedStepId) {
-      renderStepConfig();
-      renderPreview();
+  async function actualizarUI() {
+    console.log('[Editor] STEP 7.9.1: actualizarUI start');
+    
+    if (!editorState.definition) {
+      console.warn('[Editor] STEP 7.9.2: WARNING - definition es falsy, fail-open');
+      // Fail-open: mostrar mensaje visible
+      const stepsListEl = document.getElementById('steps-list');
+      if (stepsListEl) {
+        stepsListEl.innerHTML = '<p class="text-red-400 text-sm">⚠️ No hay datos para mostrar (fail-open)</p>';
+      }
+      // Actualizar badge de estado
+      updatePublishStatusBadge();
+      return;
     }
+    
+    console.log('[Editor] STEP 7.9.3: definition exists, steps count =', editorState.definition.steps ? Object.keys(editorState.definition.steps).length : 0);
+    
+    console.log('[Editor] STEP 7.9.4: calling renderStepsList()');
+    renderStepsList();
+    console.log('[Editor] STEP 7.9.5: renderStepsList() completed');
+    
+    if (editorState.selectedStepId) {
+      console.log('[Editor] STEP 7.9.6: step selected, rendering config and preview');
+      renderStepConfig();
+      // FIX: renderPreview es async, debe ser awaited
+      await renderPreview();
+      console.log('[Editor] STEP 7.9.7: config and preview rendered');
+    } else {
+      console.log('[Editor] STEP 7.9.6: no step selected');
+      // Asegurar que el preview muestra el mensaje cuando no hay step seleccionado
+      const previewContainer = document.getElementById('preview-container');
+      if (previewContainer) {
+        previewContainer.innerHTML = '<div class="p-8 text-center text-slate-400"><p>Selecciona un step para ver el preview</p></div>';
+      }
+    }
+    
     // Actualizar badge de estado
     updatePublishStatusBadge();
+    console.log('[Editor] STEP 7.9.8: actualizarUI complete');
   }
   
   // Inicializar campo order en steps si no existe
@@ -1845,15 +2386,36 @@
   
   // Renderizar lista de steps
   function renderStepsList() {
+    console.log('[RecorridosEditor] renderStepsList - INICIO');
+    console.log('[RecorridosEditor] renderStepsList - editorState.definition:', editorState.definition);
+    console.log('[RecorridosEditor] renderStepsList - editorState.definition?.steps:', editorState.definition?.steps);
+    
     const container = document.getElementById('steps-list');
+    console.log('[RecorridosEditor] renderStepsList - container:', container);
+    console.log('[RecorridosEditor] renderStepsList - container es null?', container === null);
+    
+    if (!container) {
+      console.error('[RecorridosEditor] renderStepsList - ERROR: container no existe');
+      return;
+    }
+    
     const steps = editorState.definition?.steps || {};
+    console.log('[RecorridosEditor] renderStepsList - steps:', steps);
+    console.log('[RecorridosEditor] renderStepsList - steps es undefined?', steps === undefined);
+    console.log('[RecorridosEditor] renderStepsList - steps es null?', steps === null);
+    console.log('[RecorridosEditor] renderStepsList - steps es objeto?', typeof steps === 'object');
+    console.log('[RecorridosEditor] renderStepsList - steps keys:', Object.keys(steps));
+    console.log('[RecorridosEditor] renderStepsList - steps length:', Object.keys(steps).length);
     
     // Asegurar que todos los steps tengan campo order
     initializeStepsOrder();
     
     const stepIds = Object.keys(steps);
+    console.log('[RecorridosEditor] renderStepsList - stepIds:', stepIds);
+    console.log('[RecorridosEditor] renderStepsList - stepIds.length:', stepIds.length);
     
     if (stepIds.length === 0) {
+      console.warn('[RecorridosEditor] renderStepsList - WARNING: No hay steps, mostrando mensaje');
       container.innerHTML = '<p class="text-slate-400 text-sm">No hay steps. Haz clic en ➕ para añadir uno.</p>';
       return;
     }
@@ -1865,9 +2427,13 @@
       return orderA - orderB;
     });
     
-    container.innerHTML = sortedStepIds.map(stepId => {
+    console.log('[RecorridosEditor] renderStepsList - sortedStepIds:', sortedStepIds);
+    console.log('[RecorridosEditor] renderStepsList - Generando HTML...');
+    
+    const html = sortedStepIds.map(stepId => {
       const step = steps[stepId];
       const isActive = stepId === editorState.selectedStepId;
+      console.log('[Editor] renderStepsList - stepId:', stepId, 'isActive:', isActive, 'selectedStepId:', editorState.selectedStepId);
       const stepType = step.step_type || 'N/A';
       const screenTemplate = step.screen_template_id || 'N/A';
       
@@ -1899,6 +2465,32 @@
         </div>
       `;
     }).join('');
+    
+      console.log('[Editor] STEP 7.9.4.1: HTML generated, length =', html.length);
+      container.innerHTML = html;
+      console.log('[Editor] STEP 7.9.4.2: innerHTML assigned to steps-list');
+      
+      // Asegurar event listeners usando event delegation como respaldo
+      // Esto garantiza que los clicks funcionen incluso si los onclick inline fallan
+      container.removeEventListener('click', handleStepListClick);
+      container.addEventListener('click', handleStepListClick);
+      console.log('[Editor] STEP 7.9.4.3: event delegation registered');
+  }
+  
+  // Event delegation para clicks en steps (respaldo de onclick inline)
+  function handleStepListClick(event) {
+    // Buscar el elemento step-item más cercano
+    const stepItem = event.target.closest('.step-item');
+    if (!stepItem) return;
+    
+    // Si el click fue en step-actions, no hacer nada (ya tiene stopPropagation)
+    if (event.target.closest('.step-actions')) return;
+    
+    const stepId = stepItem.dataset.stepId;
+    if (stepId) {
+      console.log('[Editor] handleStepListClick - stepId clicked:', stepId);
+      seleccionarStep(stepId);
+    }
   }
   
   // Variables para drag & drop
@@ -2019,9 +2611,14 @@
   
   // Seleccionar step
   function seleccionarStep(stepId) {
+    console.log('[Editor] seleccionarStep called with stepId:', stepId);
     editorState.selectedStepId = stepId;
+    console.log('[Editor] selectedStepId updated to:', editorState.selectedStepId);
     actualizarUI();
   }
+  
+  // Asegurar que seleccionarStep esté disponible globalmente
+  window.seleccionarStep = seleccionarStep;
   
   // Añadir step
   // BLINDAJE v2: Valida ID de step como slug
@@ -3667,13 +4264,18 @@ El texto se mostrará tal como lo escribas."
   
   // Renderizar preview
   async function renderPreview() {
+    console.log('[Editor] renderPreview called');
+    console.log('[Editor] renderPreview - selectedStepId:', editorState.selectedStepId);
     const container = document.getElementById('preview-container');
     const step = editorState.definition.steps[editorState.selectedStepId];
     
     if (!step) {
+      console.log('[Editor] renderPreview - no step found, showing placeholder');
       container.innerHTML = '<div class="p-8 text-center text-slate-400"><p>Selecciona un step para ver el preview</p></div>';
       return;
     }
+    
+    console.log('[Editor] renderPreview - rendering preview for step:', editorState.selectedStepId);
     
     // ============================================================================
     // PREVIEW ESPECÍFICO PARA screen_text
@@ -4112,13 +4714,6 @@ El texto se mostrará tal como lo escribas."
     }
   }
   
-  // Preview con runtime
-  async function previewRecorrido() {
-    // Por ahora abrimos en nueva ventana
-    // En el futuro, esto usará el runtime real en sandbox
-    window.open(`/api/recorridos/${editorState.recorridoId}/preview`, '_blank');
-  }
-  
   // ============================================================================
   // PUBLICAR RECORRIDO (BLINDAJE v2)
   // ============================================================================
@@ -4327,6 +4922,102 @@ El texto se mostrará tal como lo escribas."
     }
   }
   
+  /* ============================================================================
+   * REDIMENSIONAMIENTO DEL PANEL DERECHO DE CONFIGURACIÓN (AXE)
+   * ============================================================================
+   */
+  
+  let isResizingRightPanel = false;
+  
+  function initRightPanelResizer() {
+    const resizer = document.getElementById('panel-resizer-right');
+    const panel = document.getElementById('config-panel-container');
+    
+    if (!resizer || !panel) return;
+    
+    // Cargar ancho guardado desde localStorage
+    const savedWidth = localStorage.getItem('axe.editor.rightPanelWidth');
+    if (savedWidth) {
+      const width = parseInt(savedWidth, 10);
+      const minWidth = 320;
+      
+      // Obtener el contenedor padre para calcular maxWidth correctamente
+      const container = panel.closest('#lista-view-container');
+      const maxWidth = container 
+        ? Math.floor(container.getBoundingClientRect().width * 0.65) 
+        : Math.floor(window.innerWidth * 0.65); // Fallback al viewport
+      
+      if (width >= minWidth && width <= maxWidth) {
+        panel.style.setProperty('--config-panel-width', `${width}px`);
+        panel.style.width = `${width}px`;
+      }
+    }
+    
+    // Event listeners para drag
+    resizer.addEventListener('mousedown', startRightPanelResize);
+    document.addEventListener('mousemove', handleRightPanelResize);
+    document.addEventListener('mouseup', stopRightPanelResize);
+  }
+  
+  function startRightPanelResize(e) {
+    if (e.button !== 0) return; // Solo botón izquierdo
+    
+    const panel = document.getElementById('config-panel-container');
+    if (!panel) return;
+    
+    isResizingRightPanel = true;
+    const resizer = document.getElementById('panel-resizer-right');
+    
+    if (resizer && panel) {
+      resizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    
+    e.preventDefault();
+  }
+  
+  function handleRightPanelResize(e) {
+    if (!isResizingRightPanel) return;
+    
+    const panel = document.getElementById('config-panel-container');
+    if (!panel) return;
+    
+    // Obtener el contenedor padre (lista-view-container)
+    const container = panel.closest('#lista-view-container');
+    if (!container) return;
+    
+    // Calcular nuevo ancho basado en la posición del mouse desde el borde derecho del contenedor
+    const containerRect = container.getBoundingClientRect();
+    const newWidth = containerRect.right - e.clientX;
+    
+    // Aplicar límites
+    const minWidth = 320;
+    const maxWidth = Math.floor(containerRect.width * 0.65); // 65% del ancho del contenedor
+    const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+    
+    // Actualizar ancho
+    panel.style.setProperty('--config-panel-width', `${clampedWidth}px`);
+    panel.style.width = `${clampedWidth}px`;
+    
+    // Guardar en localStorage
+    localStorage.setItem('axe.editor.rightPanelWidth', clampedWidth.toString());
+  }
+  
+  function stopRightPanelResize() {
+    if (!isResizingRightPanel) return;
+    
+    isResizingRightPanel = false;
+    const resizer = document.getElementById('panel-resizer-right');
+    
+    if (resizer) {
+      resizer.classList.remove('resizing');
+    }
+    
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+  
   // ============================================================================
   // PREVIEW DE STEPS
   // ============================================================================
@@ -4393,7 +5084,9 @@ El texto se mostrará tal como lo escribas."
           .preview-close-btn:hover { background: #991b1b; }
           .preview-modal-body { padding: 20px; overflow-y: auto; flex: 1; }
           .preview-loading { text-align: center; color: #94a3b8; padding: 40px; }
-          .preview-content { background: #fff; border-radius: 8px; padding: 20px; min-height: 200px; }
+          .preview-content { background: var(--bg-primary, #fff); border-radius: 8px; padding: 20px; min-height: 200px; color: var(--text-primary, #000); }
+          .preview-content[data-theme="dark-classic"] { background: #0f172a; color: #f1f5f9; }
+          .preview-content[data-theme="light-classic"] { background: #ffffff; color: #1e293b; }
           .preview-warnings { margin-top: 16px; padding: 12px; background: #78350f; border-radius: 6px; color: #fcd34d; font-size: 14px; }
           .preview-warnings:empty { display: none; }
         `;
@@ -4457,7 +5150,16 @@ El texto se mostrará tal como lo escribas."
       }
       
       if (contentEl && data.html) {
-        contentEl.innerHTML = data.html;
+        // AXE v0.6.9: Guardar HTML original para poder re-aplicar tema
+        contentEl.dataset.originalHtml = data.html;
+        
+        // Aplicar tema seleccionado al preview
+        const temaSeleccionado = getTemaPreviewSeleccionado();
+        const htmlConTema = aplicarTemaAPreview(data.html, temaSeleccionado);
+        contentEl.innerHTML = htmlConTema;
+        
+        // Aplicar data-theme al contenedor también para CSS
+        contentEl.setAttribute('data-theme', temaSeleccionado);
       } else if (contentEl) {
         contentEl.innerHTML = '<p class="text-muted">No hay HTML disponible. RenderSpec:</p><pre>' + JSON.stringify(data.render_spec, null, 2) + '</pre>';
       }
@@ -4476,6 +5178,66 @@ El texto se mostrará tal como lo escribas."
     } finally {
       if (loadingEl) loadingEl.style.display = 'none';
     }
+  }
+  
+  /**
+   * Obtiene el tema de preview seleccionado desde localStorage (AXE v0.6.9)
+   * @returns {string} ID del tema ('dark-classic' por defecto)
+   */
+  function getTemaPreviewSeleccionado() {
+    const temaGuardado = localStorage.getItem('adminThemePreview');
+    return temaGuardado || 'dark-classic';
+  }
+  
+  /**
+   * Cambia el tema de preview y lo guarda en localStorage (AXE v0.6.9)
+   * @param {string} themeId - ID del tema ('dark-classic' o 'light-classic')
+   */
+  function cambiarTemaPreview(themeId) {
+    localStorage.setItem('adminThemePreview', themeId);
+    
+    // Si hay un preview activo, recargarlo con el nuevo tema
+    const contentEl = document.getElementById('preview-content');
+    if (contentEl && contentEl.innerHTML.trim() !== '') {
+      const htmlOriginal = contentEl.dataset.originalHtml || contentEl.innerHTML;
+      const htmlConTema = aplicarTemaAPreview(htmlOriginal, themeId);
+      contentEl.innerHTML = htmlConTema;
+    }
+  }
+  
+  /**
+   * Aplica un tema al HTML del preview (AXE v0.6.9)
+   * Envuelve el HTML con data-theme y variables CSS canónicas
+   * @param {string} html - HTML del preview
+   * @param {string} themeId - ID del tema
+   * @returns {string} HTML con tema aplicado
+   */
+  function aplicarTemaAPreview(html, themeId) {
+    if (!html || typeof html !== 'string') return html;
+    
+    // Si el HTML ya tiene data-theme, actualizarlo
+    if (html.includes('data-theme=')) {
+      html = html.replace(/data-theme="[^"]*"/gi, `data-theme="${themeId}"`);
+    } else {
+      // Si no tiene data-theme, añadirlo al elemento raíz más externo
+      // Buscar el primer elemento HTML o div que parezca contenedor principal
+      if (html.includes('<html')) {
+        html = html.replace(/<html([^>]*)>/i, `<html$1 data-theme="${themeId}">`);
+      } else if (html.includes('<body')) {
+        html = html.replace(/<body([^>]*)>/i, `<body$1 data-theme="${themeId}">`);
+      } else {
+        // Si no hay html/body, envolver en div con data-theme
+        html = `<div data-theme="${themeId}">${html}</div>`;
+      }
+    }
+    
+    // Asegurar que el contenedor del preview tenga variables CSS del tema
+    // (el servidor debería enviar esto, pero si no, lo añadimos como fallback)
+    if (!html.includes('theme-variables.css')) {
+      // No añadir CSS inline porque puede interferir, confiar en que el servidor lo incluye
+    }
+    
+    return html;
   }
   
   /**
@@ -4504,7 +5266,7 @@ El texto se mostrará tal como lo escribas."
     // Cargar JS del Preview Harness
     const script = document.createElement('script');
     script.src = '/js/preview-harness.js';
-    script.onload = () => {
+    script.onload = async () => {
       // Inicializar Preview Harness
       if (window.PreviewHarness) {
         previewHarness = new window.PreviewHarness('preview-harness-container', {
@@ -4545,14 +5307,64 @@ El texto se mostrará tal como lo escribas."
   // ============================================================================
   
   let canvasViewState = {
-    active: false,
+    active: true,  // AXE v0.6.11: Canvas es vista por defecto
     canvas: null,
-    source: null,
-    warnings: []
+    source: null,  // 'derived' | 'persisted' | null
+    warnings: [],
+    lastSavedCanvas: null,  // Canvas guardado para detectar cambios
+    dirty: false   // ¿Hay cambios sin guardar?
   };
   
   /**
-   * Toggle entre Vista Lista y Vista Canvas
+   * Toggle del panel JSON (colapsable)
+   */
+  function toggleJsonPanel() {
+    const jsonPanel = document.getElementById('canvas-json-panel');
+    const toggleBtn = document.getElementById('toggle-json-btn');
+    
+    if (!jsonPanel) return;
+    
+    const isVisible = jsonPanel.style.display !== 'none';
+    jsonPanel.style.display = isVisible ? 'none' : 'block';
+    
+    if (toggleBtn) {
+      toggleBtn.textContent = isVisible ? '📄 JSON' : '📄 Ocultar JSON';
+    }
+  }
+  
+  /**
+   * Toggle pantalla completa del editor visual
+   */
+  function toggleFullscreenCanvas() {
+    const viewer = document.getElementById('canvas-viewer');
+    if (!viewer) return;
+    
+    const container = viewer.closest('.bg-slate-800');
+    if (!container) return;
+    
+    if (!document.fullscreenElement) {
+      // Entrar en pantalla completa
+      if (container.requestFullscreen) {
+        container.requestFullscreen();
+      } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+      } else if (container.msRequestFullscreen) {
+        container.msRequestFullscreen();
+      }
+    } else {
+      // Salir de pantalla completa
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
+  }
+  
+  /**
+   * Toggle entre Vista Canvas (por defecto) y Vista Lista (AXE v0.6.11)
    */
   function toggleVistaCanvas() {
     canvasViewState.active = !canvasViewState.active;
@@ -4562,11 +5374,13 @@ El texto se mostrará tal como lo escribas."
     const toggleLabel = document.getElementById('toggle-vista-label');
     
     if (canvasViewState.active) {
+      // Mostrar Canvas
       listaView.style.display = 'none';
       canvasView.style.display = 'block';
       toggleLabel.textContent = '📋 Lista';
       cargarCanvas();
     } else {
+      // Mostrar Lista
       listaView.style.display = 'flex';
       canvasView.style.display = 'none';
       toggleLabel.textContent = '🎨 Canvas';
@@ -4599,17 +5413,17 @@ El texto se mostrará tal como lo escribas."
       canvasViewState.source = data.source;
       canvasViewState.warnings = data.warnings || [];
       
-      // Actualizar badge de source
-      const sourceBadge = document.getElementById('canvas-source-badge');
-      if (sourceBadge) {
-        if (data.source === 'derived') {
-          sourceBadge.style.display = 'inline-block';
-          sourceBadge.textContent = 'DERIVED';
-          sourceBadge.title = 'Canvas no persistido todavía; se muestra derivado';
-        } else {
-          sourceBadge.style.display = 'none';
-        }
+      // Guardar canvas original para detectar cambios (AXE v0.6.11)
+      if (data.source === 'persisted') {
+        canvasViewState.lastSavedCanvas = JSON.stringify(data.canvas, null, 2);
+        canvasViewState.dirty = false;
+      } else {
+        canvasViewState.lastSavedCanvas = null;
+        canvasViewState.dirty = false;  // DERIVED no se considera dirty hasta que se edite
       }
+      
+      // Actualizar badge de estado (AXE v0.6.11)
+      actualizarCanvasStateBadge();
       
       // Mostrar warnings
       mostrarCanvasWarnings();
@@ -4620,12 +5434,21 @@ El texto se mostrará tal como lo escribas."
         jsonEditor.value = JSON.stringify(data.canvas, null, 2);
       }
       
-      // Actualizar viewer
+      // Actualizar viewer (preservando selección si el nodo aún existe)
+      const selectedNodeId = window.canvasSelectionState?.selectedNodeId;
+      if (selectedNodeId && !data.canvas.nodes?.find(n => n.id === selectedNodeId)) {
+        if (window.canvasSelectionState) {
+          window.canvasSelectionState.selectedNodeId = null;
+        }
+      }
       renderCanvasViewer(data.canvas);
+      
+      // Actualizar diagnóstico automáticamente al cargar
+      actualizarDiagnostico();
       
     } catch (error) {
       console.error('Error cargando canvas:', error);
-      alert(`Error cargando canvas: ${error.message}`);
+      mostrarToast(`Error cargando canvas: ${error.message}`, 'error');
     }
   }
   
@@ -4652,30 +5475,575 @@ El texto se mostrará tal como lo escribas."
   }
   
   /**
-   * Renderiza el canvas viewer simple (sin drag&drop)
+   * Actualiza el diagnóstico del canvas (AXE v0.6.9)
    */
-  function renderCanvasViewer(canvas) {
+  async function actualizarDiagnostico() {
+    const diagnosticoEl = document.getElementById('canvas-diagnostico');
+    if (!diagnosticoEl) return;
+    
+    // Obtener canvas actual (del editor o del estado)
+    let canvas = canvasViewState.canvas;
+    
+    // Si no hay canvas en estado, intentar parsear del editor
+    if (!canvas) {
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (jsonEditor && jsonEditor.value) {
+        try {
+          canvas = JSON.parse(jsonEditor.value);
+        } catch (e) {
+          diagnosticoEl.innerHTML = '<p class="text-slate-400 text-sm">Canvas inválido en el editor JSON</p>';
+          return;
+        }
+      } else {
+        diagnosticoEl.innerHTML = '<p class="text-slate-400 text-sm">Carga un canvas para ver diagnósticos</p>';
+        return;
+      }
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      
+      // Usar POST para analizar el canvas del editor (puede no estar guardado)
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      renderDiagnostico(data.warnings || [], data.infos || []);
+      
+      // También actualizar sugerencias si están disponibles
+      if (data.suggestions) {
+        renderSugerencias(data.suggestions || []);
+      }
+      
+    } catch (error) {
+      console.error('Error analizando canvas:', error);
+      diagnosticoEl.innerHTML = `<p class="axe-panel-error">Error: ${error.message}</p>`;
+    }
+  }
+  
+  /**
+   * Actualiza las sugerencias pedagógicas del canvas (AXE v0.6.10)
+   */
+  async function actualizarSugerencias() {
+    const sugerenciasEl = document.getElementById('canvas-sugerencias');
+    if (!sugerenciasEl) return;
+    
+    // Obtener canvas actual (del editor o del estado)
+    let canvas = canvasViewState.canvas;
+    
+    // Si no hay canvas en estado, intentar parsear del editor
+    if (!canvas) {
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (jsonEditor && jsonEditor.value) {
+        try {
+          canvas = JSON.parse(jsonEditor.value);
+        } catch (e) {
+          sugerenciasEl.innerHTML = '<p class="axe-panel-item__text">Canvas inválido en el editor JSON</p>';
+          return;
+        }
+      } else {
+        sugerenciasEl.innerHTML = '<p class="axe-panel-item__text">Carga un canvas para ver sugerencias</p>';
+        return;
+      }
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      
+      // Usar POST para analizar el canvas del editor (puede no estar guardado)
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      renderSugerencias(data.suggestions || []);
+      
+    } catch (error) {
+      console.error('Error obteniendo sugerencias:', error);
+      sugerenciasEl.innerHTML = `<p class="axe-panel-error">Error: ${error.message}</p>`;
+    }
+  }
+  
+  /**
+   * Renderiza el panel de sugerencias pedagógicas (AXE v0.6.10)
+   */
+  function renderSugerencias(suggestions) {
+    const sugerenciasEl = document.getElementById('canvas-sugerencias');
+    if (!sugerenciasEl) return;
+    
+    if (suggestions.length === 0) {
+      sugerenciasEl.innerHTML = '<p class="axe-panel-empty">✅ No hay sugerencias pedagógicas en este momento</p>';
+      return;
+    }
+    
+    // Agrupar por tipo y prioridad
+    const byType = {
+      pedagogical: suggestions.filter(s => s.type === 'pedagogical'),
+      rhythm: suggestions.filter(s => s.type === 'rhythm'),
+      clarity: suggestions.filter(s => s.type === 'clarity')
+    };
+    
+    // Agrupar por prioridad dentro de cada tipo
+    const byPriority = {
+      high: suggestions.filter(s => s.priority === 'high'),
+      medium: suggestions.filter(s => s.priority === 'medium'),
+      low: suggestions.filter(s => s.priority === 'low')
+    };
+    
+    let html = '';
+    
+    // Mostrar primero las de alta prioridad
+    if (byPriority.high.length > 0) {
+      html += '<div class="mb-4">';
+      html += '<h4 class="axe-panel-section-title axe-panel-section-title--high">🔴 Alta Prioridad</h4>';
+      html += '<div class="axe-panel-items">';
+      
+      for (const suggestion of byPriority.high) {
+        const categoryIcon = {
+          intention: '💡',
+          decision: '❓',
+          ending: '🏁',
+          sequence: '📏',
+          balance: '⚖️',
+          meta: '📝'
+        }[suggestion.category] || '💭';
+        
+        const clickableClass = suggestion.node_id ? 'axe-panel-item--clickable' : '';
+        const onClickAttr = suggestion.node_id ? `onclick="seleccionarNodoDiagnostico('${suggestion.node_id}')"` : '';
+        
+        html += `<div class="axe-panel-item axe-panel-item--high ${clickableClass}" ${onClickAttr}>`;
+        html += `<div class="flex items-start gap-2">`;
+        html += `<span class="axe-panel-item__icon">${categoryIcon}</span>`;
+        html += `<div class="flex-1">`;
+        html += `<p class="axe-panel-item__text">${escapeHtml(suggestion.message)}</p>`;
+        if (suggestion.node_id) {
+          html += `<p class="axe-panel-item__text text-xs mt-1">Click para seleccionar nodo: <code class="axe-panel-item__badge axe-panel-item__badge--high">${suggestion.node_id}</code></p>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      html += '</div>';
+      html += '</div>';
+    }
+    
+    // Luego las de prioridad media
+    if (byPriority.medium.length > 0) {
+      html += '<div class="mb-4">';
+      html += '<h4 class="axe-panel-section-title axe-panel-section-title--medium">🟡 Prioridad Media</h4>';
+      html += '<div class="axe-panel-items">';
+      
+      for (const suggestion of byPriority.medium) {
+        const categoryIcon = {
+          intention: '💡',
+          decision: '❓',
+          ending: '🏁',
+          sequence: '📏',
+          balance: '⚖️',
+          meta: '📝'
+        }[suggestion.category] || '💭';
+        
+        const clickableClass = suggestion.node_id ? 'axe-panel-item--clickable' : '';
+        const onClickAttr = suggestion.node_id ? `onclick="seleccionarNodoDiagnostico('${suggestion.node_id}')"` : '';
+        
+        html += `<div class="axe-panel-item axe-panel-item--medium ${clickableClass}" ${onClickAttr}>`;
+        html += `<div class="flex items-start gap-2">`;
+        html += `<span class="axe-panel-item__icon">${categoryIcon}</span>`;
+        html += `<div class="flex-1">`;
+        html += `<p class="axe-panel-item__text">${escapeHtml(suggestion.message)}</p>`;
+        if (suggestion.node_id) {
+          html += `<p class="axe-panel-item__text text-xs mt-1">Click para seleccionar nodo: <code class="axe-panel-item__badge axe-panel-item__badge--medium">${suggestion.node_id}</code></p>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      html += '</div>';
+      html += '</div>';
+    }
+    
+    // Finalmente las de baja prioridad
+    if (byPriority.low.length > 0) {
+      html += '<div>';
+      html += '<h4 class="axe-panel-section-title axe-panel-section-title--low">🔵 Prioridad Baja</h4>';
+      html += '<div class="axe-panel-items">';
+      
+      for (const suggestion of byPriority.low) {
+        const categoryIcon = {
+          intention: '💡',
+          decision: '❓',
+          ending: '🏁',
+          sequence: '📏',
+          balance: '⚖️',
+          meta: '📝'
+        }[suggestion.category] || '💭';
+        
+        const clickableClass = suggestion.node_id ? 'axe-panel-item--clickable' : '';
+        const onClickAttr = suggestion.node_id ? `onclick="seleccionarNodoDiagnostico('${suggestion.node_id}')"` : '';
+        
+        html += `<div class="axe-panel-item axe-panel-item--low ${clickableClass}" ${onClickAttr}>`;
+        html += `<div class="flex items-start gap-2">`;
+        html += `<span class="axe-panel-item__icon">${categoryIcon}</span>`;
+        html += `<div class="flex-1">`;
+        html += `<p class="axe-panel-item__text">${escapeHtml(suggestion.message)}</p>`;
+        if (suggestion.node_id) {
+          html += `<p class="axe-panel-item__text text-xs mt-1">Click para seleccionar nodo: <code class="axe-panel-item__badge axe-panel-item__badge--low">${suggestion.node_id}</code></p>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      html += '</div>';
+      html += '</div>';
+    }
+    
+    sugerenciasEl.innerHTML = html;
+  }
+  
+  /**
+   * Renderiza el panel de diagnóstico
+   */
+  function renderDiagnostico(warnings, infos) {
+    const diagnosticoEl = document.getElementById('canvas-diagnostico');
+    if (!diagnosticoEl) return;
+    
+    if (warnings.length === 0 && infos.length === 0) {
+      diagnosticoEl.innerHTML = '<p class="axe-panel-empty">✅ No se encontraron observaciones</p>';
+      return;
+    }
+    
+    let html = '';
+    
+    // Agrupar por tipo
+    const warningsByType = {
+      structural: warnings.filter(d => d.type === 'structural'),
+      pedagogical: warnings.filter(d => d.type === 'pedagogical'),
+      rhythm: warnings.filter(d => d.type === 'rhythm')
+    };
+    
+    const infosByType = {
+      structural: infos.filter(d => d.type === 'structural'),
+      pedagogical: infos.filter(d => d.type === 'pedagogical'),
+      rhythm: infos.filter(d => d.type === 'rhythm')
+    };
+    
+    // Renderizar warnings
+    if (warnings.length > 0) {
+      html += '<div class="mb-4">';
+      html += '<h4 class="axe-panel-section-title axe-panel-section-title--warning">⚠️ Advertencias</h4>';
+      html += '<div class="axe-panel-items axe-panel-items--compact">';
+      
+      for (const warning of warnings) {
+        const typeLabel = {
+          structural: '🔧',
+          pedagogical: '📚',
+          rhythm: '⏱️'
+        }[warning.type] || '⚠️';
+        
+        const clickableClass = warning.node_id ? 'axe-panel-item--clickable' : '';
+        const onClickAttr = warning.node_id ? `onclick="seleccionarNodoDiagnostico('${warning.node_id}')"` : '';
+        
+        html += `<div class="axe-panel-item axe-panel-item--warning ${clickableClass}" ${onClickAttr}>`;
+        html += `<div class="flex items-start gap-2">`;
+        html += `<span class="axe-panel-item__icon">${typeLabel}</span>`;
+        html += `<span class="axe-panel-item__text flex-1">${escapeHtml(warning.message)}</span>`;
+        if (warning.node_id) {
+          html += `<span class="axe-panel-item__text text-xs">→ <code class="axe-panel-item__badge axe-panel-item__badge--warning">${warning.node_id}</code></span>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      html += '</div>';
+      html += '</div>';
+    }
+    
+    // Renderizar infos
+    if (infos.length > 0) {
+      html += '<div>';
+      html += '<h4 class="axe-panel-section-title axe-panel-section-title--info">ℹ️ Información</h4>';
+      html += '<div class="axe-panel-items axe-panel-items--compact">';
+      
+      for (const info of infos) {
+        const typeLabel = {
+          structural: '🔧',
+          pedagogical: '📚',
+          rhythm: '⏱️'
+        }[info.type] || 'ℹ️';
+        
+        const clickableClass = info.node_id ? 'axe-panel-item--clickable' : '';
+        const onClickAttr = info.node_id ? `onclick="seleccionarNodoDiagnostico('${info.node_id}')"` : '';
+        
+        html += `<div class="axe-panel-item axe-panel-item--info ${clickableClass}" ${onClickAttr}>`;
+        html += `<div class="flex items-start gap-2">`;
+        html += `<span class="axe-panel-item__icon">${typeLabel}</span>`;
+        html += `<span class="axe-panel-item__text flex-1">${escapeHtml(info.message)}</span>`;
+        if (info.node_id) {
+          html += `<span class="axe-panel-item__text text-xs">→ <code class="axe-panel-item__badge axe-panel-item__badge--info">${info.node_id}</code></span>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      html += '</div>';
+      html += '</div>';
+    }
+    
+    diagnosticoEl.innerHTML = html;
+  }
+  
+  /**
+   * Selecciona un nodo cuando se hace click en un diagnóstico
+   */
+  function seleccionarNodoDiagnostico(nodeId) {
+    // Buscar el nodo en el viewer y resaltarlo
+    const canvas = canvasViewState.canvas;
+    if (!canvas) return;
+    
+    const node = canvas.nodes?.find(n => n.id === nodeId);
+    if (!node) {
+      mostrarToast(`Nodo '${nodeId}' no encontrado`, 'warning');
+      return;
+    }
+    
+    // Actualizar selección en el viewer
+    if (window.canvasSelectionState) {
+      window.canvasSelectionState.selectedNodeId = nodeId;
+    }
+    
+    // Re-renderizar viewer para mostrar selección
+    renderCanvasViewer(canvas);
+    
+    // Scroll al nodo en el viewer si es posible
+    const viewerEl = document.getElementById('canvas-viewer');
+    if (viewerEl) {
+      const nodeEl = viewerEl.querySelector(`[data-node-id="${nodeId}"]`);
+      if (nodeEl) {
+        nodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Resaltar temporalmente
+        nodeEl.classList.add('ring-2', 'ring-yellow-400');
+        setTimeout(() => {
+          nodeEl.classList.remove('ring-2', 'ring-yellow-400');
+        }, 2000);
+      }
+    }
+    
+    mostrarToast(`Nodo '${nodeId}' seleccionado`, 'info');
+  }
+  
+  /**
+   * Helper para escapar HTML
+   */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  /**
+   * Determina las acciones semánticas permitidas para un nodo (AXE v0.6.5)
+   * 
+   * @param {Object} node - Nodo del canvas
+   * @param {Object} canvas - CanvasDefinition completo (para contexto)
+   * @returns {Array} Array de objetos { action, label, icon, description, enabled }
+   */
+  function getSemanticActionsForNode(node, canvas) {
+    if (!node || !canvas) return [];
+    
+    const nodeType = node.type || 'screen';
+    const actions = [];
+    
+    // insertNodeAfter: válida para cualquier nodo excepto end
+    if (nodeType !== 'end') {
+      actions.push({
+        action: 'insertNodeAfter',
+        label: 'Insertar después',
+        icon: '➕',
+        description: 'Inserta un nuevo nodo después de este',
+        enabled: true
+      });
+    }
+    
+    // convertNodeToDecision: válida solo para screen
+    if (nodeType === 'screen') {
+      actions.push({
+        action: 'convertNodeToDecision',
+        label: 'Convertir a decisión',
+        icon: '🔀',
+        description: 'Convierte este nodo en una decisión con opciones',
+        enabled: true
+      });
+    }
+    
+    // markAsStart: válida para cualquier nodo excepto end
+    if (nodeType !== 'end') {
+      const isAlreadyStart = nodeType === 'start';
+      actions.push({
+        action: 'markAsStart',
+        label: isAlreadyStart ? 'Ya es inicio' : 'Marcar como inicio',
+        icon: '🚀',
+        description: isAlreadyStart ? 'Este nodo ya es el nodo de inicio' : 'Marca este nodo como punto de entrada',
+        enabled: !isAlreadyStart
+      });
+    }
+    
+    // markAsEnd: válida para cualquier nodo excepto start
+    if (nodeType !== 'start') {
+      const isAlreadyEnd = nodeType === 'end';
+      actions.push({
+        action: 'markAsEnd',
+        label: isAlreadyEnd ? 'Ya es fin' : 'Marcar como fin',
+        icon: '🏁',
+        description: isAlreadyEnd ? 'Este nodo ya es un nodo de fin' : 'Marca este nodo como punto de salida',
+        enabled: !isAlreadyEnd
+      });
+    }
+    
+    // duplicateSubgraph: válida para cualquier nodo
+    actions.push({
+      action: 'duplicateSubgraph',
+      label: 'Duplicar subgrafo',
+      icon: '📋',
+      description: 'Duplica este nodo y todos los nodos alcanzables desde él',
+      enabled: true,
+      isMacro: false
+    });
+    
+    // Separador visual entre acciones simples y macros
+    actions.push({
+      action: '_separator',
+      label: '---',
+      icon: '',
+      description: '',
+      enabled: false,
+      isMacro: false,
+      isSeparator: true
+    });
+    
+    // MACROS COMPUESTAS (AXE v0.6.6)
+    // insertStandardEnding: válida para cualquier nodo excepto end
+    if (nodeType !== 'end') {
+      actions.push({
+        action: 'insertStandardEnding',
+        label: 'Insertar finalización estándar',
+        icon: '✨',
+        description: 'Inserta un nodo de finalización estándar después de este nodo',
+        enabled: true,
+        isMacro: true
+      });
+    }
+    
+    // createGuidedChoice: válida para screen (lo convierte a decision con nodos después)
+    if (nodeType === 'screen') {
+      actions.push({
+        action: 'createGuidedChoice',
+        label: 'Crear decisión guiada',
+        icon: '🎯',
+        description: 'Convierte este nodo en decisión y crea nodos después de cada opción',
+        enabled: true,
+        isMacro: true
+      });
+    }
+    
+    // createBranchingPath: válida para cualquier nodo excepto end
+    if (nodeType !== 'end') {
+      actions.push({
+        action: 'createBranchingPath',
+        label: 'Crear ramificación',
+        icon: '🌳',
+        description: 'Crea una estructura de ramificación con múltiples ramas',
+        enabled: true,
+        isMacro: true
+      });
+    }
+    
+    // createLinearSequence: válida para cualquier nodo excepto end
+    if (nodeType !== 'end') {
+      actions.push({
+        action: 'createLinearSequence',
+        label: 'Crear secuencia lineal',
+        icon: '📝',
+        description: 'Crea una secuencia lineal de nodos después de este',
+        enabled: true,
+        isMacro: true
+      });
+    }
+    
+    return actions;
+  }
+  
+  /**
+   * Renderiza el canvas viewer en modo READ-ONLY (AXE v0.6.11)
+   * Solo visualización, sin acciones de edición
+   */
+  function renderCanvasViewerReadOnly(canvas) {
     const viewer = document.getElementById('canvas-viewer');
     if (!viewer || !canvas) return;
     
     let html = '<div class="space-y-4">';
     
-    // Nodos como tarjetas en grid
-    html += '<div><h4 class="text-white font-semibold mb-2">Nodos</h4>';
+    // Mensaje de modo READ-ONLY
+    html += `
+      <div class="bg-blue-900 border border-blue-700 rounded-lg p-3 mb-4">
+        <p class="text-blue-200 text-sm">
+          <strong>📖 Modo Navegación (READ-ONLY)</strong> — Solo visualización del flujo
+        </p>
+      </div>
+    `;
+    
+    // Nodos como tarjetas en grid (NO clickeables)
+    html += '<div><h4 class="text-white font-semibold mb-2">Nodos del Flujo</h4>';
     html += '<div class="grid grid-cols-2 md:grid-cols-3 gap-2">';
     for (const node of canvas.nodes || []) {
+      // Badge de tipo
+      let typeBadge = '';
+      if (node.type === 'start') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-green-600 text-white text-xs rounded ml-1">START</span>';
+      } else if (node.type === 'end') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-orange-600 text-white text-xs rounded ml-1">END</span>';
+      } else if (node.type === 'decision') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded ml-1">DECISION</span>';
+      }
+      
       html += `
-        <div class="bg-slate-800 border border-slate-700 rounded p-2">
-          <div class="text-white font-medium text-sm">${node.id}</div>
-          <div class="text-slate-400 text-xs">${node.type}</div>
+        <div class="border border-slate-700 bg-slate-800 rounded p-2">
+          <div class="flex items-center justify-between">
+            <div class="text-white font-medium text-sm">${node.id}</div>
+            ${typeBadge}
+          </div>
+          <div class="text-slate-400 text-xs mt-1">${node.type}</div>
           ${node.label ? `<div class="text-slate-300 text-xs mt-1">${node.label}</div>` : ''}
         </div>
       `;
     }
     html += '</div></div>';
     
-    // Edges como lista
-    html += '<div><h4 class="text-white font-semibold mb-2">Edges</h4>';
+    // Edges como lista (mostrando el flujo)
+    html += '<div><h4 class="text-white font-semibold mb-2">Flujo (Edges)</h4>';
     html += '<div class="space-y-1">';
     for (const edge of canvas.edges || []) {
       html += `
@@ -4695,6 +6063,1149 @@ El texto se mostrará tal como lo escribas."
   }
   
   /**
+   * Actualiza el panel contextual lateral (AXE v0.6.9)
+   * Renderiza acciones, macros, meta, diagnóstico y propiedades del nodo seleccionado
+   */
+  function actualizarPanelContextual(canvas) {
+    const panelContent = document.getElementById('canvas-contextual-panel-content');
+    if (!panelContent || !canvas) return;
+    
+    // Estado de selección
+    if (!window.canvasSelectionState) {
+      window.canvasSelectionState = { selectedNodeId: null };
+    }
+    
+    const selectedNodeId = window.canvasSelectionState.selectedNodeId;
+    const selectedNode = selectedNodeId 
+      ? (canvas.nodes || []).find(n => n.id === selectedNodeId)
+      : null;
+    
+    let html = '';
+    
+    if (selectedNode) {
+      const actions = getSemanticActionsForNode(selectedNode, canvas);
+      html += `
+        <div class="bg-indigo-900 border-2 border-indigo-500 rounded-lg p-4 mb-4">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <h4 class="text-white font-semibold text-lg">Nodo seleccionado: ${selectedNode.id}</h4>
+              <p class="text-indigo-200 text-sm mt-1">
+                Tipo: <span class="font-mono">${selectedNode.type}</span>
+                ${selectedNode.label ? ` • ${selectedNode.label}` : ''}
+              </p>
+            </div>
+            <button 
+              onclick="deseleccionarNodo()" 
+              class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
+              title="Deseleccionar nodo"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="space-y-2">
+            <p class="text-indigo-200 text-sm font-medium mb-2">Acciones disponibles:</p>
+            <div class="space-y-3">
+              <!-- Acciones simples -->
+              <div>
+                <p class="text-indigo-300 text-xs font-medium mb-1.5">Acciones simples:</p>
+                <div class="grid grid-cols-1 gap-2">
+      `;
+      
+      let hasSimpleActions = false;
+      let hasMacros = false;
+      
+      for (const action of actions) {
+        if (action.isSeparator) {
+          // Separador visual
+          if (hasSimpleActions && !hasMacros) {
+            html += `
+                </div>
+              </div>
+              <!-- Macros compuestas -->
+              <div>
+                <p class="text-indigo-300 text-xs font-medium mb-1.5">
+                  <span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded mr-1">MACRO</span>
+                  Acciones compuestas:
+                </p>
+                <div class="grid grid-cols-1 gap-2">
+            `;
+            hasMacros = true;
+          }
+          continue;
+        }
+        
+        if (!action.isMacro) {
+          hasSimpleActions = true;
+        } else {
+          hasMacros = true;
+        }
+        
+        const buttonClass = action.enabled
+          ? action.isMacro
+            ? 'w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded transition-colors flex items-center gap-2 border border-purple-400'
+            : 'w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors flex items-center gap-2'
+          : 'w-full px-3 py-2 bg-slate-700 text-slate-400 text-sm font-medium rounded cursor-not-allowed flex items-center gap-2';
+        
+        html += `
+          <button 
+            onclick="${action.enabled ? `ejecutarAccionSemanticaContextual('${action.action}', '${selectedNode.id}')` : ''}"
+            class="${buttonClass}"
+            title="${action.description}"
+            ${action.enabled ? '' : 'disabled'}
+          >
+            <span>${action.icon}</span>
+            <span>${action.label}</span>
+            ${action.isMacro ? '<span class="text-xs opacity-75 ml-auto">⚡</span>' : ''}
+          </button>
+        `;
+      }
+      
+      // Cerrar divs si hay macros
+      if (hasMacros) {
+        html += `
+                </div>
+              </div>
+        `;
+      } else {
+        html += `
+                </div>
+        `;
+      }
+      
+      // Editor de Meta (AXE v0.6.8: metadatos pedagógicos de intención)
+      html += `
+          </div>
+          <div class="border-t border-indigo-700 pt-3 mt-3">
+            <p class="text-indigo-200 text-sm font-medium mb-2">📝 Metadatos Semánticos (Meta):</p>
+            <div class="space-y-2">
+              <textarea 
+                id="node-meta-editor" 
+                class="w-full h-32 bg-slate-900 text-slate-100 font-mono text-xs p-2 rounded border border-slate-700 resize-none"
+                placeholder='{"intention": "objetivo pedagógico", "notes": "notas internas"}'
+              >${selectedNode.meta ? JSON.stringify(selectedNode.meta, null, 2) : ''}</textarea>
+              <div class="flex gap-2">
+                <button 
+                  onclick="guardarMetaNodo('${selectedNode.id}')" 
+                  class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors"
+                  title="Guardar meta del nodo"
+                >
+                  💾 Guardar Meta
+                </button>
+                <button 
+                  onclick="limpiarMetaNodo('${selectedNode.id}')" 
+                  class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors"
+                  title="Eliminar meta del nodo"
+                >
+                  🗑️ Limpiar Meta
+                </button>
+              </div>
+              <p class="text-indigo-300 text-xs">
+                Meta es opcional y no afecta el runtime. Úsalo para notas pedagógicas, intenciones, etc.
+              </p>
+            </div>
+          </div>
+          <div class="border-t border-indigo-700 pt-3 mt-3">
+            <p class="text-indigo-200 text-sm font-medium mb-2">🗑️ Eliminar Nodo:</p>
+            <button 
+              onclick="deleteSelectedNode()" 
+              class="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors"
+              title="Eliminar este nodo (Delete/Backspace)"
+            >
+              🗑️ Eliminar nodo "${selectedNode.id}"
+            </button>
+            <p class="text-indigo-300 text-xs mt-2">
+              Elimina el nodo y sus conexiones. Si es START o último END, se reparará automáticamente.
+            </p>
+          </div>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="bg-slate-800 border border-slate-600 rounded-lg p-4">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">💡</span>
+            <div>
+              <p class="text-slate-200 text-sm font-semibold mb-1">Editor Visual AXE v1.0</p>
+              <p class="text-slate-300 text-sm">
+                <strong>Arrastra los nodos</strong> para moverlos. <strong>Haz clic en un nodo</strong> para seleccionarlo y ver acciones semánticas.
+              </p>
+              <p class="text-slate-400 text-xs mt-2">
+                Usa <strong>Alt + rueda</strong> para hacer zoom. Arrastra el fondo para mover el canvas. Rueda sin teclas = scroll normal.
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    panelContent.innerHTML = html;
+  }
+  
+  /**
+   * Renderiza el canvas viewer con UI semántica contextual (AXE v0.6.5)
+   * AXE v0.6.9: Panel contextual movido a aside lateral sticky
+   */
+  function renderCanvasViewer(canvas) {
+    const viewer = document.getElementById('canvas-viewer');
+    if (!viewer || !canvas) return;
+    
+    // Estado de selección
+    if (!window.canvasSelectionState) {
+      window.canvasSelectionState = { selectedNodeId: null };
+    }
+    
+    // Obtener selectedNodeId de forma segura (tolerante a null)
+    const selectedNodeId = window.canvasSelectionState?.selectedNodeId ?? null;
+    
+    // AXE v0.6.9: Actualizar panel contextual lateral (ya no se renderiza aquí)
+    actualizarPanelContextual(canvas);
+    
+    let html = '<div class="space-y-4">';
+    
+    // EDITOR VISUAL: Canvas con nodos posicionados y edges SVG (AXE v0.7.0)
+    // Estado de pan/zoom para el canvas visual
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = {
+        panX: 0,
+        panY: 0,
+        zoom: 1,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        dragNodeId: null,
+        dragOffsetX: 0,
+        dragOffsetY: 0,
+        isPanning: false,
+        panStartX: 0,
+        panStartY: 0,
+        snappingEnabled: false,
+        snapGrid: 20  // Tamaño de la grilla para snapping
+      };
+    }
+    
+    html += `
+      <div class="bg-slate-800 rounded-lg p-4 mb-4">
+        <div class="flex justify-between items-center mb-2">
+          <h4 class="text-white font-semibold">Editor Visual</h4>
+          <div class="flex gap-2">
+            <button onclick="toggleSnapping()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" id="snap-toggle-btn" title="Activar/Desactivar snapping">
+              📐 Snap: OFF
+            </button>
+            <button onclick="resetCanvasView()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Resetear vista">
+              🔄 Reset Vista
+            </button>
+            <button onclick="zoomOutCanvas()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Alejar">
+              ➖
+            </button>
+            <span class="text-slate-400 text-xs px-2 py-1" id="zoom-level">100%</span>
+            <button onclick="zoomInCanvas()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded" title="Acercar">
+              ➕
+            </button>
+          </div>
+        </div>
+        <div 
+          id="canvas-visual-container" 
+          class="relative bg-slate-900 rounded border border-slate-700 overflow-hidden"
+          style="width: 100%; height: calc(100vh - 450px); min-height: 600px; cursor: grab;"
+          onmousedown="handleCanvasMouseDown(event)"
+          onmousemove="handleCanvasMouseMove(event)"
+          onmouseup="handleCanvasMouseUp(event)"
+          onmouseleave="handleCanvasMouseUp(event)"
+        >
+          <!-- SVG para edges (debajo de nodos) -->
+          <svg 
+            id="canvas-edges-svg" 
+            class="absolute inset-0 pointer-events-none"
+            style="z-index: 1;"
+          >
+          </svg>
+          
+          <!-- Contenedor de nodos con transform para pan/zoom -->
+          <div 
+            id="canvas-nodes-container" 
+            class="absolute inset-0"
+            style="transform: translate(${window.canvasVisualState.panX}px, ${window.canvasVisualState.panY}px) scale(${window.canvasVisualState.zoom}); transform-origin: 0 0;"
+          >
+    `;
+    
+    // Renderizar nodos con position absoluta
+    for (const node of canvas.nodes || []) {
+      const pos = node.position || { x: 0, y: 0 };
+      const isSelected = selectedNodeId === node.id;
+      
+      // Badge de tipo
+      let typeBadge = '';
+      let nodeColor = 'bg-slate-700';
+      if (node.type === 'start') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-green-600 text-white text-xs rounded">START</span>';
+        nodeColor = 'bg-green-700';
+      } else if (node.type === 'end') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-orange-600 text-white text-xs rounded">END</span>';
+        nodeColor = 'bg-orange-700';
+      } else if (node.type === 'decision') {
+        typeBadge = '<span class="px-1.5 py-0.5 bg-purple-600 text-white text-xs rounded">DECISION</span>';
+        nodeColor = 'bg-purple-700';
+      }
+      
+      const borderClass = isSelected 
+        ? 'border-2 border-indigo-400 shadow-lg shadow-indigo-500/50' 
+        : 'border border-slate-600';
+      
+      html += `
+        <div 
+          id="node-${node.id}"
+          data-node-id="${node.id}"
+          class="absolute ${nodeColor} ${borderClass} rounded-lg p-3 min-w-[120px] cursor-move select-none"
+          style="left: ${pos.x}px; top: ${pos.y}px; z-index: 10;"
+          onmousedown="handleNodeMouseDown(event, '${node.id}')"
+          onclick="handleNodeClick(event, '${node.id}')"
+        >
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="text-white font-semibold text-sm truncate">${node.id}</div>
+            ${typeBadge}
+          </div>
+          <div class="text-slate-300 text-xs">${node.type}</div>
+          ${node.label ? `<div class="text-slate-200 text-xs mt-1 truncate">${node.label}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    html += `
+          </div>
+        </div>
+      </div>
+    `;
+    
+    html += '</div>';
+    viewer.innerHTML = html;
+    
+    // Renderizar edges SVG después de que el HTML esté en el DOM
+    setTimeout(() => {
+      renderCanvasEdges(canvas);
+    }, 0);
+  }
+  
+  /**
+   * Renderiza edges como líneas SVG (AXE v0.7.0)
+   */
+  function renderCanvasEdges(canvas) {
+    const svg = document.getElementById('canvas-edges-svg');
+    if (!svg || !canvas) return;
+    
+    // Limpiar SVG
+    svg.innerHTML = '';
+    
+    // Obtener dimensiones del contenedor
+    const container = document.getElementById('canvas-visual-container');
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    svg.setAttribute('width', containerRect.width);
+    svg.setAttribute('height', containerRect.height);
+    
+    // Agregar defs con marcador de flecha si no existe
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('points', '0 0, 10 3, 0 6');
+      polygon.setAttribute('fill', '#64748b');
+      
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+    }
+    
+    // Renderizar cada edge
+    for (const edge of canvas.edges || []) {
+      const fromNodeEl = document.getElementById(`node-${edge.from_node_id}`);
+      const toNodeEl = document.getElementById(`node-${edge.to_node_id}`);
+      
+      if (!fromNodeEl || !toNodeEl) {
+        // Fallback: usar posiciones del JSON si los elementos no existen
+        const fromNode = canvas.nodes?.find(n => n.id === edge.from_node_id);
+        const toNode = canvas.nodes?.find(n => n.id === edge.to_node_id);
+        if (!fromNode || !toNode) continue;
+        
+        const fromPos = fromNode.position || { x: 0, y: 0 };
+        const toPos = toNode.position || { x: 0, y: 0 };
+        
+        const panX = window.canvasVisualState?.panX || 0;
+        const panY = window.canvasVisualState?.panY || 0;
+        const zoom = window.canvasVisualState?.zoom || 1;
+        
+        const x1 = fromPos.x * zoom + panX + 60;
+        const y1 = fromPos.y * zoom + panY + 40;
+        const x2 = toPos.x * zoom + panX + 60;
+        const y2 = toPos.y * zoom + panY + 40;
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', '#64748b');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('marker-end', 'url(#arrowhead)');
+        svg.appendChild(line);
+        continue;
+      }
+      
+      // Obtener posiciones reales del DOM (más preciso)
+      const fromRect = fromNodeEl.getBoundingClientRect();
+      const toRect = toNodeEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      // Calcular centros de los nodos en coordenadas del contenedor
+      const fromCenterX = fromRect.left - containerRect.left + fromRect.width / 2;
+      const fromCenterY = fromRect.top - containerRect.top + fromRect.height / 2;
+      const toCenterX = toRect.left - containerRect.left + toRect.width / 2;
+      const toCenterY = toRect.top - containerRect.top + toRect.height / 2;
+      
+      // Crear línea SVG
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', fromCenterX);
+      line.setAttribute('y1', fromCenterY);
+      line.setAttribute('x2', toCenterX);
+      line.setAttribute('y2', toCenterY);
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
+      line.setAttribute('class', 'canvas-edge');
+      
+      svg.appendChild(line);
+    }
+  }
+  
+  /**
+   * Maneja el inicio del drag de un nodo (AXE v0.7.0)
+   */
+  function handleNodeMouseDown(event, nodeId) {
+    event.stopPropagation();
+    
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    const nodeEl = document.getElementById(`node-${nodeId}`);
+    if (!nodeEl) return;
+    
+    const container = document.getElementById('canvas-visual-container');
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    
+    window.canvasVisualState.isDragging = true;
+    window.canvasVisualState.dragNodeId = nodeId;
+    window.canvasVisualState.dragStartX = event.clientX;
+    window.canvasVisualState.dragStartY = event.clientY;
+    
+    // Calcular offset desde el mouse hasta la esquina del nodo
+    const panX = window.canvasVisualState.panX || 0;
+    const panY = window.canvasVisualState.panY || 0;
+    const zoom = window.canvasVisualState.zoom || 1;
+    
+    const nodePos = nodeEl.style.left ? parseInt(nodeEl.style.left) : 0;
+    const nodeTop = nodeEl.style.top ? parseInt(nodeEl.style.top) : 0;
+    
+    window.canvasVisualState.dragOffsetX = (event.clientX - containerRect.left - panX) / zoom - nodePos;
+    window.canvasVisualState.dragOffsetY = (event.clientY - containerRect.top - panY) / zoom - nodeTop;
+    
+    // Cambiar cursor
+    container.style.cursor = 'grabbing';
+    nodeEl.style.cursor = 'grabbing';
+  }
+  
+  /**
+   * Maneja el movimiento del mouse durante drag (AXE v0.7.0) - Mejorado con snapping
+   */
+  function handleCanvasMouseMove(event) {
+    if (!window.canvasVisualState) return;
+    
+    // Si se está arrastrando un nodo
+    if (window.canvasVisualState.isDragging && window.canvasVisualState.dragNodeId) {
+      const container = document.getElementById('canvas-visual-container');
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      
+      const panX = window.canvasVisualState.panX || 0;
+      const panY = window.canvasVisualState.panY || 0;
+      const zoom = window.canvasVisualState.zoom || 1;
+      
+      // Calcular nueva posición del nodo
+      let newX = (event.clientX - containerRect.left - panX) / zoom - window.canvasVisualState.dragOffsetX;
+      let newY = (event.clientY - containerRect.top - panY) / zoom - window.canvasVisualState.dragOffsetY;
+      
+      // Aplicar snapping si está habilitado
+      newX = applySnapping(newX);
+      newY = applySnapping(newY);
+      
+      // Asegurar que no salga de los límites
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+      
+      const nodeEl = document.getElementById(`node-${window.canvasVisualState.dragNodeId}`);
+      if (nodeEl) {
+        nodeEl.style.left = `${newX}px`;
+        nodeEl.style.top = `${newY}px`;
+        
+        // Actualizar edges en tiempo real
+        const jsonEditor = document.getElementById('canvas-json-editor');
+        if (jsonEditor && jsonEditor.value) {
+          try {
+            const canvas = JSON.parse(jsonEditor.value);
+            renderCanvasEdges(canvas);
+          } catch (e) {
+            // Ignorar errores de parsing
+          }
+        }
+      }
+    }
+    // Si se está haciendo pan del canvas
+    else if (window.canvasVisualState.isPanning) {
+      window.canvasVisualState.panX = event.clientX - window.canvasVisualState.panStartX;
+      window.canvasVisualState.panY = event.clientY - window.canvasVisualState.panStartY;
+      
+      const container = document.getElementById('canvas-nodes-container');
+      if (container) {
+        const panX = window.canvasVisualState.panX || 0;
+        const panY = window.canvasVisualState.panY || 0;
+        const zoom = window.canvasVisualState.zoom || 1;
+        container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      }
+      
+      // Re-renderizar edges
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (jsonEditor && jsonEditor.value) {
+        try {
+          const canvas = JSON.parse(jsonEditor.value);
+          renderCanvasEdges(canvas);
+        } catch (e) {
+          // Ignorar errores
+        }
+      }
+    }
+  }
+  
+  /**
+   * Maneja el fin del drag (AXE v0.7.0)
+   */
+  function handleCanvasMouseUp(event) {
+    if (!window.canvasVisualState) return;
+    
+    const container = document.getElementById('canvas-visual-container');
+    if (container) {
+      container.style.cursor = 'grab';
+    }
+    
+    // Si se estaba arrastrando un nodo
+    if (window.canvasVisualState.isDragging && window.canvasVisualState.dragNodeId) {
+      const nodeEl = document.getElementById(`node-${window.canvasVisualState.dragNodeId}`);
+      if (nodeEl) {
+        nodeEl.style.cursor = 'move';
+      }
+      
+      // Actualizar posición en el canvas JSON
+      updateNodePositionInCanvas(window.canvasVisualState.dragNodeId);
+      
+      window.canvasVisualState.isDragging = false;
+      window.canvasVisualState.dragNodeId = null;
+    }
+    
+    // Si se estaba haciendo pan
+    if (window.canvasVisualState.isPanning) {
+      window.canvasVisualState.isPanning = false;
+    }
+  }
+  
+  /**
+   * Actualiza la posición de un nodo en el canvas JSON y marca como DIRTY (AXE v0.7.0)
+   * Mejorado con autoguardado
+   */
+  function updateNodePositionInCanvas(nodeId) {
+    const nodeEl = document.getElementById(`node-${nodeId}`);
+    if (!nodeEl) return;
+    
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor || !jsonEditor.value) return;
+    
+    try {
+      const canvas = JSON.parse(jsonEditor.value);
+      const node = canvas.nodes?.find(n => n.id === nodeId);
+      if (!node) return;
+      
+      const x = parseInt(nodeEl.style.left) || 0;
+      const y = parseInt(nodeEl.style.top) || 0;
+      
+      // Actualizar posición
+      if (!node.position) {
+        node.position = { x: 0, y: 0 };
+      }
+      node.position.x = x;
+      node.position.y = y;
+      
+      // Actualizar JSON editor
+      jsonEditor.value = JSON.stringify(canvas, null, 2);
+      
+      // Marcar como DIRTY
+      canvasViewState.dirty = true;
+      actualizarCanvasStateBadge();
+      
+      // Re-renderizar edges
+      renderCanvasEdges(canvas);
+      
+      // Autoguardado en draft (debounced)
+      debouncedAutoSaveCanvas();
+      
+    } catch (error) {
+      console.error('Error actualizando posición del nodo:', error);
+    }
+  }
+  
+  /**
+   * Debounce para autoguardado (evita guardar en cada movimiento)
+   */
+  let autoSaveTimeout = null;
+  function debouncedAutoSaveCanvas() {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    
+    autoSaveTimeout = setTimeout(async () => {
+      await autoSaveCanvas();
+    }, 2000); // Guardar 2 segundos después del último cambio
+  }
+  
+  /**
+   * Autoguardado del canvas en draft
+   * Sincroniza posiciones del DOM al JSON antes de guardar
+   */
+  async function autoSaveCanvas() {
+    if (!editorState.recorridoId) return;
+    
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor || !jsonEditor.value) return;
+    
+    try {
+      // Sincronizar todas las posiciones del DOM al JSON antes de guardar
+      const canvas = JSON.parse(jsonEditor.value);
+      
+      // Actualizar posiciones de todos los nodos desde el DOM
+      for (const node of canvas.nodes || []) {
+        const nodeEl = document.getElementById(`node-${node.id}`);
+        if (nodeEl) {
+          const x = parseInt(nodeEl.style.left) || 0;
+          const y = parseInt(nodeEl.style.top) || 0;
+          
+          if (!node.position) {
+            node.position = { x: 0, y: 0 };
+          }
+          node.position.x = x;
+          node.position.y = y;
+        }
+      }
+      
+      // Actualizar JSON editor con posiciones sincronizadas
+      jsonEditor.value = JSON.stringify(canvas, null, 2);
+      
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok) {
+          canvasViewState.canvas = data.canvas_normalized || data.canvas;
+          canvasViewState.dirty = false;
+          canvasViewState.lastSavedCanvas = JSON.stringify(data.canvas_normalized || data.canvas, null, 2);
+          actualizarCanvasStateBadge();
+          // Toast silencioso (no interrumpe)
+          mostrarToast('💾 Guardado automático', 'success', 1500);
+        }
+      }
+    } catch (error) {
+      console.error('Error en autoguardado:', error);
+      // No mostrar error al usuario para no interrumpir el flujo
+    }
+  }
+  
+  /**
+   * Maneja clic en nodo (selección) (AXE v0.7.0)
+   */
+  function handleNodeClick(event, nodeId) {
+    // Solo seleccionar si no hubo drag
+    if (window.canvasVisualState && window.canvasVisualState.isDragging) {
+      return;
+    }
+    
+    event.stopPropagation();
+    seleccionarNodo(nodeId);
+  }
+  
+  /**
+   * Maneja mouse down en el canvas (pan) (AXE v0.7.0)
+   */
+  function handleCanvasMouseDown(event) {
+    // Solo hacer pan si no se está arrastrando un nodo
+    if (event.target.id && event.target.id.startsWith('node-')) {
+      return;
+    }
+    
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1 };
+    }
+    
+    window.canvasVisualState.isPanning = true;
+    window.canvasVisualState.panStartX = event.clientX - window.canvasVisualState.panX;
+    window.canvasVisualState.panStartY = event.clientY - window.canvasVisualState.panY;
+  }
+  
+  /**
+   * Maneja wheel para zoom (AXE v0.7.0) - Mejorado
+   * Solo hace zoom si Alt está pulsado; sin Alt permite scroll normal del navegador
+   */
+  function handleCanvasWheel(event) {
+    // Sin Alt: permitir scroll normal del navegador (NO interceptar)
+    if (!event.altKey) {
+      return;
+    }
+    
+    // Con Alt: interceptar y hacer zoom del canvas
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    const delta = event.deltaY > 0 ? 0.9 : 1.1;
+    window.canvasVisualState.zoom = Math.max(0.3, Math.min(3, window.canvasVisualState.zoom * delta));
+    
+    // Actualizar display de zoom
+    updateZoomDisplay();
+    
+    // Actualizar transform
+    const container = document.getElementById('canvas-nodes-container');
+    if (container) {
+      const panX = window.canvasVisualState.panX || 0;
+      const panY = window.canvasVisualState.panY || 0;
+      const zoom = window.canvasVisualState.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    // Re-renderizar edges
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor && jsonEditor.value) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasEdges(canvas);
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+  }
+  
+  /**
+   * Actualiza el display del nivel de zoom
+   */
+  function updateZoomDisplay() {
+    const zoomLevel = document.getElementById('zoom-level');
+    if (zoomLevel && window.canvasVisualState) {
+      const zoom = Math.round((window.canvasVisualState.zoom || 1) * 100);
+      zoomLevel.textContent = `${zoom}%`;
+    }
+  }
+  
+  /**
+   * Toggle snapping de nodos
+   */
+  function toggleSnapping() {
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualState.snappingEnabled = !window.canvasVisualState.snappingEnabled;
+    
+    const snapBtn = document.getElementById('snap-toggle-btn');
+    if (snapBtn) {
+      snapBtn.textContent = `📐 Snap: ${window.canvasVisualState.snappingEnabled ? 'ON' : 'OFF'}`;
+      snapBtn.classList.toggle('bg-indigo-600', window.canvasVisualState.snappingEnabled);
+    }
+  }
+  
+  /**
+   * Aplica snapping a una coordenada
+   */
+  function applySnapping(value) {
+    if (!window.canvasVisualState || !window.canvasVisualState.snappingEnabled) {
+      return value;
+    }
+    const grid = window.canvasVisualState.snapGrid || 20;
+    return Math.round(value / grid) * grid;
+  }
+  
+  /**
+   * Resetear vista del canvas (AXE v0.7.0) - Mejorado
+   */
+  function resetCanvasView() {
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualState.panX = 0;
+    window.canvasVisualState.panY = 0;
+    window.canvasVisualState.zoom = 1;
+    updateZoomDisplay();
+    
+    const container = document.getElementById('canvas-nodes-container');
+    if (container) {
+      container.style.transform = 'translate(0px, 0px) scale(1)';
+    }
+    
+    // Re-renderizar edges
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor && jsonEditor.value) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasEdges(canvas);
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+  }
+  
+  /**
+   * Zoom in (AXE v0.7.0) - Mejorado
+   */
+  function zoomInCanvas() {
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualState.zoom = Math.min(3, (window.canvasVisualState.zoom || 1) * 1.2);
+    updateZoomDisplay();
+    
+    const container = document.getElementById('canvas-nodes-container');
+    if (container) {
+      const panX = window.canvasVisualState.panX || 0;
+      const panY = window.canvasVisualState.panY || 0;
+      const zoom = window.canvasVisualState.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    // Re-renderizar edges
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor && jsonEditor.value) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasEdges(canvas);
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+  }
+  
+  /**
+   * Zoom out (AXE v0.7.0) - Mejorado
+   */
+  function zoomOutCanvas() {
+    if (!window.canvasVisualState) {
+      window.canvasVisualState = { panX: 0, panY: 0, zoom: 1, snappingEnabled: false, snapGrid: 20 };
+    }
+    
+    window.canvasVisualState.zoom = Math.max(0.3, (window.canvasVisualState.zoom || 1) * 0.8);
+    updateZoomDisplay();
+    
+    const container = document.getElementById('canvas-nodes-container');
+    if (container) {
+      const panX = window.canvasVisualState.panX || 0;
+      const panY = window.canvasVisualState.panY || 0;
+      const zoom = window.canvasVisualState.zoom || 1;
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+    
+    // Re-renderizar edges
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor && jsonEditor.value) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasEdges(canvas);
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+  }
+  
+  /**
+   * Selecciona un nodo para mostrar acciones contextuales (AXE v0.6.5)
+   */
+  function seleccionarNodo(nodeId) {
+    if (!window.canvasSelectionState) {
+      window.canvasSelectionState = { selectedNodeId: null };
+    }
+    window.canvasSelectionState.selectedNodeId = nodeId;
+    
+    // Re-renderizar viewer para mostrar acciones
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasViewer(canvas);
+      } catch (error) {
+        console.error('Error parseando canvas:', error);
+      }
+    }
+  }
+  
+  /**
+   * Deselecciona el nodo actual (AXE v0.6.5)
+   */
+  function deseleccionarNodo() {
+    if (window.canvasSelectionState) {
+      window.canvasSelectionState.selectedNodeId = null;
+    }
+    
+    // Re-renderizar viewer
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor) {
+      try {
+        const canvas = JSON.parse(jsonEditor.value);
+        renderCanvasViewer(canvas);
+      } catch (error) {
+        console.error('Error parseando canvas:', error);
+      }
+    }
+  }
+  
+  /**
+   * Guarda meta del nodo seleccionado (AXE v0.6.8)
+   */
+  function guardarMetaNodo(nodeId) {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    const metaEditor = document.getElementById('node-meta-editor');
+    
+    if (!jsonEditor || !metaEditor) {
+      mostrarToast('Error: No se encontraron los editores', 'error');
+      return;
+    }
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    // Parsear meta del editor
+    const metaText = metaEditor.value.trim();
+    let meta = null;
+    
+    if (metaText) {
+      try {
+        meta = JSON.parse(metaText);
+        // Validar que sea un objeto
+        if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) {
+          mostrarToast('Meta debe ser un objeto JSON válido', 'error');
+          return;
+        }
+      } catch (error) {
+        mostrarToast(`Error parseando meta: ${error.message}`, 'error');
+        return;
+      }
+    }
+    
+    // Buscar y actualizar el nodo
+    const node = (canvas.nodes || []).find(n => n.id === nodeId);
+    if (!node) {
+      mostrarToast(`Nodo '${nodeId}' no encontrado`, 'error');
+      return;
+    }
+    
+    // Actualizar meta
+    if (meta && Object.keys(meta).length > 0) {
+      node.meta = meta;
+    } else {
+      // Si meta está vacío, eliminarlo
+      delete node.meta;
+    }
+    
+    // Actualizar JSON editor
+    jsonEditor.value = JSON.stringify(canvas, null, 2);
+    
+    // Re-renderizar viewer
+    renderCanvasViewer(canvas);
+    
+    mostrarToast('Meta guardado correctamente', 'success');
+  }
+  
+  /**
+   * Limpia meta del nodo seleccionado (AXE v0.6.8)
+   */
+  function limpiarMetaNodo(nodeId) {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    const metaEditor = document.getElementById('node-meta-editor');
+    
+    if (!jsonEditor || !metaEditor) {
+      mostrarToast('Error: No se encontraron los editores', 'error');
+      return;
+    }
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    // Buscar y eliminar meta del nodo
+    const node = (canvas.nodes || []).find(n => n.id === nodeId);
+    if (!node) {
+      mostrarToast(`Nodo '${nodeId}' no encontrado`, 'error');
+      return;
+    }
+    
+    // Eliminar meta
+    delete node.meta;
+    
+    // Limpiar editor
+    metaEditor.value = '';
+    
+    // Actualizar JSON editor
+    jsonEditor.value = JSON.stringify(canvas, null, 2);
+    
+    // Re-renderizar viewer
+    renderCanvasViewer(canvas);
+    
+    mostrarToast('Meta eliminado correctamente', 'success');
+  }
+  
+  /**
+   * Ejecuta una acción semántica contextual (simple o macro)
+   * AXE v0.6.6 - Soporta macros compuestas
+   * 
+   * @param {string} action - Nombre de la acción o macro
+   * @param {string} nodeId - ID del nodo sobre el cual ejecutar la acción
+   */
+  async function ejecutarAccionSemanticaContextual(action, nodeId) {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    // Determinar si es una macro
+    const macros = [
+      'insertStandardEnding',
+      'createGuidedChoice',
+      'createBranchingPath',
+      'createLinearSequence'
+    ];
+    const isMacro = macros.includes(action);
+    
+    // Preparar parámetros según la acción
+    let params = { nodeId };
+    
+    // Para macros, los parámetros van en options
+    if (isMacro) {
+      params.options = {};
+      
+      // insertStandardEnding: opciones simples
+      if (action === 'insertStandardEnding') {
+        const label = prompt('Label del ending (opcional, default: "Finalización"):', '') || undefined;
+        const templateId = prompt('Template ID (opcional, default: "ending"):', '') || undefined;
+        if (label) params.options.label = label;
+        if (templateId) params.options.templateId = templateId;
+      }
+      
+      // createGuidedChoice: opciones más complejas
+      else if (action === 'createGuidedChoice') {
+        const addEnding = confirm('¿Añadir ending después de cada opción?');
+        params.options.addEnding = addEnding;
+        // Por ahora usamos defaults, en el futuro se podría pedir choices personalizados
+      }
+      
+      // createBranchingPath: opciones de ramificación
+      else if (action === 'createBranchingPath') {
+        const branchCount = parseInt(prompt('Número de ramas (2-5):', '2') || '2', 10);
+        const decisionLabel = prompt('Label de la decisión (opcional):', '') || undefined;
+        if (decisionLabel) params.options.decisionLabel = decisionLabel;
+        
+        // Crear branches básicas
+        params.options.branches = [];
+        for (let i = 0; i < Math.min(Math.max(2, branchCount), 5); i++) {
+          const branchLabel = prompt(`Label de la rama ${i + 1}:`, `Rama ${i + 1}`) || `Rama ${i + 1}`;
+          params.options.branches.push({
+            label: branchLabel,
+            choiceLabel: branchLabel,
+            addEnding: false
+          });
+        }
+      }
+      
+      // createLinearSequence: opciones de secuencia
+      else if (action === 'createLinearSequence') {
+        const nodeCount = parseInt(prompt('Número de nodos en la secuencia (1-5):', '2') || '2', 10);
+        const addEnding = confirm('¿Añadir ending al final?');
+        params.options.addEnding = addEnding;
+        
+        // Crear nodos básicos
+        params.options.nodes = [];
+        for (let i = 0; i < Math.min(Math.max(1, nodeCount), 5); i++) {
+          const nodeLabel = prompt(`Label del nodo ${i + 1}:`, `Nodo ${i + 1}`) || `Nodo ${i + 1}`;
+          params.options.nodes.push({
+            label: nodeLabel,
+            type: 'screen',
+            props: { screen_template_id: 'blank' }
+          });
+        }
+      }
+    }
+    
+    // Para insertNodeAfter, necesitamos datos del nuevo nodo
+    else if (action === 'insertNodeAfter') {
+      const newNodeId = prompt('ID del nuevo nodo (opcional, se generará si está vacío):', '') || '';
+      const nodeType = prompt('Tipo del nodo (screen, decision, condition, delay):', 'screen') || 'screen';
+      const nodeLabel = prompt('Label del nodo (opcional):', '') || '';
+      
+      params.newNode = {
+        id: newNodeId || undefined,
+        type: nodeType,
+        label: nodeLabel || undefined,
+        position: { x: 0, y: 0 },
+        props: {}
+      };
+    }
+    
+    // Ejecutar acción usando el helper existente
+    const resultCanvas = await ejecutarAccionSemantica(action, params);
+    
+    if (resultCanvas) {
+      // Deseleccionar nodo después de la acción
+      deseleccionarNodo();
+    }
+  }
+  
+  /**
    * Valida el canvas sin guardar
    */
   async function validarCanvas() {
@@ -4705,7 +7216,7 @@ El texto se mostrará tal como lo escribas."
     try {
       canvas = JSON.parse(jsonEditor.value);
     } catch (error) {
-      alert(`Error parseando JSON: ${error.message}`);
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
       return;
     }
     
@@ -4727,19 +7238,36 @@ El texto se mostrará tal como lo escribas."
       
       const data = await response.json();
       
-      let message = data.valid ? '✅ Canvas válido' : '❌ Canvas inválido';
-      if (data.errors && data.errors.length > 0) {
-        message += '\n\nErrores:\n' + data.errors.map(e => `- ${e}`).join('\n');
+      if (data.valid) {
+        let message = '✅ Canvas válido';
+        if (data.warnings && data.warnings.length > 0) {
+          message += ` (${data.warnings.length} advertencia${data.warnings.length > 1 ? 's' : ''})`;
+        }
+        mostrarToast(message, 'success');
+        
+        // Mostrar warnings en consola si hay
+        if (data.warnings && data.warnings.length > 0) {
+          console.log('Advertencias del canvas:', data.warnings);
+        }
+      } else {
+        let message = '❌ Canvas inválido';
+        if (data.errors && data.errors.length > 0) {
+          message += ` (${data.errors.length} error${data.errors.length > 1 ? 'es' : ''})`;
+        }
+        mostrarToast(message, 'error');
+        
+        // Mostrar errores en consola
+        if (data.errors && data.errors.length > 0) {
+          console.error('Errores del canvas:', data.errors);
+        }
+        if (data.warnings && data.warnings.length > 0) {
+          console.warn('Advertencias del canvas:', data.warnings);
+        }
       }
-      if (data.warnings && data.warnings.length > 0) {
-        message += '\n\nAdvertencias:\n' + data.warnings.map(w => `- ${w}`).join('\n');
-      }
-      
-      alert(message);
       
     } catch (error) {
       console.error('Error validando canvas:', error);
-      alert(`Error validando canvas: ${error.message}`);
+      mostrarToast(`Error validando canvas: ${error.message}`, 'error');
     }
   }
   
@@ -4754,7 +7282,7 @@ El texto se mostrará tal como lo escribas."
     try {
       canvas = JSON.parse(jsonEditor.value);
     } catch (error) {
-      alert(`Error parseando JSON: ${error.message}`);
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
       return;
     }
     
@@ -4784,31 +7312,829 @@ El texto se mostrará tal como lo escribas."
         if (data.warnings && data.warnings.length > 0) {
           message += '\n\nAdvertencias:\n' + data.warnings.map(w => `- ${w}`).join('\n');
         }
-        alert(message);
+        mostrarToast(message, 'error');
         return;
       }
       
-      // Actualizar estado
+      // Actualizar estado (AXE v0.6.11)
       canvasViewState.canvas = data.canvas_normalized;
-      canvasViewState.source = 'draft';
+      canvasViewState.source = 'persisted';
       canvasViewState.warnings = data.warnings || [];
+      canvasViewState.lastSavedCanvas = JSON.stringify(data.canvas_normalized, null, 2);
+      canvasViewState.dirty = false;  // Limpiar DIRTY tras guardar
       
-      // Ocultar badge DERIVED
-      const sourceBadge = document.getElementById('canvas-source-badge');
-      if (sourceBadge) {
-        sourceBadge.style.display = 'none';
+      // Actualizar badge de estado
+      actualizarCanvasStateBadge();
+      
+      // Actualizar editor JSON con el canvas normalizado
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (jsonEditor) {
+        jsonEditor.value = JSON.stringify(data.canvas_normalized, null, 2);
       }
       
-      // Actualizar viewer
+      // Actualizar viewer (preservando selección si el nodo aún existe)
+      const selectedNodeId = window.canvasSelectionState?.selectedNodeId;
+      if (selectedNodeId && !data.canvas_normalized.nodes?.find(n => n.id === selectedNodeId)) {
+        if (window.canvasSelectionState) {
+          window.canvasSelectionState.selectedNodeId = null;
+        }
+      }
       renderCanvasViewer(data.canvas_normalized);
       mostrarCanvasWarnings();
       
-      alert('✅ Canvas guardado exitosamente');
+      // Actualizar diagnóstico después de guardar (AXE v0.6.9)
+      actualizarDiagnostico();
+      
+      // Mostrar toast de éxito
+      mostrarToast('✅ Canvas guardado exitosamente', 'success');
+      
+      // Recargar canvas para refrescar estado completo
+      await cargarCanvas();
       
     } catch (error) {
       console.error('Error guardando canvas:', error);
       alert(`Error guardando canvas: ${error.message}`);
     }
+  }
+  
+  /**
+   * Sistema de Toasts - Mejorado con duración
+   */
+  function mostrarToast(mensaje, tipo = 'info', duracion = 5000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    container.style.display = 'block';
+    
+    const toast = document.createElement('div');
+    const bgColor = tipo === 'success' ? 'bg-green-600' : tipo === 'error' ? 'bg-red-600' : 'bg-blue-600';
+    toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-[300px] max-w-[500px]`;
+    toast.innerHTML = `
+      <span>${mensaje}</span>
+      <button onclick="this.parentElement.remove()" class="ml-auto text-white hover:text-gray-200">✕</button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Auto-remover después de la duración especificada
+    if (duracion > 0) {
+      setTimeout(() => {
+        if (toast.parentElement) {
+          toast.remove();
+        }
+        if (container.children.length === 0) {
+          container.style.display = 'none';
+        }
+      }, duracion);
+    }
+    
+    container.appendChild(toast);
+    
+    // Auto-remover después de 5 segundos
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.remove();
+      }
+      if (container.children.length === 0) {
+        container.style.display = 'none';
+      }
+    }, 5000);
+  }
+  
+  /**
+   * Añade un nodo al canvas
+   */
+  async function añadirNodoCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes) canvas.nodes = [];
+    
+    const nodeId = prompt('ID del nodo (ej: node1):');
+    if (!nodeId) return;
+    
+    // Verificar que no exista
+    if (canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`El nodo "${nodeId}" ya existe`, 'error');
+      return;
+    }
+    
+    const nodeType = prompt('Tipo del nodo (ej: step, start, end):', 'step');
+    if (!nodeType) return;
+    
+    const nodeLabel = prompt('Label del nodo (opcional):', '') || '';
+    
+    const newNode = {
+      id: nodeId,
+      type: nodeType,
+      label: nodeLabel,
+      position: { x: Math.random() * 400, y: Math.random() * 300 },
+      props: {}
+    };
+    
+    canvas.nodes.push(newNode);
+    
+    // Actualizar editor
+    jsonEditor.value = JSON.stringify(canvas, null, 2);
+    
+    // Actualizar viewer
+    renderCanvasViewer(canvas);
+    
+    // Actualizar estado en memoria
+    canvasViewState.canvas = canvas;
+    
+    // Validar canvas (sin bloquear, solo feedback)
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.valid && data.errors && data.errors.length > 0) {
+          mostrarToast(`⚠️ Nodo añadido, pero hay ${data.errors.length} error${data.errors.length > 1 ? 'es' : ''} de validación`, 'error');
+        }
+      }
+    } catch (error) {
+      // Ignorar errores de validación en acciones estructurales
+    }
+    
+    mostrarToast(`✅ Nodo "${nodeId}" añadido`, 'success');
+  }
+  
+  /**
+   * Elimina un nodo del canvas (AXE v0.6.9)
+   * 
+   * - Usa el nodo seleccionado (o prompt si no hay)
+   * - Confirmación especial si es START o último END
+   * - Si borras START: auto markAsStart sobre otro nodo
+   * - Si borras último END: insertar end estándar (macro)
+   * - Validar + normalizar después
+   * - Marcar DIRTY
+   */
+  async function eliminarNodoCanvas(nodeIdParam = null) {
+    // Obtener canvas actual (desde estado o JSON editor)
+    let canvas = canvasViewState.canvas;
+    if (!canvas) {
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (!jsonEditor) {
+        mostrarToast('No hay canvas cargado', 'error');
+        return;
+      }
+      try {
+        canvas = JSON.parse(jsonEditor.value);
+      } catch (error) {
+        mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+        return;
+      }
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos para eliminar', 'error');
+      return;
+    }
+    
+    // Determinar qué nodo eliminar
+    let nodeId = nodeIdParam;
+    if (!nodeId) {
+      // Usar nodo seleccionado si existe
+      nodeId = window.canvasSelectionState?.selectedNodeId;
+      if (!nodeId) {
+        nodeId = prompt('ID del nodo a eliminar:');
+        if (!nodeId) return;
+      }
+    }
+    
+    // Buscar el nodo
+    const node = canvas.nodes.find(n => n.id === nodeId);
+    if (!node) {
+      mostrarToast(`Nodo "${nodeId}" no encontrado`, 'error');
+      return;
+    }
+    
+    // Verificar si es START o último END
+    const isStart = node.type === 'start';
+    const endNodes = canvas.nodes.filter(n => n.type === 'end');
+    const isLastEnd = endNodes.length === 1 && node.type === 'end';
+    
+    // Confirmación especial para START o último END
+    if (isStart) {
+      const confirmed = confirm(
+        `⚠️ ADVERTENCIA: Estás borrando el nodo START.\n\n` +
+        `Esto puede romper el flujo. Si continúas, se intentará marcar otro nodo como START automáticamente.\n\n` +
+        `¿Deseas continuar?`
+      );
+      if (!confirmed) return;
+    } else if (isLastEnd) {
+      const confirmed = confirm(
+        `⚠️ ADVERTENCIA: Estás borrando el último nodo END.\n\n` +
+        `Esto puede romper el flujo. Si continúas, se intentará insertar un END estándar automáticamente.\n\n` +
+        `¿Deseas continuar?`
+      );
+      if (!confirmed) return;
+    } else {
+      // Confirmación normal
+      const confirmed = confirm(`¿Eliminar el nodo "${nodeId}"?`);
+      if (!confirmed) return;
+    }
+    
+    // Crear copia del canvas para modificar
+    const newCanvas = JSON.parse(JSON.stringify(canvas));
+    
+    // Eliminar nodo
+    const nodeIndex = newCanvas.nodes.findIndex(n => n.id === nodeId);
+    newCanvas.nodes.splice(nodeIndex, 1);
+    
+    // Eliminar edges que referencian este nodo
+    if (newCanvas.edges) {
+      newCanvas.edges = newCanvas.edges.filter(
+        e => e.from_node_id !== nodeId && e.to_node_id !== nodeId
+      );
+    }
+    
+    // Si era el entry_node_id, necesitamos un nuevo start
+    let finalCanvas = newCanvas;
+    if (newCanvas.entry_node_id === nodeId) {
+      // Buscar otro nodo para marcar como start (preferir uno conectado)
+      const connectedNode = newCanvas.nodes.find(n => {
+        // Buscar nodo que tenga edges entrantes o salientes (está conectado)
+        const hasIncoming = newCanvas.edges.some(e => e.to_node_id === n.id);
+        const hasOutgoing = newCanvas.edges.some(e => e.from_node_id === n.id);
+        return (hasIncoming || hasOutgoing) && n.type !== 'end';
+      });
+      
+      if (connectedNode) {
+        // Marcar como start usando acción semántica
+        try {
+          const encodedId = encodeURIComponent(editorState.recorridoId);
+          const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/action`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              canvas: newCanvas,
+              action: 'markAsStart',
+              params: { nodeId: connectedNode.id }
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.ok && data.canvas) {
+              finalCanvas = data.canvas;
+            }
+          }
+        } catch (error) {
+          console.warn('Error marcando nuevo start, usando fallback:', error);
+          // Fallback: usar el primer nodo disponible
+          if (finalCanvas.nodes.length > 0) {
+            finalCanvas.entry_node_id = finalCanvas.nodes[0].id;
+            finalCanvas.nodes[0].type = 'start';
+          }
+        }
+      } else if (finalCanvas.nodes.length > 0) {
+        // Fallback: usar el primer nodo
+        finalCanvas.entry_node_id = finalCanvas.nodes[0].id;
+        finalCanvas.nodes[0].type = 'start';
+      }
+    }
+    
+    // Si era el último END, insertar un end estándar
+    if (isLastEnd && finalCanvas.nodes.filter(n => n.type === 'end').length === 0) {
+      // Encontrar el nodo "leaf" más profundo (sin edges salientes)
+      const leafNodes = finalCanvas.nodes.filter(n => {
+        if (n.type === 'start' || n.type === 'end') return false;
+        const outgoingEdges = finalCanvas.edges.filter(e => e.from_node_id === n.id);
+        return outgoingEdges.length === 0;
+      });
+      
+      if (leafNodes.length > 0) {
+        // Usar el primer leaf node encontrado
+        const targetNode = leafNodes[0];
+        
+        try {
+          const encodedId = encodeURIComponent(editorState.recorridoId);
+          const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/action`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              canvas: finalCanvas,
+              action: 'insertStandardEnding',
+              params: {
+                nodeId: targetNode.id,
+                options: {}
+              }
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.ok && data.canvas) {
+              finalCanvas = data.canvas;
+            }
+          }
+        } catch (error) {
+          console.warn('Error insertando ending estándar, continuando sin end:', error);
+        }
+      }
+    }
+    
+    // Actualizar canvas en el estado
+    canvasViewState.canvas = finalCanvas;
+    canvasViewState.dirty = true;
+    
+    // Actualizar JSON editor si existe
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor) {
+      jsonEditor.value = JSON.stringify(finalCanvas, null, 2);
+    }
+    
+    // Actualizar viewer
+    renderCanvasViewer(finalCanvas);
+    
+    // Deseleccionar nodo si estaba seleccionado
+    if (window.canvasSelectionState?.selectedNodeId === nodeId) {
+      window.canvasSelectionState.selectedNodeId = null;
+      actualizarPanelContextual(finalCanvas);
+    }
+    
+    // Validar canvas (sin bloquear, solo feedback)
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas: finalCanvas })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.valid && data.errors && data.errors.length > 0) {
+          mostrarToast(`⚠️ Nodo eliminado, pero hay ${data.errors.length} error${data.errors.length > 1 ? 'es' : ''} de validación`, 'warning');
+        } else {
+          mostrarToast(`✅ Nodo "${nodeId}" eliminado correctamente`, 'success');
+        }
+      }
+    } catch (error) {
+      // Ignorar errores de validación, pero mostrar éxito de todas formas
+      mostrarToast(`✅ Nodo "${nodeId}" eliminado`, 'success');
+    }
+    
+    // Actualizar badge de estado DIRTY
+    actualizarCanvasStateBadge();
+  }
+  
+  /**
+   * Función helper para deleteSelectedNode (alias más claro)
+   */
+  async function deleteSelectedNode() {
+    await eliminarNodoCanvas();
+  }
+  
+  /**
+   * Añade un edge al canvas
+   */
+  async function añadirEdgeCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.edges) canvas.edges = [];
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos. Añade nodos primero.', 'error');
+      return;
+    }
+    
+    const fromNodeId = prompt('ID del nodo origen:');
+    if (!fromNodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === fromNodeId)) {
+      mostrarToast(`Nodo origen "${fromNodeId}" no existe`, 'error');
+      return;
+    }
+    
+    const toNodeId = prompt('ID del nodo destino:');
+    if (!toNodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === toNodeId)) {
+      mostrarToast(`Nodo destino "${toNodeId}" no existe`, 'error');
+      return;
+    }
+    
+    // Verificar que no exista ya
+    if (canvas.edges.find(e => e.from_node_id === fromNodeId && e.to_node_id === toNodeId)) {
+      mostrarToast(`Edge de "${fromNodeId}" a "${toNodeId}" ya existe`, 'error');
+      return;
+    }
+    
+    const edgeType = prompt('Tipo del edge (opcional, ej: default, conditional):', 'default') || 'default';
+    const edgeLabel = prompt('Label del edge (opcional):', '') || '';
+    
+    const newEdge = {
+      from_node_id: fromNodeId,
+      to_node_id: toNodeId,
+      type: edgeType,
+      label: edgeLabel || undefined
+    };
+    
+    if (!newEdge.label) delete newEdge.label;
+    
+    canvas.edges.push(newEdge);
+    
+    // Actualizar editor
+    jsonEditor.value = JSON.stringify(canvas, null, 2);
+    
+    // Actualizar viewer
+    renderCanvasViewer(canvas);
+    
+    // Actualizar estado en memoria
+    canvasViewState.canvas = canvas;
+    
+    // Validar canvas (sin bloquear, solo feedback)
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.valid && data.errors && data.errors.length > 0) {
+          mostrarToast(`⚠️ Edge añadido, pero hay ${data.errors.length} error${data.errors.length > 1 ? 'es' : ''} de validación`, 'error');
+        }
+      }
+    } catch (error) {
+      // Ignorar errores de validación en acciones estructurales
+    }
+    
+    mostrarToast(`✅ Edge de "${fromNodeId}" a "${toNodeId}" añadido`, 'success');
+  }
+  
+  /**
+   * Elimina un edge del canvas
+   */
+  async function eliminarEdgeCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.edges || canvas.edges.length === 0) {
+      mostrarToast('No hay edges para eliminar', 'error');
+      return;
+    }
+    
+    const fromNodeId = prompt('ID del nodo origen:');
+    if (!fromNodeId) return;
+    
+    const toNodeId = prompt('ID del nodo destino:');
+    if (!toNodeId) return;
+    
+    const edgeIndex = canvas.edges.findIndex(
+      e => e.from_node_id === fromNodeId && e.to_node_id === toNodeId
+    );
+    
+    if (edgeIndex === -1) {
+      mostrarToast(`Edge de "${fromNodeId}" a "${toNodeId}" no encontrado`, 'error');
+      return;
+    }
+    
+    // Eliminar edge
+    canvas.edges.splice(edgeIndex, 1);
+    
+    // Actualizar editor
+    jsonEditor.value = JSON.stringify(canvas, null, 2);
+    
+    // Actualizar viewer
+    renderCanvasViewer(canvas);
+    
+    // Actualizar estado en memoria
+    canvasViewState.canvas = canvas;
+    
+    // Validar canvas (sin bloquear, solo feedback)
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.valid && data.errors && data.errors.length > 0) {
+          mostrarToast(`⚠️ Edge eliminado, pero hay ${data.errors.length} error${data.errors.length > 1 ? 'es' : ''} de validación`, 'error');
+        }
+      }
+    } catch (error) {
+      // Ignorar errores de validación en acciones estructurales
+    }
+    
+    mostrarToast(`✅ Edge de "${fromNodeId}" a "${toNodeId}" eliminado`, 'success');
+  }
+  
+  /**
+   * Ejecuta una acción semántica sobre el canvas (AXE v0.6.4)
+   * Helper genérico que llama al endpoint de acciones
+   */
+  async function ejecutarAccionSemantica(action, params) {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return null;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return null;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/action`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas, action, params })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        let message = '❌ Error ejecutando acción:\n\n';
+        if (data.errors && data.errors.length > 0) {
+          message += 'Errores:\n' + data.errors.map(e => `- ${e}`).join('\n');
+        }
+        mostrarToast(message, 'error');
+        return null;
+      }
+      
+      // Actualizar editor con el canvas resultante
+      jsonEditor.value = JSON.stringify(data.canvas, null, 2);
+      
+      // Actualizar viewer (preservando selección si el nodo aún existe)
+      const selectedNodeId = window.canvasSelectionState?.selectedNodeId;
+      if (selectedNodeId && !data.canvas.nodes?.find(n => n.id === selectedNodeId)) {
+        // Si el nodo seleccionado ya no existe, deseleccionar
+        if (window.canvasSelectionState) {
+          window.canvasSelectionState.selectedNodeId = null;
+        }
+      }
+      renderCanvasViewer(data.canvas);
+      
+      // Actualizar estado en memoria
+      canvasViewState.canvas = data.canvas;
+      
+      // Mostrar warnings si hay
+      if (data.warnings && data.warnings.length > 0) {
+        console.warn('Advertencias:', data.warnings);
+        mostrarToast(`✅ Acción ejecutada (${data.warnings.length} advertencia${data.warnings.length > 1 ? 's' : ''})`, 'success');
+      } else {
+        mostrarToast('✅ Acción ejecutada correctamente', 'success');
+      }
+      
+      return data.canvas;
+    } catch (error) {
+      console.error('Error ejecutando acción semántica:', error);
+      mostrarToast(`Error ejecutando acción: ${error.message}`, 'error');
+      return null;
+    }
+  }
+  
+  /**
+   * Inserta un nodo después de otro (AXE v0.6.4)
+   */
+  async function insertNodeAfterAction() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos en el canvas', 'error');
+      return;
+    }
+    
+    const nodeId = prompt('ID del nodo después del cual insertar:');
+    if (!nodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`Nodo "${nodeId}" no existe`, 'error');
+      return;
+    }
+    
+    // Solicitar datos del nuevo nodo
+    const newNodeId = prompt('ID del nuevo nodo (opcional, se generará si está vacío):', '') || '';
+    const nodeType = prompt('Tipo del nodo (screen, decision, condition, delay):', 'screen') || 'screen';
+    const nodeLabel = prompt('Label del nodo (opcional):', '') || '';
+    
+    const newNode = {
+      id: newNodeId || undefined, // Se generará en el backend si está vacío
+      type: nodeType,
+      label: nodeLabel || undefined,
+      position: { x: 0, y: 0 }, // Se ajustará en el backend
+      props: {}
+    };
+    
+    await ejecutarAccionSemantica('insertNodeAfter', {
+      nodeId,
+      newNode
+    });
+  }
+  
+  /**
+   * Convierte un nodo a decisión (AXE v0.6.4)
+   */
+  async function convertToDecisionAction() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos en el canvas', 'error');
+      return;
+    }
+    
+    const nodeId = prompt('ID del nodo a convertir a decisión:');
+    if (!nodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`Nodo "${nodeId}" no existe`, 'error');
+      return;
+    }
+    
+    await ejecutarAccionSemantica('convertNodeToDecision', {
+      nodeId
+    });
+  }
+  
+  /**
+   * Marca un nodo como start (AXE v0.6.4)
+   */
+  async function markAsStartAction() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos en el canvas', 'error');
+      return;
+    }
+    
+    const nodeId = prompt('ID del nodo a marcar como inicio:');
+    if (!nodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`Nodo "${nodeId}" no existe`, 'error');
+      return;
+    }
+    
+    await ejecutarAccionSemantica('markAsStart', {
+      nodeId
+    });
+  }
+  
+  /**
+   * Marca un nodo como end (AXE v0.6.4)
+   */
+  async function markAsEndAction() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos en el canvas', 'error');
+      return;
+    }
+    
+    const nodeId = prompt('ID del nodo a marcar como fin:');
+    if (!nodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`Nodo "${nodeId}" no existe`, 'error');
+      return;
+    }
+    
+    await ejecutarAccionSemantica('markAsEnd', {
+      nodeId
+    });
+  }
+  
+  /**
+   * Duplica un subgrafo completo (AXE v0.6.4)
+   */
+  async function duplicateSubgraphAction() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
+      return;
+    }
+    
+    if (!canvas.nodes || canvas.nodes.length === 0) {
+      mostrarToast('No hay nodos en el canvas', 'error');
+      return;
+    }
+    
+    const nodeId = prompt('ID del nodo raíz del subgrafo a duplicar:');
+    if (!nodeId) return;
+    
+    // Verificar que existe
+    if (!canvas.nodes.find(n => n.id === nodeId)) {
+      mostrarToast(`Nodo "${nodeId}" no existe`, 'error');
+      return;
+    }
+    
+    await ejecutarAccionSemantica('duplicateSubgraph', {
+      nodeId
+    });
   }
   
   /**
@@ -4822,7 +8148,7 @@ El texto se mostrará tal como lo escribas."
     try {
       canvas = JSON.parse(jsonEditor.value);
     } catch (error) {
-      alert(`Error parseando JSON: ${error.message}`);
+      mostrarToast(`Error parseando JSON: ${error.message}`, 'error');
       return;
     }
     
@@ -4864,15 +8190,222 @@ El texto se mostrará tal como lo escribas."
       
     } catch (error) {
       console.error('Error convirtiendo canvas:', error);
-      alert(`Error convirtiendo canvas: ${error.message}`);
+      mostrarToast(`Error convirtiendo canvas: ${error.message}`, 'error');
     }
   }
 
+  /**
+   * Actualiza el badge de estado del canvas (AXE v0.6.11)
+   * Estados: DERIVED, PERSISTED, DIRTY
+   */
+  function actualizarCanvasStateBadge() {
+    const stateBadge = document.getElementById('canvas-state-badge');
+    if (!stateBadge) return;
+    
+    // Detectar cambios en el editor JSON
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (jsonEditor && jsonEditor.value) {
+      try {
+        const currentCanvas = JSON.stringify(JSON.parse(jsonEditor.value), null, 2);
+        if (canvasViewState.lastSavedCanvas && currentCanvas !== canvasViewState.lastSavedCanvas) {
+          canvasViewState.dirty = true;
+        }
+      } catch (e) {
+        // JSON inválido, no actualizar estado
+      }
+    }
+    
+    // Determinar estado a mostrar
+    let state, label, className, title;
+    
+    if (canvasViewState.dirty) {
+      state = 'DIRTY';
+      label = 'DIRTY';
+      className = 'px-2 py-1 bg-orange-900 text-orange-200 rounded text-xs font-semibold';
+      title = 'Hay cambios sin guardar en el canvas';
+    } else if (canvasViewState.source === 'persisted') {
+      state = 'PERSISTED';
+      label = 'PERSISTED';
+      className = 'px-2 py-1 bg-green-900 text-green-200 rounded text-xs font-semibold';
+      title = 'Canvas guardado en draft';
+    } else if (canvasViewState.source === 'derived') {
+      state = 'DERIVED';
+      label = 'DERIVED';
+      className = 'px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs font-semibold';
+      title = 'Canvas derivado desde definition_json (no persistido)';
+    } else {
+      stateBadge.style.display = 'none';
+      return;
+    }
+    
+    stateBadge.style.display = 'inline-block';
+    stateBadge.textContent = label;
+    stateBadge.className = className;
+    stateBadge.title = title;
+  }
+  
+  /**
+   * Detecta cambios en el editor JSON del canvas (AXE v0.6.11)
+   */
+  function detectarCambiosCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    try {
+      const currentCanvas = JSON.stringify(JSON.parse(jsonEditor.value), null, 2);
+      if (canvasViewState.lastSavedCanvas && currentCanvas !== canvasViewState.lastSavedCanvas) {
+        canvasViewState.dirty = true;
+        actualizarCanvasStateBadge();
+      } else if (canvasViewState.lastSavedCanvas && currentCanvas === canvasViewState.lastSavedCanvas) {
+        canvasViewState.dirty = false;
+        actualizarCanvasStateBadge();
+      }
+    } catch (e) {
+      // JSON inválido, no actualizar
+    }
+  }
+  
+  /**
+   * Flujo AXE: Editar (AXE v0.6.11)
+   * Activa el modo de edición (ya está activo por defecto en Canvas)
+   */
+  function editarRecorrido() {
+    // Asegurar que estamos en vista Canvas
+    if (!canvasViewState.active) {
+      toggleVistaCanvas();
+    }
+    mostrarToast('Modo edición activo', 'info');
+  }
+  
+  /**
+   * Flujo AXE: Guardar (AXE v0.6.11)
+   * Guarda el canvas actual
+   */
+  async function guardarRecorrido() {
+    await guardarCanvas();
+    // El estado DIRTY se limpia automáticamente en guardarCanvas
+  }
+  
+  /**
+   * Flujo AXE: Publicar (AXE v0.6.11)
+   * Reutiliza la función existente publicarRecorrido
+   */
+  // La función publicarRecorrido ya existe, no necesitamos crear una nueva
+  
+  /**
+   * Maneja shortcuts de teclado en el editor (AXE v0.6.9)
+   * - Delete/Backspace: Eliminar nodo seleccionado
+   */
+  function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (event) => {
+      // Solo procesar si no estamos escribiendo en un input/textarea
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+      );
+      
+      if (isInputFocused) {
+        return; // No procesar shortcuts si estamos escribiendo
+      }
+      
+      // Delete o Backspace: Eliminar nodo seleccionado
+      if ((event.key === 'Delete' || event.key === 'Backspace') && window.canvasSelectionState?.selectedNodeId) {
+        event.preventDefault();
+        deleteSelectedNode();
+      }
+    });
+  }
+  
   // Inicializar al cargar
   document.addEventListener('DOMContentLoaded', () => {
-    initEditor();
+    // Configurar shortcuts de teclado
+    setupKeyboardShortcuts();
+    
+    // AXE v0.6.9: Cargar tema de preview desde localStorage
+    const temaGuardado = getTemaPreviewSeleccionado();
+    const themeSelector = document.getElementById('theme-selector');
+    if (themeSelector) {
+      themeSelector.value = temaGuardado;
+    }
+    
+    const editor = document.getElementById('recorridos-editor');
+    if (!editor) {
+      console.error('[Editor] DOMContentLoaded: ERROR - Elemento #recorridos-editor no encontrado');
+      // Fail-open: mostrar mensaje visible
+      const body = document.body;
+      if (body) {
+        body.innerHTML = `
+          <div style="padding: 40px; background: #1e293b; color: #fca5a5; font-family: sans-serif;">
+            <h1 style="color: #ef4444; margin-bottom: 20px;">⚠️ Error cargando editor de recorridos</h1>
+            <p>No se pudo encontrar el contenedor del editor. Por favor, recarga la página.</p>
+            <p style="margin-top: 20px; font-size: 0.9em; color: #94a3b8;">Si el problema persiste, verifica la consola del navegador para más detalles.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+    console.log('[Editor] DOMContentLoaded: calling initEditor()');
+    initEditor().catch(err => {
+      console.error('[Editor] DOMContentLoaded: ERROR in initEditor():', err);
+      // Fail-open: mostrar mensaje visible
+      const stepsListEl = document.getElementById('steps-list');
+      if (stepsListEl) {
+        stepsListEl.innerHTML = `<p class="text-red-400 text-sm">⚠️ Error inicializando editor: ${err.message}</p>`;
+      }
+    });
     initPanelResizer();
+    initRightPanelResizer();
     initPreviewHarness();
+    
+    // AXE v0.6.11: Cargar canvas automáticamente si estamos en vista Canvas (por defecto)
+    if (canvasViewState.active) {
+      cargarCanvas().catch(err => {
+        console.error('[Editor] Error cargando canvas inicial:', err);
+      });
+    }
+    
+    // AXE v0.6.11: Detectar cambios periódicamente en el editor JSON
+    setInterval(() => {
+      if (canvasViewState.active) {
+        detectarCambiosCanvas();
+      }
+    }, 1000);  // Verificar cada segundo
+    
+    // Inicializar zoom display
+    updateZoomDisplay();
+    
+    // Configurar wheel listener para zoom (solo con Alt)
+    const canvasContainer = document.getElementById('canvas-visual-container');
+    if (canvasContainer) {
+      // Usar { passive: false } para poder llamar preventDefault cuando Alt esté pulsado
+      canvasContainer.addEventListener('wheel', handleCanvasWheel, { passive: false });
+    }
+    
+    // Listener para cambios de pantalla completa
+    document.addEventListener('fullscreenchange', () => {
+      const fullscreenBtn = document.querySelector('[onclick="toggleFullscreenCanvas()"]');
+      if (fullscreenBtn) {
+        if (document.fullscreenElement) {
+          fullscreenBtn.textContent = '⛶ Salir Pantalla Completa';
+        } else {
+          fullscreenBtn.textContent = '⛶ Pantalla Completa';
+        }
+      }
+    });
+    
+    // También para webkit y ms
+    document.addEventListener('webkitfullscreenchange', () => {
+      const fullscreenBtn = document.querySelector('[onclick="toggleFullscreenCanvas()"]');
+      if (fullscreenBtn) {
+        if (document.webkitFullscreenElement) {
+          fullscreenBtn.textContent = '⛶ Salir Pantalla Completa';
+        } else {
+          fullscreenBtn.textContent = '⛶ Pantalla Completa';
+        }
+      }
+    });
   });
 </script>
 

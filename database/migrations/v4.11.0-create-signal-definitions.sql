@@ -41,3 +41,4 @@ COMMENT ON COLUMN signal_definitions.description IS 'Descripción de qué mide l
 
 
 
+

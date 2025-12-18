@@ -159,6 +159,21 @@ try {
 // Inicializar primera pestaña
 openTab('tab-identidad');
 
+// Cargar catálogos disponibles para selects
+let catalogsAvailable = [];
+async function cargarCatalogos() {
+  try {
+    const response = await fetch('/admin/pde/catalog-registry?format=json&usable_for_motors=true');
+    const data = await response.json();
+    if (data.success) {
+      catalogsAvailable = data.catalogs || [];
+    }
+  } catch (error) {
+    console.error('Error cargando catálogos:', error);
+  }
+}
+cargarCatalogos();
+
 // Cargar inputs en la pestaña 2
 cargarInputs();
 
@@ -215,6 +230,7 @@ function cargarInputs() {
             <label class="block text-xs text-slate-400 mb-1">Tipo</label>
             <select data-input-index="${index}" data-field="type" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm">
               <option value="enum" ${input.type === 'enum' ? 'selected' : ''}>enum</option>
+              <option value="select" ${input.type === 'select' ? 'selected' : ''}>select (catálogo)</option>
               <option value="number" ${input.type === 'number' ? 'selected' : ''}>number</option>
               <option value="string" ${input.type === 'string' ? 'selected' : ''}>string</option>
               <option value="boolean" ${input.type === 'boolean' ? 'selected' : ''}>boolean</option>
@@ -234,6 +250,26 @@ function cargarInputs() {
             <input type="text" data-input-index="${index}" data-field="options" value="${(input.options || []).join(', ')}" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm" placeholder="rapida, basica, profunda">
           </div>
         ` : ''}
+        ${input.type === 'select' ? `
+          <div class="space-y-2">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Fuente del Catálogo</label>
+              <select data-input-index="${index}" data-field="options_source_catalog" class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm">
+                <option value="">-- Seleccionar catálogo --</option>
+                ${catalogsAvailable.map(cat => {
+                  // Verificar si este catálogo está seleccionado
+                  const selected = input._selected_catalog_key === cat.catalog_key ||
+                                   (input.options_source?.catalog_key === cat.catalog_key) ||
+                                   (input.options_source?.source === 'pde_catalog_registry' && !input._selected_catalog_key && input.key === cat.catalog_key);
+                  return `<option value="${cat.catalog_key}" ${selected ? 'selected' : ''}>${cat.label} (${cat.catalog_key})</option>`;
+                }).join('')}
+              </select>
+            </div>
+            <div class="text-xs text-slate-500">
+              El catálogo seleccionado se usará para generar las opciones del dropdown dinámicamente.
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
     container.innerHTML += inputHtml;
@@ -242,6 +278,29 @@ function cargarInputs() {
   // Agregar event listeners
   container.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('change', actualizarInput);
+  });
+  
+  // Cargar catálogos en los selects si el tipo cambió
+  container.querySelectorAll('[data-field="type"]').forEach(select => {
+    select.addEventListener('change', function() {
+      const index = parseInt(this.dataset.inputIndex);
+      if (this.value === 'select') {
+        // Recargar para mostrar el selector de catálogos
+        cargarInputs();
+      }
+    });
+  });
+  
+  // Cargar catálogos en los dropdowns existentes
+  container.querySelectorAll('[data-field="options_source_catalog"]').forEach(select => {
+    const index = parseInt(select.dataset.inputIndex);
+    const input = currentDefinition.inputs[index];
+    if (input && input.options_source && input.options_source.source === 'pde_catalog_registry') {
+      // Ya está seleccionado, mantenerlo
+      const catalogKey = input.options_source.value_field === 'catalog_key' ? 
+        (input.options_source.filter?.catalog_key || input.options_source.filter?.usable_for_motors === true ? '' : '') : '';
+      // El selected ya está manejado en el template
+    }
   });
 }
 
@@ -271,6 +330,29 @@ function actualizarInput(e) {
 
   if (field === 'options') {
     currentDefinition.inputs[index].options = value.split(',').map(s => s.trim()).filter(s => s);
+  } else if (field === 'options_source_catalog') {
+    // Actualizar options_source cuando se selecciona un catálogo
+    if (value) {
+      // Almacenar el catalog_key seleccionado
+      currentDefinition.inputs[index]._selected_catalog_key = value;
+      // Actualizar options_source con el catálogo seleccionado
+      // El sistema en runtime usará este catalog_key para obtener las opciones del catálogo
+      currentDefinition.inputs[index].options_source = {
+        source: 'pde_catalog_registry',
+        value_field: 'catalog_key',
+        label_field: 'label',
+        filter: { usable_for_motors: true },
+        catalog_key: value  // Catálogo específico seleccionado
+      };
+    } else {
+      delete currentDefinition.inputs[index].options_source;
+      delete currentDefinition.inputs[index]._selected_catalog_key;
+    }
+  } else if (field === 'type' && value === 'select') {
+    // Al cambiar a select, inicializar options_source si no existe
+    if (!currentDefinition.inputs[index].options_source) {
+      // No inicializar aquí, dejar que el usuario seleccione
+    }
   } else {
     currentDefinition.inputs[index][field] = value;
   }
@@ -291,22 +373,34 @@ async function guardarMotor() {
     status: document.getElementById('status').value
   };
 
-  // Recopilar inputs
+  // Recopilar inputs (usar currentDefinition.inputs que ya tiene options_source actualizado)
   const inputs = [];
   document.querySelectorAll('[data-input-index]').forEach(el => {
     const index = parseInt(el.dataset.inputIndex);
     if (!inputs[index]) {
-      inputs[index] = {};
+      // Copiar el input actual para mantener options_source y otros campos
+      inputs[index] = currentDefinition.inputs[index] ? { ...currentDefinition.inputs[index] } : {};
     }
     const field = el.dataset.field;
     if (field === 'options') {
       inputs[index].options = el.value.split(',').map(s => s.trim()).filter(s => s);
     } else if (field === 'required') {
       inputs[index].required = el.checked;
+    } else if (field === 'options_source_catalog') {
+      // Ya está actualizado en currentDefinition.inputs por actualizarInput()
+      // No hacer nada aquí
     } else {
       inputs[index][field] = el.value;
     }
   });
+  
+  // Limpiar campos internos antes de guardar
+  inputs.forEach(input => {
+    if (input._selected_catalog_key) {
+      delete input._selected_catalog_key;
+    }
+  });
+  
   currentDefinition.inputs = inputs.filter(i => i.key);
 
   // Recopilar rules

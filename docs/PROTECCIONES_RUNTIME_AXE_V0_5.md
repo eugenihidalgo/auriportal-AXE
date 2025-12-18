@@ -141,3 +141,4 @@ return renderFallbackHtml(screen_template_id, props, student, theme_id);
 
 **Recomendación:** Verificar periódicamente que los puntos de registro de analíticas respeten `preview_mode`.
 
+

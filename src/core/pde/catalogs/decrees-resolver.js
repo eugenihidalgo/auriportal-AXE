@@ -143,7 +143,8 @@ export async function resolveDecreeBundle(studentCtx, options = {}) {
       
       // Incluir contenido HTML si se solicita
       if (includeContent) {
-        baseItem.contenido_html = item.contenido_html || '';
+        // Fallback: si no hay contenido_html, usar content_text o string vacío
+        baseItem.contenido_html = item.contenido_html || item.content_text || '';
       }
       
       return baseItem;

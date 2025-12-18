@@ -473,7 +473,7 @@ export default async function adminThemesUIHandler(request, env, ctx) {
             <h3>👁️ Preview en Vivo</h3>
             <button onclick="cerrarPreview()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">✕</button>
           </div>
-          <iframe id="themePreviewFrame" class="preview-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
+          <iframe id="themePreviewFrame" class="preview-iframe"></iframe>
         </div>
       </div>
     </div>
@@ -651,6 +651,59 @@ export default async function adminThemesUIHandler(request, env, ctx) {
       // Añadir event listener al form
       if (!isReadOnly) {
         document.getElementById('theme-form').addEventListener('submit', guardarTema);
+        
+        // PREVIEW CONTEXT v1: Enviar tokens al iframe cuando cambien los inputs
+        const form = document.getElementById('theme-form');
+        if (form) {
+          // Función para enviar tokens a todos los iframes de preview
+          const enviarTokensATodosLosPreview = function() {
+            const formData = new FormData(form);
+            const tokens = {};
+            
+            contractVariables.forEach(varName => {
+              const value = formData.get(\`values[\${varName}]\`);
+              if (value && value.trim() !== '') {
+                tokens[varName] = value.trim();
+              }
+            });
+            
+            // Enviar a iframe del layout 2 columnas (si existe)
+            const iframeLayout = document.getElementById('themePreviewFrame');
+            if (iframeLayout && iframeLayout.contentWindow) {
+              try {
+                iframeLayout.contentWindow.postMessage(
+                  { type: 'AP_THEME_TOKENS', tokens: tokens },
+                  window.location.origin
+                );
+              } catch (e) {
+                // Ignorar errores (iframe puede no estar cargado aún)
+              }
+            }
+            
+            // Enviar a iframe del modal (si existe)
+            const iframeModal = document.getElementById('preview-iframe');
+            if (iframeModal && iframeModal.contentWindow) {
+              try {
+                iframeModal.contentWindow.postMessage(
+                  { type: 'AP_THEME_TOKENS', tokens: tokens },
+                  window.location.origin
+                );
+              } catch (e) {
+                // Ignorar errores (iframe puede no estar cargado aún)
+              }
+            }
+          };
+          
+          // Escuchar cambios en todos los inputs de tokens
+          form.addEventListener('input', function(e) {
+            if (e.target.name && e.target.name.startsWith('values[')) {
+              enviarTokensATodosLosPreview();
+            }
+          });
+          
+          // También enviar al cargar el editor (si ya hay preview abierto)
+          setTimeout(enviarTokensATodosLosPreview, 500);
+        }
       }
     }
     
@@ -925,8 +978,74 @@ export default async function adminThemesUIHandler(request, env, ctx) {
       // Añadir parámetro screen
       previewUrl += \`&screen=\${encodeURIComponent(selectedScreen)}\`;
       
-      // Abrir modal con iframe
-      abrirModalPreview(previewUrl);
+      // PREVIEW CONTEXT v1: Cargar preview en iframe del layout 2 columnas
+      const previewContainer = document.getElementById('preview-container');
+      const iframeLayout = document.getElementById('themePreviewFrame');
+      
+      if (previewContainer && iframeLayout) {
+        // Mostrar contenedor de preview
+        previewContainer.style.display = 'block';
+        
+        // Ajustar layout del editor para mostrar preview
+        const editorContainer = document.querySelector('.editor-container');
+        if (editorContainer) {
+          editorContainer.classList.add('has-preview');
+        }
+        
+        // Cargar preview en iframe
+        iframeLayout.src = previewUrl;
+        
+        // Enviar tokens cuando el iframe se carga
+        iframeLayout.addEventListener('load', function() {
+          setTimeout(function() {
+            enviarTokensAlPreviewLayout();
+          }, 300);
+        }, { once: true });
+      } else {
+        // Fallback: abrir modal con iframe
+        abrirModalPreview(previewUrl);
+      }
+    }
+    
+    // Función helper para enviar tokens al iframe del layout
+    function enviarTokensAlPreviewLayout() {
+      const form = document.getElementById('theme-form');
+      const iframeLayout = document.getElementById('themePreviewFrame');
+      
+      if (!form || !iframeLayout || !iframeLayout.contentWindow) {
+        return;
+      }
+      
+      const formData = new FormData(form);
+      const tokens = {};
+      
+      contractVariables.forEach(varName => {
+        const value = formData.get(\`values[\${varName}]\`);
+        if (value && value.trim() !== '') {
+          tokens[varName] = value.trim();
+        }
+      });
+      
+      try {
+        iframeLayout.contentWindow.postMessage(
+          { type: 'AP_THEME_TOKENS', tokens: tokens },
+          window.location.origin
+        );
+      } catch (e) {
+        console.warn('Error enviando tokens al iframe del layout:', e);
+      }
+    }
+    
+    function cerrarPreview() {
+      const previewContainer = document.getElementById('preview-container');
+      if (previewContainer) {
+        previewContainer.style.display = 'none';
+      }
+      
+      const editorContainer = document.querySelector('.editor-container');
+      if (editorContainer) {
+        editorContainer.classList.remove('has-preview');
+      }
     }
     
     function abrirModalPreview(previewUrl) {
@@ -1014,6 +1133,34 @@ export default async function adminThemesUIHandler(request, env, ctx) {
       // Cargar preview en iframe
       const iframe = document.getElementById('preview-iframe');
       iframe.src = previewUrl;
+      
+      // PREVIEW CONTEXT v1: Enviar tokens cuando el iframe se carga
+      iframe.addEventListener('load', function() {
+        // Esperar un momento para que el iframe esté completamente listo
+        setTimeout(function() {
+          const form = document.getElementById('theme-form');
+          if (form) {
+            const formData = new FormData(form);
+            const tokens = {};
+            
+            contractVariables.forEach(varName => {
+              const value = formData.get(\`values[\${varName}]\`);
+              if (value && value.trim() !== '') {
+                tokens[varName] = value.trim();
+              }
+            });
+            
+            try {
+              iframe.contentWindow.postMessage(
+                { type: 'AP_THEME_TOKENS', tokens: tokens },
+                window.location.origin
+              );
+            } catch (e) {
+              console.warn('Error enviando tokens al iframe:', e);
+            }
+          }
+        }, 300);
+      });
       
       // Mostrar modal
       modal.style.display = 'flex';

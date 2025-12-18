@@ -1596,19 +1596,20 @@ async function handleSaveCanvas(request, env, ctx, recorridoId) {
     });
 
     // EDITOR MODE: SIEMPRE devolver 200, incluso si hay errores
-    // El canvas ya está guardado (fail-open)
+    // PERO: Si saved === false, significa que NO se persistió (rowCount === 0)
     logInfo('RecorridosCanvasAPI', '[AXE][PUT_CANVAS]', {
       recorrido_id: recorridoId,
+      saved: result.saved || false,
+      source: result.source || 'unknown',
       errors: result.errors?.length || 0,
-      warnings: result.warnings?.length || 0,
-      saved: true
+      warnings: result.warnings?.length || 0
     });
 
     return jsonResponse({
       ok: result.ok,
-      saved: true,
+      saved: result.saved || false,
       mode: 'editor',
-      source: 'persisted',
+      source: result.source || 'derived',
       canvas: result.canvas_normalized,
       errors: result.errors || [],
       warnings: result.warnings || []

@@ -69,7 +69,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
             <tbody>
               <tr class="border-b border-slate-700 border-dashed bg-slate-800/50">
                 <td class="py-2">
-                  <input type="number" id="newPreparacionNivel" value="1" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  <input type="number" id="newPreparacionNivel" value="9" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
                 </td>
                 <td class="py-2">
                   <input type="text" id="newPreparacionNombre" placeholder="Nombre *" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onkeydown="if(event.key === 'Enter') { event.preventDefault(); crearPreparacionRapido(); }">
@@ -111,10 +111,16 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
                   <button onclick="crearPreparacionRapido()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">➕ Crear</button>
                 </td>
               </tr>
+              <tr class="border-b border-slate-700 border-dashed bg-slate-800/50">
+                <td colspan="9" class="py-2">
+                  <label class="block text-slate-300 text-xs mb-1">Descripción (opcional)</label>
+                  <textarea id="newPreparacionDescripcion" placeholder="Descripción de la preparación..." rows="2" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y"></textarea>
+                </td>
+              </tr>
               ${preparaciones.length > 0 ? preparaciones.map(preparacion => `
                 <tr class="border-b border-slate-700 hover:bg-slate-700" data-preparacion-id="${preparacion.id}">
                   <td class="py-3">
-                    <input type="number" value="${preparacion.nivel || 1}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoPreparacion(${preparacion.id}, 'nivel', this.value)">
+                    <input type="number" value="${preparacion.nivel || 1}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoPreparacion(${preparacion.id}, 'nivel', this.value); setDefaultLevel('preparaciones_practica', parseInt(this.value, 10));">
                   </td>
                   <td class="py-3">
                     <input type="text" value="${(preparacion.nombre || '').replace(/"/g, '&quot;')}" class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onblur="guardarCampoPreparacion(${preparacion.id}, 'nombre', this.value)">
@@ -168,8 +174,28 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
       </div>
     </div>
 
+    <script src="/js/admin-default-level.js"></script>
     <script>
       const API_BASE = '/api/preparaciones-practica';
+      
+      // Inicializar nivel por defecto persistente
+      document.addEventListener('DOMContentLoaded', function() {
+        initDefaultLevel('preparaciones_practica', '#newPreparacionNivel', 9);
+        
+        // También guardar cuando se cambia el nivel en filas existentes
+        document.querySelectorAll('input[type="number"][onchange*="guardarCampoPreparacion"]').forEach(input => {
+          if (input.onchange && input.onchange.toString().includes('nivel')) {
+            const originalOnChange = input.onchange;
+            input.addEventListener('change', function() {
+              const level = parseInt(this.value, 10);
+              if (!isNaN(level) && level >= 1) {
+                setDefaultLevel('preparaciones_practica', level);
+              }
+              if (originalOnChange) originalOnChange.call(this);
+            });
+          }
+        });
+      });
 
       async function fetchWithAuth(url, options = {}) {
         return fetch(url, { 
@@ -191,6 +217,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
         const obligatoriaInput = document.getElementById('newPreparacionObligatoria');
         const minutosInput = document.getElementById('newPreparacionMinutos');
         const tieneVideoInput = document.getElementById('newPreparacionTieneVideo');
+        const descripcionInput = document.getElementById('newPreparacionDescripcion');
         
         if (!nombreInput || !nivelInput) return;
         
@@ -202,6 +229,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
         const obligatoria_global = obligatoriaInput?.checked || false;
         const minutos = minutosInput?.value ? parseInt(minutosInput.value) : null;
         const tiene_video = tieneVideoInput?.checked || false;
+        const descripcion = descripcionInput?.value?.trim() || '';
         
         if (!nombre) {
           alert('El nombre es requerido');
@@ -217,6 +245,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
         if (obligatoriaInput) obligatoriaInput.disabled = true;
         if (minutosInput) minutosInput.disabled = true;
         if (tieneVideoInput) tieneVideoInput.disabled = true;
+        if (descripcionInput) descripcionInput.disabled = true;
         
         try {
           const response = await fetchWithAuth(API_BASE, {
@@ -230,7 +259,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
               obligatoria_global, 
               minutos, 
               tiene_video,
-              descripcion: '',
+              descripcion: descripcion,
               video_url: null,
               activar_reloj: false,
               musica_id: null,
@@ -243,13 +272,16 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
           
           if (data.success) {
             nombreInput.value = '';
-            nivelInput.value = '1';
+            // Mantener el nivel por defecto guardado
+            const defaultLevel = getDefaultLevel('preparaciones_practica', 9);
+            nivelInput.value = defaultLevel.toString();
             if (tipoInput) tipoInput.value = 'consigna';
             if (posicionInput) posicionInput.value = 'inicio';
             if (ordenInput) ordenInput.value = '0';
             if (obligatoriaInput) obligatoriaInput.checked = false;
             if (minutosInput) minutosInput.value = '';
             if (tieneVideoInput) tieneVideoInput.checked = false;
+            if (descripcionInput) descripcionInput.value = '';
             
             nombreInput.disabled = false;
             nivelInput.disabled = false;
@@ -259,6 +291,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
             if (obligatoriaInput) obligatoriaInput.disabled = false;
             if (minutosInput) minutosInput.disabled = false;
             if (tieneVideoInput) tieneVideoInput.disabled = false;
+            if (descripcionInput) descripcionInput.disabled = false;
             
             location.reload();
           } else {
@@ -271,6 +304,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
             if (obligatoriaInput) obligatoriaInput.disabled = false;
             if (minutosInput) minutosInput.disabled = false;
             if (tieneVideoInput) tieneVideoInput.disabled = false;
+            if (descripcionInput) descripcionInput.disabled = false;
           }
         } catch (error) {
           alert('Error: ' + error.message);
@@ -282,6 +316,7 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
           if (obligatoriaInput) obligatoriaInput.disabled = false;
           if (minutosInput) minutosInput.disabled = false;
           if (tieneVideoInput) tieneVideoInput.disabled = false;
+          if (descripcionInput) descripcionInput.disabled = false;
         }
       }
 

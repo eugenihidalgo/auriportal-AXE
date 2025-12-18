@@ -130,7 +130,7 @@ export async function renderTransmutacionesEnergeticas(request, env) {
             </div>
             <div class="mb-4">
               <label class="block text-sm font-medium text-slate-300 mb-2">Nivel</label>
-              <input type="number" name="nivel" value="9" min="1" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <input type="number" name="nivel" id="formItemNivel" value="9" min="1" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div class="mb-4" id="frecuenciaGroup">
               <label class="block text-sm font-medium text-slate-300 mb-2">Frecuencia (días)</label>
@@ -163,10 +163,20 @@ export async function renderTransmutacionesEnergeticas(request, env) {
         </div>
       </div>
 
+      <script src="/js/admin-default-level.js"></script>
       <script>
         const API_BASE = '/api/transmutaciones';
         let listasData = ${JSON.stringify(listas)};
         let tabPrincipalActual = 'recurrente';
+        
+        // Inicializar nivel por defecto persistente
+        document.addEventListener('DOMContentLoaded', function() {
+          // Inicializar nivel en el modal de crear/editar
+          const formItemNivel = document.querySelector('#formItem input[name="nivel"]');
+          if (formItemNivel) {
+            initDefaultLevel('transmutaciones_energeticas', formItemNivel, 9);
+          }
+        });
         let listaActivaRecurrente = null;
         let listaActivaUnaVez = null;
 
@@ -473,7 +483,7 @@ export async function renderTransmutacionesEnergeticas(request, env) {
                   <tr class="border-b border-slate-700 border-dashed bg-slate-800/50">
                     <td class="py-2"></td>
                     <td class="py-2">
-                      <input type="number" id="newItemNivel" value="9" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      <input type="number" id="newItemNivel" value="9" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="setDefaultLevel('transmutaciones_energeticas', parseInt(this.value, 10));">
                     </td>
                     <td class="py-2">
                       <select id="newItemPrioridad" class="w-24 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
@@ -505,7 +515,7 @@ export async function renderTransmutacionesEnergeticas(request, env) {
                       <input type="checkbox" class="checkbox-item" data-item-id="\${item.id}" data-lista-id="\${listaId}" onchange="actualizarPanelMasivo(\${listaId})" \${item.seleccionado ? 'checked' : ''}>
                     </td>
                     <td class="py-3">
-                      <input type="number" value="\${item.nivel}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoItem(\${item.id}, 'nivel', this.value)">
+                      <input type="number" value="\${item.nivel}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoItem(\${item.id}, 'nivel', this.value); setDefaultLevel('transmutaciones_energeticas', parseInt(this.value, 10));">
                     </td>
                     <td class="py-3">
                       <select class="w-24 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoItem(\${item.id}, 'prioridad', this.value)">
@@ -548,6 +558,14 @@ export async function renderTransmutacionesEnergeticas(request, env) {
           \`;
           
           container.innerHTML = html;
+          
+          // Inicializar nivel por defecto en el input de creación rápida
+          const newItemNivel = container.querySelector('#newItemNivel');
+          if (newItemNivel) {
+            const defaultLevel = getDefaultLevel('transmutaciones_energeticas', 9);
+            newItemNivel.value = defaultLevel;
+          }
+          
           actualizarPanelMasivo(listaId);
         }
 
@@ -608,7 +626,9 @@ export async function renderTransmutacionesEnergeticas(request, env) {
             if (data.success) {
               nombreInput.value = '';
               if (descripcionInput) descripcionInput.value = '';
-              nivelInput.value = '9';
+              // Mantener el nivel por defecto guardado
+              const defaultLevel = getDefaultLevel('transmutaciones_energeticas', 9);
+              nivelInput.value = defaultLevel.toString();
               if (prioridadInput) prioridadInput.value = 'media';
               frecuenciaInput.value = lista.tipo === 'recurrente' ? '20' : '15';
               
@@ -798,7 +818,9 @@ export async function renderTransmutacionesEnergeticas(request, env) {
           document.getElementById('formItem').reset();
           document.getElementById('itemId').value = '';
           document.getElementById('itemListaId').value = listaId;
-          document.querySelector('#formItem input[name="nivel"]').value = 9;
+          // Usar nivel por defecto guardado
+          const defaultLevel = getDefaultLevel('transmutaciones_energeticas', 9);
+          document.querySelector('#formItem input[name="nivel"]').value = defaultLevel;
           
           const frecuenciaGroup = document.getElementById('frecuenciaGroup');
           const vecesGroup = document.getElementById('vecesGroup');

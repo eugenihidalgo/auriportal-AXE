@@ -69,7 +69,7 @@ export default async function adminTecnicasPostPracticaHandler(request, env) {
             <tbody>
               <tr class="border-b border-slate-700 border-dashed bg-slate-800/50">
                 <td class="py-2">
-                  <input type="number" id="newTecnicaNivel" value="1" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  <input type="number" id="newTecnicaNivel" value="9" min="1" class="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
                 </td>
                 <td class="py-2">
                   <input type="text" id="newTecnicaNombre" placeholder="Nombre *" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onkeydown="if(event.key === 'Enter') { event.preventDefault(); crearTecnicaRapido(); }">
@@ -114,7 +114,7 @@ export default async function adminTecnicasPostPracticaHandler(request, env) {
               ${tecnicas.length > 0 ? tecnicas.map(tecnica => `
                 <tr class="border-b border-slate-700 hover:bg-slate-700" data-tecnica-id="${tecnica.id}">
                   <td class="py-3">
-                    <input type="number" value="${tecnica.nivel || 1}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoTecnica(${tecnica.id}, 'nivel', this.value)">
+                    <input type="number" value="${tecnica.nivel || 1}" min="1" class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="guardarCampoTecnica(${tecnica.id}, 'nivel', this.value); setDefaultLevel('tecnicas_post_practica', parseInt(this.value, 10));">
                   </td>
                   <td class="py-3">
                     <input type="text" value="${(tecnica.nombre || '').replace(/"/g, '&quot;')}" class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" onblur="guardarCampoTecnica(${tecnica.id}, 'nombre', this.value)">
@@ -168,8 +168,28 @@ export default async function adminTecnicasPostPracticaHandler(request, env) {
       </div>
     </div>
 
+    <script src="/js/admin-default-level.js"></script>
     <script>
       const API_BASE = '/api/tecnicas-post-practica';
+      
+      // Inicializar nivel por defecto persistente
+      document.addEventListener('DOMContentLoaded', function() {
+        initDefaultLevel('tecnicas_post_practica', '#newTecnicaNivel', 9);
+        
+        // También guardar cuando se cambia el nivel en filas existentes
+        document.querySelectorAll('input[type="number"][onchange*="guardarCampoTecnica"]').forEach(input => {
+          if (input.onchange && input.onchange.toString().includes('nivel')) {
+            const originalOnChange = input.onchange;
+            input.addEventListener('change', function() {
+              const level = parseInt(this.value, 10);
+              if (!isNaN(level) && level >= 1) {
+                setDefaultLevel('tecnicas_post_practica', level);
+              }
+              if (originalOnChange) originalOnChange.call(this);
+            });
+          }
+        });
+      });
 
       async function fetchWithAuth(url, options = {}) {
         return fetch(url, { 
@@ -243,7 +263,9 @@ export default async function adminTecnicasPostPracticaHandler(request, env) {
           
           if (data.success) {
             nombreInput.value = '';
-            nivelInput.value = '1';
+            // Mantener el nivel por defecto guardado
+            const defaultLevel = getDefaultLevel('tecnicas_post_practica', 9);
+            nivelInput.value = defaultLevel.toString();
             if (tipoInput) tipoInput.value = 'consigna';
             if (posicionInput) posicionInput.value = 'inicio';
             if (ordenInput) ordenInput.value = '0';

@@ -44,3 +44,4 @@ COMMENT ON COLUMN student_modes.ended_at IS 'Fecha de finalización real (nullab
 
 
 
+

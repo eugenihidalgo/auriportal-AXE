@@ -116,14 +116,18 @@ export class RecorridoDraftRepoPg {
    * @param {Object} canvas_json - CanvasDefinition normalizada
    * @param {string|null} [updated_by] - ID/email del admin (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
-   * @returns {Promise<Object|null>} Objeto draft actualizado o null si no existe
+   * @returns {Promise<Object>} { draft, rowCount }
+   *   - draft: Objeto draft actualizado o null si no existe
+   *   - rowCount: Número de filas afectadas por el UPDATE
    */
   async updateCanvas(draft_id, canvas_json, updated_by = null, client = null) {
-    if (!draft_id) return null;
+    if (!draft_id) {
+      return { draft: null, rowCount: 0 };
+    }
 
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
-      UPDATE recorrido_drafts
+      UPDATE public.recorrido_drafts
       SET canvas_json = $1,
           canvas_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP,
@@ -132,7 +136,12 @@ export class RecorridoDraftRepoPg {
       RETURNING *
     `, [JSON.stringify(canvas_json), updated_by, draft_id]);
 
-    if (!result.rows[0]) return null;
+    const rowCount = result.rowCount || 0;
+
+    // Si no se afectó ninguna fila, el draft no existe o el draft_id es incorrecto
+    if (rowCount === 0 || !result.rows[0]) {
+      return { draft: null, rowCount: 0 };
+    }
 
     // Parsear JSONs si son strings
     const draft = result.rows[0];
@@ -143,7 +152,7 @@ export class RecorridoDraftRepoPg {
       draft.canvas_json = JSON.parse(draft.canvas_json);
     }
 
-    return draft;
+    return { draft, rowCount };
   }
 
   /**

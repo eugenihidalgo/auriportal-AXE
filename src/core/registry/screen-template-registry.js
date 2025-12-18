@@ -593,4 +593,16 @@ export function validateProps(templateId, props) {
   };
 }
 
+/**
+ * Obtiene el objeto registry con métodos para acceder a los templates
+ * 
+ * @returns {Object} Objeto con métodos getAll, getById, validateProps
+ */
+export function getScreenTemplateRegistry() {
+  return {
+    getAll,
+    getById,
+    validateProps
+  };
+}
 
