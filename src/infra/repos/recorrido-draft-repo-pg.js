@@ -64,6 +64,10 @@ export class RecorridoDraftRepoPg {
     if (typeof draft.definition_json === 'string') {
       draft.definition_json = JSON.parse(draft.definition_json);
     }
+    // Parsear canvas_json si es string
+    if (draft.canvas_json && typeof draft.canvas_json === 'string') {
+      draft.canvas_json = JSON.parse(draft.canvas_json);
+    }
 
     return draft;
   }
@@ -97,6 +101,47 @@ export class RecorridoDraftRepoPg {
     if (typeof draft.definition_json === 'string') {
       draft.definition_json = JSON.parse(draft.definition_json);
     }
+    // Parsear canvas_json si es string
+    if (draft.canvas_json && typeof draft.canvas_json === 'string') {
+      draft.canvas_json = JSON.parse(draft.canvas_json);
+    }
+
+    return draft;
+  }
+
+  /**
+   * Actualiza canvas_json de un draft
+   * 
+   * @param {string} draft_id - UUID del draft
+   * @param {Object} canvas_json - CanvasDefinition normalizada
+   * @param {string|null} [updated_by] - ID/email del admin (opcional)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object|null>} Objeto draft actualizado o null si no existe
+   */
+  async updateCanvas(draft_id, canvas_json, updated_by = null, client = null) {
+    if (!draft_id) return null;
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(`
+      UPDATE recorrido_drafts
+      SET canvas_json = $1,
+          canvas_updated_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP,
+          updated_by = $2
+      WHERE draft_id = $3
+      RETURNING *
+    `, [JSON.stringify(canvas_json), updated_by, draft_id]);
+
+    if (!result.rows[0]) return null;
+
+    // Parsear JSONs si son strings
+    const draft = result.rows[0];
+    if (typeof draft.definition_json === 'string') {
+      draft.definition_json = JSON.parse(draft.definition_json);
+    }
+    if (draft.canvas_json && typeof draft.canvas_json === 'string') {
+      draft.canvas_json = JSON.parse(draft.canvas_json);
+    }
 
     return draft;
   }
@@ -125,6 +170,10 @@ export class RecorridoDraftRepoPg {
     const draft = result.rows[0];
     if (typeof draft.definition_json === 'string') {
       draft.definition_json = JSON.parse(draft.definition_json);
+    }
+    // Parsear canvas_json si es string
+    if (draft.canvas_json && typeof draft.canvas_json === 'string') {
+      draft.canvas_json = JSON.parse(draft.canvas_json);
     }
 
     return draft;

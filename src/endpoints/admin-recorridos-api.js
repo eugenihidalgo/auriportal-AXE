@@ -21,6 +21,11 @@ import { getDefaultRecorridoVersionRepo } from '../infra/repos/recorrido-version
 import { getDefaultRecorridoAuditRepo } from '../infra/repos/recorrido-audit-repo-pg.js';
 import { query, getPool } from '../../database/pg.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
+import { getEffectiveCanvasForDraft, saveCanvasToDraft } from '../core/canvas/canvas-storage.js';
+import { canvasToRecorrido } from '../core/canvas/canvas-to-recorrido.js';
+import { validateCanvasDefinition } from '../core/canvas/validate-canvas-definition.js';
+import { normalizeCanvasDefinition } from '../core/canvas/normalize-canvas-definition.js';
+import { recorridoToCanvas } from '../core/canvas/recorrido-to-canvas.js';
 
 /**
  * Helper para obtener el admin ID/email del contexto
@@ -591,11 +596,49 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
       const latestVersion = await versionRepo.getLatestVersion(recorridoId, client);
       const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
 
-      // Crear versión (INMUTABLE)
+      // Obtener canvas para publicar (AXE v0.6.3)
+      let canvasToPublish = null;
+      let canvasWarnings = [];
+      
+      if (draft.canvas_json) {
+        // Si hay canvas persistido, validarlo estrictamente y usarlo
+        const canvasValidation = validateCanvasDefinition(draft.canvas_json, { isPublish: true });
+        if (!canvasValidation.ok) {
+          await client.query('ROLLBACK');
+          return errorResponse('No se puede publicar: el canvas tiene errores', 400, {
+            errors: canvasValidation.errors,
+            warnings: canvasValidation.warnings
+          });
+        }
+        canvasToPublish = normalizeCanvasDefinition(draft.canvas_json);
+        canvasWarnings = canvasValidation.warnings;
+      } else {
+        // Si no hay canvas, derivar desde definition_json
+        try {
+          const derivedCanvas = recorridoToCanvas(draft.definition_json, { generatePositions: true });
+          canvasToPublish = normalizeCanvasDefinition(derivedCanvas);
+          canvasWarnings.push('Canvas publicado fue derivado automáticamente desde definition_json');
+          
+          logInfo('RecorridosPublish', 'Canvas derivado en publish-time', {
+            recorrido_id: recorridoId,
+            version: nextVersion
+          });
+        } catch (error) {
+          logWarn('RecorridosPublish', 'Error derivando canvas en publish', {
+            recorrido_id: recorridoId,
+            error: error.message
+          });
+          // Fail-open: continuar sin canvas (no bloquear publish)
+          canvasWarnings.push(`Error derivando canvas: ${error.message}. Se publica sin canvas.`);
+        }
+      }
+
+      // Crear versión (INMUTABLE) con canvas
       const version = await versionRepo.createVersion(
         recorridoId,
         nextVersion,
         draft.definition_json, // INMUTABLE después de esto
+        canvasToPublish, // Canvas también INMUTABLE
         release_notes || null,
         getAdminId(authCtx),
         client
@@ -622,7 +665,10 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           version: nextVersion,
           errors_count: validation.errors.length,
           warnings_count: validation.warnings.length,
-          warnings: validation.warnings
+          warnings: validation.warnings,
+          canvas_published: canvasToPublish !== null,
+          canvas_derived: draft.canvas_json === null,
+          canvas_warnings: canvasWarnings
         },
         getAdminId(authCtx),
         client
@@ -643,14 +689,20 @@ async function handlePublishVersion(request, env, ctx, recorridoId) {
           version: version.version,
           status: version.status,
           definition_json: version.definition_json,
+          canvas_json: version.canvas_json,
           release_notes: version.release_notes,
           created_at: version.created_at
         },
         validation: {
           valid: validation.valid,
-        warnings: validation.warnings
-      }
-    }, 201);
+          warnings: validation.warnings
+        },
+        canvas: {
+          published: canvasToPublish !== null,
+          derived: draft.canvas_json === null,
+          warnings: canvasWarnings
+        }
+      }, 201);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -977,6 +1029,198 @@ async function handlePreviewStep(request, env, ctx, recorridoId) {
   }
 }
 
+/**
+ * GET /admin/api/recorridos/:id/canvas
+ * Obtiene el canvas del recorrido (persistido o derivado)
+ * 
+ * Response: {
+ *   ok: true,
+ *   source: "draft" | "derived",
+ *   canvas: <CanvasDefinition normalizado>,
+ *   warnings: []
+ * }
+ */
+async function handleGetCanvas(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const draftRepo = getDefaultRecorridoDraftRepo();
+    const draft = await draftRepo.getCurrentDraft(recorridoId);
+
+    if (!draft) {
+      return errorResponse('No hay draft para este recorrido', 404);
+    }
+
+    const result = getEffectiveCanvasForDraft(draft);
+
+    return jsonResponse({
+      ok: true,
+      source: result.source,
+      canvas: result.canvas,
+      warnings: result.warnings
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error obteniendo canvas', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al obtener canvas', 500);
+  }
+}
+
+/**
+ * PUT /admin/api/recorridos/:id/canvas
+ * Guarda canvas en draft (valida, normaliza y persiste)
+ * 
+ * Body: { canvas: <CanvasDefinition> }
+ * Response: {
+ *   ok: true,
+ *   canvas_normalized: <CanvasDefinition normalizado>,
+ *   warnings: []
+ * }
+ * 
+ * Si hay errors bloqueantes → 400 con { ok: false, errors, warnings }
+ */
+async function handleSaveCanvas(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    const { canvas } = body;
+
+    if (!canvas) {
+      return errorResponse('Se requiere "canvas" en el body');
+    }
+
+    const result = await saveCanvasToDraft(recorridoId, canvas, {
+      isPublish: false,
+      updated_by: getAdminId(authCtx)
+    });
+
+    if (!result.ok) {
+      return errorResponse('No se puede guardar canvas: tiene errores', 400, {
+        errors: result.errors,
+        warnings: result.warnings
+      });
+    }
+
+    return jsonResponse({
+      ok: true,
+      canvas_normalized: result.canvas_normalized,
+      warnings: result.warnings
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error guardando canvas', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al guardar canvas', 500);
+  }
+}
+
+/**
+ * POST /admin/api/recorridos/:id/canvas/validate
+ * Valida canvas sin persistir
+ * 
+ * Body: { canvas: <CanvasDefinition> }
+ * Response: {
+ *   ok: true,
+ *   valid: boolean,
+ *   errors: [],
+ *   warnings: []
+ * }
+ */
+async function handleValidateCanvas(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    const { canvas } = body;
+
+    if (!canvas) {
+      return errorResponse('Se requiere "canvas" en el body');
+    }
+
+    const validation = validateCanvasDefinition(canvas, { isPublish: false });
+
+    return jsonResponse({
+      ok: true,
+      valid: validation.ok,
+      errors: validation.errors,
+      warnings: validation.warnings
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error validando canvas', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse('Error interno al validar canvas', 500);
+  }
+}
+
+/**
+ * POST /admin/api/recorridos/:id/canvas/convert-to-recorrido
+ * Convierte Canvas → RecorridoDefinition (solo devuelve, no persiste)
+ * 
+ * Body: { canvas: <CanvasDefinition> }
+ * Response: {
+ *   ok: true,
+ *   recorrido_definition: <RecorridoDefinition>,
+ *   warnings: []
+ * }
+ */
+async function handleConvertCanvasToRecorrido(request, env, ctx, recorridoId) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    const { canvas } = body;
+
+    if (!canvas) {
+      return errorResponse('Se requiere "canvas" en el body');
+    }
+
+    const recorridoDefinition = canvasToRecorrido(canvas);
+    const warnings = [];
+
+    // Validar que el recorrido resultante es válido
+    const validation = validateRecorridoDefinition(recorridoDefinition, { isPublish: false });
+    if (!validation.valid) {
+      warnings.push(...validation.errors.map(e => `Recorrido resultante: ${e}`));
+    }
+    if (validation.warnings) {
+      warnings.push(...validation.warnings);
+    }
+
+    return jsonResponse({
+      ok: true,
+      recorrido_definition: recorridoDefinition,
+      warnings
+    });
+  } catch (error) {
+    logError('RecorridosCanvasAPI', 'Error convirtiendo canvas a recorrido', {
+      recorrido_id: recorridoId,
+      error: error.message,
+      stack: error.stack
+    });
+    return errorResponse(`Error convirtiendo canvas: ${error.message}`, 500);
+  }
+}
 
 /**
  * DELETE /admin/api/recorridos/:id
@@ -1215,6 +1459,23 @@ export default async function adminRecorridosApiHandler(request, env, ctx) {
 
   if (method === 'POST' && recorridoId && subPath === 'preview-step') {
     return handlePreviewStep(request, env, ctx, recorridoId);
+  }
+
+  // Endpoints de Canvas (AXE v0.6.3)
+  if (method === 'GET' && recorridoId && subPath === 'canvas') {
+    return handleGetCanvas(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'PUT' && recorridoId && subPath === 'canvas') {
+    return handleSaveCanvas(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'POST' && recorridoId && subPath === 'canvas/validate') {
+    return handleValidateCanvas(request, env, ctx, recorridoId);
+  }
+
+  if (method === 'POST' && recorridoId && subPath === 'canvas/convert-to-recorrido') {
+    return handleConvertCanvasToRecorrido(request, env, ctx, recorridoId);
   }
 
   if (method === 'DELETE' && recorridoId && !subPath) {

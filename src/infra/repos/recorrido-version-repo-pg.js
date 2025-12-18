@@ -48,6 +48,10 @@ export class RecorridoVersionRepoPg {
     if (typeof version.definition_json === 'string') {
       version.definition_json = JSON.parse(version.definition_json);
     }
+    // Parsear canvas_json si es string
+    if (version.canvas_json && typeof version.canvas_json === 'string') {
+      version.canvas_json = JSON.parse(version.canvas_json);
+    }
 
     return version;
   }
@@ -76,6 +80,10 @@ export class RecorridoVersionRepoPg {
     if (typeof versionObj.definition_json === 'string') {
       versionObj.definition_json = JSON.parse(versionObj.definition_json);
     }
+    // Parsear canvas_json si es string
+    if (versionObj.canvas_json && typeof versionObj.canvas_json === 'string') {
+      versionObj.canvas_json = JSON.parse(versionObj.canvas_json);
+    }
 
     return versionObj;
   }
@@ -86,25 +94,36 @@ export class RecorridoVersionRepoPg {
    * @param {string} recorrido_id - ID del recorrido
    * @param {number} version - Número de versión
    * @param {Object} definition_json - RecorridoDefinition completa (validada)
+   * @param {Object|null} [canvas_json] - CanvasDefinition (opcional, se congela en publish)
    * @param {string|null} [release_notes] - Notas de la versión (opcional)
    * @param {string|null} [created_by] - ID/email del admin (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object>} Objeto versión creada
    */
-  async createVersion(recorrido_id, version, definition_json, release_notes = null, created_by = null, client = null) {
+  async createVersion(recorrido_id, version, definition_json, canvas_json = null, release_notes = null, created_by = null, client = null) {
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
       INSERT INTO recorrido_versions (
-        recorrido_id, version, status, definition_json, release_notes, created_by
+        recorrido_id, version, status, definition_json, canvas_json, release_notes, created_by
       )
-      VALUES ($1, $2, 'published', $3, $4, $5)
+      VALUES ($1, $2, 'published', $3, $4, $5, $6)
       RETURNING *
-    `, [recorrido_id, version, JSON.stringify(definition_json), release_notes, created_by]);
+    `, [
+      recorrido_id, 
+      version, 
+      JSON.stringify(definition_json), 
+      canvas_json ? JSON.stringify(canvas_json) : null,
+      release_notes, 
+      created_by
+    ]);
 
-    // Parsear definition_json si es string
+    // Parsear JSONs si son strings
     const versionObj = result.rows[0];
     if (typeof versionObj.definition_json === 'string') {
       versionObj.definition_json = JSON.parse(versionObj.definition_json);
+    }
+    if (versionObj.canvas_json && typeof versionObj.canvas_json === 'string') {
+      versionObj.canvas_json = JSON.parse(versionObj.canvas_json);
     }
 
     return versionObj;
@@ -135,6 +154,10 @@ export class RecorridoVersionRepoPg {
     const versionObj = result.rows[0];
     if (typeof versionObj.definition_json === 'string') {
       versionObj.definition_json = JSON.parse(versionObj.definition_json);
+    }
+    // Parsear canvas_json si es string
+    if (versionObj.canvas_json && typeof versionObj.canvas_json === 'string') {
+      versionObj.canvas_json = JSON.parse(versionObj.canvas_json);
     }
 
     return versionObj;

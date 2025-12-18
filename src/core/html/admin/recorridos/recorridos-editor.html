@@ -23,6 +23,13 @@
         <span id="recorrido-version" class="px-2 py-1 bg-slate-600 text-slate-200 rounded text-xs">v-</span>
       </div>
       <div class="flex items-center gap-2">
+        <!-- Toggle Vista Lista/Canvas (AXE v0.6.3) -->
+        <div class="flex items-center gap-2 mr-2 border-r border-slate-700 pr-2">
+          <button onclick="toggleVistaCanvas()" id="toggle-vista-btn" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-colors" title="Cambiar entre Vista Lista y Vista Canvas">
+            <span id="toggle-vista-label">📋 Lista</span>
+          </button>
+          <span id="canvas-source-badge" class="px-2 py-1 bg-yellow-900 text-yellow-200 rounded text-xs" style="display: none;" title="Canvas derivado desde definition_json">DERIVED</span>
+        </div>
         <!-- Botón de guardar manual (BLINDAJE v2) -->
         <button onclick="forzarGuardado()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded transition-colors" title="Guardar ahora (si es válido)">
           💾 Guardar
@@ -43,8 +50,53 @@
   
   <!-- Contenido principal del editor (flex: 1, scroll interno) -->
   <div class="editor-body flex">
-    <!-- Columna izquierda: Lista de steps -->
-    <div class="steps-panel bg-slate-950 border-r border-slate-800 overflow-y-auto" id="steps-panel">
+    <!-- Vista Canvas v1 (AXE v0.6.3) - Oculto por defecto -->
+    <div id="canvas-view-container" class="flex-1 bg-slate-900 overflow-y-auto p-6" style="display: none;">
+      <div class="max-w-7xl mx-auto">
+        <!-- Warnings -->
+        <div id="canvas-warnings" class="mb-4"></div>
+        
+        <!-- Controles Canvas -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-4 flex gap-2 flex-wrap">
+          <button onclick="cargarCanvas()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+            📥 Cargar Canvas
+          </button>
+          <button onclick="validarCanvas()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded transition-colors">
+            ✓ Validar Canvas
+          </button>
+          <button onclick="guardarCanvas()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors">
+            💾 Guardar Canvas
+          </button>
+          <button onclick="convertirCanvasARecorrido()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors">
+            🔄 Convertir a Recorrido (Preview)
+          </button>
+        </div>
+        
+        <!-- Editor JSON Canvas -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="bg-slate-800 rounded-lg p-4">
+            <h3 class="text-white font-semibold mb-2">Canvas JSON</h3>
+            <textarea id="canvas-json-editor" class="w-full h-96 bg-slate-900 text-slate-100 font-mono text-sm p-4 rounded border border-slate-700" placeholder='{"version":"1.0","canvas_id":"...","nodes":[],"edges":[]}'></textarea>
+          </div>
+          
+          <!-- Canvas Viewer Simple -->
+          <div class="bg-slate-800 rounded-lg p-4">
+            <h3 class="text-white font-semibold mb-2">Canvas Viewer</h3>
+            <div id="canvas-viewer" class="bg-slate-900 rounded p-4 min-h-96">
+              <p class="text-slate-400 text-sm">Carga un canvas para verlo</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Resultado de conversión (si aplica) -->
+        <div id="canvas-conversion-result" class="bg-slate-800 rounded-lg p-4" style="display: none;"></div>
+      </div>
+    </div>
+    
+    <!-- Vista Lista (por defecto) -->
+    <div id="lista-view-container" class="flex-1 flex">
+      <!-- Columna izquierda: Lista de steps -->
+      <div class="steps-panel bg-slate-950 border-r border-slate-800 overflow-y-auto" id="steps-panel">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-lg font-semibold text-white">Steps</h2>
@@ -83,6 +135,7 @@
       <div class="p-4" id="config-panel">
         <p class="text-slate-400 text-sm">Selecciona un step para configurarlo</p>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -4485,6 +4538,334 @@ El texto se mostrará tal como lo escribas."
       }
     };
     document.head.appendChild(script);
+  }
+
+  // ============================================================================
+  // VISTA CANVAS v1 (AXE v0.6.3)
+  // ============================================================================
+  
+  let canvasViewState = {
+    active: false,
+    canvas: null,
+    source: null,
+    warnings: []
+  };
+  
+  /**
+   * Toggle entre Vista Lista y Vista Canvas
+   */
+  function toggleVistaCanvas() {
+    canvasViewState.active = !canvasViewState.active;
+    const listaView = document.getElementById('lista-view-container');
+    const canvasView = document.getElementById('canvas-view-container');
+    const toggleBtn = document.getElementById('toggle-vista-btn');
+    const toggleLabel = document.getElementById('toggle-vista-label');
+    
+    if (canvasViewState.active) {
+      listaView.style.display = 'none';
+      canvasView.style.display = 'block';
+      toggleLabel.textContent = '📋 Lista';
+      cargarCanvas();
+    } else {
+      listaView.style.display = 'flex';
+      canvasView.style.display = 'none';
+      toggleLabel.textContent = '🎨 Canvas';
+    }
+  }
+  
+  /**
+   * Carga el canvas desde el servidor
+   */
+  async function cargarCanvas() {
+    if (!editorState.recorridoId) {
+      alert('No hay recorrido cargado');
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      canvasViewState.canvas = data.canvas;
+      canvasViewState.source = data.source;
+      canvasViewState.warnings = data.warnings || [];
+      
+      // Actualizar badge de source
+      const sourceBadge = document.getElementById('canvas-source-badge');
+      if (sourceBadge) {
+        if (data.source === 'derived') {
+          sourceBadge.style.display = 'inline-block';
+          sourceBadge.textContent = 'DERIVED';
+          sourceBadge.title = 'Canvas no persistido todavía; se muestra derivado';
+        } else {
+          sourceBadge.style.display = 'none';
+        }
+      }
+      
+      // Mostrar warnings
+      mostrarCanvasWarnings();
+      
+      // Actualizar editor JSON
+      const jsonEditor = document.getElementById('canvas-json-editor');
+      if (jsonEditor) {
+        jsonEditor.value = JSON.stringify(data.canvas, null, 2);
+      }
+      
+      // Actualizar viewer
+      renderCanvasViewer(data.canvas);
+      
+    } catch (error) {
+      console.error('Error cargando canvas:', error);
+      alert(`Error cargando canvas: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Muestra warnings del canvas
+   */
+  function mostrarCanvasWarnings() {
+    const warningsEl = document.getElementById('canvas-warnings');
+    if (!warningsEl) return;
+    
+    if (canvasViewState.warnings.length === 0) {
+      warningsEl.innerHTML = '';
+      return;
+    }
+    
+    warningsEl.innerHTML = `
+      <div class="bg-yellow-900 border border-yellow-700 rounded-lg p-4">
+        <h4 class="text-yellow-200 font-semibold mb-2">⚠️ Advertencias</h4>
+        <ul class="text-yellow-100 text-sm list-disc list-inside">
+          ${canvasViewState.warnings.map(w => `<li>${w}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  /**
+   * Renderiza el canvas viewer simple (sin drag&drop)
+   */
+  function renderCanvasViewer(canvas) {
+    const viewer = document.getElementById('canvas-viewer');
+    if (!viewer || !canvas) return;
+    
+    let html = '<div class="space-y-4">';
+    
+    // Nodos como tarjetas en grid
+    html += '<div><h4 class="text-white font-semibold mb-2">Nodos</h4>';
+    html += '<div class="grid grid-cols-2 md:grid-cols-3 gap-2">';
+    for (const node of canvas.nodes || []) {
+      html += `
+        <div class="bg-slate-800 border border-slate-700 rounded p-2">
+          <div class="text-white font-medium text-sm">${node.id}</div>
+          <div class="text-slate-400 text-xs">${node.type}</div>
+          ${node.label ? `<div class="text-slate-300 text-xs mt-1">${node.label}</div>` : ''}
+        </div>
+      `;
+    }
+    html += '</div></div>';
+    
+    // Edges como lista
+    html += '<div><h4 class="text-white font-semibold mb-2">Edges</h4>';
+    html += '<div class="space-y-1">';
+    for (const edge of canvas.edges || []) {
+      html += `
+        <div class="bg-slate-800 border border-slate-700 rounded p-2 text-sm">
+          <span class="text-white">${edge.from_node_id}</span>
+          <span class="text-slate-400"> → </span>
+          <span class="text-white">${edge.to_node_id}</span>
+          ${edge.type ? `<span class="text-slate-400 text-xs ml-2">[${edge.type}]</span>` : ''}
+          ${edge.label ? `<span class="text-slate-300 text-xs ml-2">(${edge.label})</span>` : ''}
+        </div>
+      `;
+    }
+    html += '</div></div>';
+    
+    html += '</div>';
+    viewer.innerHTML = html;
+  }
+  
+  /**
+   * Valida el canvas sin guardar
+   */
+  async function validarCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      alert(`Error parseando JSON: ${error.message}`);
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      let message = data.valid ? '✅ Canvas válido' : '❌ Canvas inválido';
+      if (data.errors && data.errors.length > 0) {
+        message += '\n\nErrores:\n' + data.errors.map(e => `- ${e}`).join('\n');
+      }
+      if (data.warnings && data.warnings.length > 0) {
+        message += '\n\nAdvertencias:\n' + data.warnings.map(w => `- ${w}`).join('\n');
+      }
+      
+      alert(message);
+      
+    } catch (error) {
+      console.error('Error validando canvas:', error);
+      alert(`Error validando canvas: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Guarda el canvas en el draft
+   */
+  async function guardarCanvas() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      alert(`Error parseando JSON: ${error.message}`);
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        let message = '❌ No se puede guardar canvas:\n\n';
+        if (data.errors && data.errors.length > 0) {
+          message += 'Errores:\n' + data.errors.map(e => `- ${e}`).join('\n');
+        }
+        if (data.warnings && data.warnings.length > 0) {
+          message += '\n\nAdvertencias:\n' + data.warnings.map(w => `- ${w}`).join('\n');
+        }
+        alert(message);
+        return;
+      }
+      
+      // Actualizar estado
+      canvasViewState.canvas = data.canvas_normalized;
+      canvasViewState.source = 'draft';
+      canvasViewState.warnings = data.warnings || [];
+      
+      // Ocultar badge DERIVED
+      const sourceBadge = document.getElementById('canvas-source-badge');
+      if (sourceBadge) {
+        sourceBadge.style.display = 'none';
+      }
+      
+      // Actualizar viewer
+      renderCanvasViewer(data.canvas_normalized);
+      mostrarCanvasWarnings();
+      
+      alert('✅ Canvas guardado exitosamente');
+      
+    } catch (error) {
+      console.error('Error guardando canvas:', error);
+      alert(`Error guardando canvas: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Convierte canvas a recorrido (preview, no persiste)
+   */
+  async function convertirCanvasARecorrido() {
+    const jsonEditor = document.getElementById('canvas-json-editor');
+    if (!jsonEditor) return;
+    
+    let canvas;
+    try {
+      canvas = JSON.parse(jsonEditor.value);
+    } catch (error) {
+      alert(`Error parseando JSON: ${error.message}`);
+      return;
+    }
+    
+    try {
+      const encodedId = encodeURIComponent(editorState.recorridoId);
+      const response = await fetch(`/admin/api/recorridos/${encodedId}/canvas/convert-to-recorrido`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ canvas })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Mostrar resultado
+      const resultEl = document.getElementById('canvas-conversion-result');
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = `
+          <h4 class="text-white font-semibold mb-2">Recorrido Convertido (Preview)</h4>
+          <pre class="bg-slate-900 text-slate-100 p-4 rounded text-xs overflow-auto max-h-96">${JSON.stringify(data.recorrido_definition, null, 2)}</pre>
+          ${data.warnings && data.warnings.length > 0 ? `
+            <div class="mt-2 text-yellow-200 text-sm">
+              <strong>Advertencias:</strong>
+              <ul class="list-disc list-inside mt-1">
+                ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        `;
+      }
+      
+    } catch (error) {
+      console.error('Error convirtiendo canvas:', error);
+      alert(`Error convirtiendo canvas: ${error.message}`);
+    }
   }
 
   // Inicializar al cargar
