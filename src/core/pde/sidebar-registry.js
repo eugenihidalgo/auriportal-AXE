@@ -244,6 +244,17 @@ export const PDE_SIDEBAR_SECTIONS = [
     href: '/admin/tarot',
     grupo: 'contenido-pde',
     orden: 70
+  },
+  {
+    id: 'automatizaciones-v2',
+    nombre: 'Automatizaciones V2',
+    icono: '⚡',
+    href: '/admin/automations',
+    grupo: 'contenido-pde',
+    orden: 80,
+    badge: 'V2',
+    badgeColor: 'blue',
+    descripcion: 'Motor de automatizaciones con flujos DAG (grafos dirigidos acíclicos)'
   }
 ];
 
@@ -420,6 +431,7 @@ export default {
   updateSection,
   deactivateSection
 };
+
 
 
 
