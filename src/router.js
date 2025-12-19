@@ -11,6 +11,44 @@ import syncAllHandler from "./endpoints/sync-all.js";
 import syncListaPrincipalHandler from "./endpoints/sync-lista-principal.js";
 import healthCheckHandler from "./endpoints/health-check.js";
 import healthAuthHandler from "./endpoints/health-auth.js";
+
+// ============================================
+// ❗ ADMIN ROUTE REGISTRY v1 - FUENTE DE VERDAD ÚNICA
+// ============================================
+// 
+// PRINCIPIO FUNDAMENTAL (NO NEGOCIABLE):
+// Si una ruta no está en el registry, NO puede funcionar.
+//
+// REGLA DE ORO:
+// Para crear una nueva funcionalidad del admin:
+// 1. Añadir ruta en src/core/admin/admin-route-registry.js
+// 2. Crear handler correspondiente
+// 3. (Opcional) añadir al sidebar-registry.js
+//
+// El router SOLO obedece este registry para:
+// - Documentar qué rutas existen
+// - Validar que no haya errores silenciosos
+// - Registrar islas antes del catch-all
+//
+// ⚠️ NO eliminar legacy.
+// ⚠️ NO refactorizar todo.
+// ⚠️ SOLO usar el registry como fuente de verdad.
+// ============================================
+
+import { ADMIN_ROUTES, validateAdminRouteRegistry } from './core/admin/admin-route-registry.js';
+
+// Validar el registry al arrancar (solo una vez)
+// Si hay error, el servidor NO arranca (esto es deseado)
+try {
+  validateAdminRouteRegistry();
+} catch (error) {
+  console.error('[Router] ❌ ERROR CRÍTICO: Admin Route Registry inválido');
+  console.error('[Router] El servidor NO puede arrancar hasta que se corrija el registry');
+  console.error('[Router] Error:', error.message);
+  // En producción, podríamos lanzar el error para detener el servidor
+  // Por ahora, solo logueamos para no romper el arranque en desarrollo
+  // throw error;
+}
 // Admin panels cargados dinámicamente para evitar errores de imports
 const adminPanelHandler = async (request, env, ctx) => {
   const handler = (await import("./endpoints/admin-panel.js")).default;
@@ -259,6 +297,28 @@ async function routerFunction(request, env, ctx) {
         return onboardingCompleteHandler(request, env, ctx);
       }
       
+      // ============================================
+      // RUNTIME DE RECORRIDOS (ALUMNO)
+      // Rutas públicas para ejecutar recorridos publicados
+      // ============================================
+      // GET  /r/:recorrido_slug - Iniciar o continuar recorrido
+      // POST /r/:recorrido_slug/next - Avanzar al siguiente step
+      if (path.startsWith("/r/") && request.method === "GET") {
+        const recorridoSlug = path.slice("/r/".length);
+        if (recorridoSlug) {
+          const { handleGetRecorridoRuntime } = await import("./endpoints/app/recorridos-runtime.js");
+          return handleGetRecorridoRuntime(request, env, recorridoSlug);
+        }
+      }
+      if (path.startsWith("/r/") && path.endsWith("/next") && request.method === "POST") {
+        const pathParts = path.slice("/r/".length).split("/next");
+        const recorridoSlug = pathParts[0];
+        if (recorridoSlug) {
+          const { handlePostRecorridoNext } = await import("./endpoints/app/recorridos-runtime.js");
+          return handlePostRecorridoNext(request, env, recorridoSlug);
+        }
+      }
+      
       // IMPORTANTE: OAuth callbacks deben manejarse ANTES de cualquier otra lógica
       // Endpoint para OAuth callback de Google Apps Script
       if (path === "/oauth/apps-script" || path === "/oauth/apps-script/callback") {
@@ -505,8 +565,21 @@ async function routerFunction(request, env, ctx) {
       return typeformWebhookHandler(request, env, ctx);
     }
     
-    // Admin
+    // ============================================
+    // ADMIN ROUTER - AuriPortal Admin Panel
+    // ============================================
+    // 
+    // ❗ REGLA DE ORO: Ver comentarios al inicio del archivo sobre ADMIN ROUTE REGISTRY
+    // 
+    // IMPORTANTE: El orden de las rutas es crítico.
+    // Las "islas" (rutas específicas) deben ir ANTES del catch-all.
+    // NO reordenar rutas por estética, solo añadir comentarios.
+    // 
+    // Todas las rutas admin deben estar registradas en:
+    // src/core/admin/admin-route-registry.js
+    // ============================================
     if (host === 'admin.pdeeugenihidalgo.org' || host.startsWith('admin.')) {
+      // Health checks (sistema)
       if (path === "/health-check" || path === "/health" || path === "/status") {
         return healthCheckHandler(request, env, ctx);
       }
@@ -519,7 +592,13 @@ async function routerFunction(request, env, ctx) {
         });
       }
       
-      // Endpoints API de energía (antes de delegar a admin-panel-v4)
+      // ============================================
+      // ADMIN API - Endpoints API específicos
+      // ============================================
+      // Estos endpoints deben procesarse ANTES del catch-all
+      // para evitar conflictos con rutas dinámicas.
+      
+      // Endpoints API de energía
       if (path === "/admin/api/energy/clean" && request.method === "POST") {
         const { handleEnergyClean } = await import("./endpoints/admin-energy-api.js");
         return handleEnergyClean(request, env, ctx);
@@ -529,7 +608,34 @@ async function routerFunction(request, env, ctx) {
         return handleEnergyIlluminate(request, env, ctx);
       }
       
-      // Theme Studio v3 UI - ANTES de v2 (legacy)
+      // Endpoint admin para Capability Registry v1 (Recorridos)
+      if (path === "/admin/api/registry" && request.method === "GET") {
+        const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
+        return adminRegistryHandler(request, env, ctx);
+      }
+      
+      // Endpoints API de Navegación (Admin) - Editor de Navegación v1
+      // Rutas API con prefijo explícito /admin/api/navigation
+      if (path.startsWith("/admin/api/navigation")) {
+        const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
+        return adminNavigationApiHandler(request, env, ctx);
+      }
+      
+      // Endpoint de diagnóstico de Ollama (solo admin)
+      if (path === "/admin/ollama/health" && request.method === "GET") {
+        const adminOllamaHealthHandler = (await import("./endpoints/admin-ollama-health.js")).default;
+        return adminOllamaHealthHandler(request, env, ctx);
+      }
+      
+      // ============================================
+      // ADMIN ISLAS - Rutas especiales (ANTES del catch-all)
+      // ============================================
+      // Estas rutas deben procesarse ANTES de admin-panel-v4
+      // porque tienen handlers específicos o son legacy.
+      // NO mover estas rutas después del catch-all.
+      
+      // Theme Studio v3 UI - PREFERENTE (v3 antes de v2)
+      // IMPORTANTE: v3 debe ir ANTES de v2 para prioridad
       if (path === "/admin/themes/studio-v3" || path.startsWith("/admin/themes/studio-v3/")) {
         const adminThemesV3UIHandler = (await import("./endpoints/admin-themes-v3-ui.js")).default;
         return adminThemesV3UIHandler(request, env, ctx);
@@ -537,12 +643,12 @@ async function routerFunction(request, env, ctx) {
       
       // UI del editor de temas (DEPRECATED - redirigir a Theme Studio v2)
       if (path === "/admin/themes/ui" || path === "/admin/apariencia/temas") {
-        // Redirigir a Theme Studio v2
+        // Redirigir a Theme Studio v2 (legacy)
         const studioUrl = new URL('/admin/themes/studio', request.url);
         return Response.redirect(studioUrl.toString(), 302);
       }
       
-      // Theme Studio v2 - Nueva UI de temas (ANTES del catch-all /admin/themes)
+      // Theme Studio v2 - Legacy (ANTES del catch-all /admin/themes)
       if (path === "/admin/themes/studio") {
         // #region agent log
         fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:478',message:'Before importing admin-themes-studio-ui (admin host)',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -576,7 +682,8 @@ async function routerFunction(request, env, ctx) {
         }
       }
       
-      // Endpoints API de temas (antes de delegar a admin-panel-v4)
+      // Endpoints API de temas (catch-all para /admin/themes/* que no sean studio-v3 o studio)
+      // IMPORTANTE: Debe ir DESPUÉS de las rutas específicas de Theme Studio
       if (path.startsWith("/admin/themes")) {
         // #region agent log
         fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:439',message:'Router: ruta /admin/themes API detectada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
@@ -585,33 +692,16 @@ async function routerFunction(request, env, ctx) {
         return adminThemesHandler(request, env, ctx);
       }
       
-      // Endpoint de diagnóstico de Ollama (solo admin)
-      if (path === "/admin/ollama/health" && request.method === "GET") {
-        const adminOllamaHealthHandler = (await import("./endpoints/admin-ollama-health.js")).default;
-        return adminOllamaHealthHandler(request, env, ctx);
-      }
-      
-      // Endpoint admin para Capability Registry v1 (Recorridos)
-      if (path === "/admin/api/registry" && request.method === "GET") {
-        const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
-        return adminRegistryHandler(request, env, ctx);
-      }
-      
-      // Endpoints API de Navegación (Admin) - Editor de Navegación v1
-      // Rutas API con prefijo explícito /admin/api/navigation
-      if (path.startsWith("/admin/api/navigation")) {
-        const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
-        return adminNavigationApiHandler(request, env, ctx);
-      }
-      
       // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
       // Rutas HTML sin prefijo /api (solo páginas)
+      // IMPORTANTE: Debe ir ANTES del catch-all para evitar conflictos
       if (path.startsWith("/admin/navigation")) {
         const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
         return adminNavigationPagesHandler(request, env, ctx);
       }
       
-      // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
+      // Registro de Catálogos PDE (Admin) - Isla especial
+      // IMPORTANTE: Debe ir ANTES del catch-all admin-panel-v4
       // #region agent log
       if (path.startsWith("/admin/pde/catalog-registry")) {
         fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:517',message:'Router: ruta catalog-registry detectada (admin.pdeeugenihidalgo.org)',data:{path,method:request.method,host},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -628,10 +718,85 @@ async function routerFunction(request, env, ctx) {
       }
       // #endregion
       
-      // Delegar TODAS las rutas al Admin Panel v4
+      // Endpoints API de Paquetes PDE (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/packages")) {
+        const adminPackagesApiHandler = (await import("./endpoints/admin-packages-api.js")).default;
+        return adminPackagesApiHandler(request, env, ctx);
+      }
+
+      // Endpoints API de Source Templates (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/source-templates")) {
+        const adminSourceTemplatesApiHandler = (await import("./endpoints/admin-source-templates-api.js")).default;
+        return adminSourceTemplatesApiHandler(request, env, ctx);
+      }
+
+      // Endpoints API de Contextos (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/contexts")) {
+        const adminContextsApiHandler = (await import("./endpoints/admin-contexts-api.js")).default;
+        return adminContextsApiHandler(request, env, ctx);
+      }
+
+      // Endpoints API de Señales (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/senales")) {
+        const adminSenalesApiHandler = (await import("./endpoints/admin-senales-api.js")).default;
+        return adminSenalesApiHandler(request, env, ctx);
+      }
+
+      // Endpoints API de Automatizaciones (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/signals")) {
+        const adminSignalsApiHandler = (await import("./endpoints/admin-signals-api.js")).default;
+        return adminSignalsApiHandler(request, env, ctx);
+      }
+
+      if (path.startsWith("/admin/api/automations") || path.startsWith("/admin/api/actions/catalog")) {
+        if (path === "/admin/api/actions/catalog" && request.method === "GET") {
+          const adminActionsCatalogApiHandler = (await import("./endpoints/admin-actions-catalog-api.js")).default;
+          return adminActionsCatalogApiHandler(request, env, ctx);
+        }
+        if (path.startsWith("/admin/api/automations")) {
+          const adminAutomationsApiHandler = (await import("./endpoints/admin-automations-api.js")).default;
+          return adminAutomationsApiHandler(request, env, ctx);
+        }
+      }
+
+      // UI del Creador de Paquetes (Admin) - ANTES del catch-all
+      if (path === "/admin/packages" || path.startsWith("/admin/packages/")) {
+        const adminPackagesUiHandler = (await import("./endpoints/admin-packages-ui.js")).default;
+        return adminPackagesUiHandler(request, env, ctx);
+      }
+
+      // UI del Gestor de Contextos (Admin) - ANTES del catch-all
+      if (path === "/admin/contexts" || path.startsWith("/admin/contexts/")) {
+        const adminContextsUiHandler = (await import("./endpoints/admin-contexts-ui.js")).default;
+        return adminContextsUiHandler(request, env, ctx);
+      }
+
+      // UI del Gestor de Señales (Admin) - ANTES del catch-all
+      if (path === "/admin/senales" || path.startsWith("/admin/senales/")) {
+        const adminSenalesUiHandler = (await import("./endpoints/admin-senales-ui.js")).default;
+        return adminSenalesUiHandler(request, env, ctx);
+      }
+
+      // UI del Gestor de Automatizaciones (Admin) - ANTES del catch-all
+      if (path === "/admin/automations" || path.startsWith("/admin/automations/")) {
+        const adminAutomationsUiHandler = (await import("./endpoints/admin-automations-ui.js")).default;
+        return adminAutomationsUiHandler(request, env, ctx);
+      }
+      
+      // ============================================
+      // ADMIN LEGACY - Catch-all para todas las demás rutas
+      // ============================================
+      // IMPORTANTE: Esta es la última ruta del admin.
+      // Todas las rutas /admin/* que no hayan sido capturadas arriba
+      // se delegan a admin-panel-v4.js.
+      // 
+      // admin-panel-v4.js maneja:
       // - Rutas explícitas /admin/* (incluye /admin/progreso-v4)
-      // - Rutas raíz "/" o "" (el admin-panel-v4.js las normalizará a /admin)
-      // - Cualquier otra ruta (el admin-panel-v4.js las normalizará internamente)
+      // - Rutas raíz "/" o "" (las normaliza a /admin)
+      // - Cualquier otra ruta (las normaliza internamente)
+      // 
+      // NO mover esta línea antes de las "islas" (rutas específicas).
+      // ============================================
       const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
       return adminPanelV4Handler(request, env, ctx);
     }
@@ -1040,6 +1205,12 @@ async function routerFunction(request, env, ctx) {
     return adminThemesV3ApiHandler(request, env, ctx);
   }
 
+  // Theme Catalog endpoint (antes del catch-all de /admin/api/themes)
+  if (path === "/admin/api/themes/catalog" && request.method === "GET") {
+    const adminThemesCatalogHandler = (await import("./endpoints/admin-themes-catalog-api.js")).default;
+    return adminThemesCatalogHandler(request, env, ctx);
+  }
+
   // Endpoints API de Temas (Admin)
   if (path.startsWith("/admin/api/themes")) {
     const adminThemesApiHandler = (await import("./endpoints/admin-themes-api.js")).default;
@@ -1048,6 +1219,12 @@ async function routerFunction(request, env, ctx) {
     return adminThemesApiHandler(request, env, ctx);
   }
 
+  // Preview Host de Recorridos (isla canónica, antes del catch-all)
+  if (path === "/admin/recorridos/preview") {
+    const adminRecorridosPreviewUIHandler = (await import("./endpoints/admin-recorridos-preview-ui.js")).default;
+    return adminRecorridosPreviewUIHandler(request, env, ctx);
+  }
+  
   // Endpoints UI de Recorridos (Admin)
   if (path.startsWith("/admin/recorridos")) {
     const adminRecorridosHandler = (await import("./endpoints/admin-recorridos.js")).default;
@@ -1121,14 +1298,29 @@ async function routerFunction(request, env, ctx) {
     return adminMotorsApiHandler(request, env, ctx);
   }
 
+  // Endpoints API de Paquetes PDE (Admin)
+  if (path.startsWith("/admin/api/packages")) {
+    const adminPackagesApiHandler = (await import("./endpoints/admin-packages-api.js")).default;
+    return adminPackagesApiHandler(request, env, ctx);
+  }
+
+  // Endpoints API de Source Templates (Admin)
+  if (path.startsWith("/admin/api/source-templates")) {
+    const adminSourceTemplatesApiHandler = (await import("./endpoints/admin-source-templates-api.js")).default;
+    return adminSourceTemplatesApiHandler(request, env, ctx);
+  }
+
+  // UI del Creador de Paquetes (Admin)
+  if (path === "/admin/packages" || path.startsWith("/admin/packages/")) {
+    const adminPackagesUiHandler = (await import("./endpoints/admin-packages-ui.js")).default;
+    return adminPackagesUiHandler(request, env, ctx);
+  }
+
   // Panel de control administrativo
-  // #region agent log
   if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:906',message:'Router: ruta admin genérica detectada',data:{path,method:request.method,matchesAdmin:path === "/admin",matchesControl:path === "/control",startsWithAdmin:path.startsWith("/admin/")},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
     return adminPanelV4Handler(request, env, ctx);
   }
-  // #endregion
 
   // Panel SQL de administración
   if (path === "/sql-admin" || path.startsWith("/sql-admin/")) {
