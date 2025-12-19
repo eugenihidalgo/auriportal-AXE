@@ -260,11 +260,12 @@ export async function archiveMotor(id) {
  * (Preparado para consumo futuro por el Editor de Recorridos)
  * 
  * @param {string} motorId - UUID del motor
- * @param {Object} inputs - Valores de inputs para el motor
- * @returns {Promise<Object>} Estructura AXE generada { steps, edges, captures }
+ * @param {Object} inputs - Valores de inputs para el motor (puede incluir context)
+ * @param {Object} context - Contexto opcional para motores que modifican context
+ * @returns {Promise<Object>} Estructura AXE generada { steps, edges, captures } o context modificado
  * @throws {Error} Si el motor no existe o los inputs son inválidos
  */
-export async function generateAxeStructure(motorId, inputs = {}) {
+export async function generateAxeStructure(motorId, inputs = {}, context = {}) {
   const motor = await getMotorById(motorId);
   if (!motor) {
     throw new Error(`Motor con ID ${motorId} no encontrado`);
@@ -281,6 +282,74 @@ export async function generateAxeStructure(motorId, inputs = {}) {
         throw new Error(`Valor "${inputs[inputDef.key]}" no es válido para input "${inputDef.key}". Opciones: ${inputDef.options.join(', ')}`);
       }
     }
+  }
+
+  // Motores especiales que modifican el context en lugar de generar steps/edges
+  if (motor.motor_key === 'motor_limpiezas_energeticas') {
+    const { executeMotorLimpiezasEnergeticas } = await import('./pde-motors-executors/motor-limpiezas-energeticas-executor.js');
+    
+    // Combinar inputs con context (inputs pueden venir del step motor, context del recorrido)
+    const combinedContext = {
+      ...context,
+      ...inputs
+    };
+    
+    // Ejecutar motor especial que modifica context
+    const contextModificado = await executeMotorLimpiezasEnergeticas(combinedContext, definition);
+    
+    // Retornar estructura vacía pero con metadata del context modificado
+    // El context modificado se debe propagar de otra manera (ver expand-motors.js)
+    return {
+      steps: [],
+      edges: [],
+      captures: [],
+      _context_modified: contextModificado // Metadata para que expand-motors.js pueda propagar
+    };
+  }
+
+  if (motor.motor_key === 'motor_post_limpieza_practicas') {
+    const { executeMotorPostLimpiezaPracticas } = await import('./pde-motors-executors/motor-post-limpieza-practicas-executor.js');
+    
+    // Combinar inputs con context (inputs pueden venir del step motor, context del recorrido)
+    const combinedContext = {
+      ...context,
+      ...inputs
+    };
+    
+    // Ejecutar motor especial que modifica context
+    const contextModificado = await executeMotorPostLimpiezaPracticas(combinedContext, definition);
+    
+    // Retornar estructura vacía pero con metadata del context modificado
+    // El context modificado se debe propagar de otra manera (ver expand-motors.js)
+    return {
+      steps: [],
+      edges: [],
+      captures: [],
+      _context_modified: contextModificado // Metadata para que expand-motors.js pueda propagar
+    };
+  }
+
+  // AXE v5.16.0: Motor post-limpieza-seleccion (preparado para consumo futuro)
+  if (motor.motor_key === 'motor_post_limpieza_seleccion') {
+    const { executeMotorPostLimpiezaSeleccion } = await import('./pde-motors-executors/motor-post-limpieza-seleccion-executor.js');
+    
+    // Combinar inputs con context (inputs pueden venir del step motor, context del recorrido)
+    const combinedContext = {
+      ...context,
+      ...inputs
+    };
+    
+    // Ejecutar motor especial que modifica context
+    const contextModificado = await executeMotorPostLimpiezaSeleccion(combinedContext, definition);
+    
+    // Retornar estructura vacía pero con metadata del context modificado
+    // El context modificado se debe propagar de otra manera (ver expand-motors.js)
+    return {
+      steps: [],
+      edges: [],
+      captures: [],
+      _context_modified: contextModificado // Metadata para que expand-motors.js pueda propagar
+    };
   }
 
   // Por ahora, retornar la estructura base del motor

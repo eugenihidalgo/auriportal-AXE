@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
 import { isActivo, isBeta } from '../services/modulos.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 import { 
   listarAspectosGlobales,
   crearAspectoRapido,

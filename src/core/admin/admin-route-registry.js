@@ -89,6 +89,11 @@ export const ADMIN_ROUTES = [
     type: 'api'
   },
   {
+    key: 'api-widgets',
+    path: '/admin/api/widgets',
+    type: 'api'
+  },
+  {
     key: 'api-source-templates',
     path: '/admin/api/source-templates',
     type: 'api'
@@ -170,6 +175,11 @@ export const ADMIN_ROUTES = [
   {
     key: 'packages-creator',
     path: '/admin/packages',
+    type: 'island'
+  },
+  {
+    key: 'widgets-creator',
+    path: '/admin/widgets',
     type: 'island'
   },
   {

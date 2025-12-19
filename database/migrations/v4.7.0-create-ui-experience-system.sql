@@ -143,3 +143,5 @@ COMMENT ON COLUMN ui_active_config.updated_by IS 'Actor que hizo el cambio (admi
 
 
 
+
+

@@ -193,11 +193,41 @@ function validateNode(node, canvas, isPublish = false) {
   if (node.type === 'decision') {
     const props = node.props || {};
     if (isPublish) {
-      if (!props.choices || !Array.isArray(props.choices) || props.choices.length < 2) {
-        errors.push(`Node '${node.id}': DecisionNode debe tener al menos 2 choices en PUBLISH`);
+      const choices = props.choices || [];
+      const choicesCount = Array.isArray(choices) ? choices.length : 0;
+      
+      if (choicesCount === 0) {
+        // Si no hay choices, verificar si hay edges salientes que puedan servir como nextStep
+        const outgoingEdges = (canvas.edges || []).filter(e => e.from_node_id === node.id);
+        if (outgoingEdges.length === 0) {
+          errors.push(`Node '${node.id}': DecisionNode debe tener al menos 1 choice o edge saliente en PUBLISH`);
+        } else {
+          // Hay edges salientes, se puede resolver automáticamente
+          warnings.push(`Node '${node.id}': DecisionNode tiene 0 choices pero tiene ${outgoingEdges.length} edge(s) saliente(s), se tratará como passthrough`);
+          logWarn('CanvasValidator', `[AXE][DECISION][PASSTHROUGH] DecisionNode '${node.id}' has 0 choices, auto-resolved via edges in publish`, {
+            node_id: node.id,
+            choices_count: 0,
+            outgoing_edges_count: outgoingEdges.length,
+            is_publish: true
+          });
+        }
+      } else if (choicesCount === 1) {
+        // Un solo choice: warning (passthrough), no error
+        warnings.push(`Node '${node.id}': DecisionNode tiene 1 choice, se tratará como passthrough (auto-resuelto en publish)`);
+        logWarn('CanvasValidator', `[AXE][DECISION][PASSTHROUGH] DecisionNode '${node.id}' has < 2 choices (${choicesCount}), auto-resolved in publish`, {
+          node_id: node.id,
+          choices_count: choicesCount,
+          is_publish: true
+        });
+        
+        // Validar choice_id único (si existe)
+        const choice = choices[0];
+        if (choice && choice.choice_id) {
+          // Choice válido, no hacer nada más (solo el warning)
+        }
       } else {
-        // Validar choice_ids únicos
-        const choiceIds = props.choices.map(c => c?.choice_id).filter(Boolean);
+        // 2 o más choices: validar choice_ids únicos
+        const choiceIds = choices.map(c => c?.choice_id).filter(Boolean);
         const duplicates = choiceIds.filter((id, idx) => choiceIds.indexOf(id) !== idx);
         if (duplicates.length > 0) {
           errors.push(`Node '${node.id}': choice_id duplicados: ${duplicates.join(', ')}`);

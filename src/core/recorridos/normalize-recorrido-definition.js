@@ -150,6 +150,11 @@ export function normalizeRecorridoDefinition(definition, options = {}) {
 
 /**
  * Normaliza un step individual
+ * 
+ * NOTE:
+ * Motor steps are compile-time structural transformations.
+ * They do NOT render UI and are NOT visible to the student.
+ * Do NOT require screen_template_id.
  */
 function normalizeStep(step, cleanEmptyProps = true) {
   if (!step || typeof step !== 'object') {
@@ -159,6 +164,52 @@ function normalizeStep(step, cleanEmptyProps = true) {
     };
   }
   
+  // ============================================================================
+  // VALIDACIÓN ESPECÍFICA: Steps motor (type === "motor")
+  // ============================================================================
+  // NOTE: Motor steps are compile-time structural transformations.
+  // They do NOT render UI and are NOT visible to the student.
+  // Do NOT require screen_template_id.
+  if (step.type === 'motor') {
+    const normalized = {
+      type: 'motor'
+    };
+    
+    // Campos obligatorios del motor
+    if (step.motor_key) {
+      normalized.motor_key = step.motor_key;
+    }
+    
+    if (step.motor_version !== undefined && step.motor_version !== null) {
+      normalized.motor_version = step.motor_version;
+    }
+    
+    // Inputs (opcional pero debe ser objeto si existe)
+    if (step.inputs && typeof step.inputs === 'object' && !Array.isArray(step.inputs)) {
+      normalized.inputs = { ...step.inputs };
+    } else if (step.inputs !== undefined) {
+      // Si inputs existe pero no es objeto válido, inicializar como objeto vacío
+      normalized.inputs = {};
+    }
+    
+    // CRÍTICO: order (opcional, pero SIEMPRE preservar si existe)
+    if (typeof step.order === 'number') {
+      normalized.order = step.order;
+    }
+    
+    // PROHIBIDO en steps motor:
+    // - screen_template_id
+    // - props
+    // - capture
+    // - ui_config
+    // - cualquier campo de render
+    
+    return normalized;
+  }
+  
+  // ============================================================================
+  // NORMALIZACIÓN: Steps normales (screen steps)
+  // ============================================================================
   const normalized = {};
   
   // Campos obligatorios
@@ -308,7 +359,38 @@ export function validateDefinitionForDraft(definition) {
         continue;
       }
       
-      // screen_template_id es obligatorio
+      // ============================================================================
+      // VALIDACIÓN ESPECÍFICA: Steps motor (type === "motor")
+      // ============================================================================
+      // NOTE: Motor steps are compile-time structural transformations.
+      // They do NOT render UI and are NOT visible to the student.
+      // Do NOT require screen_template_id.
+      if (step.type === 'motor') {
+        // Validar motor_key (obligatorio)
+        if (!step.motor_key || typeof step.motor_key !== 'string' || step.motor_key.trim() === '') {
+          errors.push(`Step motor "${stepId}": debe tener un "motor_key" (string no vacío)`);
+        }
+        
+        // Validar motor_version (obligatorio, debe ser número)
+        if (step.motor_version === undefined || step.motor_version === null) {
+          errors.push(`Step motor "${stepId}": debe tener un "motor_version" (número)`);
+        } else if (typeof step.motor_version !== 'number' || step.motor_version < 1) {
+          errors.push(`Step motor "${stepId}": motor_version debe ser un número >= 1`);
+        }
+        
+        // Validar inputs (opcional pero debe ser objeto si existe)
+        if (step.inputs !== undefined && (typeof step.inputs !== 'object' || Array.isArray(step.inputs))) {
+          errors.push(`Step motor "${stepId}": inputs debe ser un objeto`);
+        }
+        
+        // Los steps motor NO requieren screen_template_id
+        continue;
+      }
+      
+      // ============================================================================
+      // VALIDACIÓN: Steps normales (screen steps)
+      // ============================================================================
+      // screen_template_id es obligatorio para steps normales
       if (!step.screen_template_id) {
         errors.push(`Step "${stepId}": falta screen_template_id`);
       }

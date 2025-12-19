@@ -38,3 +38,5 @@ COMMENT ON COLUMN master_notifications.read_at IS 'Fecha de lectura de la notifi
 
 
 
+
+

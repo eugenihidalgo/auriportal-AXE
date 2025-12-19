@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { requireAdminContext } from '../core/auth-context.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 import { 
   listarDecretos, 
   obtenerDecreto, 
@@ -77,7 +78,7 @@ export async function renderListadoDecretos(request, env) {
     DECRETOS_ROWS: decretosRows
   });
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Biblioteca de Decretos',
     CONTENT: content,
     CURRENT_PATH: '/admin/decretos'
@@ -119,7 +120,7 @@ export async function renderEditarDecreto(request, env, decretoId) {
     OBLIGATORIA_POR_NIVEL: decreto ? (JSON.stringify(decreto.obligatoria_por_nivel || {})).replace(/"/g, '&quot;') : '{}'
   });
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: decreto ? `Editar Decreto: ${decreto.nombre}` : 'Nuevo Decreto',
     CONTENT: content,
     CURRENT_PATH: '/admin/decretos'

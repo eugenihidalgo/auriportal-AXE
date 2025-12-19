@@ -153,6 +153,10 @@ async function validateStep(stepId, step, isPublish = false) {
   // ============================================================================
   // VALIDACIÓN ESPECÍFICA: Steps motor (type === "motor")
   // ============================================================================
+  // NOTE:
+  // Motor steps are compile-time structural transformations.
+  // They do NOT render UI and are NOT visible to the student.
+  // Do NOT require screen_template_id.
   if (step.type === 'motor') {
     // Validar motor_key (obligatorio)
     if (!step.motor_key || typeof step.motor_key !== 'string' || step.motor_key.trim() === '') {
@@ -174,7 +178,7 @@ async function validateStep(stepId, step, isPublish = false) {
     // En publish, verificar que el motor existe y está published
     if (isPublish && step.motor_key) {
       try {
-        const { getMotorByKey } = await import('../services/pde-motors-service.js');
+        const { getMotorByKey } = await import('../../services/pde-motors-service.js');
         const motor = await getMotorByKey(step.motor_key);
         
         if (!motor) {
@@ -193,9 +197,18 @@ async function validateStep(stepId, step, isPublish = false) {
     }
     
     // Los steps motor no tienen screen_template_id, así que retornamos aquí
+    // PROHIBIDO en steps motor:
+    // - screen_template_id
+    // - props
+    // - capture
+    // - ui_config
+    // - cualquier campo de render
     return errors;
   }
   
+  // ============================================================================
+  // VALIDACIÓN: Steps normales (screen steps)
+  // ============================================================================
   // Validar screen_template_id (para steps normales)
   if (!step.screen_template_id || typeof step.screen_template_id !== 'string') {
     errors.push(`Step "${stepId}": debe tener un "screen_template_id" (string)`);
@@ -232,22 +245,28 @@ async function validateStep(stepId, step, isPublish = false) {
         // ============================================================================
         // VALIDACIÓN PUBLISH ESPECÍFICA: screen_audio
         // ============================================================================
-        // Para screen_audio, validamos que audio_source sea uno de los valores permitidos
+        // REGLA: audio_source y audio_ref son OPCIONALES
+        // Si existen, validar que audio_source sea un valor permitido
+        // Si no existen, el runtime no renderiza el bloque de audio (fail-open)
         if (isPublish && step.screen_template_id === 'screen_audio') {
-          const audioSource = step.props.audio_source;
-          const audioRef = step.props.audio_ref;
+          const audioSource = step.props?.audio_source;
+          const audioRef = step.props?.audio_ref;
           
-          // Validar audio_source (obligatorio y debe ser valor permitido)
-          if (!audioSource || typeof audioSource !== 'string' || audioSource.trim() === '') {
-            errors.push(`Step "${stepId}": props.audio_source es obligatorio para publicar`);
-          } else if (!['internal', 'external'].includes(audioSource)) {
-            errors.push(`Step "${stepId}": props.audio_source debe ser 'internal' o 'external'`);
+          // Solo validar si ambos están presentes (opcional pero si existe debe ser válido)
+          if (audioSource || audioRef) {
+            // Si hay audio_source, debe ser valor permitido
+            if (audioSource && typeof audioSource === 'string' && audioSource.trim() !== '') {
+              if (!['internal', 'external'].includes(audioSource)) {
+                errors.push(`Step "${stepId}": props.audio_source debe ser 'internal' o 'external'`);
+              }
+            }
+            
+            // Si hay audio_ref, debe ser string no vacío
+            if (audioRef && typeof audioRef !== 'string') {
+              errors.push(`Step "${stepId}": props.audio_ref debe ser un string`);
+            }
           }
-          
-          // Validar audio_ref (obligatorio)
-          if (!audioRef || typeof audioRef !== 'string' || audioRef.trim() === '') {
-            errors.push(`Step "${stepId}": props.audio_ref es obligatorio para publicar`);
-          }
+          // Si no hay audio_source ni audio_ref, no validar (son opcionales)
         }
         
         // ============================================================================

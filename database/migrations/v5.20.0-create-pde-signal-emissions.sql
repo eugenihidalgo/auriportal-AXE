@@ -76,3 +76,4 @@ COMMENT ON COLUMN pde_signal_emissions.context IS 'Contexto resuelto al momento 
 COMMENT ON COLUMN pde_signal_emissions.source_type IS 'Tipo de origen: package, recorrido, manual, system';
 COMMENT ON COLUMN pde_signal_emissions.source_id IS 'ID del origen (package_key, recorrido_id, etc.)';
 
+

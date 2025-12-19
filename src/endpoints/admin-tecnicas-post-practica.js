@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { listarTecnicasPostPractica, crearTecnicaPostPractica, actualizarTecnicaPostPractica, eliminarTecnicaPostPractica } from '../services/tecnicas-post-practica.js';
 import { listarMusicas } from '../services/musicas-meditacion.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from '
 import { fileURLToPath } from 'url';
 import { dirname, join, extname, basename } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -787,7 +788,7 @@ export async function renderEditorPantallas(request, env) {
     </script>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Editor de Pantallas HTML',
     CONTENT: content
   });

@@ -285,3 +285,5 @@ Según especificaciones AXE v0.5: **NO tocar sidebar largo**. El acceso manual e
 **Estado:** Screen Templates v1 está operativo y listo para uso.
 
 
+
+

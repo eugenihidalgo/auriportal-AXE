@@ -5,6 +5,7 @@ import { query } from '../../database/pg.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 // Función helper para reemplazar placeholders
 async function replace(html, placeholders) {
   let output = html;
@@ -246,7 +247,7 @@ export async function renderAutomationsOverview(request, env) {
     </script>
   `;
   
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'AUTOMATIZACIONES - Overview',
     CONTENT: content,
     CURRENT_PATH: '/admin/automations'
@@ -278,7 +279,7 @@ export async function renderAutomationsPlaceholder(sectionName, sectionTitle) {
     </div>
   `;
   
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: `AUTOMATIZACIONES - ${sectionTitle}`,
     CONTENT: content,
     CURRENT_PATH: `/admin/automations/${sectionName}`

@@ -49,3 +49,5 @@ crearTablaTecnicas();
 
 
 
+
+

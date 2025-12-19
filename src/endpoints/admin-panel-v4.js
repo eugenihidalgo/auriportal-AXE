@@ -104,6 +104,7 @@ import { findStudentById } from '../modules/student-v4.js';
 import { generateProgressSnapshot } from '../core/progress-snapshot.js';
 import { getDefaultProgressSnapshotRepo } from '../infra/repos/progress-snapshot-repo-pg.js';
 import { getCurrentStreak } from '../modules/streak-v4.js';
+import { getVisibleSidebarItems, getSectionOrder } from '../core/admin/sidebar-registry.js';
 
 // Importar módulos V6
 import { renderAuribosses } from '../modules/auribosses/endpoints/admin-auribosses.js';
@@ -131,6 +132,7 @@ import {
   renderSellosAscension
 } from './admin-panel-v61-modulos.js';
 import { renderEditorPantallas } from './admin-editor-pantallas.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 // Importar módulos V7
 import {
@@ -169,13 +171,17 @@ fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{metho
 const loginTemplate = readFileSync(join(__dirname, '../core/html/admin/login.html'), 'utf-8');
 
 /**
- * Reemplaza placeholders en templates
+ * Helper local para reemplazar placeholders en templates de contenido
+ * (NO en baseTemplate, solo en templates de contenido interno)
+ * 
+ * Para baseTemplate, usar replaceAdminTemplate() del helper centralizado.
  */
 function replace(html, placeholders) {
   let output = html;
   for (const key in placeholders) {
     const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
+    const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`{{${escapedKey}}}`, "g");
     output = output.replace(regex, value);
   }
   return output;
@@ -1861,7 +1867,7 @@ async function renderDashboard(env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Dashboard',
       CONTENT: content
     });
@@ -2197,7 +2203,7 @@ async function renderAlumnos(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Alumnos',
       CONTENT: content
     });
@@ -2502,7 +2508,7 @@ async function renderAlumnoDetail(alumnoId, env, request) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: `Alumno: ${alumno.email}`,
       CONTENT: content
     });
@@ -2813,7 +2819,7 @@ async function renderPracticas(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Prácticas',
       CONTENT: content
     });
@@ -2926,7 +2932,7 @@ async function renderFrases(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Frases Personalizadas (PDE)',
       CONTENT: content
     });
@@ -3079,7 +3085,7 @@ async function renderEditFrases(request, env, id) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: id ? 'Editar Frases Personalizadas' : 'Nuevo Recurso de Frases',
       CONTENT: content
     });
@@ -3272,7 +3278,7 @@ async function renderLogs(env) {
     </div>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Logs',
     CONTENT: content
   });
@@ -3436,7 +3442,7 @@ async function renderConfiguracion(env) {
     </div>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Configuración',
     CONTENT: content
   });
@@ -3577,7 +3583,7 @@ async function renderFlags(env) {
     </div>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Feature Flags',
     CONTENT: content
   });
@@ -4703,7 +4709,7 @@ function renderEmailForm(request) {
     </div>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Enviar Email',
     CONTENT: content
   });

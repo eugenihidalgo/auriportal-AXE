@@ -3390,6 +3390,292 @@ export async function runMigrations() {
         }
       }
     }
+    
+    // Migración v5.13.0: Sistema de Paquetes PDE (Package Creator)
+    const migration513Path = join(__dirname, 'migrations', 'v5.13.0-create-pde-packages.sql');
+    try {
+      const migrationSQL = readFileSync(migration513Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.13.0 ejecutada: sistema de paquetes PDE');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.13.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_packages', 'pde_source_templates')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 2) {
+              console.log('ℹ️  Migración v5.13.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.13.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.13.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.13.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.17.0: Context Registry v1 (Source of Truth para Contextos)
+    const migration517Path = join(__dirname, 'migrations', 'v5.17.0-create-pde-contexts.sql');
+    try {
+      const migrationSQL = readFileSync(migration517Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.17.0 ejecutada: Context Registry v1');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.17.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_contexts', 'pde_context_audit_log')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 2) {
+              console.log('ℹ️  Migración v5.17.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.17.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.17.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.17.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.18.0: Señales Registry v1 (Sistema de Señales PDE)
+    const migration518Path = join(__dirname, 'migrations', 'v5.18.0-create-pde-senales.sql');
+    try {
+      const migrationSQL = readFileSync(migration518Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.18.0 ejecutada: Señales Registry v1');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.18.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_signals', 'pde_signal_audit_log')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 2) {
+              console.log('ℹ️  Migración v5.18.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.18.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.18.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.18.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.19.0: Motor de Automatizaciones v1 (Señales → Acciones)
+    const migration519Path = join(__dirname, 'migrations', 'v5.19.0-pde-automations-engine-v1.sql');
+    try {
+      const migrationSQL = readFileSync(migration519Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.19.0 ejecutada: Motor de Automatizaciones v1');
+    } catch (error) {
+      // Si el archivo no existe o ya está aplicada, ignorar
+      if (error.code !== 'ENOENT') {
+        // Si es error de tabla ya existe, es OK (idempotente)
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.19.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_automations', 'pde_automation_audit_log', 'pde_automation_executions')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 3) {
+              console.log('ℹ️  Migración v5.19.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.19.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.19.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.19.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.5.0: Sistema de Versionado de Navegación (DRAFT/PUBLISH)
+    try {
+      // Verificar si las tablas ya existen ANTES de intentar aplicar
+      const checkResult = await pool.query(`
+        SELECT COUNT(*) as count FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('navigation_definitions', 'navigation_drafts', 'navigation_versions', 'navigation_audit_log')
+      `);
+      
+      const count = parseInt(checkResult.rows[0].count);
+      if (count >= 3) {
+        console.log('ℹ️  Migración v5.5.0 ya aplicada (tablas existentes)');
+      } else {
+        // Solo aplicar si faltan tablas
+        const migration55Path = join(__dirname, 'migrations', 'v5.5.0-navigation-versioning-v1.sql');
+        const migrationSQL = readFileSync(migration55Path, 'utf-8');
+        // Ejecutar SQL completo (las funciones con $$ se manejan mejor así)
+        await pool.query(migrationSQL);
+        console.log('✅ Migración v5.5.0 ejecutada: navigation_definitions, navigation_drafts, navigation_versions, navigation_audit_log');
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.5.0 ya aplicada (objetos existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          // Verificar si las tablas ya existen (migración aplicada por otro usuario)
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('navigation_definitions', 'navigation_drafts', 'navigation_versions', 'navigation_audit_log')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 3) {
+              console.log('ℹ️  Migración v5.5.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.5.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.5.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.5.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.21.0: Sistema de Widgets PDE (RECONSTRUCCIÓN COMPLETA)
+    const migration521Path = join(__dirname, 'migrations', 'v5.21.0-create-pde-widgets.sql');
+    try {
+      const migrationSQL = readFileSync(migration521Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.21.0 ejecutada: Sistema de Widgets PDE');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.21.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_widgets', 'pde_widget_drafts', 'pde_widget_versions', 'pde_widget_audit_log')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 4) {
+              console.log('ℹ️  Migración v5.21.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.21.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.21.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.21.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.22.0: Añadir Versionado Completo a Paquetes PDE
+    const migration522Path = join(__dirname, 'migrations', 'v5.22.0-add-versioning-to-pde-packages.sql');
+    try {
+      const migrationSQL = readFileSync(migration522Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.22.0 ejecutada: Versionado completo a paquetes PDE');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.22.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('pde_package_drafts', 'pde_package_versions', 'pde_package_audit_log')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 3) {
+              console.log('ℹ️  Migración v5.22.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.22.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.22.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.22.0:', error.message);
+        }
+      }
+    }
   } catch (error) {
     console.warn('⚠️  Error ejecutando migraciones:', error.message);
   }

@@ -367,3 +367,5 @@ src/core/html/practicas/
 
 **Fin del Diagnóstico**
 
+
+

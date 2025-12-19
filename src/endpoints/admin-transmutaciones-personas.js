@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
 import { requireAdminAuth } from '../modules/admin-auth.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 import { 
   listarPersonasConApadrinados,
   getPersonaConApadrinados
@@ -409,7 +410,7 @@ export async function renderTransmutacionesPersonas(request, env) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Personas de la plataforma',
       CONTENT: content
     });

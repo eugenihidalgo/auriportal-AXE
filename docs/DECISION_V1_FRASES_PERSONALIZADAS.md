@@ -124,3 +124,5 @@ const frase = await resolveFrasePersonalizada({
 **Versión**: v1.0.0
 **Estado**: Implementación base completada, integraciones pendientes
 
+
+

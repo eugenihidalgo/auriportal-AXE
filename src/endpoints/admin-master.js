@@ -15,6 +15,7 @@ import { gestionarEstadoSuscripcion } from '../modules/suscripcion-v4.js';
 import { calcularDiasPausados, estaPausada } from '../modules/pausa-v4.js';
 import { logAuditEvent } from '../core/audit/audit-service.js';
 import { requireAdminContext } from '../core/auth-context.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -842,7 +843,7 @@ export async function renderMaster(request, env, alumnoId) {
     // Renderizar usando baseTemplate
     // Usar apodo como identificador principal en el título
     const tituloPagina = alumno.apodo || alumno.nombre_completo || alumno.email;
-    const html = await replace(baseTemplate, {
+    const html = await replaceAdminTemplate(baseTemplate, {
       TITLE: `Modo Master: ${tituloPagina}`,
       CONTENT: content
     });

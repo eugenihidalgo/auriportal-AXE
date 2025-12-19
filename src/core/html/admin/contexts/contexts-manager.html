@@ -1,0 +1,729 @@
+<div class="p-6">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold text-white mb-2">🔧 Gestor de Contextos PDE</h1>
+    <p class="text-slate-400">Gestiona contextos globales (variables semánticas) que usan Paquetes y Editores.</p>
+  </div>
+
+  <!-- Tabs por scope -->
+  <div class="mb-6 bg-slate-800 rounded-lg shadow-lg p-4">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-semibold text-white">Contextos Disponibles</h2>
+      <button 
+        onclick="abrirModalCrearContexto()" 
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors"
+      >
+        ➕ Crear Contexto
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-slate-600 mb-4">
+      <button 
+        onclick="mostrarScopeTab('system')" 
+        id="tabSystem" 
+        class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium"
+      >
+        🧠 Contextos de Sistema
+      </button>
+      <button 
+        onclick="mostrarScopeTab('recorrido')" 
+        id="tabRecorrido" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        🔁 Contextos de Recorridos
+      </button>
+    </div>
+
+    <!-- Explicación del scope -->
+    <div id="scopeExplanation" class="mb-4 p-3 bg-slate-700 rounded text-sm text-slate-300">
+      <!-- Se llena dinámicamente -->
+    </div>
+
+    <div id="contextsList" class="space-y-2">
+      <!-- Se llena dinámicamente -->
+    </div>
+  </div>
+</div>
+
+<!-- Modal para crear/editar contexto -->
+<div id="contextModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-white" id="modalTitle">Crear Nuevo Contexto</h2>
+      <button 
+        onclick="cerrarModalContexto()" 
+        class="text-slate-400 hover:text-white text-2xl"
+      >
+        ×
+      </button>
+    </div>
+
+    <!-- Tabs: Visual / Avanzado -->
+    <div class="mb-4 border-b border-slate-600">
+      <button onclick="mostrarTab('visual')" id="tabVisual" class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium">📝 Visual</button>
+      <button onclick="mostrarTab('avanzado')" id="tabAvanzado" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white">⚙️ Avanzado (JSON)</button>
+    </div>
+
+    <!-- Tab Visual -->
+    <div id="tabVisualContent">
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Context Key <span class="text-red-400">*</span></label>
+        <input 
+          type="text" 
+          id="contextKey" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder="nivel_efectivo"
+          oninput="validarContextKey(this)"
+        />
+        <div id="contextKeyError" class="mt-1 text-sm text-red-400 hidden"></div>
+        <p class="text-xs text-slate-500 mt-1">Solo letras minúsculas, números, guiones bajos y guiones</p>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Label <span class="text-red-400">*</span></label>
+        <input 
+          type="text" 
+          id="contextLabel" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Nivel Efectivo"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Descripción</label>
+        <textarea 
+          id="contextDescription" 
+          rows="2"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Descripción opcional del contexto"
+        ></textarea>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Tipo <span class="text-red-400">*</span></label>
+        <select 
+          id="contextType" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          onchange="actualizarInputsPorTipo()"
+        >
+          <option value="string">String (texto)</option>
+          <option value="number">Number (número)</option>
+          <option value="boolean">Boolean (verdadero/falso)</option>
+          <option value="enum">Enum (lista de valores)</option>
+          <option value="json">JSON (objeto)</option>
+        </select>
+      </div>
+
+      <!-- Default Value (dinámico según type) -->
+      <div class="mb-4" id="defaultValueContainer">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Valor por Defecto</label>
+        <div id="defaultValueInput">
+          <!-- Se llena dinámicamente según type -->
+        </div>
+      </div>
+
+      <!-- Allowed Values (solo para enum) -->
+      <div class="mb-4 hidden" id="allowedValuesContainer">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Valores Permitidos <span class="text-red-400">*</span> (uno por línea)</label>
+        <textarea 
+          id="allowedValues" 
+          rows="4"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder="rapida&#10;basica&#10;profunda&#10;maestro"
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Escribe un valor por línea</p>
+      </div>
+
+      <!-- Scope y Origin -->
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Scope <span class="text-red-400">*</span></label>
+          <select 
+            id="contextScope" 
+            class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onchange="actualizarScopeEnFormulario()"
+          >
+            <option value="recorrido">Recorrido</option>
+            <option value="system">Sistema</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">
+            <strong>Recorrido:</strong> Para usar en paquetes y recorridos<br>
+            <strong>Sistema:</strong> Contextos del sistema (ej: nivel_efectivo)
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Origin</label>
+          <select 
+            id="contextOrigin" 
+            class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="user_choice">User Choice</option>
+            <option value="system">System</option>
+            <option value="derived">Derived</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Usable en paquetes (solo para system) -->
+      <div class="mb-4 hidden" id="usableEnPaquetesContainer">
+        <label class="block text-sm font-medium text-slate-300 mb-2">
+          <input 
+            type="checkbox" 
+            id="usableEnPaquetes" 
+            class="mr-2"
+          />
+          Usable en Paquetes
+        </label>
+        <p class="text-xs text-slate-500 mt-1">Permite usar este contexto de sistema en paquetes</p>
+      </div>
+
+      <!-- UI Config (opcional) -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Configuración UI (JSON opcional)</label>
+        <textarea 
+          id="uiConfig" 
+          rows="4"
+          class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder='{"placeholder": "Ejemplo...", "help_text": "Texto de ayuda", "order": 1, "hidden": false}'
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Opcional: placeholder, help_text, order, hidden</p>
+      </div>
+    </div>
+
+    <!-- Tab Avanzado (JSON) -->
+    <div id="tabAvanzadoContent" class="hidden">
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Definition (JSON completo)</label>
+        <textarea 
+          id="contextDefinition" 
+          rows="15"
+          class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder='{"type": "number", "default_value": 1, "scope": "global", "origin": "system", "description": "..."}'
+          onchange="sincronizarDesdeJSON()"
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Edita el JSON completo. Los cambios se sincronizan con el formulario visual.</p>
+      </div>
+    </div>
+    
+    <div class="flex gap-2 mt-6">
+      <button 
+        onclick="guardarContexto()" 
+        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors"
+      >
+        💾 Guardar Contexto
+      </button>
+      <button 
+        onclick="cerrarModalContexto()" 
+        class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded transition-colors"
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Datos globales
+let contexts = [];
+let editingContextKey = null;
+let currentScopeTab = 'system'; // Tab activo: 'system' o 'recorrido'
+
+// Cargar contextos al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+  contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+  mostrarScopeTab('system'); // Mostrar tab de sistema por defecto
+});
+
+// Mostrar tab por scope
+function mostrarScopeTab(scope) {
+  currentScopeTab = scope;
+  
+  // Actualizar tabs
+  if (scope === 'system') {
+    document.getElementById('tabSystem').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabSystem').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabRecorrido').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabRecorrido').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('scopeExplanation').innerHTML = '<strong>Contextos de Sistema:</strong> Variables globales del sistema (ej: nivel_efectivo). Pueden usarse en paquetes si están marcados como "Usable en Paquetes".';
+  } else {
+    document.getElementById('tabRecorrido').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabRecorrido').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabSystem').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabSystem').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('scopeExplanation').innerHTML = '<strong>Contextos de Recorridos:</strong> Variables específicas para paquetes y recorridos. Aparecen automáticamente en el selector del creador de paquetes.';
+  }
+  
+  renderContexts();
+}
+
+// Actualizar formulario cuando cambia scope
+function actualizarScopeEnFormulario() {
+  const scope = document.getElementById('contextScope').value;
+  const usableContainer = document.getElementById('usableEnPaquetesContainer');
+  
+  if (scope === 'system') {
+    usableContainer.classList.remove('hidden');
+  } else {
+    usableContainer.classList.add('hidden');
+    document.getElementById('usableEnPaquetes').checked = false;
+  }
+}
+
+// Validación de context_key
+function validarContextKey(input) {
+  const contextKey = input.value;
+  const errorDiv = document.getElementById('contextKeyError');
+  const contextKeyRegex = /^[a-z0-9_-]+$/;
+  
+  if (!contextKey) {
+    errorDiv.classList.add('hidden');
+    input.classList.remove('border-red-500');
+    return true;
+  }
+  
+  if (!contextKeyRegex.test(contextKey)) {
+    errorDiv.textContent = 'Solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)';
+    errorDiv.classList.remove('hidden');
+    input.classList.add('border-red-500');
+    return false;
+  }
+  
+  errorDiv.classList.add('hidden');
+  input.classList.remove('border-red-500');
+  return true;
+}
+
+// Renderizar lista de contextos (filtrado por scope)
+function renderContexts() {
+  const container = document.getElementById('contextsList');
+  if (!container) return;
+
+  // Filtrar contextos por scope activo
+  const scope = currentScopeTab;
+  const filteredContexts = contexts.filter(ctx => {
+    const def = ctx.definition || {};
+    return (def.scope || 'recorrido') === scope;
+  });
+
+  if (filteredContexts.length === 0) {
+    container.innerHTML = `<p class="text-slate-400">No hay contextos de tipo "${scope}" disponibles</p>`;
+    return;
+  }
+
+  container.innerHTML = filteredContexts.map(ctx => {
+    const def = ctx.definition || {};
+    const isSystem = ctx.is_system || false;
+    const ctxScope = def.scope || 'recorrido';
+    const usableEnPaquetes = def.usable_en_paquetes || false;
+    
+    return `
+      <div class="bg-slate-700 rounded p-4 flex justify-between items-start">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="text-lg font-semibold text-white">${escapeHtml(ctx.label)}</h3>
+            <span class="text-xs px-2 py-1 rounded ${isSystem ? 'bg-blue-600' : 'bg-green-600'} text-white">${isSystem ? 'Sistema' : 'Usuario'}</span>
+            <span class="text-xs px-2 py-1 rounded ${ctxScope === 'system' ? 'bg-purple-600' : 'bg-indigo-600'} text-white">${ctxScope === 'system' ? 'SYSTEM' : 'RECORRIDO'}</span>
+            ${ctxScope === 'system' && usableEnPaquetes ? '<span class="text-xs px-2 py-1 rounded bg-yellow-600 text-white">Usable en Paquetes</span>' : ''}
+            <code class="text-xs text-slate-400">${escapeHtml(ctx.context_key)}</code>
+          </div>
+          <div class="text-sm text-slate-300">
+            <p><strong>Tipo:</strong> ${escapeHtml(def.type || 'string')}</p>
+            ${def.default_value !== null && def.default_value !== undefined ? `<p><strong>Default:</strong> ${escapeHtml(JSON.stringify(def.default_value))}</p>` : ''}
+            ${def.description ? `<p><strong>Descripción:</strong> ${escapeHtml(def.description)}</p>` : ''}
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="editarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">✏️ Editar</button>
+          ${!isSystem ? `
+            <button onclick="eliminarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded">🗑️ Eliminar</button>
+          ` : '<span class="text-xs text-slate-500">Sistema</span>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Mostrar tab
+function mostrarTab(tab) {
+  if (tab === 'visual') {
+    document.getElementById('tabVisual').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabVisual').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabAvanzado').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabAvanzado').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('tabVisualContent').classList.remove('hidden');
+    document.getElementById('tabAvanzadoContent').classList.add('hidden');
+  } else {
+    document.getElementById('tabAvanzado').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabAvanzado').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabVisual').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabVisual').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('tabAvanzadoContent').classList.remove('hidden');
+    document.getElementById('tabVisualContent').classList.add('hidden');
+    sincronizarHaciaJSON();
+  }
+}
+
+// Actualizar inputs según tipo
+function actualizarInputsPorTipo() {
+  const type = document.getElementById('contextType').value;
+  const container = document.getElementById('defaultValueInput');
+  const allowedContainer = document.getElementById('allowedValuesContainer');
+
+  // Mostrar/ocultar allowed values
+  if (type === 'enum') {
+    allowedContainer.classList.remove('hidden');
+  } else {
+    allowedContainer.classList.add('hidden');
+  }
+
+  // Crear input según tipo
+  let html = '';
+  switch (type) {
+    case 'string':
+      html = '<input type="text" id="defaultValue" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Valor por defecto" />';
+      break;
+    case 'number':
+      html = '<input type="number" id="defaultValue" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />';
+      break;
+    case 'boolean':
+      html = '<select id="defaultValue" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="false">Falso</option><option value="true">Verdadero</option></select>';
+      break;
+    case 'enum':
+      html = '<select id="defaultValue" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="">-- Seleccionar --</option></select>';
+      break;
+    case 'json':
+      html = '<textarea id="defaultValue" rows="3" class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm" placeholder="{}"></textarea>';
+      break;
+  }
+  container.innerHTML = html;
+}
+
+// Sincronizar desde formulario visual hacia JSON
+function sincronizarHaciaJSON() {
+  const type = document.getElementById('contextType').value;
+  let defaultValue = null;
+
+  // Obtener default value según tipo
+  const defaultValueEl = document.getElementById('defaultValue');
+  if (defaultValueEl) {
+    if (type === 'number') {
+      const val = defaultValueEl.value;
+      defaultValue = val === '' ? null : parseFloat(val);
+    } else if (type === 'boolean') {
+      defaultValue = defaultValueEl.value === 'true';
+    } else if (type === 'json') {
+      try {
+        defaultValue = defaultValueEl.value ? JSON.parse(defaultValueEl.value) : {};
+      } catch (e) {
+        defaultValue = {};
+      }
+    } else if (type === 'enum') {
+      defaultValue = defaultValueEl.value || null;
+    } else {
+      defaultValue = defaultValueEl.value || '';
+    }
+  }
+
+  // Obtener allowed_values
+  let allowedValues = [];
+  if (type === 'enum') {
+    const allowedText = document.getElementById('allowedValues').value;
+    allowedValues = allowedText.split('\n').map(v => v.trim()).filter(v => v);
+  }
+
+  // Obtener ui_config
+  let uiConfig = {};
+  const uiConfigText = document.getElementById('uiConfig').value;
+  if (uiConfigText.trim()) {
+    try {
+      uiConfig = JSON.parse(uiConfigText);
+    } catch (e) {
+      uiConfig = {};
+    }
+  }
+
+  const definition = {
+    type,
+    default_value: defaultValue,
+    scope: document.getElementById('contextScope').value,
+    origin: document.getElementById('contextOrigin').value,
+    description: document.getElementById('contextDescription').value || ''
+  };
+
+  // Añadir usable_en_paquetes si es scope system
+  if (definition.scope === 'system') {
+    definition.usable_en_paquetes = document.getElementById('usableEnPaquetes').checked;
+  }
+
+  if (type === 'enum' && allowedValues.length > 0) {
+    definition.allowed_values = allowedValues;
+  }
+
+  if (Object.keys(uiConfig).length > 0) {
+    definition.ui_config = uiConfig;
+  }
+
+  document.getElementById('contextDefinition').value = JSON.stringify(definition, null, 2);
+}
+
+// Sincronizar desde JSON hacia formulario visual
+function sincronizarDesdeJSON() {
+  try {
+    const definition = JSON.parse(document.getElementById('contextDefinition').value);
+    
+    document.getElementById('contextType').value = definition.type || 'string';
+    document.getElementById('contextScope').value = definition.scope || 'recorrido';
+    document.getElementById('contextOrigin').value = definition.origin || 'user_choice';
+    document.getElementById('contextDescription').value = definition.description || '';
+    
+    // Actualizar usable_en_paquetes
+    actualizarScopeEnFormulario();
+    if (definition.scope === 'system') {
+      document.getElementById('usableEnPaquetes').checked = definition.usable_en_paquetes || false;
+    }
+    
+    if (definition.ui_config) {
+      document.getElementById('uiConfig').value = JSON.stringify(definition.ui_config, null, 2);
+    } else {
+      document.getElementById('uiConfig').value = '';
+    }
+
+    actualizarInputsPorTipo();
+
+    // Establecer default value
+    setTimeout(() => {
+      const defaultValueEl = document.getElementById('defaultValue');
+      if (defaultValueEl && definition.default_value !== undefined && definition.default_value !== null) {
+        if (definition.type === 'json') {
+          defaultValueEl.value = JSON.stringify(definition.default_value, null, 2);
+        } else {
+          defaultValueEl.value = definition.default_value;
+        }
+      }
+    }, 100);
+
+    // Establecer allowed values
+    if (definition.type === 'enum' && definition.allowed_values) {
+      document.getElementById('allowedValues').value = definition.allowed_values.join('\n');
+    }
+  } catch (e) {
+    // Ignorar errores de parseo
+  }
+}
+
+// Abrir modal para crear contexto
+function abrirModalCrearContexto() {
+  editingContextKey = null;
+  document.getElementById('modalTitle').textContent = 'Crear Nuevo Contexto';
+  document.getElementById('contextKey').value = '';
+  document.getElementById('contextKey').disabled = false;
+  document.getElementById('contextLabel').value = '';
+  document.getElementById('contextDescription').value = '';
+  document.getElementById('contextType').value = 'string';
+  document.getElementById('contextScope').value = 'recorrido';
+  document.getElementById('contextOrigin').value = 'user_choice';
+  document.getElementById('uiConfig').value = '';
+  document.getElementById('allowedValues').value = '';
+  
+  actualizarScopeEnFormulario();
+  actualizarInputsPorTipo();
+  
+  const defaultValueEl = document.getElementById('defaultValue');
+  if (defaultValueEl) defaultValueEl.value = '';
+
+  document.getElementById('contextDefinition').value = JSON.stringify({
+    type: 'string',
+    default_value: '',
+    scope: 'recorrido',
+    origin: 'user_choice',
+    description: ''
+  }, null, 2);
+
+  mostrarTab('visual');
+  document.getElementById('contextModal').classList.remove('hidden');
+}
+
+// Cerrar modal
+function cerrarModalContexto() {
+  document.getElementById('contextModal').classList.add('hidden');
+  editingContextKey = null;
+}
+
+// Editar contexto
+function editarContexto(contextKey) {
+  const ctx = contexts.find(c => c.context_key === contextKey);
+  if (!ctx) return;
+
+  editingContextKey = contextKey;
+  const isSystem = ctx.is_system || false;
+  document.getElementById('modalTitle').textContent = isSystem ? 'Editar Contexto (Sistema)' : 'Editar Contexto';
+  document.getElementById('contextKey').value = ctx.context_key;
+  document.getElementById('contextKey').disabled = isSystem; // No editable si es sistema
+  document.getElementById('contextLabel').value = ctx.label;
+  
+  const def = ctx.definition || {};
+  document.getElementById('contextType').value = def.type || 'string';
+  document.getElementById('contextScope').value = def.scope || 'recorrido';
+  document.getElementById('contextOrigin').value = def.origin || 'user_choice';
+  document.getElementById('contextDescription').value = def.description || '';
+  
+  // Actualizar usable_en_paquetes
+  actualizarScopeEnFormulario();
+  if (def.scope === 'system') {
+    document.getElementById('usableEnPaquetes').checked = def.usable_en_paquetes || false;
+  }
+  
+  if (def.ui_config) {
+    document.getElementById('uiConfig').value = JSON.stringify(def.ui_config, null, 2);
+  } else {
+    document.getElementById('uiConfig').value = '';
+  }
+
+  actualizarInputsPorTipo();
+
+  // Establecer default value
+  setTimeout(() => {
+    const defaultValueEl = document.getElementById('defaultValue');
+    if (defaultValueEl && def.default_value !== undefined && def.default_value !== null) {
+      if (def.type === 'json') {
+        defaultValueEl.value = JSON.stringify(def.default_value, null, 2);
+      } else {
+        defaultValueEl.value = def.default_value;
+      }
+    }
+  }, 100);
+
+  // Establecer allowed values
+  if (def.type === 'enum' && def.allowed_values) {
+    document.getElementById('allowedValues').value = def.allowed_values.join('\n');
+    // Actualizar select de default con allowed values
+    setTimeout(() => {
+      const defaultValueEl = document.getElementById('defaultValue');
+      if (defaultValueEl && defaultValueEl.tagName === 'SELECT') {
+        defaultValueEl.innerHTML = '<option value="">-- Seleccionar --</option>' + 
+          def.allowed_values.map(v => `<option value="${escapeHtml(v)}" ${v === def.default_value ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+      }
+    }, 150);
+  }
+
+  document.getElementById('contextDefinition').value = JSON.stringify(def, null, 2);
+  mostrarTab('visual');
+  document.getElementById('contextModal').classList.remove('hidden');
+}
+
+// Guardar contexto
+async function guardarContexto() {
+  // Sincronizar desde formulario visual hacia JSON antes de guardar
+  sincronizarHaciaJSON();
+
+  const contextKey = document.getElementById('contextKey').value;
+  const label = document.getElementById('contextLabel').value;
+  const definitionText = document.getElementById('contextDefinition').value;
+
+  if (!contextKey || !label || !definitionText) {
+    alert('Context Key, Label y Definition son obligatorios');
+    return;
+  }
+
+  // Validar context_key
+  const contextKeyRegex = /^[a-z0-9_-]+$/;
+  if (!contextKeyRegex.test(contextKey)) {
+    alert('Context Key inválido: Solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)');
+    return;
+  }
+
+  // Validar JSON
+  let definition;
+  try {
+    definition = JSON.parse(definitionText);
+  } catch (error) {
+    alert('JSON inválido: ' + error.message);
+    return;
+  }
+
+  try {
+    const url = editingContextKey ? `/admin/api/contexts/${encodeURIComponent(contextKey)}` : '/admin/api/contexts';
+    const method = editingContextKey ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context_key: contextKey, label, definition })
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Respuesta no es JSON:', text.substring(0, 200));
+      alert('Error: El servidor devolvió una respuesta inesperada. Ver consola para más detalles.');
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+      return;
+    }
+
+    // Recargar contextos
+    const contextsResponse = await fetch('/admin/api/contexts');
+    if (contextsResponse.ok) {
+      const contextsData = await contextsResponse.json();
+      contexts = contextsData.contexts || [];
+      renderContexts();
+    }
+
+    cerrarModalContexto();
+    alert('Contexto guardado exitosamente');
+  } catch (error) {
+    console.error('Error guardando contexto:', error);
+    alert('Error al guardar contexto: ' + (error.message || 'Error desconocido'));
+  }
+}
+
+// Eliminar contexto
+async function eliminarContexto(contextKey) {
+  if (!confirm(`¿Estás seguro de eliminar el contexto '${contextKey}'?`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/api/contexts/${encodeURIComponent(contextKey)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+      return;
+    }
+
+    // Recargar contextos
+    const contextsResponse = await fetch('/admin/api/contexts');
+    if (contextsResponse.ok) {
+      const contextsData = await contextsResponse.json();
+      contexts = contextsData.contexts || [];
+      renderContexts();
+    }
+
+    alert('Contexto eliminado exitosamente');
+  } catch (error) {
+    console.error('Error eliminando contexto:', error);
+    alert('Error al eliminar contexto: ' + (error.message || 'Error desconocido'));
+  }
+}
+
+// Helper para escapar HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+

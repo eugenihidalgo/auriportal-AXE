@@ -336,8 +336,8 @@ const SCREEN_TEMPLATES = {
   // ============================================================================
   // screen_audio - Pantalla de audio embebido (interno o externo)
   // ============================================================================
-  // REGLA: audio_source y audio_ref son opcionales en draft, OBLIGATORIOS en publish
-  // Esto permite edición libre sin errores, validación estricta al publicar
+  // REGLA: audio_source y audio_ref son OPCIONALES (no obligatorios)
+  // Si no se definen, el runtime no renderiza el bloque de audio
   // NOTA: declared_duration_minutes se guarda pero NO se usa aún (preparado para reloj futuro)
   screen_audio: {
     id: 'screen_audio',
@@ -363,12 +363,12 @@ const SCREEN_TEMPLATES = {
         audio_source: {
           type: 'string',
           enum: ['internal', 'external'],
-          description: 'Origen del audio: interno o externo (obligatorio para publicar)'
+          description: 'Origen del audio: interno o externo (opcional)'
         },
         audio_ref: { 
           type: 'string',
           maxLength: 500,
-          description: 'ID o URL del audio según el origen (obligatorio para publicar)'
+          description: 'ID o URL del audio según el origen (opcional)'
         },
         declared_duration_minutes: {
           type: 'number',
@@ -380,8 +380,8 @@ const SCREEN_TEMPLATES = {
     },
     // Metadatos para el editor
     editor_config: {
-      // Campos obligatorios para publicar (pero no para draft)
-      publish_required: ['audio_source', 'audio_ref'],
+      // Campos obligatorios para publicar (NINGUNO - video/audio son opcionales)
+      publish_required: [],
       // Campos a mostrar en orden en el editor
       field_order: ['title', 'subtitle', 'audio_source', 'audio_ref', 'declared_duration_minutes'],
       // Configuración de campos para UI específica
@@ -401,8 +401,8 @@ const SCREEN_TEMPLATES = {
   // ============================================================================
   // screen_video - Pantalla de vídeo embebido (YouTube o interno)
   // ============================================================================
-  // REGLA: video_source y video_ref son opcionales en draft, OBLIGATORIOS en publish
-  // Esto permite edición libre sin errores, validación estricta al publicar
+  // REGLA: video_source y video_ref son OPCIONALES (no obligatorios)
+  // Si no se definen, el runtime no renderiza el bloque de vídeo
   // NOTA: declared_duration_minutes se guarda pero NO se usa aún (preparado para reloj futuro)
   screen_video: {
     id: 'screen_video',
@@ -428,12 +428,12 @@ const SCREEN_TEMPLATES = {
         video_source: {
           type: 'string',
           enum: ['youtube', 'internal'],
-          description: 'Origen del vídeo: YouTube o interno (obligatorio para publicar)'
+          description: 'Origen del vídeo: YouTube o interno (opcional)'
         },
         video_ref: { 
           type: 'string',
           maxLength: 500,
-          description: 'ID o URL del vídeo según el origen (obligatorio para publicar)'
+          description: 'ID o URL del vídeo según el origen (opcional)'
         },
         display_mode: {
           type: 'string',
@@ -451,8 +451,8 @@ const SCREEN_TEMPLATES = {
     },
     // Metadatos para el editor
     editor_config: {
-      // Campos obligatorios para publicar (pero no para draft)
-      publish_required: ['video_source', 'video_ref'],
+      // Campos obligatorios para publicar (NINGUNO - video/audio son opcionales)
+      publish_required: [],
       // Campos a mostrar en orden en el editor
       field_order: ['title', 'description', 'video_source', 'video_ref', 'display_mode', 'declared_duration_minutes'],
       // Configuración de campos para UI específica
@@ -470,6 +470,166 @@ const SCREEN_TEMPLATES = {
         ]},
         declared_duration_minutes: { input_type: 'number', placeholder: 'Duración estimada en minutos' }
       }
+    }
+  },
+  
+  // ============================================================================
+  // screen_checklist_preparacion - Checklist de preparaciones dinámicas
+  // ============================================================================
+  // REGLA: Los items vienen del contexto (context.preparations) generado por Motor PDE
+  // NO se configuran en el editor, solo title y description
+  // Capture: prep_selected_ids (array de IDs)
+  screen_checklist_preparacion: {
+    id: 'screen_checklist_preparacion',
+    name: 'Checklist Preparación',
+    description: 'Pantalla de checklist para seleccionar múltiples preparaciones (items dinámicos desde contexto)',
+    feature_flag: 'on',
+    type: 'screen',
+    props_schema: {
+      type: 'object',
+      required: [],
+      properties: {
+        title: { 
+          type: 'string', 
+          maxLength: 200,
+          description: 'Título opcional de la pantalla'
+        },
+        description: { 
+          type: 'string', 
+          maxLength: 500,
+          description: 'Descripción opcional debajo del título'
+        },
+        items_source: {
+          type: 'string',
+          default: 'context.preparations',
+          description: 'Fuente de items (siempre context.preparations, no configurable)'
+        },
+        limits_source: {
+          type: 'string',
+          default: 'context.limits',
+          description: 'Fuente de límites (siempre context.limits, no configurable)'
+        }
+      }
+    },
+    // Capture definido: prep_selected_ids (array de IDs)
+    capture: {
+      field: 'prep_selected_ids',
+      value_type: 'json',
+      required: true
+    },
+    // Metadatos para el editor
+    editor_config: {
+      // Campos obligatorios para publicar (ninguno, todo opcional)
+      publish_required: [],
+      // Campos a mostrar en orden en el editor
+      field_order: ['title', 'description'],
+      // Configuración de campos para UI específica
+      field_config: {
+        title: { input_type: 'text', placeholder: 'Ej: Selecciona tus preparaciones' },
+        description: { input_type: 'textarea', rows: 3, placeholder: 'Elige las preparaciones que deseas realizar...' }
+      },
+      // Información read-only sobre items dinámicos
+      info_message: 'Los items de la checklist vienen dinámicamente del Motor PDE (context.preparations). No se configuran aquí.'
+    }
+  },
+  
+  // ============================================================================
+  // screen_preparacion_practica - Ejecución guiada de preparaciones seleccionadas
+  // ============================================================================
+  // REGLA: Consume context.prep_selected_ids (array de IDs) del paso anterior
+  // Resuelve cada ID contra el catálogo PDE de preparaciones
+  // Capture: prep_completed (boolean, required true)
+  screen_preparacion_practica: {
+    id: 'screen_preparacion_practica',
+    name: 'Preparación Práctica',
+    description: 'Pantalla de ejecución guiada de las preparaciones seleccionadas con reloj de meditación',
+    feature_flag: 'on',
+    type: 'screen',
+    props_schema: {
+      type: 'object',
+      required: [],
+      properties: {
+        title: { 
+          type: 'string', 
+          maxLength: 200,
+          description: 'Título opcional de la pantalla'
+        },
+        description: { 
+          type: 'string', 
+          maxLength: 500,
+          description: 'Descripción opcional debajo del título'
+        }
+      }
+    },
+    // Capture definido: prep_completed (boolean, required true)
+    capture: {
+      field: 'prep_completed',
+      value_type: 'boolean',
+      required: true
+    },
+    // Metadatos para el editor
+    editor_config: {
+      // Campos obligatorios para publicar (ninguno, todo opcional)
+      publish_required: [],
+      // Campos a mostrar en orden en el editor
+      field_order: ['title', 'description'],
+      // Configuración de campos para UI específica
+      field_config: {
+        title: { input_type: 'text', placeholder: 'Ej: Tiempo de preparación' },
+        description: { input_type: 'textarea', rows: 3, placeholder: 'Realiza las preparaciones seleccionadas...' }
+      },
+      // Información read-only sobre items dinámicos
+      info_message: 'Las prácticas vienen del paso anterior (context.prep_selected_ids). Se resuelven automáticamente desde el catálogo PDE.'
+    }
+  },
+  
+  // ============================================================================
+  // screen_limpieza_energetica - Pantalla de limpieza energética diaria
+  // ============================================================================
+  // REGLA: Consume context.items_limpieza y context.tecnicas_disponibles
+  // NO filtra, NO limita, NO decide - solo consume y renderiza
+  // Capture: limpieza_completed (boolean, required true)
+  screen_limpieza_energetica: {
+    id: 'screen_limpieza_energetica',
+    name: 'Limpieza Energética',
+    description: 'Pantalla núcleo de ejecución de la limpieza energética diaria',
+    feature_flag: 'on',
+    type: 'screen',
+    props_schema: {
+      type: 'object',
+      required: [],
+      properties: {
+        title: { 
+          type: 'string', 
+          maxLength: 200,
+          description: 'Título opcional de la pantalla'
+        },
+        description: { 
+          type: 'string', 
+          maxLength: 500,
+          description: 'Descripción opcional debajo del título'
+        }
+      }
+    },
+    // Capture definido: limpieza_completed (boolean, required true)
+    capture: {
+      field: 'limpieza_completed',
+      value_type: 'boolean',
+      required: true
+    },
+    // Metadatos para el editor
+    editor_config: {
+      // Campos obligatorios para publicar (ninguno, todo opcional)
+      publish_required: [],
+      // Campos a mostrar en orden en el editor
+      field_order: ['title', 'description'],
+      // Configuración de campos para UI específica
+      field_config: {
+        title: { input_type: 'text', placeholder: 'Ej: Limpieza Energética Diaria' },
+        description: { input_type: 'textarea', rows: 3, placeholder: 'Realiza tu limpieza energética diaria...' }
+      },
+      // Información read-only sobre items dinámicos
+      info_message: 'Los items y técnicas vienen dinámicamente del Motor PDE (context.items_limpieza y context.tecnicas_disponibles). No se configuran aquí.'
     }
   }
 };

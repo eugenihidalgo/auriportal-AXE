@@ -9,6 +9,57 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.16.0] - 2025-01-XX
+
+### Added
+- **Recorridos Preview Host**: Sistema de preview canónico para el Editor de Recorridos
+  - HTML isla canónica (`/admin/recorridos/preview`) sin base.html, sin replace/regex
+  - Renderer mínimo de steps (screen_video, screen_choice, placeholder para otros)
+  - Listener postMessage con fail-open absoluto
+  - Integración en editor con panel preview + iframe
+- **Theme Catalog Endpoint**: Endpoint canónico para consumo en editores
+  - `GET /admin/api/themes/catalog?include_drafts=0|1`
+  - Agrega: Auto, Light Classic, Dark Classic, themes v3 publicados
+  - Fail-open: si themes-v3 falla, devuelve solo system/classic
+- **Theme Selector Helper**: Helper reutilizable para selector de temas
+  - `src/core/ui/theme/theme-selector.js`
+  - Persistencia localStorage configurable
+  - Integración con Theme Catalog
+- **Theme Tokens to CSS**: Helper para convertir tokens a CSS text
+  - `src/core/theme/theme-tokens-to-css.js`
+  - Soporta Theme Resolver v1 y ThemeDefinition v1
+
+### Changed
+- **Editor de Recorridos**: Integración de preview panel con iframe
+  - Panel preview toggle ON/OFF
+  - Theme selector actualizado con catálogo dinámico
+  - postMessage automático con snapshot del recorrido
+  - Persistencia de preferencia de tema en localStorage
+
+### Fixed
+- **Bug {{SIDEBAR_MENU}}**: Validación post-replace para asegurar que nunca quede sin reemplazar
+  - Validación adicional en `admin-navigation-pages.js`
+  - Logs de diagnóstico para detectar rutas que escapan
+
+### Technical Details
+- `src/endpoints/admin-themes-catalog-api.js`: Endpoint de catálogo de temas
+- `src/core/html/admin/recorridos/recorridos-preview.html`: Preview host HTML
+- `src/endpoints/admin-recorridos-preview-ui.js`: Handler del preview host
+- `src/core/ui/theme/theme-selector.js`: Helper reutilizable
+- `src/core/theme/theme-tokens-to-css.js`: Conversión tokens → CSS
+- `src/core/admin/admin-route-registry.js`: Rutas nuevas registradas
+- `src/router.js`: Enlaces de handlers nuevos
+- `docs/RECORRIDOS_PREVIEW_V1.md`: Documentación de arquitectura
+- `docs/DIAGNOSTICO_REC_PREVIEW_THEME_BRIDGE.md`: Diagnóstico inicial
+
+### Notes
+- Preview Recorridos NO usa portal alumno ni scripts legacy globales
+- Theme Studio v3 sigue soberano: no renderiza pantallas reales del alumno
+- Fail-open absoluto: tema inválido → fallback automático, preview falla → placeholder + banner
+- Admin Route Registry v1 manda: todas las rutas nuevas registradas y validadas
+
+---
+
 ## [5.13.0] - 2025-01-XX
 
 ### Added

@@ -30,7 +30,8 @@ import {
   normalizeNavigationDefinition,
   createMinimalNavigation,
 } from '../core/navigation/navigation-definition-v1.js';
-import { resolveNavigationEffective } from '../core/navigation/navigation-effective-resolver.js';
+import { resolveNavigationEffective as resolveNavigationEffectiveLegacy } from '../core/navigation/navigation-effective-resolver.js';
+import { resolveNavigationEffective } from '../core/navigation/resolve-navigation-effective.js';
 import { isValidId } from '../core/navigation/navigation-constants.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 
@@ -332,6 +333,7 @@ async function handlePublish(request, env, ctx, navId) {
     // Intentar publicar
     const version = await repo.publish(navId, actor);
 
+    console.log(`[AXE][NAV_PUBLISH] validation_ok navigation_id=${navId} version=${version.version} checksum=${version.checksum}`);
     logInfo('NavigationAPI', 'Versión publicada', {
       navigation_id: navId,
       version: version.version,
@@ -448,6 +450,7 @@ async function handleExport(request, env, ctx, navId) {
       version: exportData.version,
     }, actor);
 
+    console.log(`[AXE][NAV_EXPORT] navigation_id=${navId} version=${exportData.version} checksum=${exportData.checksum}`);
     logInfo('NavigationAPI', 'Navegación exportada', {
       navigation_id: navId,
       version: exportData.version,
@@ -629,114 +632,119 @@ async function handleCreateNavigation(request, env, ctx) {
 }
 
 /**
- * POST /admin/api/navigation/preview-effective
- * Resuelve una navegación efectiva desde global + contextuales (FASE 5)
+ * GET /admin/api/navigation/preview-effective
+ * Resuelve una navegación efectiva desde base + contextuales (Sprint 3)
+ * Query params: navigation_id (obligatorio), context_key (opcional)
  */
 async function handlePreviewEffective(request, env, ctx) {
   const authCtx = await requireAdminContext(request, env);
   if (authCtx instanceof Response) return authCtx;
 
   try {
-    const body = await request.json();
-    const { global_navigation_id, context_navigation_ids = [] } = body;
+    const url = new URL(request.url);
+    const navigation_id = url.searchParams.get('navigation_id');
+    const context_key = url.searchParams.get('context_key') || null;
 
-    if (!global_navigation_id) {
-      return errorResponse('MISSING_FIELD', 'Se requiere "global_navigation_id"');
+    if (!navigation_id) {
+      return errorResponse('MISSING_FIELD', 'Se requiere "navigation_id" en query params', null, 400);
     }
 
-    if (!Array.isArray(context_navigation_ids)) {
-      return errorResponse('INVALID_FIELD', 'context_navigation_ids debe ser un array');
-    }
+    console.log('[AXE][NAV2][PREVIEW] preview-effective requested', { navigation_id, context_key });
 
     const repo = getDefaultNavigationRepo();
 
-    // Cargar navegación global (draft o published)
-    const globalNav = await repo.getNavigationById(global_navigation_id);
-    if (!globalNav) {
-      return errorResponse('NOT_FOUND', `Navegación global "${global_navigation_id}" no encontrada`, null, 404);
+    // Cargar navegación base (draft si existe, fallback published)
+    const baseNav = await repo.getNavigationById(navigation_id);
+    if (!baseNav) {
+      return errorResponse('NOT_FOUND', `Navegación "${navigation_id}" no encontrada`, null, 404);
     }
 
-    // Intentar cargar draft primero, si no existe usar published
-    let globalDef = null;
-    const globalDraft = await repo.getDraftLatest(global_navigation_id);
-    if (globalDraft && globalDraft.draft_json) {
-      globalDef = globalDraft.draft_json;
+    let baseDef = null;
+    const baseDraft = await repo.getDraft(navigation_id);
+    if (baseDraft && baseDraft.draft_json) {
+      baseDef = baseDraft.draft_json;
+      console.log('[AXE][NAV_EFFECTIVE] base loaded from draft', { navigation_id });
     } else {
-      const globalPublished = await repo.getPublishedLatest(global_navigation_id);
-      if (globalPublished && globalPublished.definition_json) {
-        globalDef = globalPublished.definition_json;
+      const basePublished = await repo.getPublishedLatest(navigation_id);
+      if (basePublished && basePublished.definition_json) {
+        baseDef = basePublished.definition_json;
+        console.log('[AXE][NAV_EFFECTIVE] base loaded from published', { navigation_id });
       }
     }
 
-    if (!globalDef) {
-      return errorResponse('NOT_FOUND', `Navegación global "${global_navigation_id}" no tiene draft ni versión publicada`, null, 404);
+    if (!baseDef) {
+      return errorResponse('NOT_FOUND', `Navegación "${navigation_id}" no tiene draft ni versión publicada`, null, 404);
     }
 
-    // Validar que sea tipo global
-    if (globalDef.type !== 'global') {
-      return errorResponse('INVALID_TYPE', `Navegación "${global_navigation_id}" debe ser tipo 'global'`, {
-        actual_type: globalDef.type
-      });
-    }
+    // Cargar navegaciones contextuales relacionadas (si existen)
+    // Buscar todas las navegaciones contextuales que puedan estar relacionadas
+    const allNavigations = await repo.listNavigations({ include_deleted: false });
+    const contextualNavigations = [];
 
-    // Cargar navegaciones contextuales
-    const contextDefs = [];
-    for (const contextNavId of context_navigation_ids) {
-      const contextNav = await repo.getNavigationById(contextNavId);
-      if (!contextNav) {
-        logWarn('NavigationAPI', 'Navegación contextual no encontrada', { contextNavId });
-        continue;
-      }
+    for (const nav of allNavigations) {
+      if (nav.navigation_id === navigation_id) continue; // Skip base
 
-      // Intentar cargar draft primero, si no existe usar published
       let contextDef = null;
-      const contextDraft = await repo.getDraftLatest(contextNavId);
+      const contextDraft = await repo.getDraft(nav.navigation_id);
       if (contextDraft && contextDraft.draft_json) {
         contextDef = contextDraft.draft_json;
       } else {
-        const contextPublished = await repo.getPublishedLatest(contextNavId);
+        const contextPublished = await repo.getPublishedLatest(nav.navigation_id);
         if (contextPublished && contextPublished.definition_json) {
           contextDef = contextPublished.definition_json;
         }
       }
 
-      if (!contextDef) {
-        logWarn('NavigationAPI', 'Navegación contextual sin draft ni published', { contextNavId });
-        continue;
-      }
-
-      // Validar que sea tipo contextual
-      if (contextDef.type !== 'contextual') {
-        logWarn('NavigationAPI', 'Navegación contextual con tipo incorrecto', {
-          contextNavId,
-          actual_type: contextDef.type
+      if (contextDef && contextDef.type === 'contextual' && contextDef.context_key) {
+        contextualNavigations.push({
+          context_key: contextDef.context_key,
+          navigation: contextDef
         });
-        continue;
       }
-
-      contextDefs.push(contextDef);
     }
 
-    // Resolver navegación efectiva
-    const result = resolveNavigationEffective(globalDef, contextDefs, { strict: false });
-
-    logInfo('NavigationAPI', 'Preview efectivo resuelto', {
-      global_navigation_id,
-      context_count: contextDefs.length,
-      warnings_count: result.warnings.length
+    console.log('[AXE][NAV_EFFECTIVE] contextual loaded: ' + contextualNavigations.length, {
+      context_keys: contextualNavigations.map(ctx => ctx.context_key)
     });
 
+    // Resolver navegación efectiva usando el resolver canónico
+    let effectiveDef;
+    const warnings = [];
+
+    try {
+      effectiveDef = resolveNavigationEffective(baseDef, contextualNavigations, context_key);
+      console.log('[AXE][NAV_EFFECTIVE] resolved ok', {
+        navigation_id: effectiveDef.navigation_id,
+        entry_node_id: effectiveDef.entry_node_id
+      });
+    } catch (error) {
+      logError('NavigationAPI', 'Error resolviendo navegación efectiva', {
+        error: error.message,
+        stack: error.stack
+      });
+      warnings.push(`Error resolviendo navegación efectiva: ${error.message}`);
+      
+      // Fail-open: devolver base navigation
+      return jsonResponse({
+        ok: false,
+        error: error.message,
+        fallback: baseDef,
+        warnings
+      });
+    }
+
+    // Responder con contrato canónico
     return jsonResponse({
-      effectiveDef: result.effectiveDef,
-      provenance: result.provenance,
-      warnings: result.warnings
+      ok: true,
+      effective: effectiveDef,
+      warnings
     });
   } catch (error) {
-    logError('NavigationAPI', 'Error resolviendo preview efectivo', {
+    logError('NavigationAPI', 'Error en preview-effective', {
       error: error.message,
       stack: error.stack
     });
-    return errorResponse('INTERNAL_ERROR', 'Error interno al resolver navegación efectiva', null, 500);
+    return errorResponse('INTERNAL_ERROR', 'Error interno al resolver preview efectivo', null, 500);
   }
 }
 
@@ -781,8 +789,8 @@ export default async function adminNavigationApiHandler(request, env, ctx) {
     return handleCreateNavigation(request, env, ctx);
   }
 
-  // POST /admin/api/navigation/preview-effective (FASE 5)
-  if (method === 'POST' && path === '/admin/api/navigation/preview-effective') {
+  // GET /admin/api/navigation/preview-effective (Sprint 3)
+  if (method === 'GET' && path === '/admin/api/navigation/preview-effective') {
     return handlePreviewEffective(request, env, ctx);
   }
 

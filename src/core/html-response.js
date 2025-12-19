@@ -6,6 +6,8 @@
 
 import { getHtmlCacheHeaders } from './responses.js';
 import { applyTheme } from './responses.js';
+import { logWarn, logError } from './observability/logger.js';
+import { generateSidebarHTML } from './admin/sidebar-registry.js';
 
 /**
  * Renderiza una respuesta HTML con headers anti-cache correctos y aplicación de tema
@@ -75,6 +77,41 @@ export function renderHtml(html, options = {}) {
     fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'html-response.js:68',message:'Error in getHtmlCacheHeaders',data:{error:headersError?.message,stack:headersError?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     throw headersError;
+  }
+  
+  // VALIDACIÓN ANTI-REGRESIÓN: Detectar {{SIDEBAR_MENU}} sin reemplazar
+  // Esto previene que el sidebar legacy aparezca en pantalla
+  if (html.includes('{{SIDEBAR_MENU}}')) {
+    logWarn('HtmlResponse', '{{SIDEBAR_MENU}} placeholder sin reemplazar detectado en renderHtml', {
+      htmlLength: html.length,
+      htmlPreview: html.substring(0, 500)
+    });
+    
+    // Fail-open: generar sidebar automáticamente si es una página admin
+    if (html.includes('/admin/') || html.includes('AuriPortal Admin')) {
+      try {
+        // Intentar extraer CURRENT_PATH del HTML o usar ruta por defecto
+        const currentPathMatch = html.match(/CURRENT_PATH['"]?\s*[:=]\s*['"]([^'"]+)['"]/);
+        const currentPath = currentPathMatch ? currentPathMatch[1] : '';
+        const sidebarHtml = generateSidebarHTML(currentPath);
+        html = html.replace(/\{\{SIDEBAR_MENU\}\}/g, sidebarHtml);
+        
+        // Verificar nuevamente
+        if (html.includes('{{SIDEBAR_MENU}}')) {
+          logError('HtmlResponse', '{{SIDEBAR_MENU}} aún presente después de reemplazo automático', {
+            currentPath
+          });
+        } else {
+          logWarn('HtmlResponse', '{{SIDEBAR_MENU}} reemplazado automáticamente (fallback)', {
+            currentPath
+          });
+        }
+      } catch (sidebarError) {
+        logError('HtmlResponse', 'Error generando sidebar automático', {
+          error: sidebarError.message
+        });
+      }
+    }
   }
   
   // Fusionar headers adicionales (los adicionales tienen prioridad)

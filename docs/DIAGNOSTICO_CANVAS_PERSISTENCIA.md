@@ -179,3 +179,5 @@ pm2 logs aurelinportal-prod --lines 100 | grep -i "canvas\|PUT_CANVAS"
 **Estado**: ✅ Diagnóstico completado  
 **Conclusión**: CASO B - Canvas no está persistido en la base de datos
 
+
+

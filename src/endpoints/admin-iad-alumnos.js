@@ -5,6 +5,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,7 +106,7 @@ export async function renderIadAlumnos(request, env) {
     </div>
   `;
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'I+D de los alumnos',
     CONTENT: content
   });

@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { validateAndNormalizeNivelesEnergeticos } from '../core/config/niveles-energeticos.schema.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -340,7 +341,7 @@ export async function renderNivelesEnergeticos(request, env) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Niveles Energéticos',
       CONTENT: content
     });

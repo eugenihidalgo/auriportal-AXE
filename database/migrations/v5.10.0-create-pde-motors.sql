@@ -38,3 +38,5 @@ COMMENT ON COLUMN pde_motors.created_at IS 'Fecha de creación';
 COMMENT ON COLUMN pde_motors.updated_at IS 'Fecha de última actualización';
 COMMENT ON COLUMN pde_motors.deleted_at IS 'Soft delete: fecha de eliminación (NULL si no eliminado)';
 
+
+

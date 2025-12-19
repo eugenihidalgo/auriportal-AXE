@@ -57,14 +57,15 @@ export const SECTION_ORDER = {
   '💬 Comunicación con los alumnos': 5,
   '🌟 Transmutación energética de la PDE': 6,
   '📚 Contenido PDE': 7,
-  '💡 I+D de los alumnos': 8,
-  '🧭 Navegaciones': 9,
-  '🗺️ Recorridos': 10,
-  '🎨 Apariencia': 11,
-  '🎵 Recursos técnicos': 12,
-  '🏷️ Clasificaciones': 13,
-  '📊 Analytics': 14,
-  '⚙️ System / Configuración': 15
+  '✏️ EDITOR PDE': 8,
+  '💡 I+D de los alumnos': 9,
+  '🧭 Navegaciones': 10,
+  '🗺️ Recorridos': 11,
+  '🎨 Apariencia': 12,
+  '🎵 Recursos técnicos': 13,
+  '🏷️ Clasificaciones': 14,
+  '📊 Analytics': 15,
+  '⚙️ System / Configuración': 16
 };
 
 export const sidebarRegistry = [
@@ -367,32 +368,42 @@ export const sidebarRegistry = [
     visible: true,
     order: 9
   },
+  // 8. ✏️ EDITOR PDE (Nueva sección)
   {
     id: 'packages-creator',
-    label: 'Creador de Paquetes',
+    label: 'Paquetes',
     icon: '📦',
     route: '/admin/packages',
-    section: '📚 Contenido PDE',
+    section: '✏️ EDITOR PDE',
     visible: true,
-    order: 10
+    order: 1
+  },
+  {
+    id: 'widgets-creator',
+    label: 'Widgets',
+    icon: '🧩',
+    route: '/admin/widgets',
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 2
   },
   {
     id: 'contexts-manager',
     label: 'Contextos',
     icon: '🔧',
     route: '/admin/contexts',
-    section: '📚 Contenido PDE',
+    section: '✏️ EDITOR PDE',
     visible: true,
-    order: 11
+    order: 3
   },
   {
     id: 'senales-manager',
     label: 'Señales',
     icon: '📡',
     route: '/admin/senales',
-    section: '📚 Contenido PDE',
+    section: '✏️ EDITOR PDE',
     visible: true,
-    order: 12
+    order: 4
   },
   {
     id: 'automations-manager',
@@ -1083,14 +1094,15 @@ export function generateSidebarHTML(currentPath = '') {
     '💬 Comunicación con los alumnos', // 5
     '🌟 Transmutación energética de la PDE', // 6
     '📚 Contenido PDE',            // 7
-    '💡 I+D de los alumnos',       // 8
-    '🧭 Navegaciones',             // 9
-    '🗺️ Recorridos',              // 10
-    '🎨 Apariencia',               // 11
-    '🎵 Recursos técnicos',        // 12
-    '🏷️ Clasificaciones',         // 13
-    '📊 Analytics',                // 14
-    '⚙️ System / Configuración'   // 15
+    '✏️ EDITOR PDE',               // 8
+    '💡 I+D de los alumnos',       // 9
+    '🧭 Navegaciones',             // 10
+    '🗺️ Recorridos',              // 11
+    '🎨 Apariencia',               // 12
+    '🎵 Recursos técnicos',        // 13
+    '🏷️ Clasificaciones',         // 14
+    '📊 Analytics',                // 15
+    '⚙️ System / Configuración'   // 16
   ];
   
   // Generar secciones en el orden canónico

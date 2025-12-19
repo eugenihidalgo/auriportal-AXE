@@ -8,6 +8,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -86,7 +87,7 @@ export async function renderListadoScreenTemplates(request, env) {
     </script>
   `;
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'Screen Templates',
     CONTENT: listadoHtml,
     CURRENT_PATH: '/admin/screen-templates'
@@ -321,7 +322,7 @@ export async function renderEditorScreenTemplate(request, env, templateId) {
     </script>
   `;
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: `Editor de Screen Template${templateId ? `: ${templateId}` : ''}`,
     CONTENT: editorHtml,
     CURRENT_PATH: `/admin/screen-templates/${templateId || 'new'}/edit`
@@ -359,5 +360,7 @@ export default async function adminScreenTemplatesHandler(request, env, ctx) {
   // 404
   return new Response('Página no encontrada', { status: 404 });
 }
+
+
 
 

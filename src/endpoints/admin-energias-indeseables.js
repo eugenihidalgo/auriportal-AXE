@@ -14,6 +14,7 @@ import {
   marcarTodosAlumnosLimpiosPorAspectoIndeseable
 } from '../services/aspectos-indeseables.js';
 import { query } from '../../database/pg.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

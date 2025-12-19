@@ -4,6 +4,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 import { 
   listarFavoritos,
   crearFavorito,

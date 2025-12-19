@@ -258,3 +258,5 @@ No se requiere migración. Los nuevos campos son opcionales y tienen valores por
 **Estado**: ✅ Completo  
 **Versión**: FASE 4.0
 
+
+

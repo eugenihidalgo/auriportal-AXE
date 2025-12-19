@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { respuestas, aspectosPractica, progresoPedagogico, alumnos, rachaFases, caminosPantallas } from '../../database/pg.js';
 import { crearWebhookTypeform, generarUrlWebhookAspecto } from '../services/typeform-webhook-manager.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -114,7 +115,7 @@ export async function renderRespuestas(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Respuestas',
       CONTENT: content
     });
@@ -490,7 +491,7 @@ export async function renderRecorridoPedagogico(request, env) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Recorrido Pedagógico',
       CONTENT: content
     });
@@ -933,7 +934,7 @@ export async function renderConfiguracionAspectos(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Configuración de Aspectos',
       CONTENT: content
     });
@@ -1231,7 +1232,7 @@ export async function renderConfiguracionRacha(request, env) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Configuración de Fases de Racha',
       CONTENT: content
     });

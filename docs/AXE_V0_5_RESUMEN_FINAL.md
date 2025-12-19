@@ -251,3 +251,5 @@ Migración SQL ejecutada para Screen Templates v1 con sistema de versionado (dra
 **Fin del Resumen - AXE v0.5**
 
 
+
+

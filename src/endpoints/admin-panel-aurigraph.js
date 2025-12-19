@@ -5,6 +5,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { query } from '../../database/pg.js';
 import { generarAurigraph } from '../services/aurigraph.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __dirname = resolve();
 const baseTemplate = readFileSync(resolve(__dirname, 'src/core/html/admin/base.html'), 'utf-8');
@@ -194,7 +195,7 @@ export async function renderAurigraph(env, request) {
       </div>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Aurigraph',
       CONTENT: content
     });

@@ -165,3 +165,5 @@ Esta configuración aplica a todos los dominios configurados en el `server_name`
 **Última actualización:** 2025-12-18  
 **Estado:** ✅ Resuelto
 
+
+

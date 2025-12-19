@@ -300,3 +300,5 @@ export function generateSuggestions(canvas, diagnostics = null) {
   return suggestions;
 }
 
+
+

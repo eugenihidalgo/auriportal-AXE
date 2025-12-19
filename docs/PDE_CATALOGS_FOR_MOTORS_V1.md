@@ -588,3 +588,5 @@ Documentación canónica de todos los catálogos PDE existentes en AuriPortal, c
 **Versión del documento:** v1.0.0  
 **Mantenido por:** Arquitecto Técnico Principal AuriPortal
 
+
+

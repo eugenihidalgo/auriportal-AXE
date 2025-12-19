@@ -8,6 +8,7 @@ import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { isFeatureEnabled } from '../core/flags/feature-flags.js';
 import { logInfo, logWarn } from '../core/observability/logger.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,7 +62,7 @@ export async function renderListadoRecorridos(request, env) {
       </div>
     `;
     
-    const html = await replace(baseTemplate, {
+    const html = await replaceAdminTemplate(baseTemplate, {
       TITLE: 'Recorridos',
       CONTENT: content,
       CURRENT_PATH: '/admin/recorridos'
@@ -76,7 +77,7 @@ export async function renderListadoRecorridos(request, env) {
   const listadoTemplate = readFileSync(join(__dirname, '../core/html/admin/recorridos/recorridos-listado.html'), 'utf-8');
   const content = listadoTemplate;
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'Recorridos',
     CONTENT: content,
     CURRENT_PATH: '/admin/recorridos'
@@ -112,7 +113,7 @@ export async function renderEditorRecorrido(request, env, recorridoId) {
       </div>
     `;
     
-    const html = await replace(baseTemplate, {
+    const html = await replaceAdminTemplate(baseTemplate, {
       TITLE: 'Editor de Recorrido',
       CONTENT: content,
       CURRENT_PATH: `/admin/recorridos/${recorridoId}/edit`
@@ -129,7 +130,7 @@ export async function renderEditorRecorrido(request, env, recorridoId) {
     RECORRIDO_ID: recorridoId || 'new'
   });
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: recorridoId === 'new' ? 'Nuevo Recorrido' : `Editor de Recorrido: ${recorridoId}`,
     CONTENT: content,
     CURRENT_PATH: `/admin/recorridos/${recorridoId}/edit`

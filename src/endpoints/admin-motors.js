@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { listMotors, getMotorById } from '../services/pde-motors-service.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -73,7 +74,7 @@ export async function renderListadoMotors(request, env) {
     MOTORS_ROWS: motorsRows
   });
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Diseñador de Motores',
     CONTENT: content,
     CURRENT_PATH: '/admin/motors'
@@ -146,7 +147,7 @@ export async function renderEditarMotor(request, env, motorId) {
     SUBTITLE: subtitle
   });
 
-  const html = replace(baseTemplate, {
+  const html = replaceAdminTemplate(baseTemplate, {
     TITLE: 'Diseñador de Motores',
     CONTENT: content,
     CURRENT_PATH: '/admin/motors'

@@ -24,6 +24,7 @@
         <span id="navigation-id-badge" class="nav-badge">-</span>
         <span id="save-status-badge" class="nav-badge nav-badge-saved" style="display: none;">✓ Guardado</span>
         <span id="dirty-badge" class="nav-badge nav-badge-dirty" style="display: none;">● Cambios sin guardar</span>
+        <span id="published-status-badge" class="nav-badge nav-badge-published" style="display: none;">📦 Published: v-</span>
       </div>
       <div class="nav-editor-header-right">
         <button onclick="guardarNavegacion()" class="nav-btn nav-btn-primary" title="Guardar draft">
@@ -32,7 +33,7 @@
         <button onclick="validarNavegacion()" class="nav-btn nav-btn-secondary">
           ✓ Validar
         </button>
-        <button onclick="publicarNavegacion()" class="nav-btn nav-btn-success">
+        <button id="btn-publish" onclick="publicarNavegacion()" class="nav-btn nav-btn-success" title="Publicar navegación (requiere guardar cambios primero)">
           🚀 Publicar
         </button>
       </div>
@@ -51,7 +52,7 @@
           <button onclick="setNavigationView('mapa')" id="tab-mapa" class="nav-tab active">🗺️ Mapa</button>
           <button onclick="setNavigationView('arbol')" id="tab-arbol" class="nav-tab">🌳 Árbol</button>
           <button onclick="setNavigationView('json')" id="tab-json" class="nav-tab">📄 JSON</button>
-          <button onclick="setNavigationView('preview')" id="tab-preview" class="nav-tab">👁️ Preview</button>
+          <button onclick="setNavigationView('preview')" id="tab-preview" class="nav-tab">👁️ Preview Efectivo</button>
         </div>
         <div class="nav-toolbar-right">
           <button id="btn-connect" onclick="toggleConnectMode()" class="nav-btn-icon" title="Modo conectar (crear edges)">🔗 Conectar</button>
@@ -812,10 +813,19 @@
   /* Vista Preview */
   .nav-preview-view {
     flex: 1;
-    padding: 16px;
-    overflow-y: auto;
-    text-align: center;
-    color: var(--text-muted, #94a3b8);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-main, #0f172a);
+  }
+
+  .nav-node-base {
+    border-color: var(--border-soft, #475569);
+  }
+
+  .nav-node-contextual {
+    border-color: var(--accent-primary, #3b82f6);
+    border-width: 3px;
   }
 </style>
 
@@ -840,6 +850,7 @@
     },
     navDef: null,
     isDirty: false,
+    publishedVersion: null,
     isDragging: false,
     isPanning: false,
     isBoxSelecting: false,
@@ -2153,23 +2164,49 @@
       console.log('[AXE][NAV2] Cargando navegación:', navId);
       
       const encodedId = encodeURIComponent(navId);
-      let response = await fetch(`/admin/api/navigation/${encodedId}/draft`);
       
-      if (!response.ok) {
-        // Si no hay draft, intentar published
+      // Cargar draft
+      let response = await fetch(`/admin/api/navigation/${encodedId}/draft`);
+      let navDef = null;
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data.draft_json) {
+          navDef = data.data.draft_json;
+        }
+      }
+      
+      // Si no hay draft, intentar published
+      if (!navDef) {
         response = await fetch(`/admin/api/navigation/${encodedId}/published`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && data.data.definition_json) {
+            navDef = data.data.definition_json;
+            navState.publishedVersion = {
+              version: data.data.version,
+              published_at: data.data.published_at,
+            };
+          }
+        }
+      } else {
+        // Si hay draft, también cargar published para mostrar versión
+        response = await fetch(`/admin/api/navigation/${encodedId}/published`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && data.data.definition_json) {
+            navState.publishedVersion = {
+              version: data.data.version,
+              published_at: data.data.published_at,
+            };
+          }
+        }
       }
 
-      if (!response.ok) {
+      if (!navDef) {
         throw new Error(`No se pudo cargar navegación: ${response.status}`);
       }
 
-      const data = await response.json();
-      if (!data.ok) {
-        throw new Error(data.error?.message || 'Error al cargar');
-      }
-
-      const navDef = data.data.draft_json || data.data.published_json;
       navState.navDef = navDef;
 
       // Convertir navDef a canvas
@@ -2181,6 +2218,9 @@
       
       const idBadge = document.getElementById('navigation-id-badge');
       if (idBadge) idBadge.textContent = navId;
+
+      // Actualizar badge de published
+      updatePublishedStatus();
 
       // Inicializar snapshot después de cargar
       updateSavedSnapshot();
@@ -2351,7 +2391,13 @@
   }
 
   async function publicarNavegacion() {
-    if (!confirm('¿Publicar esta navegación?')) return;
+    // Verificar que no hay cambios sin guardar
+    if (navState.isDirty) {
+      showToast('⚠️ Guarda los cambios antes de publicar', 'error');
+      return;
+    }
+
+    if (!confirm('¿Publicar esta navegación? Esta acción creará una nueva versión inmutable.')) return;
 
     try {
       const encodedId = encodeURIComponent(navState.navigationId);
@@ -2361,13 +2407,47 @@
 
       const data = await response.json();
       if (data.ok) {
-        showToast('✓ Publicado correctamente', 'success');
+        // Actualizar versión publicada
+        navState.publishedVersion = {
+          version: data.data.version,
+          published_at: data.data.published_at,
+        };
+        updatePublishedStatus();
+        showToast(`✓ Publicado v${data.data.version} correctamente`, 'success');
       } else {
-        showToast('Error al publicar: ' + (data.error?.message || 'Error desconocido'), 'error');
+        // Mostrar errores de validación en modal/listado bonito
+        const errors = data.error?.details?.errors || [data.error?.message || 'Error desconocido'];
+        if (Array.isArray(errors) && errors.length > 0) {
+          showValidationErrors(errors);
+        } else {
+          showToast('Error al publicar: ' + (data.error?.message || 'Error desconocido'), 'error');
+        }
       }
     } catch (error) {
       showToast('Error al publicar: ' + error.message, 'error');
     }
+  }
+
+  function showValidationErrors(errors) {
+    // Crear modal con errores
+    const modal = document.createElement('div');
+    modal.className = 'nav-error-modal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+    
+    const content = document.createElement('div');
+    content.style.cssText = 'background: var(--bg-card, #1e293b); padding: 24px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto;';
+    
+    content.innerHTML = `
+      <h2 style="margin: 0 0 16px 0; color: var(--text-primary, #fff);">❌ Errores de Validación</h2>
+      <p style="margin: 0 0 16px 0; color: var(--text-muted, #94a3b8);">La navegación no puede publicarse debido a los siguientes errores:</p>
+      <ul style="margin: 0 0 16px 0; padding-left: 24px; color: var(--text-primary, #fff);">
+        ${errors.map(e => `<li style="margin: 8px 0;">${e}</li>`).join('')}
+      </ul>
+      <button onclick="this.closest('.nav-error-modal').remove()" style="padding: 8px 16px; background: var(--accent-primary, #3b82f6); color: white; border: none; border-radius: 4px; cursor: pointer;">Cerrar</button>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
   }
 
   // ========================================================================
@@ -2445,18 +2525,414 @@
     `;
   }
 
-  function renderPreviewView() {
+  // ========================================================================
+  // PREVIEW EFECTIVO
+  // ========================================================================
+  
+  /**
+   * Normaliza respuesta del endpoint preview-effective
+   * Acepta múltiples shapes legacy y devuelve siempre { effectiveDef, warnings }
+   */
+  function normalizePreviewResponse(resp) {
+    try {
+      // Shape canónico: { ok: true, effective: {...}, warnings: [] }
+      if (resp.ok && resp.effective) {
+        return {
+          effectiveDef: resp.effective,
+          warnings: resp.warnings || []
+        };
+      }
+
+      // Shape legacy: { ok: true, data: {...} }
+      if (resp.ok && resp.data) {
+        console.log('[AXE][NAV2][PREVIEW] normalized legacy shape: { ok, data }');
+        // Si data tiene navigation, usar eso
+        if (resp.data.navigation) {
+          return {
+            effectiveDef: resp.data.navigation,
+            warnings: resp.data.warnings || []
+          };
+        }
+        // Si data es directamente la navegación
+        return {
+          effectiveDef: resp.data,
+          warnings: resp.warnings || []
+        };
+      }
+
+      // Shape legacy: { ok: true, effectiveDef: {...} }
+      if (resp.ok && resp.effectiveDef) {
+        console.log('[AXE][NAV2][PREVIEW] normalized legacy shape: { ok, effectiveDef }');
+        return {
+          effectiveDef: resp.effectiveDef,
+          warnings: resp.warnings || []
+        };
+      }
+
+      // Error shape: { ok: false, error: "...", fallback: {...} }
+      if (!resp.ok && resp.fallback) {
+        return {
+          effectiveDef: resp.fallback,
+          warnings: [resp.error || 'Error al cargar preview efectivo']
+        };
+      }
+
+      // Fallback: asumir que resp es directamente la navegación
+      return {
+        effectiveDef: resp,
+        warnings: []
+      };
+    } catch (error) {
+      console.error('[AXE][NAV2][PREVIEW] Error normalizando respuesta:', error);
+      return {
+        effectiveDef: null,
+        warnings: ['Error normalizando respuesta del preview']
+      };
+    }
+  }
+
+  async function renderPreviewView() {
     const body = document.querySelector('.nav-editor-body');
     if (!body) return;
 
+    // Mostrar loading
     body.innerHTML = `
       <div class="nav-preview-view">
-        <h2>Preview Efectivo</h2>
-        <p>Esta funcionalidad está en construcción.</p>
-        <p>El preview efectivo mostrará la navegación resuelta según las reglas de visibilidad.</p>
+        <div style="text-align: center; padding: 40px;">
+          <p>Cargando preview efectivo...</p>
+        </div>
       </div>
     `;
+
+    try {
+      const navigationId = navState.navigationId;
+      if (!navigationId || navigationId === 'new') {
+        body.innerHTML = `
+          <div class="nav-preview-view">
+            <div style="text-align: center; padding: 40px;">
+              <p>⚠️ Guarda la navegación primero para ver el preview efectivo</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // Obtener context_key del selector (si existe)
+      const contextKeySelect = document.getElementById('preview-context-select');
+      const contextKey = contextKeySelect ? contextKeySelect.value : null;
+
+      // Llamar al endpoint
+      const encodedId = encodeURIComponent(navigationId);
+      const url = `/admin/api/navigation/preview-effective?navigation_id=${encodedId}${contextKey ? '&context_key=' + encodeURIComponent(contextKey) : ''}`;
+      
+      console.log('[AXE][NAV2][PREVIEW] fetching preview-effective:', url);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Normalizar respuesta
+      const normalized = normalizePreviewResponse(data);
+      
+      if (!normalized.effectiveDef) {
+        throw new Error('No se pudo obtener navegación efectiva');
+      }
+
+      // Renderizar preview efectivo
+      renderPreviewEffective(normalized.effectiveDef, normalized.warnings, contextKey);
+    } catch (error) {
+      console.error('[AXE][NAV2][PREVIEW] Error cargando preview:', error);
+      
+      // Fail-open: mostrar base navigation con banner
+      const baseNav = convertCanvasToNavDef();
+      body.innerHTML = `
+        <div class="nav-preview-view">
+          <div class="nav-error-banner" style="display: block; margin: 16px;">
+            ⚠️ Preview efectivo no disponible. Mostrando base. Error: ${escapeHtml(error.message)}
+          </div>
+          <div id="preview-canvas-container" style="flex: 1; overflow: hidden;">
+            ${renderPreviewCanvas(baseNav, [], null)}
+          </div>
+        </div>
+      `;
+    }
   }
+
+  function renderPreviewEffective(effectiveDef, warnings, contextKey) {
+    const body = document.querySelector('.nav-editor-body');
+    if (!body) return;
+
+    // Obtener context keys disponibles
+    const availableContextKeys = [];
+    // TODO: cargar desde endpoint o estado global
+
+    body.innerHTML = `
+      <div class="nav-preview-view" style="display: flex; flex-direction: column; height: 100%;">
+        <!-- Header con selector de contexto -->
+        <div style="padding: 16px; border-bottom: 1px solid var(--border-soft, #334155); background: var(--bg-card, #1e293b);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0; color: var(--text-primary, #fff);">Preview Efectivo</h2>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <label style="color: var(--text-muted, #94a3b8); font-size: 13px;">Contexto:</label>
+              <select id="preview-context-select" class="nav-form-select" style="width: 200px;" onchange="reloadPreviewEffective()">
+                <option value="">Base</option>
+                ${availableContextKeys.map(key => `<option value="${escapeHtml(key)}" ${key === contextKey ? 'selected' : ''}>${escapeHtml(key)}</option>`).join('')}
+              </select>
+              <button onclick="fitPreviewToView()" class="nav-btn-icon" title="Ajustar vista">📐 Fit</button>
+            </div>
+          </div>
+          ${warnings.length > 0 ? `
+            <div class="nav-error-banner" style="display: block; margin-top: 12px;">
+              ⚠️ Warnings (${warnings.length}): ${warnings.map(w => escapeHtml(typeof w === 'string' ? w : w.message || 'Warning')).join('; ')}
+            </div>
+          ` : ''}
+          ${contextKey ? `
+            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted, #94a3b8);">
+              Contexto activo: <strong>${escapeHtml(contextKey)}</strong> | Entry: <strong>${escapeHtml(effectiveDef.entry_node_id || 'N/A')}</strong>
+            </div>
+          ` : `
+            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted, #94a3b8);">
+              Mostrando navegación base | Entry: <strong>${escapeHtml(effectiveDef.entry_node_id || 'N/A')}</strong>
+            </div>
+          `}
+        </div>
+        <!-- Canvas read-only -->
+        <div id="preview-canvas-container" style="flex: 1; overflow: hidden; position: relative;">
+          ${renderPreviewCanvas(effectiveDef, warnings, contextKey)}
+        </div>
+      </div>
+    `;
+
+    // Inicializar interacciones del canvas (zoom, pan)
+    setupPreviewCanvasInteractions();
+  }
+
+  function renderPreviewCanvas(effectiveDef, warnings, contextKey) {
+    const nodes = effectiveDef.nodes || {};
+    const edges = effectiveDef.edges || [];
+    const provenance = effectiveDef.meta?.provenance || {};
+
+    // Convertir a formato canvas
+    const canvasNodes = Object.values(nodes).map(node => ({
+      id: node.id,
+      label: node.label || node.id,
+      type: node.type,
+      kind: node.kind,
+      position: node.position || { x: 120, y: 120 },
+      provenance: provenance.nodeId?.[node.id] || 'base'
+    }));
+
+    const canvasEdges = edges.map(edge => ({
+      id: edge.id || `e_${edge.from}__${edge.to}`,
+      from: edge.from,
+      to: edge.to,
+      kind: edge.kind || 'child',
+      provenance: provenance.edgeIdx?.[`${edge.from}:${edge.to}:${edge.kind || 'child'}`] || 'base'
+    }));
+
+    // Renderizar HTML
+    let html = `
+      <div id="preview-canvas-viewport" class="nav-canvas-viewport" style="cursor: grab;">
+        <div id="preview-canvas-stage" class="nav-canvas-stage" style="transform: translate(0px, 0px) scale(1);">
+    `;
+
+    // Renderizar nodos
+    canvasNodes.forEach(node => {
+      const provenanceClass = node.provenance === 'contextual' ? 'nav-node-contextual' : 'nav-node-base';
+      html += `
+        <div class="nav-node ${provenanceClass}" 
+             style="left: ${node.position.x}px; top: ${node.position.y}px; cursor: default;"
+             title="Provenance: ${node.provenance}">
+          <div class="nav-node-label">${escapeHtml(node.label)}</div>
+          <div class="nav-node-meta">${node.type || node.kind || 'node'}</div>
+          ${node.provenance === 'contextual' ? '<div style="position: absolute; top: 4px; right: 4px; font-size: 10px; background: var(--accent-primary, #3b82f6); color: #fff; padding: 2px 4px; border-radius: 2px;">CTX</div>' : ''}
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
+        <svg id="preview-edges-svg" class="nav-edges-svg"></svg>
+      </div>
+    `;
+
+    // Renderizar edges (después de que el DOM esté listo)
+    setTimeout(() => {
+      renderPreviewEdges(canvasNodes, canvasEdges);
+    }, 0);
+
+    return html;
+  }
+
+  function renderPreviewEdges(nodes, edges) {
+    const svg = document.getElementById('preview-edges-svg');
+    if (!svg) return;
+
+    svg.innerHTML = '';
+
+    // Definir marker para flecha
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'preview-arrowhead');
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '10');
+    marker.setAttribute('refX', '9');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    polygon.setAttribute('points', '0 0, 10 3, 0 6');
+    const computedStyle = getComputedStyle(document.documentElement);
+    const strokeColor = computedStyle.getPropertyValue('--text-muted').trim() || '#64748b';
+    polygon.setAttribute('fill', strokeColor);
+    marker.appendChild(polygon);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    // Renderizar líneas
+    edges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.from);
+      const targetNode = nodes.find(n => n.id === edge.to);
+      
+      if (!sourceNode || !targetNode) return;
+
+      const x1 = sourceNode.position.x + 60;
+      const y1 = sourceNode.position.y + 30;
+      const x2 = targetNode.position.x + 60;
+      const y2 = targetNode.position.y + 30;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.setAttribute('marker-end', 'url(#preview-arrowhead)');
+      if (edge.provenance === 'contextual') {
+        line.setAttribute('stroke', '#3b82f6');
+        line.setAttribute('stroke-width', '3');
+      }
+      svg.appendChild(line);
+    });
+  }
+
+  function setupPreviewCanvasInteractions() {
+    const viewport = document.getElementById('preview-canvas-viewport');
+    const stage = document.getElementById('preview-canvas-stage');
+    if (!viewport || !stage) return;
+
+    let panX = 0, panY = 0, zoom = 1;
+    let isPanning = false;
+    let panStart = { x: 0, y: 0 };
+
+    // Pan
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target === viewport || e.target === stage) {
+        isPanning = true;
+        panStart = { x: e.clientX - panX, y: e.clientY - panY };
+        viewport.style.cursor = 'grabbing';
+      }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        panX = e.clientX - panStart.x;
+        panY = e.clientY - panStart.y;
+        updatePreviewTransform();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isPanning) {
+        isPanning = false;
+        viewport.style.cursor = 'grab';
+      }
+    });
+
+    // Zoom: SOLO con CTRL + rueda
+    viewport.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      const worldX = (mouseX - panX) / zoom;
+      const worldY = (mouseY - panY) / zoom;
+      
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      zoom = Math.max(0.3, Math.min(3, zoom * delta));
+      
+      panX = mouseX - worldX * zoom;
+      panY = mouseY - worldY * zoom;
+      
+      updatePreviewTransform();
+    }, { passive: false });
+
+    function updatePreviewTransform() {
+      stage.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      const svg = document.getElementById('preview-edges-svg');
+      if (svg) {
+        svg.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      }
+    }
+
+    // Guardar estado para fitToView
+    window.previewCanvasState = { panX, panY, zoom, updateTransform: updatePreviewTransform };
+  }
+
+  function fitPreviewToView() {
+    const viewport = document.getElementById('preview-canvas-viewport');
+    const stage = document.getElementById('preview-canvas-stage');
+    if (!viewport || !stage) return;
+
+    const nodes = stage.querySelectorAll('.nav-node');
+    if (nodes.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodes.forEach(node => {
+      const rect = node.getBoundingClientRect();
+      const stageRect = stage.getBoundingClientRect();
+      const x = rect.left - stageRect.left;
+      const y = rect.top - stageRect.top;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + rect.width);
+      maxY = Math.max(maxY, y + rect.height);
+    });
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const padding = 60;
+
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+
+    const zoomX = (viewportWidth - padding * 2) / width;
+    const zoomY = (viewportHeight - padding * 2) / height;
+    const newZoom = Math.max(0.3, Math.min(3, Math.min(zoomX, zoomY)));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    if (window.previewCanvasState) {
+      window.previewCanvasState.zoom = newZoom;
+      window.previewCanvasState.panX = viewportWidth / 2 - centerX * newZoom;
+      window.previewCanvasState.panY = viewportHeight / 2 - centerY * newZoom;
+      window.previewCanvasState.updateTransform();
+    }
+  }
+
+  function reloadPreviewEffective() {
+    renderPreviewView();
+  }
+
+  // Exponer funciones globalmente
+  window.reloadPreviewEffective = reloadPreviewEffective;
+  window.fitPreviewToView = fitPreviewToView;
 
   function copiarJSON() {
     const navDef = convertCanvasToNavDef();
@@ -2905,14 +3381,39 @@
 
   function markDirty() {
     checkDirtyState();
+    updateUI();
   }
 
   function updateUI() {
     const dirtyBadge = document.getElementById('dirty-badge');
     const savedBadge = document.getElementById('save-status-badge');
+    const publishBtn = document.getElementById('btn-publish');
     
     if (dirtyBadge) dirtyBadge.style.display = navState.isDirty ? 'inline-block' : 'none';
     if (savedBadge) savedBadge.style.display = !navState.isDirty ? 'inline-block' : 'none';
+    
+    // Deshabilitar botón Publicar si hay cambios sin guardar
+    if (publishBtn) {
+      publishBtn.disabled = navState.isDirty;
+      publishBtn.title = navState.isDirty 
+        ? 'Publicar navegación (requiere guardar cambios primero)' 
+        : 'Publicar navegación';
+    }
+    
+    updatePublishedStatus();
+  }
+
+  function updatePublishedStatus() {
+    const publishedBadge = document.getElementById('published-status-badge');
+    if (publishedBadge) {
+      if (navState.publishedVersion) {
+        publishedBadge.textContent = `📦 Published: v${navState.publishedVersion.version}`;
+        publishedBadge.style.display = 'inline-block';
+      } else {
+        publishedBadge.textContent = '📦 Draft';
+        publishedBadge.style.display = 'inline-block';
+      }
+    }
   }
 
   function showError(message) {

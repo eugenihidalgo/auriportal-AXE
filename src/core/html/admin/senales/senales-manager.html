@@ -1,0 +1,597 @@
+<div class="p-6">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold text-white mb-2">📡 Gestor de Señales PDE</h1>
+    <p class="text-slate-400">Gestiona señales (signals) que pueden emitirse desde paquetes y recorridos.</p>
+  </div>
+
+  <!-- Tabs por scope -->
+  <div class="mb-6 bg-slate-800 rounded-lg shadow-lg p-4">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-semibold text-white">Señales Disponibles</h2>
+      <button 
+        onclick="abrirModalCrearSenal()" 
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors"
+      >
+        ➕ Crear Señal
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-slate-600 mb-4">
+      <button 
+        onclick="mostrarScopeTab('global')" 
+        id="tabGlobal" 
+        class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium"
+      >
+        🌐 Global
+      </button>
+      <button 
+        onclick="mostrarScopeTab('workflow')" 
+        id="tabWorkflow" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        🔁 Workflow
+      </button>
+      <button 
+        onclick="mostrarScopeTab('step')" 
+        id="tabStep" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        📍 Step
+      </button>
+    </div>
+
+    <!-- Explicación del scope -->
+    <div id="scopeExplanation" class="mb-4 p-3 bg-slate-700 rounded text-sm text-slate-300">
+      <!-- Se llena dinámicamente -->
+    </div>
+
+    <div id="senalesList" class="space-y-2">
+      <!-- Se llena dinámicamente -->
+    </div>
+  </div>
+</div>
+
+<!-- Modal para crear/editar señal -->
+<div id="senalModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-white" id="modalTitle">Crear Nueva Señal</h2>
+      <button 
+        onclick="cerrarModalSenal()" 
+        class="text-slate-400 hover:text-white text-2xl"
+      >
+        ×
+      </button>
+    </div>
+
+    <!-- Tabs: Visual / Avanzado -->
+    <div class="mb-4 border-b border-slate-600">
+      <button onclick="mostrarTab('visual')" id="tabVisual" class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium">📝 Visual</button>
+      <button onclick="mostrarTab('avanzado')" id="tabAvanzado" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white">⚙️ Avanzado (JSON)</button>
+    </div>
+
+    <!-- Tab Visual -->
+    <div id="tabVisualContent">
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Signal Key <span class="text-red-400">*</span></label>
+        <input 
+          type="text" 
+          id="signalKey" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder="practica_completada"
+          oninput="validarSignalKey(this)"
+        />
+        <div id="signalKeyError" class="mt-1 text-sm text-red-400 hidden"></div>
+        <p class="text-xs text-slate-500 mt-1">Solo letras minúsculas, números, guiones bajos y guiones</p>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Label <span class="text-red-400">*</span></label>
+        <input 
+          type="text" 
+          id="senalLabel" 
+          required
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Práctica Completada"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Descripción</label>
+        <textarea 
+          id="senalDescription" 
+          rows="2"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Descripción opcional de la señal"
+        ></textarea>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Scope <span class="text-red-400">*</span></label>
+          <select 
+            id="senalScope" 
+            required
+            class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="workflow">Workflow</option>
+            <option value="global">Global</option>
+            <option value="step">Step</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Order Index</label>
+          <input 
+            type="number" 
+            id="orderIndex" 
+            value="0"
+            class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <p class="text-xs text-slate-500 mt-1">Menor = primero en listados</p>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Tags (uno por línea)</label>
+        <textarea 
+          id="senalTags" 
+          rows="3"
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder="streak&#10;progress&#10;analytics"
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Escribe un tag por línea</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Payload Schema (JSON) <span class="text-red-400">*</span></label>
+        <textarea 
+          id="payloadSchema" 
+          rows="8"
+          required
+          class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder='{"type":"object","properties":{"practica_key":{"type":"string"}},"required":["practica_key"]}'
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Schema JSON que define la estructura del payload</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Default Payload (JSON)</label>
+        <textarea 
+          id="defaultPayload" 
+          rows="4"
+          class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder="{}"
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Valores por defecto del payload</p>
+      </div>
+    </div>
+
+    <!-- Tab Avanzado (JSON) -->
+    <div id="tabAvanzadoContent" class="hidden">
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Definición Completa (JSON)</label>
+        <textarea 
+          id="senalDefinition" 
+          rows="20"
+          class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          placeholder='{"signal_key":"...","label":"...","scope":"workflow","payload_schema":{...},"default_payload":{},"tags":[]}'
+          onchange="sincronizarDesdeJSON()"
+        ></textarea>
+        <p class="text-xs text-slate-500 mt-1">Edita el JSON completo. Los cambios se sincronizan con el formulario visual.</p>
+      </div>
+    </div>
+    
+    <div class="flex gap-2 mt-6">
+      <button 
+        onclick="guardarSenal()" 
+        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-colors"
+      >
+        💾 Guardar Señal
+      </button>
+      <button 
+        onclick="copiarDefinicion()" 
+        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors"
+      >
+        📋 Copiar Definición
+      </button>
+      <button 
+        onclick="cerrarModalSenal()" 
+        class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded transition-colors"
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Datos globales
+let senales = [];
+let editingSignalKey = null;
+let currentScopeTab = 'workflow'; // Tab activo: 'global', 'workflow', 'step'
+
+// Cargar señales al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+  senales = JSON.parse('{{SENALES_JSON}}' || '[]');
+  mostrarScopeTab('workflow'); // Mostrar tab de workflow por defecto
+});
+
+// Mostrar tab por scope
+function mostrarScopeTab(scope) {
+  currentScopeTab = scope;
+  
+  // Actualizar tabs
+  ['global', 'workflow', 'step'].forEach(s => {
+    const tab = document.getElementById(`tab${s.charAt(0).toUpperCase() + s.slice(1)}`);
+    if (tab) {
+      if (s === scope) {
+        tab.classList.add('border-indigo-500', 'text-white');
+        tab.classList.remove('border-transparent', 'text-slate-400');
+      } else {
+        tab.classList.remove('border-indigo-500', 'text-white');
+        tab.classList.add('border-transparent', 'text-slate-400');
+      }
+    }
+  });
+
+  const explanations = {
+    global: '<strong>Señales Globales:</strong> Se emiten a nivel de sistema completo (ej: eventos de usuario, cambios de estado global).',
+    workflow: '<strong>Señales de Workflow:</strong> Se emiten durante flujos de trabajo (ej: práctica completada, paquete completado).',
+    step: '<strong>Señales de Step:</strong> Se emiten al completar pasos dentro de recorridos.'
+  };
+  
+  document.getElementById('scopeExplanation').innerHTML = explanations[scope] || '';
+  renderSenales();
+}
+
+// Mostrar tab Visual/Avanzado
+function mostrarTab(tab) {
+  if (tab === 'visual') {
+    document.getElementById('tabVisual').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabVisual').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabAvanzado').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabAvanzado').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('tabVisualContent').classList.remove('hidden');
+    document.getElementById('tabAvanzadoContent').classList.add('hidden');
+  } else {
+    document.getElementById('tabAvanzado').classList.add('border-indigo-500', 'text-white');
+    document.getElementById('tabAvanzado').classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById('tabVisual').classList.remove('border-indigo-500', 'text-white');
+    document.getElementById('tabVisual').classList.add('border-transparent', 'text-slate-400');
+    document.getElementById('tabAvanzadoContent').classList.remove('hidden');
+    document.getElementById('tabVisualContent').classList.add('hidden');
+    sincronizarHaciaJSON();
+  }
+}
+
+// Validación de signal_key
+function validarSignalKey(input) {
+  const signalKey = input.value;
+  const errorDiv = document.getElementById('signalKeyError');
+  const signalKeyRegex = /^[a-z0-9_-]+$/;
+  
+  if (!signalKey) {
+    errorDiv.classList.add('hidden');
+    input.classList.remove('border-red-500');
+    return true;
+  }
+  
+  if (!signalKeyRegex.test(signalKey)) {
+    errorDiv.textContent = 'Solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)';
+    errorDiv.classList.remove('hidden');
+    input.classList.add('border-red-500');
+    return false;
+  }
+  
+  errorDiv.classList.add('hidden');
+  input.classList.remove('border-red-500');
+  return true;
+}
+
+// Sincronizar desde formulario visual hacia JSON
+function sincronizarHaciaJSON() {
+  const signalKey = document.getElementById('signalKey').value;
+  const label = document.getElementById('senalLabel').value;
+  const description = document.getElementById('senalDescription').value;
+  const scope = document.getElementById('senalScope').value;
+  const orderIndex = parseInt(document.getElementById('orderIndex').value) || 0;
+  
+  // Tags
+  const tagsText = document.getElementById('senalTags').value;
+  const tags = tagsText.split('\n').map(t => t.trim()).filter(t => t);
+
+  // Payload schema
+  let payloadSchema = {};
+  try {
+    payloadSchema = JSON.parse(document.getElementById('payloadSchema').value || '{}');
+  } catch (e) {
+    payloadSchema = {};
+  }
+
+  // Default payload
+  let defaultPayload = {};
+  try {
+    defaultPayload = JSON.parse(document.getElementById('defaultPayload').value || '{}');
+  } catch (e) {
+    defaultPayload = {};
+  }
+
+  const definition = {
+    signal_key: signalKey,
+    label,
+    description: description || '',
+    scope,
+    payload_schema: payloadSchema,
+    default_payload: defaultPayload,
+    tags,
+    status: 'active',
+    origin: 'user',
+    order_index: orderIndex
+  };
+
+  document.getElementById('senalDefinition').value = JSON.stringify(definition, null, 2);
+}
+
+// Sincronizar desde JSON hacia formulario visual
+function sincronizarDesdeJSON() {
+  try {
+    const definition = JSON.parse(document.getElementById('senalDefinition').value);
+    
+    document.getElementById('signalKey').value = definition.signal_key || '';
+    document.getElementById('senalLabel').value = definition.label || '';
+    document.getElementById('senalDescription').value = definition.description || '';
+    document.getElementById('senalScope').value = definition.scope || 'workflow';
+    document.getElementById('orderIndex').value = definition.order_index || 0;
+    document.getElementById('senalTags').value = (definition.tags || []).join('\n');
+    document.getElementById('payloadSchema').value = JSON.stringify(definition.payload_schema || {}, null, 2);
+    document.getElementById('defaultPayload').value = JSON.stringify(definition.default_payload || {}, null, 2);
+  } catch (e) {
+    // Ignorar errores de parseo
+  }
+}
+
+// Renderizar lista de señales (filtrado por scope)
+function renderSenales() {
+  const container = document.getElementById('senalesList');
+  if (!container) return;
+
+  // Filtrar señales por scope activo
+  const scope = currentScopeTab;
+  const filteredSenales = senales.filter(s => (s.scope || 'workflow') === scope);
+
+  if (filteredSenales.length === 0) {
+    container.innerHTML = `<p class="text-slate-400">No hay señales de tipo "${scope}" disponibles</p>`;
+    return;
+  }
+
+  container.innerHTML = filteredSenales.map(s => {
+    const isSystem = s.is_system || false;
+    const scopeLabel = s.scope === 'global' ? 'Global' : (s.scope === 'workflow' ? 'Workflow' : (s.scope === 'step' ? 'Step' : s.scope));
+    const scopeColor = s.scope === 'global' ? 'bg-purple-600' : (s.scope === 'workflow' ? 'bg-indigo-600' : 'bg-blue-600');
+    
+    return `
+      <div class="bg-slate-700 rounded p-4 flex justify-between items-start">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="text-lg font-semibold text-white">${escapeHtml(s.label)}</h3>
+            <span class="text-xs px-2 py-1 rounded ${isSystem ? 'bg-blue-600' : 'bg-green-600'} text-white">${isSystem ? 'Sistema' : 'Usuario'}</span>
+            <span class="text-xs px-2 py-1 rounded ${scopeColor} text-white">${scopeLabel}</span>
+            ${(s.tags || []).length > 0 ? s.tags.map(tag => `<span class="text-xs px-2 py-1 rounded bg-gray-600 text-white">${escapeHtml(tag)}</span>`).join('') : ''}
+            <code class="text-xs text-slate-400">${escapeHtml(s.signal_key)}</code>
+          </div>
+          <div class="text-sm text-slate-300">
+            ${s.description ? `<p><strong>Descripción:</strong> ${escapeHtml(s.description)}</p>` : ''}
+            <p><strong>Order Index:</strong> ${s.order_index || 0}</p>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="editarSenal('${escapeHtml(s.signal_key)}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">✏️ Editar</button>
+          ${!isSystem ? `
+            <button onclick="eliminarSenal('${escapeHtml(s.signal_key)}')" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded">🗑️ Eliminar</button>
+          ` : '<span class="text-xs text-slate-500">Sistema</span>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Abrir modal para crear señal
+function abrirModalCrearSenal() {
+  editingSignalKey = null;
+  document.getElementById('modalTitle').textContent = 'Crear Nueva Señal';
+  document.getElementById('signalKey').value = '';
+  document.getElementById('signalKey').disabled = false;
+  document.getElementById('senalLabel').value = '';
+  document.getElementById('senalDescription').value = '';
+  document.getElementById('senalScope').value = 'workflow';
+  document.getElementById('orderIndex').value = '0';
+  document.getElementById('senalTags').value = '';
+  document.getElementById('payloadSchema').value = JSON.stringify({
+    type: 'object',
+    properties: {},
+    required: []
+  }, null, 2);
+  document.getElementById('defaultPayload').value = '{}';
+  document.getElementById('senalDefinition').value = JSON.stringify({
+    signal_key: '',
+    label: '',
+    description: '',
+    scope: 'workflow',
+    payload_schema: { type: 'object', properties: {}, required: [] },
+    default_payload: {},
+    tags: [],
+    status: 'active',
+    origin: 'user',
+    order_index: 0
+  }, null, 2);
+  mostrarTab('visual');
+  document.getElementById('senalModal').classList.remove('hidden');
+}
+
+// Cerrar modal
+function cerrarModalSenal() {
+  document.getElementById('senalModal').classList.add('hidden');
+  editingSignalKey = null;
+}
+
+// Editar señal
+function editarSenal(signalKey) {
+  const s = senales.find(senal => senal.signal_key === signalKey);
+  if (!s) return;
+
+  editingSignalKey = signalKey;
+  const isSystem = s.is_system || false;
+  document.getElementById('modalTitle').textContent = isSystem ? 'Editar Señal (Sistema)' : 'Editar Señal';
+  document.getElementById('signalKey').value = s.signal_key;
+  document.getElementById('signalKey').disabled = isSystem;
+  document.getElementById('senalLabel').value = s.label;
+  document.getElementById('senalDescription').value = s.description || '';
+  document.getElementById('senalScope').value = s.scope || 'workflow';
+  document.getElementById('orderIndex').value = s.order_index || 0;
+  document.getElementById('senalTags').value = (s.tags || []).join('\n');
+  document.getElementById('payloadSchema').value = JSON.stringify(s.payload_schema || {}, null, 2);
+  document.getElementById('defaultPayload').value = JSON.stringify(s.default_payload || {}, null, 2);
+  document.getElementById('senalDefinition').value = JSON.stringify({
+    signal_key: s.signal_key,
+    label: s.label,
+    description: s.description || '',
+    scope: s.scope || 'workflow',
+    payload_schema: s.payload_schema || {},
+    default_payload: s.default_payload || {},
+    tags: s.tags || [],
+    status: s.status || 'active',
+    origin: s.origin || 'user',
+    order_index: s.order_index || 0
+  }, null, 2);
+  mostrarTab('visual');
+  document.getElementById('senalModal').classList.remove('hidden');
+}
+
+// Guardar señal
+async function guardarSenal() {
+  // Sincronizar desde formulario visual hacia JSON antes de guardar
+  sincronizarHaciaJSON();
+
+  const definitionText = document.getElementById('senalDefinition').value;
+  const signalKey = document.getElementById('signalKey').value;
+  const label = document.getElementById('senalLabel').value;
+
+  if (!signalKey || !label || !definitionText) {
+    alert('Signal Key, Label y Definition son obligatorios');
+    return;
+  }
+
+  // Validar signal_key
+  const signalKeyRegex = /^[a-z0-9_-]+$/;
+  if (!signalKeyRegex.test(signalKey)) {
+    alert('Signal Key inválido: Solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)');
+    return;
+  }
+
+  // Validar JSON
+  let definition;
+  try {
+    definition = JSON.parse(definitionText);
+  } catch (error) {
+    alert('JSON inválido: ' + error.message);
+    return;
+  }
+
+  try {
+    const url = editingSignalKey ? `/admin/api/senales/${encodeURIComponent(signalKey)}` : '/admin/api/senales';
+    const method = editingSignalKey ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(definition)
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Respuesta no es JSON:', text.substring(0, 200));
+      alert('Error: El servidor devolvió una respuesta inesperada. Ver consola para más detalles.');
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+      return;
+    }
+
+    // Recargar señales
+    const senalesResponse = await fetch('/admin/api/senales');
+    if (senalesResponse.ok) {
+      const senalesData = await senalesResponse.json();
+      senales = senalesData.items || [];
+      renderSenales();
+    }
+
+    cerrarModalSenal();
+    alert('Señal guardada exitosamente');
+  } catch (error) {
+    console.error('Error guardando señal:', error);
+    alert('Error al guardar señal: ' + (error.message || 'Error desconocido'));
+  }
+}
+
+// Copiar definición
+function copiarDefinicion() {
+  sincronizarHaciaJSON();
+  const definition = document.getElementById('senalDefinition').value;
+  navigator.clipboard.writeText(definition).then(() => {
+    alert('Definición copiada al portapapeles');
+  }).catch(err => {
+    console.error('Error copiando:', err);
+    alert('Error al copiar');
+  });
+}
+
+// Eliminar señal
+async function eliminarSenal(signalKey) {
+  if (!confirm(`¿Estás seguro de eliminar la señal '${signalKey}'?`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/api/senales/${encodeURIComponent(signalKey)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert('Error: ' + (data.error || 'Error desconocido'));
+      return;
+    }
+
+    // Recargar señales
+    const senalesResponse = await fetch('/admin/api/senales');
+    if (senalesResponse.ok) {
+      const senalesData = await senalesResponse.json();
+      senales = senalesData.items || [];
+      renderSenales();
+    }
+
+    alert('Señal eliminada exitosamente');
+  } catch (error) {
+    console.error('Error eliminando señal:', error);
+    alert('Error al eliminar señal: ' + (error.message || 'Error desconocido'));
+  }
+}
+
+// Helper para escapar HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+
+

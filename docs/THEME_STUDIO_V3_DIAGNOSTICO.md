@@ -321,3 +321,5 @@ Theme Studio v3 es un sistema **SOBERANO y DESACOPLADO** del runtime real del al
 
 **Siguiente paso:** Implementar FASE 1 (verificación de tablas) y FASE 2 (endpoints v3).
 
+
+

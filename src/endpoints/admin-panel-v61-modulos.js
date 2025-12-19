@@ -5,6 +5,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { query } from '../../database/pg.js';
 import { isActivo } from '../services/modulos.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __dirname = resolve();
 const baseTemplate = readFileSync(resolve(__dirname, 'src/core/html/admin/base.html'), 'utf-8');
@@ -229,7 +230,7 @@ async function renderModuloGenerico(moduloConfig) {
         </div>
       `;
 
-      const html = replace(baseTemplate, {
+      const html = replaceAdminTemplate(baseTemplate, {
         TITLE: moduloConfig.titulo,
         CONTENT: content
       });

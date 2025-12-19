@@ -317,3 +317,5 @@ psql -d aurelinportal -f database/migrations/v5.12.0-create-pde-catalog-registry
 **Registro Canónico de Catálogos PDE v1.0** ✅  
 *Source of Truth para metadata de catálogos PDE*
 
+
+

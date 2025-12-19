@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { logInfo, logWarn } from '../core/observability/logger.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,7 +52,7 @@ export async function renderListadoThemes(request, env) {
   const listadoTemplate = readFileSync(join(__dirname, '../core/html/admin/themes/themes-listado.html'), 'utf-8');
   const content = listadoTemplate;
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'Temas',
     CONTENT: content,
     CURRENT_PATH: '/admin/themes'
@@ -76,7 +77,7 @@ export async function renderEditorTheme(request, env, themeId) {
   const editorTemplate = readFileSync(join(__dirname, '../core/html/admin/themes/themes-editor.html'), 'utf-8');
   const content = editorTemplate.replace(/{{THEME_ID}}/g, themeId || '');
 
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: `Editor de Tema${themeId ? `: ${themeId}` : ''}`,
     CONTENT: content,
     CURRENT_PATH: `/admin/themes/${themeId || 'new'}/edit`

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { renderHtml } from '../core/html-response.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 /**
  * Reemplaza placeholders en templates
@@ -53,7 +54,7 @@ const capabilityDetailTemplate = readFileSync(
  * Renderiza la vista principal del Capability Explorer
  */
 async function renderCapabilitiesExplorer(env) {
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'System Capabilities',
     CONTENT: capabilitiesExplorerTemplate
   });
@@ -67,7 +68,7 @@ async function renderCapabilitiesExplorer(env) {
 async function renderCapabilityDetail(env, type, id) {
   // El template de detalle no necesita placeholders adicionales,
   // ya que obtiene type e id de la URL en el JavaScript
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: `Capability: ${id}`,
     CONTENT: capabilityDetailTemplate
   });

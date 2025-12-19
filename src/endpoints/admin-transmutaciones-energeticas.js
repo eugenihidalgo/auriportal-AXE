@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { obtenerListas } from '../services/transmutaciones-energeticas.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1202,7 +1203,7 @@ export async function renderTransmutacionesEnergeticas(request, env) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Transmutaciones Energéticas',
       CONTENT: content,
       ACTIVE_MENU: '/admin/transmutaciones-energeticas'

@@ -252,3 +252,5 @@ edges: [{ from_node_id, to_node_id, type, ... }]
 
 **Estado**: ✅ Diagnóstico completo. Listo para FASE 1.
 
+
+

@@ -3,6 +3,7 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 import { 
   listarModulos, 
   actualizarEstado, 
@@ -198,7 +199,7 @@ export async function renderModulos(request, env) {
       </script>
     `;
 
-    const html = replace(baseTemplate, {
+    const html = replaceAdminTemplate(baseTemplate, {
       TITLE: 'Gestión de Módulos',
       CONTENT: content
     });

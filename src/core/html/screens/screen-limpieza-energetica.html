@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Limpieza energética diaria" />
+<title>AuriPortal — Limpieza Energética</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    margin-bottom: 20px;
+  }
+
+  .screen-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .screen-title {
+    font-size: 1.6rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .screen-description {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+  }
+
+  /* ZONA A - Ítems a limpiar */
+  .items-section {
+    margin-bottom: 30px;
+  }
+
+  .section-title {
+    font-size: 1.3rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+
+  .items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .categoria-container {
+    margin-bottom: 25px;
+  }
+
+  .categoria-title {
+    font-size: 1.4rem;
+    color: var(--text-accent);
+    font-weight: 700;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--text-muted);
+  }
+
+  .lista-container {
+    margin-bottom: 20px;
+    padding-left: 10px;
+  }
+
+  .lista-title {
+    font-size: 1.2rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+    padding-left: 5px;
+  }
+
+  .lista-items {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding-left: 10px;
+  }
+
+  .item-card {
+    background: var(--bg-card-active);
+    border-radius: var(--radius-md, 16px);
+    padding: 18px 20px;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+  }
+
+  .item-card:hover {
+    border-color: var(--text-accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-md);
+  }
+
+  .item-card.completed {
+    border-color: var(--text-accent);
+    background: var(--bg-card-active);
+    opacity: 0.9;
+  }
+
+  .item-card.mandatory-locked {
+    border-color: var(--text-accent);
+    background: var(--bg-card-active);
+  }
+
+  .item-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .item-checkbox {
+    width: 24px;
+    height: 24px;
+    margin-top: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .item-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .item-content {
+    flex: 1;
+  }
+
+  .item-title {
+    font-size: 1.1rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .item-description {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  .item-badge {
+    background: var(--text-accent);
+    color: var(--button-text-color);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: 10px;
+  }
+
+  /* ZONA B - Técnicas energéticas (colapsable) */
+  .tecnicas-section {
+    margin-bottom: 30px;
+  }
+
+  .tecnicas-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card-active);
+    border: 2px solid var(--text-muted);
+    border-radius: var(--radius-md, 16px);
+    padding: 15px 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 15px;
+  }
+
+  .tecnicas-toggle:hover {
+    border-color: var(--text-accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-md);
+  }
+
+  .tecnicas-toggle-title {
+    font-size: 1.1rem;
+    color: var(--text-accent);
+    font-weight: 600;
+  }
+
+  .tecnicas-toggle-icon {
+    font-size: 1.2rem;
+    color: var(--text-primary);
+    transition: transform 0.2s ease;
+  }
+
+  .tecnicas-toggle.expanded .tecnicas-toggle-icon {
+    transform: rotate(180deg);
+  }
+
+  .tecnicas-content {
+    display: none;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .tecnicas-content.expanded {
+    display: flex;
+  }
+
+  .tecnica-card {
+    background: var(--bg-card-active);
+    border-radius: var(--radius-md, 16px);
+    padding: 18px 20px;
+    border: 2px solid transparent;
+  }
+
+  .tecnica-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .tecnica-title {
+    font-size: 1.05rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .tecnica-button {
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-sm, 8px);
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    font-weight: 600;
+    transition: all 0.2s ease;
+    margin-left: 15px;
+  }
+
+  .tecnica-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px var(--shadow-md);
+  }
+
+  .tecnica-content {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--text-muted);
+  }
+
+  .tecnica-content.expanded {
+    display: block;
+  }
+
+  .tecnica-description {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    line-height: 1.6;
+  }
+
+  .tecnica-video {
+    width: 100%;
+    border-radius: var(--radius-sm, 8px);
+    margin-top: 15px;
+  }
+
+  /* Mensajes de error/estado */
+  .error-message {
+    background: var(--bg-card-active);
+    border: 2px solid var(--text-accent);
+    border-radius: var(--radius-md, 16px);
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    color: var(--text-accent);
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+  }
+
+  /* Botón final */
+  .button-container {
+    margin-top: 30px;
+    text-align: center;
+  }
+
+  .button-complete {
+    padding: 15px 40px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md, 16px);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 4px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    font-weight: 600;
+    min-width: 200px;
+  }
+
+  .button-complete:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px var(--shadow-md);
+  }
+
+  .button-complete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="screen-header">
+        <h1 class="screen-title" id="screen-title">{{title}}</h1>
+        <p class="screen-description" id="screen-description">{{description}}</p>
+      </div>
+
+      <!-- Mensaje de error si no hay listas_limpieza -->
+      <div id="error-message" class="error-message" style="display: none;">
+        No hay limpiezas disponibles para hoy.
+      </div>
+
+      <!-- ZONA A - Ítems a limpiar -->
+      <div class="items-section">
+        <h2 class="section-title">Ítems a limpiar</h2>
+        <div id="items-list" class="items-list">
+          <!-- Items se renderizan dinámicamente desde JS -->
+        </div>
+        <div id="items-empty-state" class="empty-state" style="display: none;">
+          <p>No hay ítems de limpieza disponibles en este momento.</p>
+        </div>
+      </div>
+
+      <!-- ZONA B - Técnicas energéticas (colapsable) -->
+      <div id="tecnicas-section" class="tecnicas-section" style="display: none;">
+        <div class="tecnicas-toggle" id="tecnicas-toggle">
+          <span class="tecnicas-toggle-title">Técnicas energéticas</span>
+          <span class="tecnicas-toggle-icon">▼</span>
+        </div>
+        <div id="tecnicas-content" class="tecnicas-content">
+          <!-- Técnicas se renderizan dinámicamente desde JS -->
+        </div>
+        <div id="tecnicas-empty-state" class="empty-state" style="display: none;">
+          <p>No hay técnicas disponibles en este momento.</p>
+        </div>
+      </div>
+
+      <!-- Botón final -->
+      <div class="button-container">
+        <button id="button-complete" class="button-complete" disabled>
+          He terminado la limpieza
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/screens/screen-limpieza-energetica.js"></script>
+</body>
+</html>
+

@@ -345,6 +345,7 @@ export class NavigationRepoPg {
 
       await client.query('COMMIT');
 
+      console.log(`[AXE][NAV_PUBLISH] published version=${nextVersion} navigation_id=${navigation_id} checksum=${checksum}`);
       logInfo('NavigationRepo', `Versión ${nextVersion} publicada`, {
         navigation_id,
         version: nextVersion,
@@ -417,17 +418,15 @@ export class NavigationRepoPg {
 
     const navigation = await this.getNavigationById(navigation_id);
 
+    // Formato auriportal.navigation.v1
     return {
-      _export_version: '1.0',
-      _exported_at: new Date().toISOString(),
-      navigation: {
-        navigation_id: navigation.navigation_id,
-        name: navigation.name,
-        description: navigation.description,
-      },
+      ok: true,
+      format: 'auriportal.navigation.v1',
+      exported_at: new Date().toISOString(),
+      navigation_id: navigation.navigation_id,
       version: publishedVersion.version,
       checksum: publishedVersion.checksum,
-      definition: publishedVersion.definition_json,
+      navigation: publishedVersion.definition_json,
     };
   }
 
@@ -445,17 +444,41 @@ export class NavigationRepoPg {
     try {
       await client.query('BEGIN');
 
+      // Validar formato si es export completo
+      if (json.format) {
+        if (json.format !== 'auriportal.navigation.v1') {
+          throw new Error(`Formato de export inválido: "${json.format}". Se espera "auriportal.navigation.v1"`);
+        }
+
+        // Validar checksum si está presente
+        if (json.checksum && json.navigation) {
+          const normalizedDef = normalizeNavigationDefinition(json.navigation);
+          const calculatedChecksum = await generateChecksum(normalizedDef);
+          
+          if (calculatedChecksum !== json.checksum) {
+            throw new Error(`Checksum no coincide. Esperado: ${json.checksum}, Calculado: ${calculatedChecksum}`);
+          }
+        }
+      }
+
       // Asegurar que la navegación existe
       const navigation = await this.ensureNavigation(navigation_id, {
-        name: json.navigation?.name || navigation_id,
-        description: json.navigation?.description,
+        name: json.navigation?.name || json.name || navigation_id,
+        description: json.navigation?.description || json.description,
       }, client);
 
       // Extraer definición del JSON importado
-      const definition = json.definition || json;
+      // Si es formato export, usar json.navigation; si no, usar json directamente
+      const definition = json.navigation || json.definition || json;
 
       // Asegurar que navigation_id coincide
       definition.navigation_id = navigation_id;
+
+      // Validar estructura básica (no estricto, solo estructura)
+      const validation = validateNavigationDraft(definition);
+      if (!validation.ok && validation.errors.length > 0) {
+        throw new Error(`Estructura inválida: ${validation.errors.join('; ')}`);
+      }
 
       // Crear draft
       const draft = await this.upsertDraft(navigation_id, definition, actor, client);
@@ -464,13 +487,16 @@ export class NavigationRepoPg {
       await this.appendAuditLog(navigation_id, 'import', {
         source_version: json.version,
         source_checksum: json.checksum,
+        format: json.format || 'legacy',
       }, actor, client);
 
       await client.query('COMMIT');
 
+      console.log(`[AXE][NAV_IMPORT] created draft navigation_id=${navigation_id} from version=${json.version || 'unknown'} format=${json.format || 'legacy'}`);
       logInfo('NavigationRepo', 'Navegación importada como draft', {
         navigation_id,
         source_version: json.version,
+        format: json.format,
       });
 
       return draft;

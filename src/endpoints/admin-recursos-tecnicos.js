@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { listarMusicas, crearMusica, actualizarMusica, eliminarMusica } from '../services/musicas-meditacion.js';
 import { listarTonos, crearTono, actualizarTono, eliminarTono } from '../services/tonos-meditacion.js';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

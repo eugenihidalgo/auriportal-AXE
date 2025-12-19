@@ -6,8 +6,14 @@
 // - Soporta templates: screen_text, screen_choice, etc.
 // - Fail-open: si algo falla, devolver HTML básico
 
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { logInfo, logWarn, logError } from '../../observability/logger.js';
 import { getScreenTemplateRegistry } from '../../registry/screen-template-registry.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Renderiza HTML de un step basado en su renderSpec
@@ -50,6 +56,9 @@ export async function renderStepHTML(renderSpec) {
       
       case 'blank':
         return renderBlank();
+      
+      case 'screen_checklist_preparacion':
+        return await renderScreenChecklistPreparacion(renderSpec);
       
       default:
         logWarn('StepRenderer', 'Template no soportado para renderizado', { templateId });
@@ -172,6 +181,48 @@ function renderBlank() {
       <p class="text-muted">Pantalla en blanco</p>
     </div>
   `;
+}
+
+/**
+ * Renderiza template screen_checklist_preparacion
+ * Carga HTML desde archivo y reemplaza placeholders
+ */
+async function renderScreenChecklistPreparacion(renderSpec) {
+  try {
+    const props = renderSpec.props || {};
+    const context = renderSpec.context || {};
+    
+    // Cargar HTML desde archivo
+    const htmlPath = join(__dirname, '../../html/screens/screen-checklist-preparacion.html');
+    let html = readFileSync(htmlPath, 'utf-8');
+    
+    // Reemplazar placeholders básicos
+    html = html.replace(/\{\{title\}\}/g, escapeHtml(props.title || ''));
+    html = html.replace(/\{\{description\}\}/g, escapeHtml(props.description || ''));
+    html = html.replace(/\{\{TEMA_PREFERIDO\}\}/g, 'dark'); // Tema se aplica después
+    
+    // Inyectar contexto en el HTML para que JS lo lea
+    // El contexto se pasa como variable global para que el JS del template lo use
+    const contextScript = `
+      <script>
+        window.RECORRIDO_CONTEXT = ${JSON.stringify(context)};
+        window.RECORRIDO_RUN_ID = ${JSON.stringify(renderSpec.run_id || null)};
+        window.RECORRIDO_STEP_ID = ${JSON.stringify(renderSpec.step_id || null)};
+      </script>
+    `;
+    
+    // Insertar script antes del cierre de </body>
+    html = html.replace('</body>', contextScript + '</body>');
+    
+    return html;
+  } catch (error) {
+    logError('StepRenderer', 'Error cargando screen_checklist_preparacion', {
+      error: error.message,
+      stack: error.stack
+    });
+    // Fallback: renderizar HTML básico
+    return renderBasicHTML(renderSpec);
+  }
 }
 
 /**

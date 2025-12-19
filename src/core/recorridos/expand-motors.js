@@ -2,8 +2,8 @@
 // Expansión de steps motor en RecorridoDefinition
 // Convierte steps de tipo "motor" en steps/edges/captures reales usando generateAxeStructure
 
-import { getMotorByKey } from '../services/pde-motors-service.js';
-import { generateAxeStructure } from '../services/pde-motors-service.js';
+import { getMotorByKey } from '../../services/pde-motors-service.js';
+import { generateAxeStructure } from '../../services/pde-motors-service.js';
 import { logInfo, logWarn, logError } from '../observability/logger.js';
 
 /**
@@ -195,7 +195,13 @@ async function expandMotorStep(stepId, motorStep, context = {}) {
 
   // Generar estructura AXE usando el motor
   const motorId = motor.id; // UUID del motor
-  const structure = await generateAxeStructure(motorId, finalInputs);
+  const structure = await generateAxeStructure(motorId, finalInputs, context);
+  
+  // Si el motor modificó el context, propagarlo
+  if (structure._context_modified) {
+    // Actualizar el context con los valores modificados
+    Object.assign(context, structure._context_modified);
+  }
   
   if (!structure || !structure.steps || !Array.isArray(structure.steps)) {
     throw new Error(`Motor "${motorStep.motor_key}" generó estructura inválida: falta array "steps"`);

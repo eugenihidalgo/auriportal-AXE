@@ -43,14 +43,19 @@
             🚀 Publicar
           </button>
         </div>
-        <!-- Selector de Tema para Preview (AXE v0.6.9) -->
+        <!-- Selector de Tema para Preview (AXE v5.16.0) -->
         <div class="flex items-center gap-2 mr-2 border-r border-slate-700 pr-2">
           <label for="theme-selector" class="text-slate-400 text-sm">Tema Preview:</label>
           <select id="theme-selector" onchange="cambiarTemaPreview(this.value)" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="dark-classic">🌙 Dark Classic</option>
+            <option value="auto">🔄 Auto</option>
             <option value="light-classic">☀️ Light Classic</option>
+            <option value="dark-classic">🌙 Dark Classic</option>
           </select>
         </div>
+        <!-- Toggle Preview Panel (AXE v5.16.0) -->
+        <button onclick="togglePreviewPanel()" id="toggle-preview-btn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded transition-colors" title="Mostrar/Ocultar Preview">
+          👁️ Preview Panel
+        </button>
         <!-- Botones adicionales -->
         <button onclick="validarRecorrido()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
           ✓ Validar
@@ -229,6 +234,16 @@
     <div class="editor-main flex-1 bg-slate-900 overflow-y-auto p-6">
       <!-- SPRINT AXE v0.3: Preview Harness Unificado -->
       <div id="preview-harness-container" style="display: none;"></div>
+      <!-- Preview Panel con iframe (AXE v5.16.0) -->
+      <div id="preview-panel-container" style="display: none; position: fixed; top: 0; right: 0; width: 50%; height: 100vh; background: #1e293b; z-index: 1000; border-left: 2px solid #475569; box-shadow: -4px 0 12px rgba(0,0,0,0.3);">
+        <div style="display: flex; flex-direction: column; height: 100%;">
+          <div style="padding: 12px 16px; background: #334155; border-bottom: 1px solid #475569; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="color: #f1f5f9; font-size: 0.875rem; font-weight: 600;">Preview Recorrido</h3>
+            <button onclick="togglePreviewPanel()" style="padding: 4px 8px; background: #475569; color: #f1f5f9; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕ Cerrar</button>
+          </div>
+          <iframe id="preview-iframe" src="/admin/recorridos/preview" style="flex: 1; width: 100%; border: none; background: #1e293b;"></iframe>
+        </div>
+      </div>
       <!-- Preview legacy (fallback) -->
       <div class="bg-white rounded-lg shadow-lg min-h-full" id="preview-container">
         <div class="p-8 text-center text-slate-400">
@@ -1816,8 +1831,32 @@
           errors.push(`Step "${stepId}": debe ser un objeto`);
           continue;
         }
-        if (!step.screen_template_id) {
-          errors.push(`Step "${stepId}": falta screen_template_id`);
+        
+        // Validación específica para steps tipo motor
+        if (step.type === 'motor') {
+          // Validar motor_key (obligatorio)
+          if (!step.motor_key || typeof step.motor_key !== 'string' || step.motor_key.trim() === '') {
+            errors.push(`Step motor "${stepId}": debe tener un "motor_key" (string no vacío)`);
+          }
+          
+          // Validar motor_version (obligatorio, debe ser número)
+          if (step.motor_version === undefined || step.motor_version === null) {
+            errors.push(`Step motor "${stepId}": debe tener un "motor_version" (número)`);
+          } else if (typeof step.motor_version !== 'number' || step.motor_version < 1) {
+            errors.push(`Step motor "${stepId}": motor_version debe ser un número >= 1`);
+          }
+          
+          // Validar inputs requeridos (validación básica, se valida mejor en publish)
+          if (step.inputs && typeof step.inputs !== 'object') {
+            errors.push(`Step motor "${stepId}": inputs debe ser un objeto`);
+          }
+          
+          // Los steps motor NO requieren screen_template_id
+        } else {
+          // Para steps normales, validar screen_template_id
+          if (!step.screen_template_id) {
+            errors.push(`Step "${stepId}": falta screen_template_id`);
+          }
         }
       }
     }
@@ -2733,6 +2772,12 @@
     const stepTypes = editorState.registry?.stepTypes || [];
     const screenTemplates = editorState.registry?.screenTemplates || [];
     
+    // Detectar si es un step tipo motor
+    if (step.type === 'motor') {
+      renderMotorConfigPanel(step);
+      return;
+    }
+    
     // Filtrar screen templates compatibles con el step type seleccionado
     const compatibleTemplates = step.screen_template_id 
       ? screenTemplates.filter(t => t.id === step.screen_template_id || !step.step_type)
@@ -2800,6 +2845,329 @@
     
     // Actualizar badge de estado después de renderizar
     updatePublishStatusBadge();
+  }
+  
+  // ============================================================================
+  // EDITOR DE MOTOR PDE
+  // ============================================================================
+  
+  // Estado global para el motor seleccionado
+  let selectedMotorData = null;
+  
+  /**
+   * Renderiza el panel de configuración específico para steps tipo motor
+   */
+  async function renderMotorConfigPanel(step) {
+    const panel = document.getElementById('config-panel');
+    
+    // Inicializar step como motor si no lo es
+    if (step.type !== 'motor') {
+      step.type = 'motor';
+      step.motor_key = step.motor_key || '';
+      step.motor_version = step.motor_version || undefined;
+      step.inputs = step.inputs || {};
+    }
+    
+    // Cargar motores published si no están cargados
+    let motorsList = [];
+    try {
+      const response = await fetch('/admin/pde/motors?status=published');
+      if (response.ok) {
+        const data = await response.json();
+        motorsList = data.motors || [];
+      }
+    } catch (error) {
+      console.error('Error cargando motores:', error);
+    }
+    
+    // Si hay un motor_key seleccionado, cargar sus datos
+    if (step.motor_key && !selectedMotorData) {
+      try {
+        const motor = motorsList.find(m => m.motor_key === step.motor_key);
+        if (motor) {
+          selectedMotorData = motor;
+          // Si no hay motor_version o no coincide, actualizarlo
+          if (!step.motor_version || step.motor_version !== motor.version) {
+            step.motor_version = motor.version;
+            markDirty();
+          }
+        }
+      } catch (error) {
+        console.error('Error obteniendo motor:', error);
+      }
+    }
+    
+    // Si cambió el motor_key, resetear selectedMotorData
+    if (step.motor_key && selectedMotorData && selectedMotorData.motor_key !== step.motor_key) {
+      selectedMotorData = null;
+      step.inputs = {}; // Resetear inputs al cambiar motor
+    }
+    
+    panel.innerHTML = `
+      <h2 class="text-xl font-bold text-white mb-4">Configuración: ${editorState.selectedStepId}</h2>
+      
+      <div class="config-section">
+        <h3>Step Type</h3>
+        <div class="form-group">
+          <label>Step Type</label>
+          <select id="config-step-type" onchange="actualizarStepType()">
+            <option value="">Seleccionar...</option>
+            ${(editorState.registry?.stepTypes || []).map(st => `
+              <option value="${st.id}" ${step.step_type === st.id ? 'selected' : ''}>${st.name || st.id}</option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+      
+      <div class="config-section">
+        <h3>🧠 Configuración del Motor PDE</h3>
+        <div class="form-group">
+          <label>Motor PDE (Published) <span class="text-red-400">*</span></label>
+          <select id="config-motor-key" onchange="actualizarMotorKey(this.value)">
+            <option value="">Seleccionar motor...</option>
+            ${motorsList.map(motor => `
+              <option value="${motor.motor_key}" 
+                      data-version="${motor.version}"
+                      ${step.motor_key === motor.motor_key ? 'selected' : ''}>
+                ${motor.name || motor.motor_key} (v${motor.version}) - ${motor.motor_key}
+              </option>
+            `).join('')}
+          </select>
+          <p class="text-xs text-slate-400 mt-1">Solo se muestran motores con status = published</p>
+        </div>
+        
+        ${step.motor_key && selectedMotorData ? `
+          <div class="mt-4 p-3 bg-slate-800 rounded-lg border border-slate-600">
+            <h4 class="text-sm font-semibold text-white mb-2">Información del Motor</h4>
+            <p class="text-xs text-slate-300"><strong>Nombre:</strong> ${selectedMotorData.name || 'N/A'}</p>
+            <p class="text-xs text-slate-300"><strong>Clave:</strong> ${selectedMotorData.motor_key}</p>
+            <p class="text-xs text-slate-300"><strong>Versión:</strong> ${selectedMotorData.version}</p>
+            ${selectedMotorData.description ? `<p class="text-xs text-slate-300 mt-1"><strong>Descripción:</strong> ${selectedMotorData.description}</p>` : ''}
+          </div>
+        ` : ''}
+      </div>
+      
+      ${step.motor_key && selectedMotorData ? `
+        <div class="config-section">
+          <h3>📥 Inputs del Motor</h3>
+          <div id="config-motor-inputs">
+            ${renderMotorInputs(step, selectedMotorData)}
+          </div>
+        </div>
+      ` : step.motor_key ? `
+        <div class="config-section">
+          <p class="text-amber-400 text-sm">⚠️ Cargando información del motor...</p>
+        </div>
+      ` : ''}
+      
+      <div class="config-section">
+        <h3>Branches (Edges)</h3>
+        <div id="config-branches">
+          ${renderBranchesEditor(step)}
+        </div>
+      </div>
+    `;
+    
+    // Si hay motor_key pero no selectedMotorData, cargarlo
+    if (step.motor_key && !selectedMotorData) {
+      await cargarMotorData(step.motor_key);
+    }
+    
+    // Actualizar badge de estado después de renderizar
+    updatePublishStatusBadge();
+  }
+  
+  /**
+   * Carga los datos de un motor por su motor_key
+   */
+  async function cargarMotorData(motorKey) {
+    try {
+      const motorsResponse = await fetch('/admin/pde/motors?status=published');
+      if (motorsResponse.ok) {
+        const motorsData = await motorsResponse.json();
+        const motor = motorsData.motors?.find(m => m.motor_key === motorKey);
+        if (motor) {
+          selectedMotorData = motor;
+          renderStepConfig(); // Re-renderizar para mostrar inputs
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando motor:', error);
+    }
+  }
+  
+  /**
+   * Renderiza los inputs del motor dinámicamente
+   */
+  function renderMotorInputs(step, motor) {
+    const inputs = motor.definition?.inputs || [];
+    const stepInputs = step.inputs || {};
+    
+    if (inputs.length === 0) {
+      return '<p class="text-slate-400 text-sm">Este motor no tiene inputs definidos.</p>';
+    }
+    
+    return inputs.map(input => {
+      const inputValue = stepInputs[input.key] || '';
+      const isRequired = input.required === true;
+      
+      let inputHtml = '';
+      
+      // Renderizar según el tipo
+      if (input.type === 'string') {
+        inputHtml = `
+          <input type="text" 
+                 id="motor-input-${input.key}"
+                 value="${escapeHtml(inputValue)}"
+                 onchange="actualizarMotorInput('${input.key}', this.value)"
+                 placeholder="Valor o {{context.variable}}"
+                 class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                 ${isRequired ? 'required' : ''}>
+        `;
+      } else if (input.type === 'number') {
+        // Para inputs number, permitir tanto números literales como bindings ({{context.variable}})
+        // Usar type="text" para permitir escribir bindings libremente
+        // La validación del tipo se hace en runtime, no en el editor
+        inputHtml = `
+          <input type="text" 
+                 id="motor-input-${input.key}"
+                 value="${escapeHtml(String(inputValue || ''))}"
+                 onchange="actualizarMotorInput('${input.key}', this.value)"
+                 placeholder="Número o {{context.variable}}"
+                 class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                 ${isRequired ? 'required' : ''}>
+        `;
+      } else if (input.type === 'boolean') {
+        inputHtml = `
+          <select id="motor-input-${input.key}"
+                  onchange="actualizarMotorInput('${input.key}', this.value)"
+                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                  ${isRequired ? 'required' : ''}>
+            <option value="">Seleccionar...</option>
+            <option value="true" ${inputValue === 'true' || inputValue === true ? 'selected' : ''}>Sí</option>
+            <option value="false" ${inputValue === 'false' || inputValue === false ? 'selected' : ''}>No</option>
+            <option value="{{context.${input.key}}}" ${inputValue && inputValue.startsWith('{{context.') ? 'selected' : ''}>Desde contexto</option>
+          </select>
+        `;
+      } else if (input.type === 'enum' || input.type === 'select') {
+        const options = input.options || [];
+        inputHtml = `
+          <select id="motor-input-${input.key}"
+                  onchange="actualizarMotorInput('${input.key}', this.value)"
+                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                  ${isRequired ? 'required' : ''}>
+            <option value="">Seleccionar...</option>
+            ${options.map(opt => {
+              const optValue = typeof opt === 'string' ? opt : opt.value || opt;
+              const optLabel = typeof opt === 'string' ? opt : opt.label || opt.value || opt;
+              return `<option value="${escapeHtml(optValue)}" ${inputValue === optValue ? 'selected' : ''}>${escapeHtml(optLabel)}</option>`;
+            }).join('')}
+            <option value="{{context.${input.key}}}" ${inputValue && inputValue.startsWith('{{context.') ? 'selected' : ''}>Desde contexto</option>
+          </select>
+        `;
+      } else if (input.type === 'pde_catalog') {
+        // Para catálogos PDE, solo mostrar información (read-only)
+        inputHtml = `
+          <div class="p-3 bg-slate-700 rounded border border-slate-600">
+            <p class="text-xs text-slate-300"><strong>Catálogo PDE:</strong> ${input.catalog_key || 'N/A'}</p>
+            <p class="text-xs text-slate-400 mt-1">Este input usa un catálogo PDE. El valor se obtiene del contexto del recorrido.</p>
+            <input type="text" 
+                   id="motor-input-${input.key}"
+                   value="${escapeHtml(inputValue)}"
+                   onchange="actualizarMotorInput('${input.key}', this.value)"
+                   placeholder="{{context.${input.key}}}"
+                   class="w-full mt-2 px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                   ${isRequired ? 'required' : ''}>
+          </div>
+        `;
+      } else {
+        // Tipo desconocido, input de texto genérico
+        inputHtml = `
+          <input type="text" 
+                 id="motor-input-${input.key}"
+                 value="${escapeHtml(inputValue)}"
+                 onchange="actualizarMotorInput('${input.key}', this.value)"
+                 placeholder="Valor o {{context.variable}}"
+                 class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                 ${isRequired ? 'required' : ''}>
+        `;
+      }
+      
+      return `
+        <div class="form-group mb-4">
+          <label class="block text-sm text-white mb-1">
+            ${input.key} ${isRequired ? '<span class="text-red-400">*</span>' : ''}
+            <span class="text-xs text-slate-400 ml-2">(${input.type})</span>
+          </label>
+          ${inputHtml}
+          ${input.description ? `<p class="text-xs text-slate-400 mt-1">${escapeHtml(input.description)}</p>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+  
+  /**
+   * Actualiza el motor_key del step
+   */
+  async function actualizarMotorKey(motorKey) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step) return;
+    
+    const select = document.getElementById('config-motor-key');
+    const selectedOption = select.options[select.selectedIndex];
+    const motorVersion = selectedOption ? parseInt(selectedOption.dataset.version) : undefined;
+    
+    // Si cambió el motor, resetear inputs y mostrar warning
+    if (step.motor_key && step.motor_key !== motorKey) {
+      step.inputs = {};
+      // Mostrar warning suave
+      const warningEl = document.createElement('div');
+      warningEl.className = 'bg-amber-900 border border-amber-600 text-amber-200 px-3 py-2 rounded text-sm mt-2';
+      warningEl.textContent = '⚠️ Los inputs se han reiniciado';
+      select.parentElement.appendChild(warningEl);
+      setTimeout(() => warningEl.remove(), 3000);
+    }
+    
+    step.motor_key = motorKey || undefined;
+    step.motor_version = motorVersion;
+    selectedMotorData = null; // Resetear para forzar recarga
+    
+    markDirty();
+    tryScheduleSave();
+    
+    // Re-renderizar para mostrar inputs del nuevo motor
+    await renderStepConfig();
+  }
+  
+  /**
+   * Actualiza un input del motor
+   */
+  function actualizarMotorInput(inputKey, value) {
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    if (!step) return;
+    
+    if (!step.inputs) {
+      step.inputs = {};
+    }
+    
+    if (value === '' || value === null || value === undefined) {
+      delete step.inputs[inputKey];
+    } else {
+      step.inputs[inputKey] = value;
+    }
+    
+    markDirty();
+    tryScheduleSave();
+  }
+  
+  /**
+   * Helper para escapar HTML
+   */
+  function escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   // ============================================================================
@@ -2888,7 +3256,11 @@
             <option value="youtube" ${videoSource === 'youtube' ? 'selected' : ''}>📺 YouTube</option>
             <option value="internal" ${videoSource === 'internal' ? 'selected' : ''}>🎥 Vídeo interno</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">¿De dónde proviene el vídeo?</p>
+          <p class="text-xs text-slate-500 mt-1">
+            ${publishRequired.includes('video_source') 
+              ? '¿De dónde proviene el vídeo?' 
+              : '¿De dónde proviene el vídeo? <span class="text-blue-400">(Opcional: si no se define, no se mostrará)</span>'}
+          </p>
         </div>
         
         <!-- Referencia del vídeo -->
@@ -2906,11 +3278,17 @@
                  maxlength="500"
                  class="screen-video-input">
           <p class="text-xs text-slate-500 mt-1">
-            ${videoSource === 'youtube' 
-              ? 'Puedes pegar la URL completa o solo el ID del vídeo (ej: dQw4w9WgXcQ)' 
-              : videoSource === 'internal'
-                ? 'ID del vídeo en el banco de vídeos interno'
-                : 'Selecciona primero el origen del vídeo'}
+            ${publishRequired.includes('video_ref')
+              ? (videoSource === 'youtube' 
+                  ? 'Puedes pegar la URL completa o solo el ID del vídeo (ej: dQw4w9WgXcQ)' 
+                  : videoSource === 'internal'
+                    ? 'ID del vídeo en el banco de vídeos interno'
+                    : 'Selecciona primero el origen del vídeo')
+              : (videoSource === 'youtube' 
+                  ? 'Puedes pegar la URL completa o solo el ID del vídeo (ej: dQw4w9WgXcQ). <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>' 
+                  : videoSource === 'internal'
+                    ? 'ID del vídeo en el banco de vídeos interno. <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>'
+                    : 'Selecciona primero el origen del vídeo. <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>')}
           </p>
         </div>
         
@@ -3103,7 +3481,11 @@
             <option value="internal" ${audioSource === 'internal' ? 'selected' : ''}>🎧 Audio interno</option>
             <option value="external" ${audioSource === 'external' ? 'selected' : ''}>🌐 Audio externo (URL)</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">¿De dónde proviene el audio?</p>
+          <p class="text-xs text-slate-500 mt-1">
+            ${publishRequired.includes('audio_source') 
+              ? '¿De dónde proviene el audio?' 
+              : '¿De dónde proviene el audio? <span class="text-blue-400">(Opcional: si no se define, no se mostrará)</span>'}
+          </p>
         </div>
         
         <!-- Referencia del audio -->
@@ -3121,11 +3503,17 @@
                  maxlength="500"
                  class="screen-audio-input">
           <p class="text-xs text-slate-500 mt-1">
-            ${audioSource === 'internal'
-              ? 'ID del audio en el banco de audios interno'
-              : audioSource === 'external'
-                ? 'URL completa del archivo de audio'
-                : 'Selecciona primero el origen del audio'}
+            ${publishRequired.includes('audio_ref')
+              ? (audioSource === 'internal'
+                  ? 'ID del audio en el banco de audios interno'
+                  : audioSource === 'external'
+                    ? 'URL completa del archivo de audio'
+                    : 'Selecciona primero el origen del audio')
+              : (audioSource === 'internal'
+                  ? 'ID del audio en el banco de audios interno. <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>'
+                  : audioSource === 'external'
+                    ? 'URL completa del archivo de audio. <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>'
+                    : 'Selecciona primero el origen del audio. <span class="text-blue-400">Opcional: si no se define, no se mostrará.</span>')}
           </p>
         </div>
         
@@ -3322,6 +3710,75 @@
           ${isReadyToPublish 
             ? '<span class="text-green-400">✅ Listo para publicar</span>' 
             : '<span class="text-amber-400">⚠️ Completa la pregunta y al menos 1 opción válida para publicar</span>'}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Renderiza el editor de screen_checklist_preparacion
+   * Solo muestra title y description. Los items vienen del Motor PDE.
+   */
+  function renderScreenChecklistPreparacionEditor(step) {
+    const props = step.props || {};
+    const template = editorState.registry?.screenTemplates?.find(st => st.id === step.screen_template_id);
+    const publishRequired = template?.editor_config?.publish_required || [];
+    const infoMessage = template?.editor_config?.info_message || '';
+    
+    // Función helper para generar badge de requerido
+    const getRequiredBadge = (propName) => {
+      const isRequired = publishRequired.includes(propName);
+      return isRequired 
+        ? '<span class="required-badge" title="Obligatorio para publicar">*</span>'
+        : '';
+    };
+    
+    return `
+      <div class="screen-checklist-preparacion-editor">
+        <!-- Mensaje informativo -->
+        ${infoMessage ? `
+          <div class="info-message p-3 rounded bg-blue-900/30 border border-blue-700 mb-4">
+            <p class="text-blue-300 text-sm">ℹ️ ${infoMessage}</p>
+          </div>
+        ` : ''}
+        
+        <!-- Título -->
+        <div class="form-group">
+          <label>
+            📝 Título${getRequiredBadge('title')}
+            ${!publishRequired.includes('title') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <input type="text" 
+                 id="prop-checklist-title"
+                 value="${escapeHtml(props.title || '')}" 
+                 onchange="actualizarProp('title', this.value)"
+                 oninput="markDirtyOnly()"
+                 placeholder="Ej: Selecciona tus preparaciones"
+                 maxlength="200"
+                 class="screen-choice-input">
+          <p class="text-xs text-slate-500 mt-1">Título opcional de la pantalla</p>
+        </div>
+        
+        <!-- Descripción -->
+        <div class="form-group">
+          <label>
+            📌 Descripción${getRequiredBadge('description')}
+            ${!publishRequired.includes('description') ? '<span class="text-slate-500 text-xs font-normal ml-2">(opcional)</span>' : ''}
+          </label>
+          <textarea id="prop-checklist-description"
+                    onchange="actualizarProp('description', this.value)"
+                    oninput="markDirtyOnly()"
+                    placeholder="Elige las preparaciones que deseas realizar..."
+                    maxlength="500"
+                    rows="3"
+                    class="screen-choice-textarea">${escapeHtml(props.description || '')}</textarea>
+          <p class="text-xs text-slate-500 mt-1">Texto descriptivo opcional</p>
+        </div>
+        
+        <!-- Estado -->
+        <div class="screen-choice-status mt-4 p-3 rounded bg-green-900/30 border border-green-700">
+          <span class="text-green-400">✅ Listo para usar</span>
+          <p class="text-xs text-slate-400 mt-1">Los items de la checklist se generan dinámicamente desde el Motor PDE</p>
         </div>
       </div>
     `;
@@ -3747,6 +4204,13 @@ El texto se mostrará tal como lo escribas."
     // ============================================================================
     if (step.screen_template_id === 'screen_choice') {
       return renderScreenChoiceEditor(step);
+    }
+    
+    // ============================================================================
+    // EDITOR ESPECÍFICO PARA screen_checklist_preparacion
+    // ============================================================================
+    if (step.screen_template_id === 'screen_checklist_preparacion') {
+      return renderScreenChecklistPreparacionEditor(step);
     }
     
     // ============================================================================
@@ -4335,7 +4799,32 @@ El texto se mostrará tal como lo escribas."
   
   function actualizarStepType() {
     const stepTypeId = document.getElementById('config-step-type').value;
-    editorState.definition.steps[editorState.selectedStepId].step_type = stepTypeId || undefined;
+    const step = editorState.definition.steps[editorState.selectedStepId];
+    
+    // Si se cambia a motor, inicializar campos específicos
+    if (stepTypeId === 'motor') {
+      step.type = 'motor';
+      step.step_type = 'motor';
+      // Limpiar campos que no aplican para motor
+      delete step.screen_template_id;
+      delete step.props;
+      delete step.capture;
+      // Inicializar campos del motor si no existen
+      if (!step.motor_key) step.motor_key = '';
+      if (!step.motor_version) step.motor_version = undefined;
+      if (!step.inputs) step.inputs = {};
+    } else {
+      // Si se cambia de motor a otro tipo, limpiar campos del motor
+      if (step.type === 'motor') {
+        delete step.type;
+        delete step.motor_key;
+        delete step.motor_version;
+        delete step.inputs;
+        selectedMotorData = null; // Resetear motor seleccionado
+      }
+      step.step_type = stepTypeId || undefined;
+    }
+    
     markDirty();
     tryScheduleSave();
     renderStepConfig();
@@ -8406,6 +8895,309 @@ El texto se mostrará tal como lo escribas."
         }
       }
     });
+    
+    // ============================================================================
+    // PREVIEW PANEL CON IFRAME (AXE v5.16.0)
+    // ============================================================================
+    
+    let previewPanelOpen = false;
+    let previewIframe = null;
+    let currentThemeKey = 'auto';
+    let currentThemeCatalog = [];
+    
+    /**
+     * Toggle del panel preview
+     */
+    window.togglePreviewPanel = function() {
+      const container = document.getElementById('preview-panel-container');
+      if (!container) return;
+      
+      previewPanelOpen = !previewPanelOpen;
+      container.style.display = previewPanelOpen ? 'block' : 'none';
+      
+      if (previewPanelOpen) {
+        previewIframe = document.getElementById('preview-iframe');
+        if (previewIframe) {
+          // Esperar a que el iframe cargue y luego enviar snapshot
+          previewIframe.onload = () => {
+            setTimeout(() => {
+              updatePreviewSnapshot();
+            }, 500);
+          };
+        }
+      }
+    };
+    
+    /**
+     * Actualiza el snapshot del preview
+     */
+    async function updatePreviewSnapshot() {
+      if (!previewIframe || !previewPanelOpen) return;
+      
+      try {
+        // Obtener snapshot del recorrido actual
+        const snapshot = buildRecorridoSnapshot();
+        
+        // Obtener CSS tokens del tema seleccionado
+        const themeTokensCssText = await getThemeTokensCssText(currentThemeKey);
+        
+        // Enviar mensaje al iframe
+        previewIframe.contentWindow.postMessage({
+          type: 'RECORRIDO_PREVIEW_UPDATE',
+          payload: {
+            theme: {
+              key: currentThemeKey,
+              label: currentThemeCatalog.find(t => t.key === currentThemeKey)?.label || currentThemeKey
+            },
+            themeTokensCssText,
+            snapshot
+          }
+        }, '*');
+        
+      } catch (error) {
+        console.error('[Editor] Error actualizando preview snapshot:', error);
+      }
+    }
+    
+    /**
+     * Construye snapshot del recorrido para el preview
+     * AXE v5.16.0: Incluye contextMock para preview de steps que lo requieren
+     */
+    function buildRecorridoSnapshot() {
+      try {
+        const recorrido = editorState.recorrido || {};
+        const flow = recorrido.flow || {};
+        const steps = flow.steps || {};
+        const selectedStepId = editorState.selectedStepId;
+        
+        // Obtener step seleccionado
+        let selectedStep = null;
+        if (selectedStepId) {
+          if (Array.isArray(steps)) {
+            selectedStep = steps.find(s => s.id === selectedStepId || s.step_id === selectedStepId);
+          } else if (typeof steps === 'object') {
+            selectedStep = steps[selectedStepId] || steps[selectedStepId.toString()];
+          }
+        }
+        
+        // Generar contextMock según el tipo de step
+        const contextMock = generateContextMock(selectedStep);
+        
+        return {
+          recorrido: {
+            id: recorrido.id || editorState.recorridoId,
+            name: recorrido.name || 'Recorrido sin nombre',
+            version: recorrido.version || 'draft',
+            status: recorrido.status || 'draft'
+          },
+          selected_step_id: selectedStepId,
+          steps: steps,
+          entry_step_id: flow.entry_step_id,
+          contextMock: contextMock
+        };
+      } catch (error) {
+        console.error('[Editor] Error construyendo snapshot:', error);
+        return {
+          recorrido: { id: null, name: 'Error', version: 'draft', status: 'draft' },
+          selected_step_id: null,
+          steps: {},
+          entry_step_id: null,
+          contextMock: {}
+        };
+      }
+    }
+    
+    /**
+     * Genera contextMock para el preview según el tipo de step
+     * AXE v5.16.0: Preparado para motor_post_limpieza_seleccion
+     * 
+     * @param {Object} step - Step seleccionado
+     * @returns {Object} contextMock con preparations y limits
+     */
+    function generateContextMock(step) {
+      if (!step) return {};
+      
+      const stepType = step.type || step.screen_template_id;
+      
+      // Si es screen_checklist_preparacion, generar mock de preparations
+      if (stepType === 'screen_checklist_preparacion') {
+        // Mock de preparations (el motor real generará estas desde la BD)
+        const mockPreparations = [
+          {
+            id: 'prep-1',
+            title: 'Preparación de espacio',
+            description: 'Prepara tu espacio físico para la práctica',
+            mandatory: true,
+            estimated_minutes: 5
+          },
+          {
+            id: 'prep-2',
+            title: 'Respiración consciente',
+            description: 'Realiza 3 respiraciones profundas',
+            mandatory: false,
+            estimated_minutes: 2
+          },
+          {
+            id: 'prep-3',
+            title: 'Intención clara',
+            description: 'Define tu intención para esta práctica',
+            mandatory: false,
+            estimated_minutes: 3
+          },
+          {
+            id: 'prep-4',
+            title: 'Protección energética',
+            description: 'Visualiza una burbuja de luz protectora',
+            mandatory: true,
+            estimated_minutes: 2
+          }
+        ];
+        
+        // Mock de limits (el motor real determinará estos valores)
+        const mockLimits = {
+          min: 2,  // Mínimo 2 preparaciones (las obligatorias)
+          max: 4   // Máximo todas las disponibles
+        };
+        
+        return {
+          preparations: mockPreparations,
+          limits: mockLimits
+        };
+      }
+      
+      // Para otros tipos de steps, retornar objeto vacío
+      return {};
+    }
+    
+    /**
+     * Obtiene CSS tokens del tema
+     */
+    async function getThemeTokensCssText(themeKey) {
+      try {
+        // Si es auto/light-classic/dark-classic, usar Theme Resolver
+        if (themeKey === 'auto' || themeKey === 'light-classic' || themeKey === 'dark-classic') {
+          // Para temas del sistema, generar CSS directamente
+          const { resolveTheme } = await import('/src/core/theme/theme-resolver.js');
+          const { themeTokensToCss } = await import('/src/core/theme/theme-tokens-to-css.js');
+          const themeEffective = resolveTheme({ theme_id: themeKey === 'auto' ? null : themeKey });
+          return themeTokensToCss(themeEffective);
+        }
+        
+        // Si es theme:<theme_key>:<version>, cargar desde themes-v3
+        if (themeKey.startsWith('theme:')) {
+          const parts = themeKey.split(':');
+          if (parts.length >= 3) {
+            const themeId = parts[1];
+            const version = parseInt(parts[2]);
+            
+            // Cargar versión desde API
+            const response = await fetch(`/admin/api/themes-v3/${themeId}/versions/${version}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.ok && data.version && data.version.definition_json) {
+                const { getThemeDefinitionCssText } = await import('/src/core/theme/theme-tokens-to-css.js');
+                return getThemeDefinitionCssText(data.version.definition_json);
+              }
+            }
+          }
+        }
+        
+        // Fallback: usar dark-classic
+        const { resolveTheme } = await import('/src/core/theme/theme-resolver.js');
+        const { themeTokensToCss } = await import('/src/core/theme/theme-tokens-to-css.js');
+        const themeEffective = resolveTheme({ theme_id: 'dark-classic' });
+        return themeTokensToCss(themeEffective);
+        
+      } catch (error) {
+        console.error('[Editor] Error obteniendo theme tokens:', error);
+        // Fallback absoluto
+        return ':root { --bg-main: #1e293b; --text-primary: #f1f5f9; }';
+      }
+    }
+    
+    /**
+     * Cambia el tema de preview (modificado para v5.16.0)
+     */
+    window.cambiarTemaPreview = async function(themeKey) {
+      currentThemeKey = themeKey;
+      localStorage.setItem('ap_recorridos_editor_theme_pref', themeKey);
+      
+      // Actualizar preview si está abierto
+      if (previewPanelOpen) {
+        await updatePreviewSnapshot();
+      }
+    };
+    
+    /**
+     * Inicializa el selector de temas con catálogo
+     */
+    async function initThemeSelector() {
+      try {
+        // Cargar catálogo directamente (sin import dinámico por compatibilidad)
+        const response = await fetch('/admin/api/themes/catalog');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && Array.isArray(data.items)) {
+            currentThemeCatalog = data.items;
+            
+            // Actualizar select con opciones del catálogo
+            const select = document.getElementById('theme-selector');
+            if (select) {
+              // Limpiar opciones existentes (excepto la primera si existe)
+              const currentValue = select.value;
+              select.innerHTML = '';
+              
+              for (const item of data.items) {
+                const option = document.createElement('option');
+                option.value = item.key;
+                option.textContent = item.label;
+                select.appendChild(option);
+              }
+              
+              // Restaurar valor guardado
+              const savedPref = localStorage.getItem('ap_recorridos_editor_theme_pref');
+              if (savedPref && Array.from(select.options).find(opt => opt.value === savedPref)) {
+                select.value = savedPref;
+                currentThemeKey = savedPref;
+              } else if (currentValue && Array.from(select.options).find(opt => opt.value === currentValue)) {
+                select.value = currentValue;
+                currentThemeKey = currentValue;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Editor] Error inicializando theme selector:', error);
+        // Fail-open: mantener selector básico
+      }
+    }
+    
+    // Inicializar theme selector cuando el DOM esté listo
+    setTimeout(initThemeSelector, 2000);
+    
+    // Actualizar preview cuando cambia el step seleccionado (hook en selectStep si existe)
+    if (typeof window.selectStep === 'function') {
+      const originalSelectStep = window.selectStep;
+      window.selectStep = async function(...args) {
+        const result = await originalSelectStep.apply(this, args);
+        if (previewPanelOpen) {
+          setTimeout(updatePreviewSnapshot, 300);
+        }
+        return result;
+      };
+    }
+    
+    // Hook en renderPreview para actualizar preview panel
+    if (typeof window.renderPreview === 'function') {
+      const originalRenderPreview = window.renderPreview;
+      window.renderPreview = async function(...args) {
+        const result = await originalRenderPreview.apply(this, args);
+        if (previewPanelOpen) {
+          setTimeout(updatePreviewSnapshot, 300);
+        }
+        return result;
+      };
+    }
   });
 </script>
 

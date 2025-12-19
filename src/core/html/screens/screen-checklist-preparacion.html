@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA_PREFERIDO}}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+<meta name="theme-color" content="#ffd86b" />
+<meta name="description" content="Selecciona tus preparaciones" />
+<title>AuriPortal — Checklist Preparación</title>
+<link rel="shortcut icon" type="image/png" href="https://images.typeform.com/images/tXs4JibWTbvb" />
+<link rel="stylesheet" href="/css/theme-variables.css" />
+<link rel="stylesheet" href="/css/theme-overrides.css" />
+<style>
+  /* Scope único para screen_checklist_preparacion - previene fugas de CSS */
+  [data-screen="screen_checklist_preparacion"] * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  [data-screen="screen_checklist_preparacion"] {
+    font-family: 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .container {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg, 20px);
+    padding: 30px 25px;
+    box-shadow: 0 6px 14px var(--shadow-sm);
+    margin-bottom: 20px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .screen-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .screen-title {
+    font-size: 1.6rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .screen-description {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .checklist-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .checklist-item {
+    background: var(--bg-card-active);
+    border-radius: var(--radius-md, 16px);
+    padding: 18px 20px;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .checklist-item:hover {
+    border-color: var(--text-accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-md);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .checklist-item.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .checklist-item.selected {
+    border-color: var(--text-accent);
+    background: var(--bg-card-active);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-checkbox {
+    width: 24px;
+    height: 24px;
+    margin-top: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-checkbox:disabled {
+    cursor: not-allowed;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-content {
+    flex: 1;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-title {
+    font-size: 1.1rem;
+    color: var(--text-accent);
+    font-weight: 600;
+    flex: 1;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-badge {
+    background: var(--text-accent);
+    color: var(--button-text-color);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-description {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-meta {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .item-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .error-message {
+    background: var(--bg-card-active);
+    border: 2px solid var(--text-accent);
+    border-radius: var(--radius-md, 16px);
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    color: var(--text-accent);
+    font-weight: 600;
+    text-align: center;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .validation-message {
+    background: var(--bg-card-active);
+    border-radius: var(--radius-md, 16px);
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 0.95rem;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .validation-message.error {
+    border: 2px solid var(--text-accent);
+    color: var(--text-accent);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .validation-message.info {
+    border: 2px solid var(--text-muted);
+    color: var(--text-muted);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .button-container {
+    margin-top: 30px;
+    text-align: center;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .button-continue {
+    padding: 15px 40px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md, 16px);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--button-text-color);
+    box-shadow: 0 4px 10px var(--shadow-md);
+    transition: all 0.2s ease;
+    font-weight: 600;
+    min-width: 200px;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .button-continue:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px var(--shadow-md);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .button-continue:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  [data-screen="screen_checklist_preparacion"] .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+  }
+
+  [data-screen="screen_checklist_preparacion"] .empty-state-message {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+  <div data-screen="screen_checklist_preparacion">
+    <div class="container">
+      <div class="card">
+        <div class="screen-header">
+          <h1 class="screen-title" id="screen-title">{{title}}</h1>
+          <p class="screen-description" id="screen-description">{{description}}</p>
+        </div>
+
+        <!-- Mensaje de error si no hay context.preparations -->
+        <div id="error-message" class="error-message" style="display: none;">
+          Error: No se encontraron preparaciones en el contexto. Por favor, contacta con soporte.
+        </div>
+
+        <!-- Mensaje de validación (mín/max) -->
+        <div id="validation-message" class="validation-message" style="display: none;"></div>
+
+        <!-- Checklist container -->
+        <div id="checklist-container" class="checklist-container">
+          <!-- Items se renderizan dinámicamente desde JS -->
+        </div>
+
+        <!-- Estado vacío -->
+        <div id="empty-state" class="empty-state" style="display: none;">
+          <p class="empty-state-message">No hay preparaciones disponibles en este momento.</p>
+        </div>
+
+        <!-- Botón continuar -->
+        <div class="button-container">
+          <button id="button-continue" class="button-continue" disabled>
+            Continuar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/screens/screen-checklist-preparacion.js"></script>
+</body>
+</html>
+
+

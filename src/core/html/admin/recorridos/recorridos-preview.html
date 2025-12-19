@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="theme-color" content="#667eea">
+  <title>Preview Recorrido - AuriPortal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg-main, #1e293b);
+      color: var(--text-primary, #f1f5f9);
+      min-height: 100vh;
+      padding: 0;
+    }
+    
+    /* Theme tokens se inyectan dinámicamente */
+    #ap-theme-tokens {
+      display: none;
+    }
+    
+    .preview-header {
+      background: var(--bg-card, #334155);
+      border-bottom: 1px solid var(--border-color, #475569);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    
+    .preview-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary, #f1f5f9);
+      margin: 0;
+    }
+    
+    .preview-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: var(--gradient-primary, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+      color: white;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .preview-step-info {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .step-type-badge {
+      padding: 4px 8px;
+      background: var(--bg-secondary, #475569);
+      color: var(--text-secondary, #cbd5e1);
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    #preview-root {
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+      min-height: calc(100vh - 80px);
+    }
+    
+    .preview-placeholder {
+      background: var(--bg-card, #334155);
+      border: 2px dashed var(--border-color, #475569);
+      border-radius: 12px;
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--text-muted, #94a3b8);
+    }
+    
+    .preview-placeholder h2 {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+      color: var(--text-primary, #f1f5f9);
+    }
+    
+    .preview-placeholder p {
+      font-size: 1rem;
+      margin-bottom: 24px;
+    }
+    
+    .preview-placeholder pre {
+      background: var(--bg-secondary, #475569);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: left;
+      overflow-x: auto;
+      max-height: 400px;
+      font-size: 0.875rem;
+      color: var(--text-secondary, #cbd5e1);
+    }
+    
+    .preview-error-banner {
+      background: #dc2626;
+      color: white;
+      padding: 12px 24px;
+      text-align: center;
+      font-size: 0.875rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .step-renderer {
+      background: var(--bg-card, #334155);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .step-renderer h3 {
+      font-size: 1.25rem;
+      margin-bottom: 12px;
+      color: var(--text-primary, #f1f5f9);
+    }
+    
+    .step-renderer p {
+      color: var(--text-secondary, #cbd5e1);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    
+    .step-renderer .video-ref {
+      background: var(--bg-secondary, #475569);
+      padding: 12px;
+      border-radius: 8px;
+      font-family: monospace;
+      color: var(--text-primary, #f1f5f9);
+      margin-top: 12px;
+    }
+    
+    .step-renderer .choice-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    
+    .step-renderer .choice-option {
+      background: var(--bg-secondary, #475569);
+      border: 1px solid var(--border-color, #475569);
+      border-radius: 8px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-primary, #f1f5f9);
+    }
+    
+    .step-renderer .choice-option:hover {
+      background: var(--bg-hover, #52667a);
+      border-color: var(--border-hover, #64748b);
+    }
+  </style>
+  <style id="ap-theme-tokens"></style>
+</head>
+<body>
+  <div id="preview-error-banner" class="preview-error-banner" style="display: none;"></div>
+  
+  <div class="preview-header">
+    <div>
+      <h1 id="preview-step-name">Cargando preview...</h1>
+      <div class="preview-step-info">
+        <span class="preview-badge">Preview</span>
+        <span id="preview-step-type" class="step-type-badge">-</span>
+      </div>
+    </div>
+  </div>
+  
+  <div id="preview-root">
+    <div class="preview-placeholder">
+      <h2>Esperando datos del recorrido...</h2>
+      <p>El preview se actualizará cuando el editor envíe los datos del recorrido.</p>
+    </div>
+  </div>
+  
+  <script>
+    // Fail-open absoluto: cualquier error se captura y muestra banner
+    (function() {
+      'use strict';
+      
+      const PREFIX = '[AXE][REC_PREVIEW]';
+      const isDev = window.location.hostname === 'localhost' || window.location.hostname.includes('localhost');
+      
+      function log(message, data = {}) {
+        if (isDev) {
+          console.log(`${PREFIX} ${message}`, data);
+        }
+      }
+      
+      function showError(message) {
+        try {
+          const banner = document.getElementById('preview-error-banner');
+          if (banner) {
+            banner.textContent = `⚠️ ${message}`;
+            banner.style.display = 'block';
+          }
+        } catch (e) {
+          console.error(`${PREFIX} Error mostrando banner:`, e);
+        }
+      }
+      
+      function escapeHtml(text) {
+        if (typeof text !== 'string') {
+          return String(text);
+        }
+        const map = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
+      }
+      
+      function hideError() {
+        try {
+          const banner = document.getElementById('preview-error-banner');
+          if (banner) {
+            banner.style.display = 'none';
+          }
+        } catch (e) {
+          // Silenciar
+        }
+      }
+      
+      function applyThemeTokens(cssText) {
+        try {
+          const styleEl = document.getElementById('ap-theme-tokens');
+          if (styleEl) {
+            styleEl.textContent = cssText;
+            log('Theme tokens aplicados');
+          }
+        } catch (e) {
+          log('Error aplicando theme tokens', { error: e.message });
+          showError('Error aplicando tema');
+        }
+      }
+      
+      function renderStep(step, snapshot) {
+        try {
+          const root = document.getElementById('preview-root');
+          if (!root) return;
+          
+          if (!step) {
+            root.innerHTML = `
+              <div class="preview-placeholder">
+                <h2>No hay step seleccionado</h2>
+                <p>Selecciona un step en el editor para ver el preview.</p>
+              </div>
+            `;
+            return;
+          }
+          
+          const stepType = step.type || step.screen_template_id || 'unknown';
+          const stepName = step.name || step.title || 'Step sin nombre';
+          
+          // Actualizar header
+          const stepNameEl = document.getElementById('preview-step-name');
+          if (stepNameEl) {
+            stepNameEl.textContent = stepName;
+          }
+          
+          const stepTypeEl = document.getElementById('preview-step-type');
+          if (stepTypeEl) {
+            stepTypeEl.textContent = stepType;
+          }
+          
+          // Renderizar según tipo
+          let html = '';
+          
+          if (stepType === 'screen_video' || step.screen_template_id === 'screen_video') {
+            html = `
+              <div class="step-renderer">
+                <h3>${stepName}</h3>
+                ${step.description ? `<p>${step.description}</p>` : ''}
+                <div class="video-ref">
+                  <strong>VIDEO:</strong> ${step.video_ref || step.video_id || 'No especificado'}
+                </div>
+              </div>
+            `;
+          } else if (stepType === 'screen_choice' || step.screen_template_id === 'screen_choice') {
+            const options = step.options || step.choices || [];
+            html = `
+              <div class="step-renderer">
+                <h3>${stepName}</h3>
+                ${step.description ? `<p>${step.description}</p>` : ''}
+                <div class="choice-options">
+                  ${options.map((opt, idx) => `
+                    <div class="choice-option">
+                      ${opt.label || opt.text || `Opción ${idx + 1}`}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          } else if (stepType === 'screen_checklist_preparacion' || step.screen_template_id === 'screen_checklist_preparacion') {
+            // Renderizar checklist mock desde contextMock
+            const contextMock = snapshot.contextMock || {};
+            const preparations = contextMock.preparations || [];
+            const limits = contextMock.limits || { min: 0, max: Infinity };
+            
+            if (preparations.length === 0) {
+              html = `
+                <div class="step-renderer">
+                  <h3>${stepName}</h3>
+                  ${step.description ? `<p>${step.description}</p>` : ''}
+                  <div class="preview-placeholder">
+                    <p>⚠️ No hay preparaciones disponibles en el contexto mock.</p>
+                    <p style="font-size: 0.875rem; color: var(--text-muted, #94a3b8); margin-top: 8px;">
+                      El motor post-limpieza debe generar el contexto con preparations.
+                    </p>
+                  </div>
+                </div>
+              `;
+            } else {
+              const mandatoryCount = preparations.filter(p => p.mandatory).length;
+              const optionalCount = preparations.length - mandatoryCount;
+              
+              html = `
+                <div class="step-renderer">
+                  <h3>${stepName}</h3>
+                  ${step.description ? `<p>${step.description}</p>` : ''}
+                  <div style="margin-top: 16px;">
+                    <div style="margin-bottom: 12px; padding: 8px 12px; background: var(--bg-secondary, #475569); border-radius: 6px; font-size: 0.875rem; color: var(--text-secondary, #cbd5e1);">
+                      <strong>Límites:</strong> Mínimo ${limits.min}, Máximo ${limits.max === Infinity ? '∞' : limits.max}
+                      <br>
+                      <strong>Preparaciones:</strong> ${mandatoryCount} obligatoria${mandatoryCount !== 1 ? 's' : ''}, ${optionalCount} opcional${optionalCount !== 1 ? 'es' : ''}
+                    </div>
+                    <div class="choice-options" style="margin-top: 12px;">
+                      ${preparations.map((prep, idx) => {
+                        const isMandatory = prep.mandatory === true;
+                        return `
+                          <div class="choice-option" style="${isMandatory ? 'opacity: 0.7; border-left: 3px solid var(--gradient-primary, #667eea);' : ''}">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <input type="checkbox" ${isMandatory ? 'checked disabled' : ''} style="cursor: ${isMandatory ? 'not-allowed' : 'pointer'};">
+                              <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                  <strong>${escapeHtml(prep.title || `Preparación ${idx + 1}`)}</strong>
+                                  ${isMandatory ? '<span style="font-size: 0.75rem; padding: 2px 6px; background: var(--gradient-primary, #667eea); color: white; border-radius: 4px;">Obligatoria</span>' : ''}
+                                </div>
+                                ${prep.description ? `<p style="font-size: 0.875rem; color: var(--text-secondary, #cbd5e1); margin-top: 4px;">${escapeHtml(prep.description)}</p>` : ''}
+                                ${prep.estimated_minutes ? `<span style="font-size: 0.75rem; color: var(--text-muted, #94a3b8);">⏱ ${prep.estimated_minutes} min</span>` : ''}
+                              </div>
+                            </div>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                    <div style="margin-top: 16px; padding: 12px; background: var(--bg-secondary, #475569); border-radius: 6px; font-size: 0.875rem; color: var(--text-secondary, #cbd5e1);">
+                      <strong>📋 Preview Mode:</strong> Este es un preview mock. Las selecciones no se guardan.
+                    </div>
+                  </div>
+                </div>
+              `;
+            }
+          } else {
+            // Step desconocido - mostrar placeholder con JSON
+            const stepJson = JSON.stringify(step, null, 2);
+            const truncatedJson = stepJson.length > 3000 ? stepJson.substring(0, 3000) + '\n... (truncado)' : stepJson;
+            
+            html = `
+              <div class="preview-placeholder">
+                <h2>Step no renderizable aún</h2>
+                <p>Tipo: <code>${stepType}</code></p>
+                <p>Este tipo de step aún no tiene renderer implementado.</p>
+                <pre>${truncatedJson}</pre>
+              </div>
+            `;
+          }
+          
+          root.innerHTML = html;
+          log('Step renderizado', { stepType, stepName });
+          
+        } catch (e) {
+          log('Error renderizando step', { error: e.message, stack: e.stack });
+          showError('Error renderizando step');
+          
+          const root = document.getElementById('preview-root');
+          if (root) {
+            root.innerHTML = `
+              <div class="preview-placeholder">
+                <h2>Error renderizando step</h2>
+                <p>${e.message}</p>
+              </div>
+            `;
+          }
+        }
+      }
+      
+      // Listener de mensajes
+      window.addEventListener('message', function(ev) {
+        try {
+          // Validar origin (opcional, no bloquear si no está claro)
+          // if (ev.origin !== window.location.origin) {
+          //   log('Mensaje de origin diferente ignorado', { origin: ev.origin });
+          //   return;
+          // }
+          
+          if (!ev.data || ev.data.type !== 'RECORRIDO_PREVIEW_UPDATE') {
+            return;
+          }
+          
+          log('Mensaje recibido', { type: ev.data.type });
+          
+          const payload = ev.data.payload;
+          if (!payload) {
+            showError('Payload inválido');
+            return;
+          }
+          
+          // Aplicar theme tokens
+          if (payload.themeTokensCssText) {
+            applyThemeTokens(payload.themeTokensCssText);
+          }
+          
+          // Renderizar snapshot
+          if (payload.snapshot) {
+            const snapshot = payload.snapshot;
+            const selectedStepId = snapshot.selected_step_id;
+            const steps = snapshot.steps || snapshot.flow?.steps || {};
+            
+            // Obtener step seleccionado
+            let selectedStep = null;
+            if (selectedStepId) {
+              if (Array.isArray(steps)) {
+                selectedStep = steps.find(s => s.id === selectedStepId || s.step_id === selectedStepId);
+              } else if (typeof steps === 'object') {
+                selectedStep = steps[selectedStepId] || steps[selectedStepId.toString()];
+              }
+            }
+            
+            // Si no hay step seleccionado, usar entry_step_id
+            if (!selectedStep && snapshot.entry_step_id) {
+              const entryId = snapshot.entry_step_id;
+              if (Array.isArray(steps)) {
+                selectedStep = steps.find(s => s.id === entryId || s.step_id === entryId);
+              } else if (typeof steps === 'object') {
+                selectedStep = steps[entryId] || steps[entryId.toString()];
+              }
+            }
+            
+            renderStep(selectedStep, snapshot);
+            hideError();
+          } else {
+            showError('Snapshot inválido');
+          }
+          
+        } catch (e) {
+          log('Error procesando mensaje', { error: e.message, stack: e.stack });
+          showError('Error procesando mensaje del editor');
+        }
+      });
+      
+      // Log inicial
+      log('Preview host inicializado');
+      
+      // Notificar al editor que está listo (opcional)
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: 'RECORRIDO_PREVIEW_READY',
+            source: 'preview-host'
+          }, '*');
+        }
+      } catch (e) {
+        // Silenciar errores de postMessage
+      }
+      
+    })();
+  </script>
+</body>
+</html>
+
+

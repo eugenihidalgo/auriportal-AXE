@@ -65,3 +65,5 @@ COMMENT ON COLUMN pattern_definitions.logic IS 'Reglas declarativas del patrón 
 
 
 
+
+

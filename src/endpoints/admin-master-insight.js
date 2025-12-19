@@ -5,6 +5,7 @@ import { query } from '../../database/pg.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 // Función helper para reemplazar placeholders
 async function replace(html, placeholders) {
   let output = html;
@@ -364,7 +365,7 @@ export async function renderMasterInsightOverview(request, env) {
     </div>
   `;
   
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: 'MASTER INSIGHT - Visión General',
     CONTENT: content,
     CURRENT_PATH: '/admin/master-insight/overview'
@@ -396,7 +397,7 @@ export async function renderMasterInsightPlaceholder(sectionName, sectionTitle) 
     </div>
   `;
   
-  const html = await replace(baseTemplate, {
+  const html = await replaceAdminTemplate(baseTemplate, {
     TITLE: `MASTER INSIGHT - ${sectionTitle}`,
     CONTENT: content,
     CURRENT_PATH: `/admin/master-insight/${sectionName}`

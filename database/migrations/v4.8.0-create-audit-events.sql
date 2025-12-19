@@ -57,3 +57,5 @@ COMMENT ON COLUMN audit_events.deleted_at IS 'Fecha de soft delete (si aplica)';
 
 
 
+
+

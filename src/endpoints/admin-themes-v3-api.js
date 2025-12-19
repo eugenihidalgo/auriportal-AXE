@@ -801,3 +801,5 @@ export default async function adminThemesV3ApiHandler(request, env, ctx) {
   return errorResponse('Ruta no encontrada', 404);
 }
 
+
+

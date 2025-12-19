@@ -281,6 +281,164 @@ describe('validateCanvasDefinition', () => {
     // En draft, algunos errores pueden ser warnings
     assert(result.warnings.length >= 0, 'Puede tener warnings en draft');
   });
+
+  it('debe permitir DecisionNode con 1 choice en PUBLISH (warning, no error)', () => {
+    const canvas = {
+      version: '1.0',
+      canvas_id: 'test-canvas',
+      name: 'Test Canvas',
+      entry_node_id: 'start',
+      nodes: [
+        {
+          id: 'start',
+          type: 'start',
+          label: 'Inicio',
+          position: { x: 100, y: 100 },
+          props: {}
+        },
+        {
+          id: 'decision1',
+          type: 'decision',
+          label: 'Decisión',
+          position: { x: 300, y: 100 },
+          props: {
+            choices: [
+              {
+                choice_id: 'choice1',
+                label: 'Opción única',
+                target: 'screen1'
+              }
+            ]
+          }
+        },
+        {
+          id: 'screen1',
+          type: 'screen',
+          label: 'Pantalla 1',
+          position: { x: 500, y: 100 },
+          props: {
+            screen_template_id: 'screen_text'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge1',
+          from_node_id: 'start',
+          to_node_id: 'decision1',
+          type: 'direct'
+        },
+        {
+          id: 'edge2',
+          from_node_id: 'decision1',
+          to_node_id: 'screen1',
+          type: 'direct'
+        }
+      ]
+    };
+
+    const result = validateCanvasDefinition(canvas, { isPublish: true });
+    assert.strictEqual(result.ok, true, 'DecisionNode con 1 choice debe pasar validación en PUBLISH');
+    assert.strictEqual(result.errors.length, 0, 'No debe haber errores');
+    assert(result.warnings.some(w => w.includes('passthrough') || w.includes('1 choice')), 'Debe generar warning de passthrough');
+  });
+
+  it('debe permitir DecisionNode con 0 choices pero con edges salientes en PUBLISH (warning, no error)', () => {
+    const canvas = {
+      version: '1.0',
+      canvas_id: 'test-canvas',
+      name: 'Test Canvas',
+      entry_node_id: 'start',
+      nodes: [
+        {
+          id: 'start',
+          type: 'start',
+          label: 'Inicio',
+          position: { x: 100, y: 100 },
+          props: {}
+        },
+        {
+          id: 'decision1',
+          type: 'decision',
+          label: 'Decisión',
+          position: { x: 300, y: 100 },
+          props: {
+            choices: []
+            // 0 choices, pero tiene edge saliente
+          }
+        },
+        {
+          id: 'screen1',
+          type: 'screen',
+          label: 'Pantalla 1',
+          position: { x: 500, y: 100 },
+          props: {
+            screen_template_id: 'screen_text'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge1',
+          from_node_id: 'start',
+          to_node_id: 'decision1',
+          type: 'direct'
+        },
+        {
+          id: 'edge2',
+          from_node_id: 'decision1',
+          to_node_id: 'screen1',
+          type: 'direct'
+        }
+      ]
+    };
+
+    const result = validateCanvasDefinition(canvas, { isPublish: true });
+    assert.strictEqual(result.ok, true, 'DecisionNode con 0 choices pero edge saliente debe pasar validación');
+    assert.strictEqual(result.errors.length, 0, 'No debe haber errores');
+    assert(result.warnings.some(w => w.includes('passthrough') || w.includes('0 choices')), 'Debe generar warning de passthrough');
+  });
+
+  it('debe detectar DecisionNode con 0 choices y sin edges salientes en PUBLISH (error)', () => {
+    const canvas = {
+      version: '1.0',
+      canvas_id: 'test-canvas',
+      name: 'Test Canvas',
+      entry_node_id: 'start',
+      nodes: [
+        {
+          id: 'start',
+          type: 'start',
+          label: 'Inicio',
+          position: { x: 100, y: 100 },
+          props: {}
+        },
+        {
+          id: 'decision1',
+          type: 'decision',
+          label: 'Decisión',
+          position: { x: 300, y: 100 },
+          props: {
+            choices: []
+            // 0 choices y sin edges salientes
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge1',
+          from_node_id: 'start',
+          to_node_id: 'decision1',
+          type: 'direct'
+        }
+        // No hay edge saliente del decision1
+      ]
+    };
+
+    const result = validateCanvasDefinition(canvas, { isPublish: true });
+    assert.strictEqual(result.ok, false, 'DecisionNode sin choices ni edges salientes debe fallar');
+    assert(result.errors.some(e => e.includes('DecisionNode') && (e.includes('choice') || e.includes('edge'))), 'Debe detectar falta de choices y edges');
+  });
 });
 
 

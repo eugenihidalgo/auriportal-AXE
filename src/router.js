@@ -724,6 +724,12 @@ async function routerFunction(request, env, ctx) {
         return adminPackagesApiHandler(request, env, ctx);
       }
 
+      // Endpoints API de Widgets PDE (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/widgets")) {
+        const adminWidgetsApiHandler = (await import("./endpoints/admin-widgets-api.js")).default;
+        return adminWidgetsApiHandler(request, env, ctx);
+      }
+
       // Endpoints API de Source Templates (Admin) - ANTES del catch-all
       if (path.startsWith("/admin/api/source-templates")) {
         const adminSourceTemplatesApiHandler = (await import("./endpoints/admin-source-templates-api.js")).default;
@@ -765,6 +771,12 @@ async function routerFunction(request, env, ctx) {
         return adminPackagesUiHandler(request, env, ctx);
       }
 
+      // UI del Creador de Widgets (Admin) - ANTES del catch-all
+      if (path === "/admin/widgets" || path.startsWith("/admin/widgets/")) {
+        const adminWidgetsUiHandler = (await import("./endpoints/admin-widgets-ui.js")).default;
+        return adminWidgetsUiHandler(request, env, ctx);
+      }
+
       // UI del Gestor de Contextos (Admin) - ANTES del catch-all
       if (path === "/admin/contexts" || path.startsWith("/admin/contexts/")) {
         const adminContextsUiHandler = (await import("./endpoints/admin-contexts-ui.js")).default;
@@ -779,8 +791,18 @@ async function routerFunction(request, env, ctx) {
 
       // UI del Gestor de Automatizaciones (Admin) - ANTES del catch-all
       if (path === "/admin/automations" || path.startsWith("/admin/automations/")) {
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:781',message:'Router: detectada ruta /admin/automations',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         const adminAutomationsUiHandler = (await import("./endpoints/admin-automations-ui.js")).default;
-        return adminAutomationsUiHandler(request, env, ctx);
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:782',message:'Router: handler cargado, llamando',data:{handlerType:typeof adminAutomationsUiHandler},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        const response = await adminAutomationsUiHandler(request, env, ctx);
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:783',message:'Router: handler ejecutado',data:{status:response?.status,hasBody:!!response?.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        return response;
       }
       
       // ============================================
@@ -797,6 +819,11 @@ async function routerFunction(request, env, ctx) {
       // 
       // NO mover esta línea antes de las "islas" (rutas específicas).
       // ============================================
+      // #region agent log
+      if (path === '/admin/automations' || path.startsWith('/admin/automations/')) {
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:800',message:'Router: WARNING - ruta /admin/automations cayendo al catch-all',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      }
+      // #endregion
       const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
       return adminPanelV4Handler(request, env, ctx);
     }

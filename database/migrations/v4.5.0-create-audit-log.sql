@@ -41,3 +41,5 @@ COMMENT ON COLUMN audit_log.data IS 'Datos adicionales del evento (JSONB)';
 
 
 
+
+

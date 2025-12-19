@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="theme-color" content="#ffd86b" />
+  <title>Recorrido</title>
+  <link rel="stylesheet" href="/css/theme-variables.css" />
+  <link rel="stylesheet" href="/css/theme-overrides.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-primary, #1a1a1a);
+      color: var(--text-primary, #ffffff);
+      padding: 20px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .recorrido-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    /* Estilos para steps */
+    .step-preview {
+      background: var(--bg-card, #2a2a2a);
+      border-radius: var(--radius-lg, 20px);
+      padding: 30px 25px;
+      box-shadow: 0 6px 14px var(--shadow-sm, rgba(0, 0, 0, 0.1));
+    }
+
+    .step-header {
+      margin-bottom: 20px;
+    }
+
+    .step-title {
+      font-size: 1.8rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text-primary, #ffffff);
+    }
+
+    .step-subtitle {
+      font-size: 1.2rem;
+      font-weight: 400;
+      opacity: 0.8;
+      color: var(--text-secondary, #cccccc);
+    }
+
+    .step-body {
+      margin-top: 20px;
+    }
+
+    .step-content {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: var(--text-primary, #ffffff);
+    }
+
+    /* Estilos para opciones */
+    .step-choices {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .choice-item,
+    .choice-card {
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .choice-item:hover,
+    .choice-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px var(--shadow-md, rgba(0, 0, 0, 0.2));
+    }
+
+    .choice-button {
+      width: 100%;
+      padding: 15px 20px;
+      background: var(--gradient-primary, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+      border: none;
+      border-radius: var(--radius-md, 16px);
+      font-size: 1.1rem;
+      cursor: pointer;
+      color: var(--button-text-color, #ffffff);
+      box-shadow: 0 4px 10px var(--shadow-md, rgba(0, 0, 0, 0.2));
+      transition: all 0.2s ease;
+    }
+
+    .choice-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px var(--shadow-lg, rgba(0, 0, 0, 0.3));
+    }
+
+    .choice-card {
+      background: var(--bg-card, #2a2a2a);
+      border-radius: var(--radius-md, 16px);
+      padding: 20px;
+      border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .choice-card:hover {
+      border-color: var(--accent-primary, #667eea);
+    }
+
+    .choice-card-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-primary, #ffffff);
+    }
+
+    .choice-card-description {
+      font-size: 0.95rem;
+      opacity: 0.8;
+      color: var(--text-secondary, #cccccc);
+    }
+
+    /* Estilos para intro */
+    .screen-intro-centered {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .intro-image {
+      max-width: 200px;
+      border-radius: var(--radius-lg, 20px);
+      margin-bottom: 30px;
+    }
+
+    .intro-title {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+      color: var(--text-primary, #ffffff);
+    }
+
+    .intro-subtitle {
+      font-size: 1.2rem;
+      opacity: 0.8;
+      margin-bottom: 30px;
+      color: var(--text-secondary, #cccccc);
+    }
+
+    .intro-button {
+      padding: 15px 40px;
+      background: var(--gradient-primary, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+      border: none;
+      border-radius: var(--radius-md, 16px);
+      font-size: 1.2rem;
+      cursor: pointer;
+      color: var(--button-text-color, #ffffff);
+      box-shadow: 0 4px 10px var(--shadow-md, rgba(0, 0, 0, 0.2));
+      transition: all 0.2s ease;
+    }
+
+    .intro-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px var(--shadow-lg, rgba(0, 0, 0, 0.3));
+    }
+
+    /* Texto muted */
+    .text-muted {
+      opacity: 0.6;
+      font-style: italic;
+    }
+
+    /* Formularios */
+    form[data-recorrido-next] {
+      margin-top: 20px;
+    }
+
+    form[data-recorrido-next] input,
+    form[data-recorrido-next] textarea,
+    form[data-recorrido-next] select {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 15px;
+      background: var(--bg-input, #333333);
+      border: 1px solid var(--border-primary, #444444);
+      border-radius: var(--radius-sm, 8px);
+      color: var(--text-primary, #ffffff);
+      font-size: 1rem;
+    }
+
+    form[data-recorrido-next] button[type="submit"],
+    form[data-recorrido-next] [data-next] {
+      width: 100%;
+      padding: 15px;
+      background: var(--gradient-primary, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+      border: none;
+      border-radius: var(--radius-md, 16px);
+      font-size: 1.1rem;
+      cursor: pointer;
+      color: var(--button-text-color, #ffffff);
+      box-shadow: 0 4px 10px var(--shadow-md, rgba(0, 0, 0, 0.2));
+      transition: all 0.2s ease;
+    }
+
+    form[data-recorrido-next] button[type="submit"]:hover,
+    form[data-recorrido-next] [data-next]:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px var(--shadow-lg, rgba(0, 0, 0, 0.3));
+    }
+  </style>
+  {{CONTEXT_SCRIPT}}
+</head>
+<body>
+  <div class="recorrido-container">
+    {{STEP_CONTENT}}
+  </div>
+  {{NAVIGATION_SCRIPT}}
+</body>
+</html>
+
+
+
