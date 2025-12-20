@@ -390,7 +390,7 @@
     sourcesData.forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.key || s.source_key || '';
-      opt.textContent = s.name || s.key || '';
+      opt.textContent = s.label || s.name || s.key || ''; // Backend devuelve 'label', no 'name'
       sourcesSelect.appendChild(opt);
     });
     
