@@ -1,10 +1,20 @@
 /**
  * Creador de Paquetes PDE v2
  * Sistema robusto con carga de datos vía fetch() y sin JS inline
+ * 
+ * PROTECCIÓN: Solo se ejecuta en la página packages-v2
  */
 
 (function() {
   'use strict';
+
+  // PROTECCIÓN: Solo ejecutar en la página correcta
+  // Verificar que estamos en la página packages-v2
+  const currentPath = window.location.pathname;
+  if (!currentPath.includes('/admin/pde/packages-v2')) {
+    // No estamos en la página correcta, salir silenciosamente
+    return;
+  }
 
   const PREFIX = '[PDE][PACKAGES_V2]';
   let packagesData = [];
@@ -75,6 +85,33 @@
   }
 
   /**
+   * Fetch silencioso sin mostrar errores (fail-open)
+   * Usado para endpoints opcionales que no deben romper el flujo
+   */
+  async function fetchSilent(url, options = {}) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers
+        }
+      });
+
+      if (!response.ok) {
+        console.warn(`${PREFIX} [fetchSilent] ${url} failed with status ${response.status}, using fallback`);
+        return null;
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.warn(`${PREFIX} [fetchSilent] ${url} error, using fallback:`, error.message);
+      return null;
+    }
+  }
+
+  /**
    * Cargar lista de paquetes
    */
   async function loadPackages() {
@@ -99,14 +136,11 @@
         ? rawPackages.filter(p => p && p.package_key && typeof p.package_key === 'string' && p.package_key.trim() !== '')
         : [];
 
-      // Cargar sources si el endpoint existe
-      try {
-        const sourcesResponse = await apiFetch('/admin/api/packages/sources');
-        sourcesData = sourcesResponse.sources || sourcesResponse || [];
-      } catch (err) {
-        log('Sources endpoint not available, using empty array', err);
-        sourcesData = [];
-      }
+      // Cargar sources (fail-open: no mostrar error si falla)
+      const sourcesResponse = await fetchSilent('/admin/api/packages/sources');
+      sourcesData = Array.isArray(sourcesResponse?.sources)
+        ? sourcesResponse.sources
+        : (Array.isArray(sourcesResponse) ? sourcesResponse : []);
 
       // Enriquecer con drafts y versiones
       for (const pkg of packagesData) {
@@ -301,15 +335,23 @@
 
     try {
       const [sourcesRes, contextsRes, signalsRes] = await Promise.all([
-        apiFetch('/admin/api/packages/sources').catch(() => ({ sources: [] })),
-        apiFetch('/admin/api/contexts').catch(() => ({ contexts: [] })),
-        apiFetch('/admin/api/senales').catch(() => ({ senales: [] }))
+        fetchSilent('/admin/api/packages/sources'),
+        fetchSilent('/admin/api/contexts'),
+        fetchSilent('/admin/api/senales')
       ]);
-      sourcesData = sourcesRes.sources || [];
-      contextsData = contextsRes.contexts || [];
-      signalsData = signalsRes.senales || [];
+      
+      // Fail-open: usar array vacío si falla o no hay datos
+      sourcesData = Array.isArray(sourcesRes?.sources)
+        ? sourcesRes.sources
+        : (Array.isArray(sourcesRes) ? sourcesRes : []);
+      contextsData = Array.isArray(contextsRes?.contexts) ? contextsRes.contexts : [];
+      signalsData = Array.isArray(signalsRes?.senales) ? signalsRes.senales : [];
     } catch (err) {
-      log('Error loading selectors data', err);
+      // Fallback silencioso: continuar con arrays vacíos
+      log('Error loading selectors data (using empty arrays)', err);
+      sourcesData = [];
+      contextsData = [];
+      signalsData = [];
     }
 
     // Limpiar container
@@ -866,6 +908,34 @@
   }
 
   /**
+   * Eliminar paquete
+   */
+  async function deletePackage(packageId, packageName) {
+    try {
+      if (!confirm(`¿Eliminar el paquete "${packageName}"? Esta acción no se puede deshacer.`)) {
+        return;
+      }
+
+      await apiFetch(`/admin/api/packages/${packageId}`, {
+        method: 'DELETE'
+      });
+
+      alert('Paquete eliminado correctamente');
+      currentPackageId = null;
+      await loadPackages();
+      
+      // Limpiar editores
+      const promptEditor = document.getElementById('prompt-context-editor');
+      const assembledEditor = document.getElementById('assembled-editor');
+      if (promptEditor) promptEditor.innerHTML = '';
+      if (assembledEditor) assembledEditor.innerHTML = '';
+    } catch (error) {
+      handleError(error, 'deletePackage');
+      alert(`Error eliminando paquete: ${error.message}`);
+    }
+  }
+
+  /**
    * Publicar paquete
    */
   async function publishPackage() {
@@ -969,15 +1039,12 @@
       assembledEditor.appendChild(validationResult);
     }
 
-    // Desactivar selección
-    document.querySelectorAll('.package-item').forEach(item => {
+    // Desactivar seleccion
+    const packageItems = document.querySelectorAll('.package-item');
+    packageItems.forEach(function(item) {
       item.classList.remove('active');
     });
   }
-
-  /**
-   * Escape HTML
-   */
 
   /**
    * Inicialización
