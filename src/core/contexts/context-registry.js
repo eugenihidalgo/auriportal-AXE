@@ -18,44 +18,15 @@
  * - context_key: Clave única del contexto (slug)
  * - label: Etiqueta legible para mostrar en UI
  * - definition: Objeto con type, allowed_values, default_value, scope, origin, description
+ * 
+ * NOTA: Los contextos nivel_efectivo, tipo_limpieza y tipo_practica fueron eliminados
+ * porque ya no existen realmente. Si se necesitan, deben crearse explícitamente en la DB.
  */
 export const SYSTEM_CONTEXT_DEFAULTS = [
-  {
-    context_key: 'nivel_efectivo',
-    label: 'Nivel Efectivo',
-    definition: {
-      type: 'number',
-      default_value: 1,
-      scope: 'system',
-      origin: 'system',
-      description: 'Nivel efectivo del estudiante (1-7)',
-      usable_en_paquetes: true // Permite usarse en paquetes
-    }
-  },
-  {
-    context_key: 'tipo_limpieza',
-    label: 'Tipo de Limpieza',
-    definition: {
-      type: 'enum',
-      allowed_values: ['rapida', 'basica', 'profunda', 'maestro'],
-      default_value: 'basica',
-      scope: 'recorrido',
-      origin: 'user_choice',
-      description: 'Tipo de limpieza energética a realizar'
-    }
-  },
-  {
-    context_key: 'tipo_practica',
-    label: 'Tipo de Práctica',
-    definition: {
-      type: 'enum',
-      allowed_values: ['diaria', 'semanal', 'mensual', 'especial'],
-      default_value: 'diaria',
-      scope: 'recorrido',
-      origin: 'user_choice',
-      description: 'Tipo de práctica a realizar'
-    }
-  }
+  // Contextos del sistema eliminados:
+  // - nivel_efectivo (ya no existe, eliminado)
+  // - tipo_limpieza (ya no existe, eliminado)
+  // - tipo_practica (ya no existe, eliminado)
 ];
 
 /**
