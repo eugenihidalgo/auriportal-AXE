@@ -942,8 +942,14 @@ async function guardarContexto() {
   }
 
   try {
-    const url = editingContextKey ? `/admin/api/contexts/${encodeURIComponent(contextKey)}` : '/admin/api/contexts';
-    const method = editingContextKey ? 'PUT' : 'POST';
+    // DEFINIR URL EXPLÍCITAMENTE: construcción canónica y robusta
+    const isEdit = Boolean(editingContextKey);
+    // En edición, usar editingContextKey como identificador (contextKey puede haber cambiado en el input)
+    const contextKeyForUrl = isEdit ? editingContextKey : contextKey;
+    const url = isEdit
+      ? `/admin/api/contexts/${encodeURIComponent(contextKeyForUrl)}`
+      : '/admin/api/contexts';
+    const method = isEdit ? 'PUT' : 'POST';
 
     // Obtener campos canónicos del formulario
     const scope = document.getElementById('contextScope').value;
@@ -961,17 +967,26 @@ async function guardarContexto() {
       allowedValues = allowedText.split('\n').map(v => v.trim()).filter(v => v);
     }
     
+    // BLINDAR parseo de default_value para evitar excepciones JS
     const defaultValueEl = document.getElementById('defaultValue');
     if (defaultValueEl) {
       if (type === 'number') {
         const val = defaultValueEl.value;
         defaultValue = val === '' ? undefined : parseFloat(val);
+        // Validar que parseFloat no devuelva NaN
+        if (isNaN(defaultValue)) {
+          defaultValue = undefined;
+        }
       } else if (type === 'boolean') {
         defaultValue = defaultValueEl.value === 'true';
       } else if (type === 'json') {
+        // Parseo blindado: nunca debe lanzar excepción
         try {
-          defaultValue = defaultValueEl.value ? JSON.parse(defaultValueEl.value) : undefined;
+          defaultValue = defaultValueEl.value
+            ? JSON.parse(defaultValueEl.value)
+            : undefined;
         } catch (e) {
+          console.warn('[PDE][CONTEXTS] Error parseando default_value JSON:', e.message);
           defaultValue = undefined;
         }
       } else if (type === 'enum') {
@@ -981,21 +996,39 @@ async function guardarContexto() {
       }
     }
 
+    // Construir payload canónico (SOLO campos permitidos)
+    const payload = {
+      context_key: contextKey,
+      label,
+      definition,
+      scope,
+      kind,
+      type,
+      injected
+    };
+
+    // Añadir description solo si está definido
+    if (description) {
+      payload.description = description;
+    }
+
+    // Añadir allowed_values solo si está definido (para tipo enum)
+    if (allowedValues !== undefined && allowedValues.length > 0) {
+      payload.allowed_values = allowedValues;
+    }
+
+    // Añadir default_value solo si está definido
+    if (defaultValue !== undefined) {
+      payload.default_value = defaultValue;
+    }
+
+    // Log defensivo antes del fetch
+    console.debug('[PDE][CONTEXTS] Saving context', { url, method, payload });
+
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        context_key: contextKey, 
-        label, 
-        description,
-        definition,
-        scope,
-        kind,
-        injected,
-        type,
-        allowed_values: allowedValues,
-        default_value: defaultValue
-      })
+      body: JSON.stringify(payload)
     });
 
     // Leer primero como texto para validar
