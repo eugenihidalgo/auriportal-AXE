@@ -123,19 +123,42 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
 /**
  * Lista todos los paquetes
  */
+/**
+ * Lista todos los paquetes
+ * 
+ * REGLA: Filtrar paquetes legacy/malformados que pueden romper el frontend
+ */
 async function handleListPackages(request, env) {
-  const url = new URL(request.url);
-  const onlyActive = url.searchParams.get('onlyActive') !== 'false';
-  const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
+  try {
+    const url = new URL(request.url);
+    const onlyActive = url.searchParams.get('onlyActive') !== 'false';
+    const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
 
-  const packages = await packagesRepo.listPackages({
-    onlyActive,
-    includeDeleted
-  });
+    const packagesRaw = await packagesRepo.listPackages({
+      onlyActive,
+      includeDeleted
+    });
 
-  return new Response(JSON.stringify({ packages }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
+    // Filtrar paquetes legacy/malformados
+    // Un paquete válido DEBE tener: package_key (string no vacío) y definition (objeto)
+    const packages = (packagesRaw || []).filter(pkg => {
+      if (!pkg) return false;
+      if (!pkg.package_key || typeof pkg.package_key !== 'string' || pkg.package_key.trim() === '') return false;
+      if (!pkg.definition || typeof pkg.definition !== 'object') return false;
+      return true;
+    });
+
+    return new Response(JSON.stringify({ packages }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[PDE][PACKAGES][LIST] Error listando paquetes:', error);
+    // Fail-open: devolver array vacío si falla
+    return new Response(JSON.stringify({ packages: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }
 
 /**
@@ -298,6 +321,12 @@ async function handleDeletePackage(id, request, env) {
  * REGLA DE ORO: Un Source of Truth es SIEMPRE un CATÁLOGO PDE REGISTRADO.
  * Este endpoint NO tiene lógica propia, es SOLO un adaptador del Catálogo Registry.
  */
+/**
+ * Lista Sources of Truth desde el Catálogo Registry PDE canónico
+ * 
+ * REGLA DE ORO: Este endpoint NUNCA puede devolver 500. FAIL-OPEN SIEMPRE.
+ * Si falla cualquier cosa, devuelve array vacío con status 200.
+ */
 async function handleListSources(request, env) {
   try {
     const authCtx = await requireAdminContext(request, env);
@@ -306,27 +335,39 @@ async function handleListSources(request, env) {
     }
 
     // Leer directamente del Catálogo Registry PDE canónico
-    const catalogs = await listCatalogs({ onlyActive: true });
+    // Fail-safe: si listCatalogs falla o devuelve null, usar array vacío
+    let catalogs = [];
+    try {
+      const catalogsResult = await listCatalogs({ onlyActive: true });
+      catalogs = Array.isArray(catalogsResult) ? catalogsResult : [];
+    } catch (catalogError) {
+      console.error('[PDE][PACKAGES][SOURCES][FATAL] Error obteniendo catálogos:', catalogError);
+      catalogs = []; // Fail-open
+    }
 
     // Mapear a formato para Package Prompt Context Builder
     // IMPORTANTE: Solo keys semánticas (catalog_key), nunca IDs
-    const sources = catalogs.map(catalog => ({
-      key: catalog.catalog_key, // catalog_key como valor semántico
-      label: catalog.label, // Nombre humano para mostrar en UI
-      description: catalog.description || null // Descripción opcional
-    }));
+    // Fail-safe: filtrar catálogos malformados y mapear con defaults
+    const sources = (catalogs || [])
+      .filter(catalog => catalog && catalog.catalog_key) // Solo catálogos válidos
+      .map(catalog => ({
+        key: catalog.catalog_key || '', // catalog_key como valor semántico
+        label: catalog.label || catalog.name || catalog.catalog_key || '', // Nombre humano para mostrar
+        description: catalog.description || null // Descripción opcional
+      }))
+      .filter(source => source.key); // Eliminar sources sin key
 
     return new Response(JSON.stringify({ sources: sources || [] }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('[PDE][PACKAGES_V2] Error listando sources desde catálogo registry:', error);
+    // Fail-open absoluto: cualquier error devuelve array vacío con 200
+    console.error('[PDE][PACKAGES][SOURCES][FATAL] Error crítico en handleListSources:', error);
     return new Response(JSON.stringify({ 
-      sources: [],
-      error: 'Error al listar sources',
-      message: error.message 
+      sources: []
     }), {
-      status: 200, // Retornar 200 con array vacío para que no rompa la UI
+      status: 200, // NUNCA devolver 500
       headers: { 'Content-Type': 'application/json' }
     });
   }

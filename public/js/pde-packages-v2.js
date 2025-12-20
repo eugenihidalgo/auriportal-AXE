@@ -93,7 +93,11 @@
 
       // Cargar paquetes
       const packagesResponse = await apiFetch('/admin/api/packages');
-      packagesData = packagesResponse.packages || packagesResponse || [];
+      const rawPackages = packagesResponse.packages || packagesResponse || [];
+      // Filtrar paquetes legacy/malformados que pueden romper el sistema
+      packagesData = Array.isArray(rawPackages) 
+        ? rawPackages.filter(p => p && p.package_key && typeof p.package_key === 'string' && p.package_key.trim() !== '')
+        : [];
 
       // Cargar sources si el endpoint existe
       try {
