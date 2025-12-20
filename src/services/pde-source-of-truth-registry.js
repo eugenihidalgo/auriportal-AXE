@@ -82,11 +82,13 @@ export async function listAvailableSources() {
   // Consumir exclusivamente el registry canónico
   const registrySources = listRegistrySources();
   
-  // Convertir a formato esperado por el UI
+  // Convertir a formato esperado por el UI (para Package Prompt Context)
+  // IMPORTANTE: Solo keys semánticas, NO IDs
   return registrySources.map(source => ({
     key: source.source_key,
-    label: source.label,
-    capabilities: source.capabilities
+    name: source.label, // name para el UI
+    label: source.label, // label también disponible por compatibilidad
+    description: source.capabilities?.description || '' // Descripción opcional si existe
   }));
 }
 

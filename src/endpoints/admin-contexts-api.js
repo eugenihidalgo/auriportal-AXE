@@ -110,7 +110,16 @@ async function handleListContexts(request, env) {
   const includeArchived = url.searchParams.get('include_archived') === 'true';
 
   try {
-    const contexts = await listContexts({ includeArchived });
+    const contextsRaw = await listContexts({ includeArchived });
+
+    // Para Package Prompt Context Builder: devolver solo keys y names (NO IDs)
+    const contexts = contextsRaw.map(ctx => ({
+      key: ctx.context_key || ctx.key,
+      context_key: ctx.context_key || ctx.key, // Compatibilidad
+      name: ctx.label || ctx.name || ctx.context_key || ctx.key, // name para el UI
+      label: ctx.label || ctx.name || ctx.context_key || ctx.key, // label también disponible
+      description: ctx.description || ctx.definition?.description || '' // Descripción opcional
+    }));
 
     return new Response(JSON.stringify({ 
       ok: true,
@@ -432,5 +441,6 @@ async function handleDeleteContext(contextKey, request, env) {
     });
   }
 }
+
 
 

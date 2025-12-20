@@ -113,9 +113,19 @@ async function handleListSenales(request, env) {
   try {
     const items = await listSenales({ includeArchived, scope });
 
+    // Para Package Prompt Context Builder: devolver solo keys y names (NO IDs)
+    const senales = items.map(item => ({
+      key: item.signal_key || item.key,
+      signal_key: item.signal_key || item.key, // Compatibilidad
+      name: item.label || item.name || item.signal_key || item.key,
+      label: item.label || item.name || item.signal_key || item.key,
+      description: item.description || ''
+    }));
+
     return new Response(JSON.stringify({ 
       ok: true,
-      items,
+      items, // Mantener items para compatibilidad con otros usos
+      senales, // Agregar senales para Package Prompt Context Builder
       warnings: [] 
     }), {
       headers: { 'Content-Type': 'application/json' }
@@ -447,5 +457,6 @@ async function handleDeleteSenal(signalKey, request, env) {
     });
   }
 }
+
 
 
