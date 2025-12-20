@@ -1,3 +1,6 @@
+<!-- Datos iniciales de contextos (base64 para evitar problemas de escape) -->
+<script id="contexts-initial-data" type="text/plain">{{CONTEXTS_JSON}}</script>
+
 <div class="p-6">
   <div class="mb-6">
     <h1 class="text-3xl font-bold text-white mb-2">🔧 Gestor de Contextos PDE</h1>
@@ -333,13 +336,35 @@ async function recargarContextosDesdeServidor() {
       const data = await response.json();
       contexts = data.contexts || [];
     } else {
-      // Fallback a datos iniciales del servidor si falla el fetch
-      contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+      // Fallback: leer desde script tag con base64
+      try {
+        const scriptTag = document.getElementById('contexts-initial-data');
+        if (scriptTag && scriptTag.textContent) {
+          const decoded = atob(scriptTag.textContent);
+          contexts = JSON.parse(decoded);
+        } else {
+          contexts = [];
+        }
+      } catch (e) {
+        console.error('Error en fallback de contextos:', e);
+        contexts = [];
+      }
     }
   } catch (error) {
     console.error('Error recargando contextos:', error);
-    // Fallback a datos iniciales del servidor si falla
-    contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+    // Fallback: leer desde script tag con base64
+    try {
+      const scriptTag = document.getElementById('contexts-initial-data');
+      if (scriptTag && scriptTag.textContent) {
+        const decoded = atob(scriptTag.textContent);
+        contexts = JSON.parse(decoded);
+      } else {
+        contexts = [];
+      }
+    } catch (e) {
+      console.error('Error en fallback de contextos:', e);
+      contexts = [];
+    }
   }
 }
 

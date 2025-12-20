@@ -21,7 +21,9 @@ export function resolveContextVisibility(context, options = {}) {
 
   // Regla 1: soft delete = inexistente
   // CRÍTICO: Un contexto con deleted_at nunca debe ser visible
-  if (context.deleted_at) {
+  // deleted_at puede venir como Date, string, o cualquier valor truthy
+  // Solo null y undefined significan "no eliminado"
+  if (context.deleted_at != null) {  // Usar != para detectar tanto null como undefined
     return false;
   }
 

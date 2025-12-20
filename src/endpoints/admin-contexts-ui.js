@@ -43,12 +43,16 @@ export async function renderContextsManager(request, env) {
 
   try {
     contexts = await listContexts({ includeArchived: false });
+    // Aplicar resolver canónico una vez más para asegurar que no hay contextos eliminados
+    const { filterVisibleContexts } = await import('../core/context/resolve-context-visibility.js');
+    contexts = filterVisibleContexts(contexts);
   } catch (error) {
     console.error('Error cargando contextos:', error);
+    contexts = [];
   }
 
-  // Preparar datos para el frontend
-  const contextsJson = JSON.stringify(contexts);
+  // Preparar datos para el frontend - usar base64 para evitar problemas de escape
+  const contextsJson = Buffer.from(JSON.stringify(contexts), 'utf8').toString('base64');
 
   const contentTemplate = readFileSync(join(__dirname, '../core/html/admin/contexts/contexts-manager.html'), 'utf-8');
   const content = replace(contentTemplate, {
