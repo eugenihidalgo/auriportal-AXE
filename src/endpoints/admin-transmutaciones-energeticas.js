@@ -48,6 +48,9 @@ export async function renderTransmutacionesEnergeticas(request, env) {
           <button id="tabUnaVez" class="px-6 py-3 text-sm font-medium text-slate-400 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors tab-main" data-tab="una_vez">
             ⚡ Limpiezas de Una Sola Vez
           </button>
+          <button id="tabClasificaciones" class="px-6 py-3 text-sm font-medium text-slate-400 border-b-2 border-transparent hover:text-white hover:border-slate-600 transition-colors tab-main" data-tab="clasificaciones">
+            ⚙️ Clasificaciones
+          </button>
         </div>
 
         <!-- Contenido Tab Recurrente -->
@@ -77,6 +80,13 @@ export async function renderTransmutacionesEnergeticas(request, env) {
           </div>
           <div id="contenidoUnaVez" class="bg-slate-900 rounded-lg border border-slate-700 p-4">
             <!-- Se llenará dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Contenido Tab Clasificaciones -->
+        <div id="contentClasificaciones" class="tab-content hidden">
+          <div id="panelClasificaciones" class="space-y-6">
+            <div class="text-center text-slate-400 py-8">Cargando clasificaciones...</div>
           </div>
         </div>
       </div>
@@ -321,12 +331,16 @@ export async function renderTransmutacionesEnergeticas(request, env) {
                 ✏️ Editar
               </button>
             </div>
+            <div id="classification-\${lista.id}" class="mb-4 pb-4 border-b border-slate-700">
+              <div class="text-center text-slate-400 py-2">Cargando clasificación...</div>
+            </div>
             <div id="items-\${lista.id}">
               <div class="text-center text-slate-400 py-8">Cargando ítems...</div>
             </div>
           \`;
           
           container.innerHTML = html;
+          renderListaClassificationEditor(lista.id, lista);
           verItems(lista.id);
         }
 
@@ -345,6 +359,12 @@ export async function renderTransmutacionesEnergeticas(request, env) {
           
           document.getElementById('contentRecurrente').classList.toggle('hidden', tipo !== 'recurrente');
           document.getElementById('contentUnaVez').classList.toggle('hidden', tipo !== 'una_vez');
+          document.getElementById('contentClasificaciones').classList.toggle('hidden', tipo !== 'clasificaciones');
+          
+          if (tipo === 'clasificaciones') {
+            renderPanelClasificaciones();
+            return;
+          }
           
           const listas = tipo === 'recurrente' 
             ? listasData.filter(l => l.tipo === 'recurrente')
@@ -1198,6 +1218,660 @@ export async function renderTransmutacionesEnergeticas(request, env) {
               boton.disabled = false;
               boton.textContent = textoOriginal;
             }
+          }
+        }
+
+        // ============================================
+        // PANEL DE CLASIFICACIONES
+        // ============================================
+        
+        let classificationsData = { categories: [], subtypes: [], tags: [] };
+
+        async function renderPanelClasificaciones() {
+          const container = document.getElementById('panelClasificaciones');
+          if (!container) return;
+
+          try {
+            const response = await fetchAPI('/admin/api/transmutaciones/classification');
+            const data = await response.json();
+            
+            if (data.success) {
+              classificationsData = data.data;
+              renderClasificaciones(container);
+            } else {
+              showError(container, 'Error cargando clasificaciones: ' + (data.error || 'Error desconocido'));
+            }
+          } catch (error) {
+            console.error('Error cargando clasificaciones:', error);
+            showError(container, 'Error: ' + error.message);
+          }
+        }
+
+        function showError(container, message) {
+          container.textContent = '';
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'bg-red-900/20 border border-red-700 rounded-lg p-4 text-red-400';
+          errorDiv.textContent = '⚠️ ' + message;
+          container.appendChild(errorDiv);
+        }
+
+        function renderClasificaciones(container) {
+          container.textContent = '';
+          
+          // Bloque Categorías
+          const categoriasBlock = createClassificationBlock('Categorías', 'categories', classificationsData.categories, {
+            create: createCategory,
+            update: updateCategory,
+            delete: deleteCategory
+          });
+          container.appendChild(categoriasBlock);
+
+          // Bloque Subtipos
+          const subtiposBlock = createClassificationBlock('Subtipos', 'subtypes', classificationsData.subtypes, {
+            create: createSubtype,
+            update: updateSubtype,
+            delete: deleteSubtype
+          }, true);
+          container.appendChild(subtiposBlock);
+
+          // Bloque Tags
+          const tagsBlock = createClassificationBlock('Tags', 'tags', classificationsData.tags, {
+            create: createTag,
+            update: updateTag,
+            delete: deleteTag
+          });
+          container.appendChild(tagsBlock);
+        }
+
+        function createClassificationBlock(title, type, items, handlers, isSubtypes = false) {
+          const block = document.createElement('div');
+          block.className = 'bg-slate-900 rounded-lg border border-slate-700 p-6';
+
+          // Título
+          const titleEl = document.createElement('h3');
+          titleEl.className = 'text-xl font-bold text-white mb-4';
+          titleEl.textContent = title;
+          block.appendChild(titleEl);
+
+          // Botón crear
+          const createBtn = document.createElement('button');
+          createBtn.className = 'mb-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors';
+          createBtn.textContent = '➕ Crear ' + title;
+          createBtn.onclick = () => handlers.create(type);
+          block.appendChild(createBtn);
+
+          // Lista de items
+          const listContainer = document.createElement('div');
+          listContainer.className = 'space-y-3';
+          block.appendChild(listContainer);
+
+          if (items.length === 0) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'text-center text-slate-400 py-4';
+            emptyMsg.textContent = 'No hay ' + title.toLowerCase() + ' creados aún';
+            listContainer.appendChild(emptyMsg);
+          } else {
+            items.forEach(item => {
+              const itemEl = createClassificationItem(item, type, handlers, isSubtypes);
+              listContainer.appendChild(itemEl);
+            });
+          }
+
+          return block;
+        }
+
+        function createClassificationItem(item, type, handlers, isSubtypes = false) {
+          const itemDiv = document.createElement('div');
+          itemDiv.className = 'bg-slate-800 rounded-lg border border-slate-700 p-4';
+
+          // Badge especial para energia_indeseable
+          if (isSubtypes && item.subtype_key === 'energia_indeseable') {
+            const badge = document.createElement('span');
+            badge.className = 'inline-block px-2 py-1 bg-red-600 text-white text-xs font-semibold rounded mr-2';
+            badge.textContent = '⚠️ Energía Indeseable';
+            itemDiv.appendChild(badge);
+          }
+
+          // Label
+          const labelEl = document.createElement('div');
+          labelEl.className = 'text-white font-semibold mb-1';
+          labelEl.textContent = item.label || item[type.slice(0, -1) + '_key'];
+          itemDiv.appendChild(labelEl);
+
+          // Key
+          const keyEl = document.createElement('div');
+          keyEl.className = 'text-slate-400 text-sm mb-2';
+          keyEl.textContent = type === 'categories' ? item.category_key : (type === 'subtypes' ? item.subtype_key : item.tag_key);
+          itemDiv.appendChild(keyEl);
+
+          // Descripción
+          if (item.description) {
+            const descEl = document.createElement('div');
+            descEl.className = 'text-slate-300 text-sm mb-2';
+            descEl.textContent = item.description;
+            itemDiv.appendChild(descEl);
+          }
+
+          // Estado
+          const estadoEl = document.createElement('div');
+          estadoEl.className = 'text-xs mb-3';
+          if (item.deleted_at) {
+            estadoEl.className += ' text-red-400';
+            estadoEl.textContent = '❌ Eliminado';
+          } else if (!item.is_active) {
+            estadoEl.className += ' text-amber-400';
+            estadoEl.textContent = '⚠️ Inactivo';
+          } else {
+            estadoEl.className += ' text-emerald-400';
+            estadoEl.textContent = '✅ Activo';
+          }
+          itemDiv.appendChild(estadoEl);
+
+          // Controles
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'flex gap-2 items-center';
+
+          // Sort order
+          const sortLabel = document.createElement('label');
+          sortLabel.className = 'text-slate-300 text-sm mr-2';
+          sortLabel.textContent = 'Orden:';
+          controlsDiv.appendChild(sortLabel);
+
+          const sortInput = document.createElement('input');
+          sortInput.type = 'number';
+          sortInput.value = item.sort_order || 100;
+          sortInput.min = '0';
+          sortInput.className = 'w-20 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm mr-2';
+          sortInput.onchange = () => {
+            const key = type === 'categories' ? item.category_key : (type === 'subtypes' ? item.subtype_key : item.tag_key);
+            handlers.update(key, { sort_order: parseInt(sortInput.value) });
+          };
+          controlsDiv.appendChild(sortInput);
+
+          // Botón editar
+          const editBtn = document.createElement('button');
+          editBtn.className = 'px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-colors';
+          editBtn.textContent = '✏️ Editar';
+          editBtn.onclick = () => handlers.update(type === 'categories' ? item.category_key : (type === 'subtypes' ? item.subtype_key : item.tag_key), null, true);
+          controlsDiv.appendChild(editBtn);
+
+          // Botón eliminar
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors';
+          deleteBtn.textContent = '🗑️ Eliminar';
+          deleteBtn.onclick = () => {
+            const key = type === 'categories' ? item.category_key : (type === 'subtypes' ? item.subtype_key : item.tag_key);
+            if (isSubtypes && key === 'energia_indeseable') {
+              if (!confirm('⚠️ Este subtipo es crítico. ¿Estás seguro de eliminarlo?')) return;
+            }
+            if (confirm('¿Estás seguro de eliminar este ' + type.slice(0, -1) + '?')) {
+              handlers.delete(key);
+            }
+          };
+          controlsDiv.appendChild(deleteBtn);
+
+          itemDiv.appendChild(controlsDiv);
+          return itemDiv;
+        }
+
+        async function createCategory(type) {
+          const label = prompt('Label de la categoría:');
+          if (!label) return;
+
+          try {
+            const response = await fetchAPI('/admin/api/transmutaciones/classification/categories', {
+              method: 'POST',
+              body: JSON.stringify({ label })
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function updateCategory(key, patch, isEdit = false) {
+          if (isEdit) {
+            const category = classificationsData.categories.find(c => c.category_key === key);
+            if (!category) {
+              alert('Categoría no encontrada');
+              return;
+            }
+            const label = prompt('Nuevo label:', category.label);
+            if (label === null) return;
+            const description = prompt('Descripción (opcional):', category.description || '');
+            patch = { label, description: description || null };
+          }
+
+          if (!patch) return;
+
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/categories/\${key}\`, {
+              method: 'PATCH',
+              body: JSON.stringify(patch)
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function deleteCategory(key) {
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/categories/\${key}/delete\`, {
+              method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function createSubtype(type) {
+          const label = prompt('Label del subtipo:');
+          if (!label) return;
+
+          try {
+            const response = await fetchAPI('/admin/api/transmutaciones/classification/subtypes', {
+              method: 'POST',
+              body: JSON.stringify({ label })
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function updateSubtype(key, patch, isEdit = false) {
+          if (isEdit) {
+            const subtype = classificationsData.subtypes.find(s => s.subtype_key === key);
+            if (!subtype) {
+              alert('Subtipo no encontrado');
+              return;
+            }
+            const label = prompt('Nuevo label:', subtype.label);
+            if (label === null) return;
+            const description = prompt('Descripción (opcional):', subtype.description || '');
+            patch = { label, description: description || null };
+          }
+
+          if (!patch) return;
+
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/subtypes/\${key}\`, {
+              method: 'PATCH',
+              body: JSON.stringify(patch)
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function deleteSubtype(key) {
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/subtypes/\${key}/delete\`, {
+              method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function createTag(type) {
+          const label = prompt('Label del tag:');
+          if (!label) return;
+
+          try {
+            const response = await fetchAPI('/admin/api/transmutaciones/classification/tags', {
+              method: 'POST',
+              body: JSON.stringify({ label })
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function updateTag(key, patch, isEdit = false) {
+          if (isEdit) {
+            const tag = classificationsData.tags.find(t => t.tag_key === key);
+            if (!tag) {
+              alert('Tag no encontrado');
+              return;
+            }
+            const label = prompt('Nuevo label:', tag.label);
+            if (label === null) return;
+            const description = prompt('Descripción (opcional):', tag.description || '');
+            patch = { label, description: description || null };
+          }
+
+          if (!patch) return;
+
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/tags/\${key}\`, {
+              method: 'PATCH',
+              body: JSON.stringify(patch)
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        async function deleteTag(key) {
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/classification/tags/\${key}/delete\`, {
+              method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+              await renderPanelClasificaciones();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+
+        // ============================================
+        // EDITOR DE CLASIFICACIÓN POR LISTA
+        // ============================================
+
+        async function renderListaClassification(listaId) {
+          // Esta función se llamará desde renderContenidoLista
+          // Obtener clasificación actual de la lista
+          try {
+            const response = await fetchAPI(\`/api/transmutaciones/listas/\${listaId}\`);
+            const data = await response.json();
+            if (data.success && data.data.lista) {
+              const lista = data.data.lista;
+              return {
+                category_key: lista.category_key || null,
+                subtype_key: lista.subtype_key || null,
+                tags: lista.tags || []
+              };
+            }
+          } catch (error) {
+            console.error('Error obteniendo clasificación:', error);
+          }
+          return { category_key: null, subtype_key: null, tags: [] };
+        }
+
+        async function guardarListaClassification(listaId, classification) {
+          try {
+            const response = await fetchAPI(\`/admin/api/transmutaciones/lists/\${listaId}/classification\`, {
+              method: 'PATCH',
+              body: JSON.stringify(classification)
+            });
+            const data = await response.json();
+            if (data.success) {
+              return true;
+            } else {
+              alert('Error guardando clasificación: ' + data.error);
+              return false;
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+            return false;
+          }
+        }
+
+        async function renderListaClassificationEditor(listaId, lista) {
+          const container = document.getElementById(\`classification-\${listaId}\`);
+          if (!container) return;
+
+          try {
+            // Obtener clasificaciones disponibles
+            const classificationsResponse = await fetchAPI('/admin/api/transmutaciones/classification');
+            const classificationsData = await classificationsResponse.json();
+            
+            if (!classificationsData.success) {
+              container.textContent = '';
+              const errorDiv = document.createElement('div');
+              errorDiv.className = 'text-red-400 text-sm';
+              errorDiv.textContent = '⚠️ Error cargando clasificaciones';
+              container.appendChild(errorDiv);
+              return;
+            }
+
+            const { categories, subtypes, tags } = classificationsData.data;
+            const currentCategory = lista.category_key || '';
+            const currentSubtype = lista.subtype_key || '';
+            const currentTags = Array.isArray(lista.tags) ? lista.tags : (lista.tags ? JSON.parse(lista.tags) : []);
+
+            // Limpiar container
+            container.textContent = '';
+
+            // Header plegable
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between cursor-pointer hover:bg-slate-800 rounded-lg p-2 transition-colors';
+            header.onclick = () => {
+              const content = document.getElementById(\`classification-content-\${listaId}\`);
+              const chevron = document.getElementById(\`classification-chevron-\${listaId}\`);
+              if (content && chevron) {
+                content.classList.toggle('hidden');
+                chevron.textContent = content.classList.contains('hidden') ? '▶' : '▼';
+              }
+            };
+
+            // Contenedor izquierdo (texto + badges)
+            const headerLeft = document.createElement('div');
+            headerLeft.className = 'flex items-center gap-2';
+
+            // Chevron
+            const chevron = document.createElement('span');
+            chevron.id = \`classification-chevron-\${listaId}\`;
+            chevron.className = 'text-slate-400 text-sm mr-2';
+            chevron.textContent = '▶'; // Cerrado por defecto
+            headerLeft.appendChild(chevron);
+
+            // Título
+            const title = document.createElement('h3');
+            title.className = 'text-lg font-semibold text-white';
+            title.textContent = 'Clasificación';
+            headerLeft.appendChild(title);
+
+            // Badge si es energia_indeseable (visible en header)
+            if (currentSubtype === 'energia_indeseable') {
+              const badge = document.createElement('span');
+              badge.className = 'px-2 py-1 bg-red-600 text-white text-xs font-semibold rounded';
+              badge.textContent = '⚠️ Energía Indeseable';
+              headerLeft.appendChild(badge);
+            }
+
+            // Warning badge si no tiene clasificación (visible en header)
+            if (!currentCategory && !currentSubtype && (!currentTags || currentTags.length === 0)) {
+              const warningBadge = document.createElement('span');
+              warningBadge.className = 'px-2 py-1 bg-amber-600 text-white text-xs font-semibold rounded';
+              warningBadge.textContent = '⚠️ Sin clasificación';
+              headerLeft.appendChild(warningBadge);
+            }
+
+            header.appendChild(headerLeft);
+            container.appendChild(header);
+
+            // Contenedor del contenido (oculto por defecto)
+            const contentDiv = document.createElement('div');
+            contentDiv.id = \`classification-content-\${listaId}\`;
+            contentDiv.className = 'hidden mt-3';
+
+            // Warning detallado si no tiene clasificación (dentro del contenido)
+            if (!currentCategory && !currentSubtype && (!currentTags || currentTags.length === 0)) {
+              const warning = document.createElement('div');
+              warning.className = 'bg-amber-900/20 border border-amber-700 rounded-lg p-2 mb-3 text-amber-400 text-sm';
+              warning.textContent = '⚠️ Esta lista no tiene clasificación. Se recomienda asignar al menos una categoría, subtipo o tag.';
+              contentDiv.appendChild(warning);
+            }
+
+            // Formulario
+            const form = document.createElement('div');
+            form.className = 'space-y-4';
+
+            // Select Categoría
+            const categoryDiv = document.createElement('div');
+            const categoryLabel = document.createElement('label');
+            categoryLabel.className = 'block text-sm font-medium text-slate-300 mb-2';
+            categoryLabel.textContent = 'Categoría';
+            categoryDiv.appendChild(categoryLabel);
+
+            const categorySelect = document.createElement('select');
+            categorySelect.className = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+            categorySelect.id = \`category-select-\${listaId}\`;
+
+            const categoryOptionNone = document.createElement('option');
+            categoryOptionNone.value = '';
+            categoryOptionNone.textContent = '— sin categoría —';
+            categorySelect.appendChild(categoryOptionNone);
+
+            categories.filter(c => c.is_active && !c.deleted_at).forEach(cat => {
+              const option = document.createElement('option');
+              option.value = cat.category_key;
+              option.textContent = cat.label;
+              if (cat.category_key === currentCategory) {
+                option.selected = true;
+              }
+              categorySelect.appendChild(option);
+            });
+
+            categoryDiv.appendChild(categorySelect);
+            form.appendChild(categoryDiv);
+
+            // Select Subtipo
+            const subtypeDiv = document.createElement('div');
+            const subtypeLabel = document.createElement('label');
+            subtypeLabel.className = 'block text-sm font-medium text-slate-300 mb-2';
+            subtypeLabel.textContent = 'Subtipo (independiente)';
+            subtypeDiv.appendChild(subtypeLabel);
+
+            const subtypeSelect = document.createElement('select');
+            subtypeSelect.className = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+            subtypeSelect.id = \`subtype-select-\${listaId}\`;
+
+            const subtypeOptionNone = document.createElement('option');
+            subtypeOptionNone.value = '';
+            subtypeOptionNone.textContent = '— sin subtipo —';
+            subtypeSelect.appendChild(subtypeOptionNone);
+
+            subtypes.filter(s => s.is_active && !s.deleted_at).forEach(sub => {
+              const option = document.createElement('option');
+              option.value = sub.subtype_key;
+              option.textContent = sub.label + (sub.subtype_key === 'energia_indeseable' ? ' ⚠️' : '');
+              if (sub.subtype_key === currentSubtype) {
+                option.selected = true;
+              }
+              subtypeSelect.appendChild(option);
+            });
+
+            subtypeDiv.appendChild(subtypeSelect);
+            form.appendChild(subtypeDiv);
+
+            // Tags (input simple con chips)
+            const tagsDiv = document.createElement('div');
+            const tagsLabel = document.createElement('label');
+            tagsLabel.className = 'block text-sm font-medium text-slate-300 mb-2';
+            tagsLabel.textContent = 'Tags (separados por comas)';
+            tagsDiv.appendChild(tagsLabel);
+
+            const tagsInput = document.createElement('input');
+            tagsInput.type = 'text';
+            tagsInput.className = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+            tagsInput.id = \`tags-input-\${listaId}\`;
+            tagsInput.placeholder = 'tag1, tag2, tag3';
+            tagsInput.value = currentTags.join(', ');
+            tagsDiv.appendChild(tagsInput);
+
+            const tagsHint = document.createElement('div');
+            tagsHint.className = 'text-xs text-slate-400 mt-1';
+            tagsHint.textContent = 'Escribe los tags separados por comas. Se crearán automáticamente si no existen.';
+            tagsDiv.appendChild(tagsHint);
+
+            form.appendChild(tagsDiv);
+
+            // Botón guardar
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors';
+            saveBtn.textContent = '💾 Guardar Clasificación';
+            saveBtn.onclick = async () => {
+              const categoryKey = categorySelect.value || null;
+              const subtypeKey = subtypeSelect.value || null;
+              const tagsValue = tagsInput.value.trim();
+              const tagsArray = tagsValue ? tagsValue.split(',').map(t => t.trim()).filter(t => t) : [];
+
+              saveBtn.disabled = true;
+              saveBtn.textContent = 'Guardando...';
+
+              const success = await guardarListaClassification(listaId, {
+                category_key: categoryKey,
+                subtype_key: subtypeKey,
+                tags: tagsArray
+              });
+
+              if (success) {
+                saveBtn.textContent = '✅ Guardado';
+                setTimeout(() => {
+                  saveBtn.textContent = '💾 Guardar Clasificación';
+                  saveBtn.disabled = false;
+                }, 2000);
+              } else {
+                saveBtn.textContent = '💾 Guardar Clasificación';
+                saveBtn.disabled = false;
+              }
+            };
+            form.appendChild(saveBtn);
+
+            contentDiv.appendChild(form);
+            container.appendChild(contentDiv);
+
+          } catch (error) {
+            console.error('Error renderizando editor de clasificación:', error);
+            container.textContent = '';
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'text-red-400 text-sm';
+            errorDiv.textContent = '⚠️ Error: ' + error.message;
+            container.appendChild(errorDiv);
           }
         }
       </script>

@@ -307,3 +307,4 @@ COMMENT ON TABLE pde_widget_versions IS 'Versiones publicadas (inmutables) de wi
 COMMENT ON COLUMN pde_widget_versions.prompt_context_json IS 'Widget Prompt Context v1 (snapshot al momento de publicación)';
 COMMENT ON TABLE pde_widget_audit_log IS 'Log de auditoría append-only para cambios en widgets';
 
+

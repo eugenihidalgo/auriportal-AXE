@@ -432,136 +432,151 @@ function evaluateWhenCondition(when, contextUsed) {
 }
 
 /**
- * Construye el Package Prompt Context JSON completo
+ * Construye el PackageDefinition JSON canónico (v3)
  * 
- * Esta función genera el JSON que se envía a GPT como contexto del package.
- * Incluye todos los sources resueltos con sus items, reglas de selección, etc.
+ * PRINCIPIO: Función determinista que solo ensambla, sin lógica, sin GPT, sin validación posterior.
+ * Este es el contrato canónico que será consumido por el futuro Resolver v1.
  * 
- * @param {Object} packageDefinition - Definición JSON del paquete
- * @param {Object} context - Contexto de ejecución
- * @returns {Promise<Object>} Package Prompt Context JSON
+ * El PackageDefinition es READONLY y correcto por diseño - no necesita validación.
+ * 
+ * @param {Object} input - Datos de entrada para ensamblar el package
+ * @param {string} input.package_key - Clave única del paquete
+ * @param {string} input.label - Nombre legible del paquete
+ * @param {string} [input.description] - Descripción del paquete
+ * @param {Array<Object>} input.sources - Array de sources seleccionados
+ * @param {Array<string>} input.context_keys - Array de context_keys seleccionados (solo scope=package)
+ * @param {Array<Object>} [input.outputs] - Array de outputs
+ * @param {Array<string>} [input.signals] - Array de signal_keys
+ * @returns {Promise<Object>} PackageDefinition canónico
  */
-export async function buildPackagePromptContext(packageDefinition, context = {}) {
-  const warnings = [];
-  
-  try {
-    // Extraer definition si viene en packageDefinition.definition
-    const definition = packageDefinition.definition || packageDefinition;
-    
-    // Resolver el paquete
-    const resolved = await resolvePackage(definition, context);
-    
-    // Construir prompt context
-    const promptContext = {
-      package_key: packageDefinition.package_key || null,
-      package_name: packageDefinition.name || null,
-      context_used: resolved.context_used,
-      sources: []
-    };
+export async function buildPackageDefinition(input) {
+  const {
+    package_key,
+    label,
+    description = null,
+    sources = [],
+    context_keys = [],
+    outputs = [],
+    signals = []
+  } = input;
 
-    // Integrar context_contract con mappings si existe
-    if (definition.context_contract && definition.context_contract.inputs) {
-      try {
-        const { listMappingsByContextKey } = await import('../../services/context-mappings-service.js');
-        
-        // Construir context_contract con mappings
-        const contextContract = {
-          inputs: await Promise.all(definition.context_contract.inputs.map(async (input) => {
-            const inputWithMappings = { ...input };
-            
-            // Si el input es enum y tiene context_key, buscar mappings
-            if (input.type === 'enum' && input.context_key) {
-              const { mappings } = await listMappingsByContextKey(input.context_key);
-              
-              if (mappings && mappings.length > 0) {
-                // Construir objeto mappings: { "valor": { ...mapping_data } }
-                const mappingsObj = {};
-                for (const mapping of mappings) {
-                  if (mapping.active && mapping.mapping_data) {
-                    mappingsObj[mapping.mapping_key] = mapping.mapping_data;
-                  }
-                }
-                
-                if (Object.keys(mappingsObj).length > 0) {
-                  inputWithMappings.mappings = mappingsObj;
-                }
-              }
-            }
-            
-            return inputWithMappings;
-          }))
-        };
-        
-        // Añadir outputs si existen
-        if (definition.context_contract.outputs) {
-          contextContract.outputs = definition.context_contract.outputs;
-        }
-        
-        promptContext.context_contract = contextContract;
-      } catch (error) {
-        console.error('[PDE][PACKAGES] Error integrando mappings en context_contract:', error);
-        warnings.push(`Error integrando mappings: ${error.message}`);
-        // Fail-open: incluir context_contract sin mappings
-        promptContext.context_contract = definition.context_contract;
-      }
+  // Validación básica (solo estructura, no lógica)
+  if (!package_key || !label) {
+    throw new Error('package_key y label son obligatorios');
+  }
+
+  // Construir PackageDefinition canónico
+  const packageDefinition = {
+    package_key,
+    label,
+    description: description || null,
+    sources: [],
+    contexts: [],
+    mappings: {},
+    outputs: [],
+    signals: [],
+    meta: {
+      version: 1,
+      created_at: new Date().toISOString()
     }
+  };
 
-    // Resolver cada source y construir su bloque en el prompt context
-    for (const source of resolved.sources) {
-      if (source.source_key === 'transmutaciones_energeticas') {
-        // Resolver transmutaciones con reglas de selección
-        try {
-          const { buildTransmutationsPromptContext } = await import('../../services/pde-transmutaciones-resolver.js');
-          const transmutacionesContext = await buildTransmutationsPromptContext(
-            source,
-            source.selection_rules || {},
-            source.nivel_efectivo
-          );
+  // Ensamblar sources (solo estructura, sin lógica)
+  for (const sourceInput of sources) {
+    const sourceDef = {
+      source_type: sourceInput.source_type || sourceInput.source_key || null,
+      source_key: sourceInput.source_key || null,
+      options: sourceInput.options || {
+        allow_video: true,
+        allow_text: true,
+        allow_audio: false
+      }
+    };
+    packageDefinition.sources.push(sourceDef);
+  }
+
+  // Ensamblar contexts (solo scope=package, obtener definiciones del registry)
+  try {
+    const { getContext } = await import('../services/pde-contexts-service.js');
+    
+    for (const contextKey of context_keys) {
+      try {
+        const contextDef = await getContext(contextKey);
+        if (contextDef && contextDef.definition) {
+          const def = contextDef.definition;
+          const scope = def.scope || contextDef.scope;
           
-          if (transmutacionesContext) {
-            promptContext.sources.push(transmutacionesContext);
-          } else {
-            warnings.push(`No se pudo construir contexto para source transmutaciones_energeticas (buildTransmutationsPromptContext devolvió null)`);
+          // Solo incluir si es scope=package
+          if (scope === 'package' || !scope) {
+            packageDefinition.contexts.push({
+              context_key: contextKey,
+              type: def.type || 'string',
+              default: def.default !== undefined ? def.default : null
+            });
           }
-        } catch (error) {
-          console.error('[PDE][PACKAGES] Error construyendo contexto de transmutaciones:', error);
-          warnings.push(`Error construyendo contexto de transmutaciones: ${error.message}`);
-          // Fail-open: continuar con otros sources
+        } else {
+          // Fail-open: incluir con valores por defecto si no se encuentra
+          packageDefinition.contexts.push({
+            context_key: contextKey,
+            type: 'string',
+            default: null
+          });
         }
-      } else {
-        // Para otros sources, construir bloque básico (legacy)
-        promptContext.sources.push({
-          source: source.source_key,
-          filter_by_nivel: source.filter_by_nivel,
-          nivel_efectivo: source.nivel_efectivo,
-          limit: source.limit,
-          note: 'Este source aún no tiene resolución completa de items'
+      } catch (error) {
+        console.warn(`[PDE][PACKAGES] Error obteniendo contexto '${contextKey}':`, error.message);
+        // Fail-open: incluir con valores por defecto
+        packageDefinition.contexts.push({
+          context_key: contextKey,
+          type: 'string',
+          default: null
         });
       }
     }
-
-    // Añadir señales si existen
-    if (resolved.resolved_senales && resolved.resolved_senales.length > 0) {
-      promptContext.senales = resolved.resolved_senales;
-    }
-
-    // Añadir warnings si existen
-    if (warnings.length > 0 || resolved.warnings.length > 0) {
-      promptContext.warnings = [...warnings, ...resolved.warnings];
-    }
-
-    return promptContext;
-
   } catch (error) {
-    console.error('[PDE][PACKAGES] Error construyendo prompt context:', error);
-    // Fail-open: devolver estructura mínima
-    return {
-      package_key: packageDefinition.package_key || null,
-      error: error.message,
-      warnings: [...warnings, `Error construyendo prompt context: ${error.message}`]
-    };
+    console.warn('[PDE][PACKAGES] Error importando servicio de contextos:', error.message);
+    // Fail-open: continuar sin contextos del registry
   }
+
+  // Ensamblar mappings (obtener desde Context Mappings Service)
+  try {
+    const { listMappingsByContextKey } = await import('../../services/context-mappings-service.js');
+    
+    for (const contextKey of context_keys) {
+      try {
+        const { mappings } = await listMappingsByContextKey(contextKey);
+        if (mappings && mappings.length > 0) {
+          const mappingsObj = {};
+          for (const mapping of mappings) {
+            if (mapping.active && mapping.mapping_key && mapping.mapping_data) {
+              mappingsObj[mapping.mapping_key] = mapping.mapping_data;
+            }
+          }
+          if (Object.keys(mappingsObj).length > 0) {
+            packageDefinition.mappings[contextKey] = mappingsObj;
+          }
+        }
+      } catch (error) {
+        console.warn(`[PDE][PACKAGES] Error obteniendo mappings para '${contextKey}':`, error.message);
+        // Fail-open: continuar sin mappings para este contexto
+      }
+    }
+  } catch (error) {
+    console.warn('[PDE][PACKAGES] Error importando servicio de mappings:', error.message);
+    // Fail-open: continuar sin mappings
+  }
+
+  // Ensamblar outputs (solo estructura)
+  packageDefinition.outputs = outputs.map(output => ({
+    key: output.key || null,
+    description: output.description || null
+  }));
+
+  // Ensamblar signals (solo array de keys)
+  packageDefinition.signals = signals.filter(s => s && typeof s === 'string');
+
+  return packageDefinition;
 }
+
 
 /**
  * Preview de un paquete (simulación sin ejecutar runtime)

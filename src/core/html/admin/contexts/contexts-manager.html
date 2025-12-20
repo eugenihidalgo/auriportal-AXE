@@ -333,8 +333,15 @@ async function recargarContextosDesdeServidor() {
     });
     
     if (response.ok) {
-      const data = await response.json();
-      contexts = data.contexts || [];
+      const responseText = await response.text();
+      try {
+        const data = JSON.parse(responseText);
+        contexts = data.contexts || [];
+      } catch (parseError) {
+        console.error('Error: Respuesta del servidor no es JSON válido al recargar contextos');
+        console.error('Respuesta recibida:', responseText.substring(0, 500));
+        contexts = [];
+      }
     } else {
       // Fallback: leer desde script tag con base64
       try {
@@ -405,12 +412,16 @@ function mostrarScopeTab(scope) {
     
     // Actualizar explicación según scope
     const explanations = {
-      'system': '<strong>Contextos de Sistema:</strong> Variables globales del sistema (ej: temporada). Inyectados automáticamente por el runtime.',
-      'structural': '<strong>Contextos Estructurales:</strong> Estado estructural del alumno (ej: nivel_pde). Inyectados automáticamente.',
-      'personal': '<strong>Contextos Personales:</strong> Estado personal variable del alumno. No inyectados automáticamente.',
-      'package': '<strong>Contextos de Package:</strong> Definidos por experiencias concretas. Aparecen en el selector del creador de paquetes.'
+      'system': 'Contextos de Sistema: Variables globales del sistema (ej: temporada). Inyectados automáticamente por el runtime.',
+      'structural': 'Contextos Estructurales: Estado estructural del alumno (ej: nivel_pde). Inyectados automáticamente.',
+      'personal': 'Contextos Personales: Estado personal variable del alumno. No inyectados automáticamente.',
+      'package': 'Contextos de Package: Definidos por experiencias concretas. Aparecen en el selector del creador de paquetes.'
     };
-    document.getElementById('scopeExplanation').innerHTML = explanations[scope] || '';
+    const explanationEl = document.getElementById('scopeExplanation');
+    explanationEl.textContent = '';
+    const strongEl = document.createElement('strong');
+    strongEl.textContent = explanations[scope] || '';
+    explanationEl.appendChild(strongEl);
     renderContexts();
   }
 }
@@ -480,6 +491,9 @@ function renderContexts() {
   const container = document.getElementById('contextsList');
   if (!container) return;
 
+  // Limpiar contenedor
+  container.textContent = '';
+
   // Filtrar contextos por scope activo
   const scope = currentScopeTab;
   const filteredContexts = contexts.filter(ctx => {
@@ -490,41 +504,132 @@ function renderContexts() {
   });
 
   if (filteredContexts.length === 0) {
-    container.innerHTML = `<p class="text-slate-400">No hay contextos de tipo "${scope}" disponibles</p>`;
+    const emptyMsg = document.createElement('p');
+    emptyMsg.className = 'text-slate-400';
+    emptyMsg.textContent = `No hay contextos de tipo "${scope}" disponibles`;
+    container.appendChild(emptyMsg);
     return;
   }
 
-  container.innerHTML = filteredContexts.map(ctx => {
+  filteredContexts.forEach(ctx => {
     const def = ctx.definition || {};
-    const isSystem = ctx.is_system || false;
     const ctxScope = ctx.scope || def.scope || 'package';
     const ctxKind = ctx.kind || def.kind || 'normal';
     const ctxInjected = ctx.injected !== undefined ? ctx.injected : (def.injected !== undefined ? def.injected : false);
     const ctxType = ctx.type || def.type || 'string';
     
-    return `
-      <div class="bg-slate-700 rounded p-4 flex justify-between items-start">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-2">
-            <h3 class="text-lg font-semibold text-white">${escapeHtml(ctx.label)}</h3>
-            <span class="text-xs px-2 py-1 rounded ${ctxScope === 'system' ? 'bg-purple-600' : ctxScope === 'structural' ? 'bg-orange-600' : ctxScope === 'personal' ? 'bg-pink-600' : 'bg-indigo-600'} text-white">${ctxScope.toUpperCase()}</span>
-            ${ctxKind === 'level' ? '<span class="text-xs px-2 py-1 rounded bg-yellow-600 text-white">LEVEL</span>' : ''}
-            ${ctxInjected ? '<span class="text-xs px-2 py-1 rounded bg-green-600 text-white">INJECTED</span>' : ''}
-            <code class="text-xs text-slate-400">${escapeHtml(ctx.context_key)}</code>
-          </div>
-          <div class="text-sm text-slate-300">
-            <p><strong>Tipo:</strong> ${escapeHtml(ctxType)}</p>
-            ${(ctx.default_value !== undefined ? ctx.default_value : def.default_value) !== null && (ctx.default_value !== undefined ? ctx.default_value : def.default_value) !== undefined ? `<p><strong>Default:</strong> ${escapeHtml(JSON.stringify(ctx.default_value !== undefined ? ctx.default_value : def.default_value))}</p>` : ''}
-            ${(ctx.description || def.description) ? `<p><strong>Descripción:</strong> ${escapeHtml(ctx.description || def.description)}</p>` : ''}
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button onclick="editarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors">✏️ Editar</button>
-          <button onclick="eliminarContexto('${escapeHtml(ctx.context_key)}', this)" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors">🗑️ Eliminar</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+    // Contenedor principal
+    const card = document.createElement('div');
+    card.className = 'bg-slate-700 rounded p-4 flex justify-between items-start';
+    
+    // Contenedor izquierdo
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'flex-1';
+    
+    // Header con label y badges
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'flex items-center gap-2 mb-2';
+    
+    const h3 = document.createElement('h3');
+    h3.className = 'text-lg font-semibold text-white';
+    h3.textContent = ctx.label || ctx.context_key;
+    headerDiv.appendChild(h3);
+    
+    // Badge de scope
+    const scopeBadge = document.createElement('span');
+    scopeBadge.className = 'text-xs px-2 py-1 rounded text-white';
+    scopeBadge.textContent = ctxScope.toUpperCase();
+    if (ctxScope === 'system') {
+      scopeBadge.classList.add('bg-purple-600');
+    } else if (ctxScope === 'structural') {
+      scopeBadge.classList.add('bg-orange-600');
+    } else if (ctxScope === 'personal') {
+      scopeBadge.classList.add('bg-pink-600');
+    } else {
+      scopeBadge.classList.add('bg-indigo-600');
+    }
+    headerDiv.appendChild(scopeBadge);
+    
+    // Badge LEVEL
+    if (ctxKind === 'level') {
+      const levelBadge = document.createElement('span');
+      levelBadge.className = 'text-xs px-2 py-1 rounded bg-yellow-600 text-white';
+      levelBadge.textContent = 'LEVEL';
+      headerDiv.appendChild(levelBadge);
+    }
+    
+    // Badge INJECTED
+    if (ctxInjected) {
+      const injectedBadge = document.createElement('span');
+      injectedBadge.className = 'text-xs px-2 py-1 rounded bg-green-600 text-white';
+      injectedBadge.textContent = 'INJECTED';
+      headerDiv.appendChild(injectedBadge);
+    }
+    
+    // Code con context_key
+    const codeEl = document.createElement('code');
+    codeEl.className = 'text-xs text-slate-400';
+    codeEl.textContent = ctx.context_key;
+    headerDiv.appendChild(codeEl);
+    
+    leftDiv.appendChild(headerDiv);
+    
+    // Información del contexto
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'text-sm text-slate-300';
+    
+    // Tipo
+    const tipoP = document.createElement('p');
+    const tipoStrong = document.createElement('strong');
+    tipoStrong.textContent = 'Tipo:';
+    tipoP.appendChild(tipoStrong);
+    tipoP.appendChild(document.createTextNode(' ' + ctxType));
+    infoDiv.appendChild(tipoP);
+    
+    // Default value
+    const defaultValue = ctx.default_value !== undefined ? ctx.default_value : def.default_value;
+    if (defaultValue !== null && defaultValue !== undefined) {
+      const defaultP = document.createElement('p');
+      const defaultStrong = document.createElement('strong');
+      defaultStrong.textContent = 'Default:';
+      defaultP.appendChild(defaultStrong);
+      defaultP.appendChild(document.createTextNode(' ' + JSON.stringify(defaultValue)));
+      infoDiv.appendChild(defaultP);
+    }
+    
+    // Descripción
+    const description = ctx.description || def.description;
+    if (description) {
+      const descP = document.createElement('p');
+      const descStrong = document.createElement('strong');
+      descStrong.textContent = 'Descripción:';
+      descP.appendChild(descStrong);
+      descP.appendChild(document.createTextNode(' ' + description));
+      infoDiv.appendChild(descP);
+    }
+    
+    leftDiv.appendChild(infoDiv);
+    card.appendChild(leftDiv);
+    
+    // Botones
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'flex gap-2';
+    
+    const editBtn = document.createElement('button');
+    editBtn.className = 'px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors';
+    editBtn.textContent = '✏️ Editar';
+    editBtn.onclick = () => editarContexto(ctx.context_key);
+    buttonsDiv.appendChild(editBtn);
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors';
+    deleteBtn.textContent = '🗑️ Eliminar';
+    deleteBtn.onclick = () => eliminarContexto(ctx.context_key, deleteBtn);
+    buttonsDiv.appendChild(deleteBtn);
+    
+    card.appendChild(buttonsDiv);
+    container.appendChild(card);
+  });
 }
 
 // Mostrar tab
@@ -776,18 +881,30 @@ function editarContexto(contextKey) {
     }
   }, 100);
 
-  // Establecer allowed values
-  if (def.type === 'enum' && def.allowed_values) {
-    document.getElementById('allowedValues').value = def.allowed_values.join('\n');
-    // Actualizar select de default con allowed values
-    setTimeout(() => {
-      const defaultValueEl = document.getElementById('defaultValue');
-      if (defaultValueEl && defaultValueEl.tagName === 'SELECT') {
-        defaultValueEl.innerHTML = '<option value="">-- Seleccionar --</option>' + 
-          def.allowed_values.map(v => `<option value="${escapeHtml(v)}" ${v === def.default_value ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
-      }
-    }, 150);
-  }
+    // Establecer allowed values
+    if (def.type === 'enum' && def.allowed_values) {
+      document.getElementById('allowedValues').value = def.allowed_values.join('\n');
+      // Actualizar select de default con allowed values
+      setTimeout(() => {
+        const defaultValueEl = document.getElementById('defaultValue');
+        if (defaultValueEl && defaultValueEl.tagName === 'SELECT') {
+          defaultValueEl.textContent = '';
+          const defaultOption = document.createElement('option');
+          defaultOption.value = '';
+          defaultOption.textContent = '-- Seleccionar --';
+          defaultValueEl.appendChild(defaultOption);
+          def.allowed_values.forEach(v => {
+            const option = document.createElement('option');
+            option.value = v;
+            option.textContent = v;
+            if (v === def.default_value) {
+              option.selected = true;
+            }
+            defaultValueEl.appendChild(option);
+          });
+        }
+      }, 150);
+    }
 
   document.getElementById('contextDefinition').value = JSON.stringify(def, null, 2);
   mostrarTab('visual');
@@ -881,15 +998,21 @@ async function guardarContexto() {
       })
     });
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('Respuesta no es JSON:', text.substring(0, 200));
-      alert('Error: El servidor devolvió una respuesta inesperada. Ver consola para más detalles.');
+    // Leer primero como texto para validar
+    const responseText = await response.text();
+    
+    // Verificar si es JSON válido
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Content-Type:', response.headers.get('content-type'));
+      console.error('Respuesta recibida (primeros 500 chars):', responseText.substring(0, 500));
+      alert('Error: El servidor devolvió una respuesta inválida. Ver consola para más detalles.');
       return;
     }
-
-    const data = await response.json();
 
     if (!data.ok) {
       alert('Error: ' + (data.error || 'Error desconocido'));
@@ -921,9 +1044,9 @@ async function eliminarContexto(contextKey, buttonElement) {
     // Mostrar indicador de carga
     let originalText = '';
     if (buttonElement) {
-      originalText = buttonElement.innerHTML;
+      originalText = buttonElement.textContent;
       buttonElement.disabled = true;
-      buttonElement.innerHTML = '⏳ Eliminando...';
+      buttonElement.textContent = '⏳ Eliminando...';
       buttonElement.classList.add('opacity-50');
     }
     
@@ -932,12 +1055,28 @@ async function eliminarContexto(contextKey, buttonElement) {
       headers: { 'Content-Type': 'application/json' }
     });
 
-    const data = await response.json();
+    // Leer primero como texto
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Respuesta recibida:', responseText.substring(0, 500));
+      if (buttonElement) {
+        buttonElement.disabled = false;
+        buttonElement.textContent = originalText;
+        buttonElement.classList.remove('opacity-50');
+      }
+      alert('Error: El servidor devolvió una respuesta inválida. Ver consola.');
+      return;
+    }
 
     if (!data.ok) {
       if (buttonElement) {
         buttonElement.disabled = false;
-        buttonElement.innerHTML = originalText;
+        buttonElement.textContent = originalText;
         buttonElement.classList.remove('opacity-50');
       }
       alert('❌ Error: ' + (data.error || 'Error desconocido'));
@@ -957,7 +1096,7 @@ async function eliminarContexto(contextKey, buttonElement) {
     // Restaurar botón si existe
     if (buttonElement) {
       buttonElement.disabled = false;
-      buttonElement.innerHTML = '🗑️ Eliminar';
+      buttonElement.textContent = '🗑️ Eliminar';
       buttonElement.classList.remove('opacity-50');
     }
   }
@@ -1020,10 +1159,22 @@ async function cargarContextosEnum() {
     return def.type === 'enum' && def.allowed_values && def.allowed_values.length > 0;
   });
 
-  selector.innerHTML = '<option value="">-- Seleccionar contexto enum --</option>' +
-    enumContexts.map(ctx => 
-      `<option value="${escapeHtml(ctx.context_key)}">${escapeHtml(ctx.label)} (${escapeHtml(ctx.context_key)})</option>`
-    ).join('');
+  // Limpiar selector
+  selector.textContent = '';
+  
+  // Opción por defecto
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = '-- Seleccionar contexto enum --';
+  selector.appendChild(defaultOption);
+  
+  // Agregar contextos enum
+  enumContexts.forEach(ctx => {
+    const option = document.createElement('option');
+    option.value = ctx.context_key;
+    option.textContent = `${ctx.label} (${ctx.context_key})`;
+    selector.appendChild(option);
+  });
 
   // Si hay un contexto seleccionado, cargar sus mappings
   if (selector.value) {
@@ -1037,17 +1188,41 @@ async function cargarMappings() {
   const contextKey = selector.value;
   const container = document.getElementById('mappingsList');
   
+  // Limpiar contenedor
+  container.textContent = '';
+  
   if (!contextKey) {
-    container.innerHTML = '<p class="text-slate-400">Selecciona un contexto enum</p>';
+    const msg = document.createElement('p');
+    msg.className = 'text-slate-400';
+    msg.textContent = 'Selecciona un contexto enum';
+    container.appendChild(msg);
     return;
   }
 
   try {
     const response = await fetch(`/admin/api/context-mappings?context_key=${encodeURIComponent(contextKey)}`);
-    const data = await response.json();
+    
+    // Leer primero como texto
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Respuesta recibida:', responseText.substring(0, 500));
+      const errorMsg = document.createElement('p');
+      errorMsg.className = 'text-red-400';
+      errorMsg.textContent = 'Error: El servidor devolvió una respuesta inválida. Ver consola.';
+      container.appendChild(errorMsg);
+      return;
+    }
 
     if (!data.ok) {
-      container.innerHTML = `<p class="text-red-400">Error: ${escapeHtml(data.error || 'Error desconocido')}</p>`;
+      const errorMsg = document.createElement('p');
+      errorMsg.className = 'text-red-400';
+      errorMsg.textContent = `Error: ${data.error || 'Error desconocido'}`;
+      container.appendChild(errorMsg);
       return;
     }
 
@@ -1058,18 +1233,28 @@ async function cargarMappings() {
 
     // Mostrar warnings si existen
     if (data.warnings && data.warnings.length > 0) {
-      container.innerHTML = `<div class="mb-4 p-3 bg-yellow-900 border border-yellow-600 rounded text-yellow-200 text-sm">
-        <strong>⚠️ Advertencias:</strong><br>
-        ${data.warnings.map(w => escapeHtml(w)).join('<br>')}
-      </div>`;
-    } else {
-      container.innerHTML = '';
+      const warningDiv = document.createElement('div');
+      warningDiv.className = 'mb-4 p-3 bg-yellow-900 border border-yellow-600 rounded text-yellow-200 text-sm';
+      const strongEl = document.createElement('strong');
+      strongEl.textContent = '⚠️ Advertencias:';
+      warningDiv.appendChild(strongEl);
+      const br = document.createElement('br');
+      warningDiv.appendChild(br);
+      data.warnings.forEach((w, idx) => {
+        if (idx > 0) {
+          const br2 = document.createElement('br');
+          warningDiv.appendChild(br2);
+        }
+        const warningText = document.createTextNode(w);
+        warningDiv.appendChild(warningText);
+      });
+      container.appendChild(warningDiv);
     }
 
     // Crear un mapping para cada valor permitido (si no existe, mostrar placeholder)
     const mappingsMap = new Map(mappings.map(m => [m.mapping_key, m]));
 
-    container.innerHTML += allowedValues.map((value, index) => {
+    allowedValues.forEach((value, index) => {
       const mapping = mappingsMap.get(value);
       const mappingId = mapping ? mapping.id : null;
       const mappingLabel = mapping ? (mapping.label || value) : value;
@@ -1078,84 +1263,151 @@ async function cargarMappings() {
       const isActive = mapping ? mapping.active : true;
       const sortOrder = mapping ? mapping.sort_order : index;
 
-      return `
-        <div class="bg-slate-700 rounded p-4 mb-2" data-mapping-key="${escapeHtml(value)}">
-          <div class="flex justify-between items-start mb-3">
-            <div class="flex-1">
-              <div class="mb-2">
-                <label class="block text-xs text-slate-400 mb-1">Label (humano) <span class="text-red-400">*</span></label>
-                <input 
-                  type="text" 
-                  id="mappingLabel_${escapeHtml(value)}" 
-                  value="${escapeHtml(mappingLabel)}"
-                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Etiqueta legible"
-                  onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
-                />
-              </div>
-              <div class="mb-2">
-                <label class="block text-xs text-slate-400 mb-1">Descripción</label>
-                <textarea 
-                  id="mappingDescription_${escapeHtml(value)}" 
-                  rows="2"
-                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  placeholder="Descripción opcional del mapping"
-                  onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
-                >${escapeHtml(mappingDescription)}</textarea>
-              </div>
-              <div class="text-xs text-slate-500 mb-2">
-                <code class="text-slate-400">${escapeHtml(contextKey)}.${escapeHtml(value)}</code>
-              </div>
-            </div>
-            <div class="flex flex-col gap-2 ml-4">
-              <label class="flex items-center gap-2 text-sm text-slate-300">
-                <input 
-                  type="checkbox" 
-                  ${isActive ? 'checked' : ''} 
-                  onchange="toggleMappingActive('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}', this.checked)"
-                  ${!mappingId ? 'disabled' : ''}
-                />
-                <span class="text-xs">Activo</span>
-              </label>
-              <input 
-                type="number" 
-                id="sortOrder_${escapeHtml(value)}" 
-                value="${sortOrder}"
-                class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs"
-                placeholder="Orden"
-                onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
-              />
-              <span class="text-xs text-slate-500 text-center">Orden</span>
-              ${mappingId ? `
-                <button onclick="eliminarMapping('${mappingId}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded">🗑️</button>
-              ` : ''}
-            </div>
-          </div>
-          
-          <!-- Mapping Data (colapsable, modo avanzado) -->
-          <details class="mt-2">
-            <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-300 mb-2">
-              ⚙️ Mapping Data (JSON avanzado)
-            </summary>
-            <div class="mt-2">
-              <label class="block text-xs text-slate-400 mb-1">Mapping Data (JSON)</label>
-              <textarea 
-                id="mappingData_${escapeHtml(value)}" 
-                rows="4"
-                class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
-                placeholder='{"max_aspects": 5, "minutes": 10}'
-                onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
-              >${escapeHtml(JSON.stringify(mappingData, null, 2))}</textarea>
-              <p class="text-xs text-slate-500 mt-1">Parámetros derivados en formato JSON (solo semántica, NO lógica)</p>
-            </div>
-          </details>
-        </div>
-      `;
-    }).join('');
+      // Contenedor principal del mapping
+      const mappingDiv = document.createElement('div');
+      mappingDiv.className = 'bg-slate-700 rounded p-4 mb-2';
+      mappingDiv.setAttribute('data-mapping-key', value);
+
+      // Contenedor flex principal
+      const flexDiv = document.createElement('div');
+      flexDiv.className = 'flex justify-between items-start mb-3';
+
+      // Columna izquierda
+      const leftCol = document.createElement('div');
+      leftCol.className = 'flex-1';
+
+      // Label input
+      const labelContainer = document.createElement('div');
+      labelContainer.className = 'mb-2';
+      const labelLabel = document.createElement('label');
+      labelLabel.className = 'block text-xs text-slate-400 mb-1';
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'text-red-400';
+      labelSpan.textContent = '*';
+      labelLabel.appendChild(document.createTextNode('Label (humano) '));
+      labelLabel.appendChild(labelSpan);
+      labelContainer.appendChild(labelLabel);
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.id = `mappingLabel_${value}`;
+      labelInput.value = mappingLabel;
+      labelInput.className = 'w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
+      labelInput.placeholder = 'Etiqueta legible';
+      labelInput.onblur = () => guardarMapping(mappingId || 'new', contextKey, value);
+      labelContainer.appendChild(labelInput);
+      leftCol.appendChild(labelContainer);
+
+      // Description textarea
+      const descContainer = document.createElement('div');
+      descContainer.className = 'mb-2';
+      const descLabel = document.createElement('label');
+      descLabel.className = 'block text-xs text-slate-400 mb-1';
+      descLabel.textContent = 'Descripción';
+      descContainer.appendChild(descLabel);
+      const descTextarea = document.createElement('textarea');
+      descTextarea.id = `mappingDescription_${value}`;
+      descTextarea.rows = 2;
+      descTextarea.className = 'w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm';
+      descTextarea.placeholder = 'Descripción opcional del mapping';
+      descTextarea.value = mappingDescription;
+      descTextarea.onblur = () => guardarMapping(mappingId || 'new', contextKey, value);
+      descContainer.appendChild(descTextarea);
+      leftCol.appendChild(descContainer);
+
+      // Code con contextKey.value
+      const codeContainer = document.createElement('div');
+      codeContainer.className = 'text-xs text-slate-500 mb-2';
+      const codeEl = document.createElement('code');
+      codeEl.className = 'text-slate-400';
+      codeEl.textContent = `${contextKey}.${value}`;
+      codeContainer.appendChild(codeEl);
+      leftCol.appendChild(codeContainer);
+
+      flexDiv.appendChild(leftCol);
+
+      // Columna derecha (controles)
+      const rightCol = document.createElement('div');
+      rightCol.className = 'flex flex-col gap-2 ml-4';
+
+      // Checkbox activo
+      const activeLabel = document.createElement('label');
+      activeLabel.className = 'flex items-center gap-2 text-sm text-slate-300';
+      const activeCheckbox = document.createElement('input');
+      activeCheckbox.type = 'checkbox';
+      activeCheckbox.checked = isActive;
+      activeCheckbox.disabled = !mappingId;
+      activeCheckbox.onchange = () => toggleMappingActive(mappingId || 'new', contextKey, value, activeCheckbox.checked);
+      activeLabel.appendChild(activeCheckbox);
+      const activeSpan = document.createElement('span');
+      activeSpan.className = 'text-xs';
+      activeSpan.textContent = 'Activo';
+      activeLabel.appendChild(activeSpan);
+      rightCol.appendChild(activeLabel);
+
+      // Input sort order
+      const sortInput = document.createElement('input');
+      sortInput.type = 'number';
+      sortInput.id = `sortOrder_${value}`;
+      sortInput.value = sortOrder;
+      sortInput.className = 'w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs';
+      sortInput.placeholder = 'Orden';
+      sortInput.onblur = () => guardarMapping(mappingId || 'new', contextKey, value);
+      rightCol.appendChild(sortInput);
+
+      const sortLabel = document.createElement('span');
+      sortLabel.className = 'text-xs text-slate-500 text-center';
+      sortLabel.textContent = 'Orden';
+      rightCol.appendChild(sortLabel);
+
+      // Botón eliminar (solo si existe mapping)
+      if (mappingId) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded';
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.onclick = () => eliminarMapping(mappingId);
+        rightCol.appendChild(deleteBtn);
+      }
+
+      flexDiv.appendChild(rightCol);
+      mappingDiv.appendChild(flexDiv);
+
+      // Details para mapping data (avanzado)
+      const details = document.createElement('details');
+      details.className = 'mt-2';
+      const summary = document.createElement('summary');
+      summary.className = 'cursor-pointer text-sm text-slate-400 hover:text-slate-300 mb-2';
+      summary.textContent = '⚙️ Mapping Data (JSON avanzado)';
+      details.appendChild(summary);
+      const detailsDiv = document.createElement('div');
+      detailsDiv.className = 'mt-2';
+      const dataLabel = document.createElement('label');
+      dataLabel.className = 'block text-xs text-slate-400 mb-1';
+      dataLabel.textContent = 'Mapping Data (JSON)';
+      detailsDiv.appendChild(dataLabel);
+      const dataTextarea = document.createElement('textarea');
+      dataTextarea.id = `mappingData_${value}`;
+      dataTextarea.rows = 4;
+      dataTextarea.className = 'w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs';
+      dataTextarea.placeholder = '{"max_aspects": 5, "minutes": 10}';
+      dataTextarea.value = JSON.stringify(mappingData, null, 2);
+      dataTextarea.onblur = () => guardarMapping(mappingId || 'new', contextKey, value);
+      detailsDiv.appendChild(dataTextarea);
+      const dataHelp = document.createElement('p');
+      dataHelp.className = 'text-xs text-slate-500 mt-1';
+      dataHelp.textContent = 'Parámetros derivados en formato JSON (solo semántica, NO lógica)';
+      detailsDiv.appendChild(dataHelp);
+      details.appendChild(detailsDiv);
+      mappingDiv.appendChild(details);
+
+      container.appendChild(mappingDiv);
+    });
 
   } catch (error) {
     console.error('Error cargando mappings:', error);
-    container.innerHTML = `<p class="text-red-400">Error cargando mappings: ${escapeHtml(error.message)}</p>`;
+    const errorMsg = document.createElement('p');
+    errorMsg.className = 'text-red-400';
+    errorMsg.textContent = `Error cargando mappings: ${error.message}`;
+    container.appendChild(errorMsg);
   }
 }
 
@@ -1204,7 +1456,18 @@ async function guardarMapping(mappingId, contextKey, mappingKey) {
       })
     });
 
-    const data = await response.json();
+    // Leer primero como texto
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Respuesta recibida:', responseText.substring(0, 500));
+      alert(`Error: El servidor devolvió una respuesta inválida. Ver consola.`);
+      return;
+    }
 
     if (!data.ok) {
       alert(`Error guardando mapping: ${data.error || 'Error desconocido'}`);
@@ -1274,7 +1537,15 @@ async function toggleMappingActive(mappingId, contextKey, mappingKey, active) {
     if (newMapping) {
       // Buscar el mapping recién creado y actualizar
       const response = await fetch(`/admin/api/context-mappings?context_key=${encodeURIComponent(contextKey)}`);
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error: Respuesta del servidor no es JSON válido');
+        console.error('Respuesta recibida:', responseText.substring(0, 500));
+        return;
+      }
       const mapping = data.mappings?.find(m => m.mapping_key === mappingKey);
       if (mapping) {
         await updateMappingActive(mapping.id, active);
@@ -1294,7 +1565,17 @@ async function updateMappingActive(mappingId, active) {
       body: JSON.stringify({ active })
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Respuesta recibida:', responseText.substring(0, 500));
+      alert('Error: El servidor devolvió una respuesta inválida. Ver consola.');
+      return;
+    }
 
     if (!data.ok) {
       alert(`Error actualizando mapping: ${data.error || 'Error desconocido'}`);
@@ -1319,7 +1600,17 @@ async function eliminarMapping(mappingId) {
       method: 'DELETE'
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error: Respuesta del servidor no es JSON válido');
+      console.error('Status:', response.status);
+      console.error('Respuesta recibida:', responseText.substring(0, 500));
+      alert('Error: El servidor devolvió una respuesta inválida. Ver consola.');
+      return;
+    }
 
     if (!data.ok) {
       alert(`Error eliminando mapping: ${data.error || 'Error desconocido'}`);

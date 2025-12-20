@@ -20,6 +20,73 @@
   let packagesData = [];
   let sourcesData = [];
   let currentPackageId = null;
+  
+  // Estado de reglas de selección por source
+  // Estructura: sourceStates[source_key] = { selection_rules: {...} }
+  const sourceStates = {};
+  
+  // Estado de autogeneración de package_key
+  // Si es true, el usuario editó manualmente el key y no debe regenerarse
+  let packageKeyManuallyEdited = false;
+  
+  // Mapa de definiciones de contexto (context_key -> definición completa)
+  // Se carga al inicio y se usa para resolver definiciones completas en el JSON
+  let contextDefinitionsMap = {};
+
+  /**
+   * Normalizar texto a package_key canónico
+   * 
+   * Reglas:
+   * - Convertir a minúsculas
+   * - Eliminar acentos (usar String.normalize('NFD'))
+   * - Reemplazar espacios y guiones largos por _
+   * - Eliminar cualquier carácter no permitido ([^a-z0-9_])
+   * - Colapsar múltiples _ en uno solo
+   * - Trim de _ inicial y final
+   * 
+   * @param {string} input - Texto a normalizar
+   * @returns {string} - package_key normalizado
+   */
+  function normalizePackageKey(input) {
+    if (!input || typeof input !== 'string') {
+      return '';
+    }
+    
+    // Convertir a minúsculas
+    let normalized = input.toLowerCase();
+    
+    // Eliminar acentos usando normalize NFD (Normalization Form Decomposed)
+    normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Reemplazar espacios y guiones largos por _
+    normalized = normalized.replace(/[\s\-–—]+/g, '_');
+    
+    // Eliminar cualquier carácter no permitido (solo a-z, 0-9, _)
+    normalized = normalized.replace(/[^a-z0-9_]/g, '');
+    
+    // Colapsar múltiples _ en uno solo
+    normalized = normalized.replace(/_+/g, '_');
+    
+    // Trim de _ inicial y final
+    normalized = normalized.replace(/^_+|_+$/g, '');
+    
+    return normalized;
+  }
+  
+  /**
+   * Validar package_key según regex canónica
+   * 
+   * @param {string} key - package_key a validar
+   * @returns {boolean} - true si es válido
+   */
+  function isValidPackageKey(key) {
+    if (!key || typeof key !== 'string') {
+      return false;
+    }
+    // Regex final permitida: ^[a-z0-9_]+$
+    const regex = /^[a-z0-9_]+$/;
+    return regex.test(key);
+  }
 
   /**
    * Log helper
@@ -49,6 +116,48 @@
         banner.classList.remove('show');
       }, 5000);
     }
+  }
+
+  /**
+   * Mostrar toast no bloqueante (feedback discreto)
+   * @param {string} message - Mensaje a mostrar
+   * @param {number} duration - Duración en ms (default: 2000)
+   */
+  function showToast(message, duration = 2000) {
+    // Crear elemento toast si no existe
+    let toast = document.getElementById('packages-v2-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'packages-v2-toast';
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #10b981;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 10000;
+        font-size: 0.875rem;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        pointer-events: none;
+      `;
+      document.body.appendChild(toast);
+    }
+    
+    // Actualizar mensaje y mostrar
+    toast.textContent = message;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    
+    // Ocultar después de la duración
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+    }, duration);
   }
 
   /**
@@ -122,7 +231,10 @@
         throw new Error('packages-list container not found');
       }
 
-      listContainer.innerHTML = '';
+      // Limpiar contenedor usando DOM API
+      while (listContainer.firstChild) {
+        listContainer.removeChild(listContainer.firstChild);
+      }
       const loadingDiv = document.createElement('div');
       loadingDiv.className = 'packages-v2-loading';
       loadingDiv.textContent = 'Cargando paquetes...';
@@ -161,7 +273,9 @@
       handleError(error, 'loadPackages');
       const listContainer = document.getElementById('packages-list');
       if (listContainer) {
-        listContainer.innerHTML = '';
+        while (listContainer.firstChild) {
+          listContainer.removeChild(listContainer.firstChild);
+        }
         const errorDiv = document.createElement('div');
         errorDiv.className = 'packages-v2-alert packages-v2-alert-error';
         errorDiv.textContent = 'Error cargando paquetes';
@@ -177,8 +291,10 @@
     const container = document.getElementById('packages-list');
     if (!container) return;
 
-    // Limpiar container
-    container.innerHTML = '';
+    // Limpiar container usando DOM API
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
 
     if (packagesData.length === 0) {
       const emptyState = document.createElement('div');
@@ -242,6 +358,7 @@
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'packages-v2-btn-delete';
       deleteBtn.dataset.packageId = String(pkg.id);
+      deleteBtn.dataset.packageKey = String(pkg.package_key || '');
       deleteBtn.dataset.packageName = pkg.name || '';
       deleteBtn.title = 'Eliminar paquete';
       deleteBtn.textContent = '🗑️';
@@ -267,9 +384,13 @@
     container.querySelectorAll('.packages-v2-btn-delete').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        // Usar package_key si está disponible, sino usar ID
+        const packageKey = btn.dataset.packageKey;
         const packageId = btn.dataset.packageId;
         const packageName = btn.dataset.packageName || 'este paquete';
-        deletePackage(packageId, packageName);
+        // Preferir package_key sobre ID para DELETE
+        const identifier = packageKey || packageId;
+        deletePackage(identifier, packageName);
       });
     });
   }
@@ -311,6 +432,18 @@
         throw new Error('Package not found');
       }
 
+      // Cargar draft si existe
+      if (pkg.id) {
+        try {
+          const draftResponse = await apiFetch(`/admin/api/packages/${pkg.id}/draft`);
+          if (draftResponse.ok && draftResponse.draft) {
+            pkg.draft = draftResponse.draft;
+          }
+        } catch (err) {
+          log(`No draft found for package ${pkg.id}`, err);
+        }
+      }
+
       await renderPromptContextEditor(pkg);
       renderAssembledEditor(pkg);
     } catch (error) {
@@ -319,14 +452,327 @@
   }
 
   /**
-   * Renderizar editor de Prompt Context
+   * Actualizar viewer de PackageDefinition (v3)
+   */
+  function updatePackageDefinitionViewer(packageDefinition) {
+    const viewer = document.getElementById('package-definition-viewer');
+    if (viewer) {
+      viewer.value = JSON.stringify(packageDefinition || {}, null, 2);
+    }
+  }
+
+  /**
+   * Crear componente de multi-selección con chips
+   * @param {Object} config - Configuración del componente
+   * @param {Array} config.options - Array de opciones {value, label}
+   * @param {Array} config.selected - Array de valores seleccionados
+   * @param {Function} config.onChange - Callback cuando cambia la selección (recibe array de valores)
+   * @param {string} config.id - ID único para el componente
+   * @param {string} config.placeholder - Placeholder para el dropdown
+   * @returns {HTMLElement} Contenedor del componente
+   */
+  function createMultiSelect({ options, selected = [], onChange, id, placeholder = 'Seleccionar...' }) {
+    const container = document.createElement('div');
+    container.className = 'packages-v2-multiselect';
+    container.dataset.multiselectId = id;
+
+    // Estado interno
+    let selectedValues = [...selected];
+
+    // Contenedor de chips
+    const chipsContainer = document.createElement('div');
+    chipsContainer.className = 'packages-v2-chips-container';
+
+    // Dropdown select
+    const select = document.createElement('select');
+    select.className = 'packages-v2-multiselect-dropdown';
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = placeholder;
+    placeholderOption.disabled = true;
+    placeholderOption.selected = true;
+    select.appendChild(placeholderOption);
+
+    // Añadir opciones al dropdown (excluyendo ya seleccionadas)
+    options.forEach(opt => {
+      if (!selectedValues.includes(opt.value)) {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        select.appendChild(option);
+      }
+    });
+
+    // Función para renderizar chips
+    function renderChips() {
+      // Limpiar contenedor usando DOM API
+      while (chipsContainer.firstChild) {
+        chipsContainer.removeChild(chipsContainer.firstChild);
+      }
+      
+      selectedValues.forEach(value => {
+        const option = options.find(opt => opt.value === value);
+        if (!option) return;
+
+        const chip = document.createElement('div');
+        chip.className = 'packages-v2-chip';
+        
+        const chipLabel = document.createElement('span');
+        chipLabel.className = 'packages-v2-chip-label';
+        chipLabel.textContent = option.label;
+        
+        const chipRemove = document.createElement('button');
+        chipRemove.type = 'button';
+        chipRemove.className = 'packages-v2-chip-remove';
+        chipRemove.textContent = '×';
+        chipRemove.setAttribute('aria-label', 'Eliminar');
+        
+        chipRemove.addEventListener('click', () => {
+          selectedValues = selectedValues.filter(v => v !== value);
+          renderChips();
+          updateSelect();
+          if (onChange) onChange([...selectedValues]);
+        });
+        
+        chip.appendChild(chipLabel);
+        chip.appendChild(chipRemove);
+        chipsContainer.appendChild(chip);
+      });
+
+      // Si no hay chips, mostrar placeholder
+      if (selectedValues.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'packages-v2-chips-empty';
+        emptyState.textContent = 'Ninguno seleccionado';
+        chipsContainer.appendChild(emptyState);
+      }
+    }
+
+    // Función para actualizar el select (remover opciones ya seleccionadas)
+    function updateSelect() {
+      // Remover todas las opciones excepto placeholder
+      while (select.children.length > 1) {
+        select.removeChild(select.lastChild);
+      }
+
+      // Añadir opciones no seleccionadas
+      options.forEach(opt => {
+        if (!selectedValues.includes(opt.value)) {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          select.appendChild(option);
+        }
+      });
+
+      // Resetear a placeholder
+      select.selectedIndex = 0;
+    }
+
+    // Event listener para el select
+    select.addEventListener('change', (e) => {
+      const value = e.target.value;
+      if (value && !selectedValues.includes(value)) {
+        selectedValues.push(value);
+        renderChips();
+        updateSelect();
+        if (onChange) onChange([...selectedValues]);
+      }
+    });
+
+    // Renderizar chips iniciales
+    renderChips();
+
+    container.appendChild(chipsContainer);
+    container.appendChild(select);
+
+    // Método público para obtener valores seleccionados
+    container.getSelectedValues = () => [...selectedValues];
+
+    // Método público para establecer valores
+    container.setSelectedValues = (values) => {
+      selectedValues = [...values];
+      renderChips();
+      updateSelect();
+      if (onChange) onChange([...selectedValues]);
+    };
+
+    return container;
+  }
+
+  /**
+   * Crear componente para outputs (añadir uno a uno)
+   * @param {Array} initialOutputs - Array inicial de outputs [{key, description}]
+   * @param {Function} onChange - Callback cuando cambia (recibe array de outputs)
+   * @param {string} id - ID único
+   * @returns {HTMLElement} Contenedor del componente
+   */
+  function createOutputsManager({ initialOutputs = [], onChange, id }) {
+    const container = document.createElement('div');
+    container.className = 'packages-v2-outputs-manager';
+    container.dataset.outputsId = id;
+
+    // Estado interno
+    let outputs = [...initialOutputs];
+
+    // Contenedor de chips
+    const chipsContainer = document.createElement('div');
+    chipsContainer.className = 'packages-v2-chips-container';
+
+    // Input y botón para añadir
+    const addContainer = document.createElement('div');
+    addContainer.className = 'packages-v2-outputs-add';
+
+    const keyInput = document.createElement('input');
+    keyInput.type = 'text';
+    keyInput.className = 'packages-v2-outputs-key';
+    keyInput.placeholder = 'Key del output';
+    keyInput.style.cssText = 'flex: 1; padding: 8px; background: #0f172a; border: 2px solid #334155; border-radius: 8px; color: #fff; margin-right: 8px;';
+
+    const descInput = document.createElement('input');
+    descInput.type = 'text';
+    descInput.className = 'packages-v2-outputs-desc';
+    descInput.placeholder = 'Descripción';
+    descInput.style.cssText = 'flex: 2; padding: 8px; background: #0f172a; border: 2px solid #334155; border-radius: 8px; color: #fff; margin-right: 8px;';
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'packages-v2-btn-add-output';
+    addBtn.textContent = '➕ Añadir';
+    addBtn.style.cssText = 'padding: 8px 16px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap;';
+
+    // Función para renderizar chips
+    function renderChips() {
+      // Limpiar contenedor usando DOM API
+      while (chipsContainer.firstChild) {
+        chipsContainer.removeChild(chipsContainer.firstChild);
+      }
+      
+      outputs.forEach((output, index) => {
+        const chip = document.createElement('div');
+        chip.className = 'packages-v2-chip';
+        
+        const chipContent = document.createElement('span');
+        chipContent.className = 'packages-v2-chip-content';
+        
+        const keyStrong = document.createElement('strong');
+        keyStrong.textContent = output.key;
+        chipContent.appendChild(keyStrong);
+        
+        const separator = document.createTextNode(': ');
+        chipContent.appendChild(separator);
+        
+        const descriptionText = document.createTextNode(output.description || '');
+        chipContent.appendChild(descriptionText);
+        
+        const chipRemove = document.createElement('button');
+        chipRemove.type = 'button';
+        chipRemove.className = 'packages-v2-chip-remove';
+        chipRemove.textContent = '×';
+        chipRemove.setAttribute('aria-label', 'Eliminar');
+        
+        chipRemove.addEventListener('click', () => {
+          outputs.splice(index, 1);
+          renderChips();
+          if (onChange) onChange([...outputs]);
+        });
+        
+        chip.appendChild(chipContent);
+        chip.appendChild(chipRemove);
+        chipsContainer.appendChild(chip);
+      });
+
+      // Si no hay chips, mostrar placeholder
+      if (outputs.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'packages-v2-chips-empty';
+        emptyState.textContent = 'Ningún output añadido';
+        chipsContainer.appendChild(emptyState);
+      }
+    }
+
+    // Función para añadir output
+    function addOutput() {
+      const key = keyInput.value.trim();
+      const description = descInput.value.trim();
+
+      if (!key) {
+        alert('El key del output es obligatorio');
+        return;
+      }
+
+      // Verificar que no esté duplicado
+      if (outputs.some(o => o.key === key)) {
+        alert('Ya existe un output con ese key');
+        return;
+      }
+
+      outputs.push({ key, description });
+      keyInput.value = '';
+      descInput.value = '';
+      renderChips();
+      if (onChange) onChange([...outputs]);
+    }
+
+    // Event listeners
+    addBtn.addEventListener('click', addOutput);
+    keyInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        descInput.focus();
+      }
+    });
+    descInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addOutput();
+      }
+    });
+
+    addContainer.appendChild(keyInput);
+    addContainer.appendChild(descInput);
+    addContainer.appendChild(addBtn);
+
+    container.appendChild(chipsContainer);
+    container.appendChild(addContainer);
+
+    // Renderizar chips iniciales
+    renderChips();
+
+    // Método público para obtener outputs
+    container.getOutputs = () => [...outputs];
+
+    // Método público para establecer outputs
+    container.setOutputs = (newOutputs) => {
+      outputs = [...newOutputs];
+      renderChips();
+      if (onChange) onChange([...outputs]);
+    };
+
+    return container;
+  }
+
+  /**
+   * Renderizar editor de Package Assembler (v3)
    */
   async function renderPromptContextEditor(pkg) {
     const container = document.getElementById('prompt-context-editor');
-    if (!container) return;
+    if (!container) {
+      console.error('[PDE][PACKAGES_V2] prompt-context-editor container no encontrado');
+      return;
+    }
 
     const draft = pkg.draft || {};
-    const promptContext = draft.prompt_context_json || {};
+    // v3: Priorizar package_definition, fallback a prompt_context_json (legacy)
+    const packageDefinition = draft.package_definition || draft.prompt_context_json || {};
+    
+    // Limpiar estado de sources antes de cargar nuevo package
+    Object.keys(sourceStates).forEach(key => {
+      delete sourceStates[key];
+    });
+    
+    // Resetear estado de autogeneración de package_key
+    packageKeyManuallyEdited = false;
 
     // Cargar datos para selectores
     let sourcesData = [];
@@ -334,10 +780,11 @@
     let signalsData = [];
 
     try {
-      const [sourcesRes, contextsRes, signalsRes] = await Promise.all([
+      const [sourcesRes, contextsRes, signalsRes, contextDefinitionsRes] = await Promise.all([
         fetchSilent('/admin/api/packages/sources'),
-        fetchSilent('/admin/api/contexts'),
-        fetchSilent('/admin/api/senales')
+        fetchSilent('/admin/api/packages/contexts'),
+        fetchSilent('/admin/api/packages/signals'),
+        fetchSilent('/admin/api/context-definitions')
       ]);
       
       // Fail-open: usar array vacío si falla o no hay datos
@@ -345,21 +792,47 @@
         ? sourcesRes.sources
         : (Array.isArray(sourcesRes) ? sourcesRes : []);
       contextsData = Array.isArray(contextsRes?.contexts) ? contextsRes.contexts : [];
-      signalsData = Array.isArray(signalsRes?.senales) ? signalsRes.senales : [];
+      // El endpoint devuelve { signals: [...] }
+      signalsData = Array.isArray(signalsRes?.signals) ? signalsRes.signals : [];
+      
+      // Cargar definiciones completas de contextos
+      if (contextDefinitionsRes?.ok && Array.isArray(contextDefinitionsRes.definitions)) {
+        contextDefinitionsMap = {};
+        contextDefinitionsRes.definitions.forEach(def => {
+          if (def.context_key) {
+            contextDefinitionsMap[def.context_key] = def;
+          }
+        });
+        log(`Loaded ${Object.keys(contextDefinitionsMap).length} context definitions`);
+      } else {
+        log('Warning: No context definitions loaded, using empty map');
+        contextDefinitionsMap = {};
+      }
     } catch (err) {
       // Fallback silencioso: continuar con arrays vacíos
       log('Error loading selectors data (using empty arrays)', err);
       sourcesData = [];
       contextsData = [];
       signalsData = [];
+      contextDefinitionsMap = {};
     }
 
-    // Limpiar container
-    container.innerHTML = '';
+    // Limpiar container usando DOM API
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
 
     // Crear formulario
     const form = document.createElement('form');
-    form.id = 'prompt-context-form';
+    form.id = 'package-assembler-form';
+    // Guardar packageDefinition en dataset para acceso posterior (v3)
+    // Mantener compatibilidad con promptContext legacy
+    // packageDefinition ya está declarado arriba (línea 742)
+    if (packageDefinition) {
+      form.dataset.packageDefinition = JSON.stringify(packageDefinition);
+      // Legacy: mantener promptContext para compatibilidad temporal
+      form.dataset.promptContext = JSON.stringify(packageDefinition);
+    }
 
     // Sección: Identidad
     const identitySection = document.createElement('div');
@@ -374,7 +847,11 @@
     const nameGroup = document.createElement('div');
     nameGroup.className = 'packages-v2-form-group';
     const nameLabel = document.createElement('label');
-    nameLabel.innerHTML = 'Nombre del Paquete <span class="required">*</span>';
+    nameLabel.appendChild(document.createTextNode('Nombre del Paquete '));
+    const nameRequired = document.createElement('span');
+    nameRequired.className = 'required';
+    nameRequired.textContent = '*';
+    nameLabel.appendChild(nameRequired);
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.id = 'package-name';
@@ -383,21 +860,83 @@
     nameGroup.appendChild(nameLabel);
     nameGroup.appendChild(nameInput);
     identitySection.appendChild(nameGroup);
+    
+    // Si no hay package_key pero hay nombre, autogenerar desde el nombre
+    if (!pkg.package_key && pkg.name) {
+      pkg.package_key = normalizePackageKey(pkg.name);
+    }
 
     // Package Key
     const keyGroup = document.createElement('div');
     keyGroup.className = 'packages-v2-form-group';
     const keyLabel = document.createElement('label');
-    keyLabel.innerHTML = 'Package Key <span class="required">*</span>';
+    keyLabel.appendChild(document.createTextNode('Package Key '));
+    const keyRequired = document.createElement('span');
+    keyRequired.className = 'required';
+    keyRequired.textContent = '*';
+    keyLabel.appendChild(keyRequired);
+    
+    // Contenedor para input y badge
+    const keyInputContainer = document.createElement('div');
+    keyInputContainer.style.cssText = 'position: relative; display: flex; align-items: center; gap: 8px;';
+    
     const keyInput = document.createElement('input');
     keyInput.type = 'text';
     keyInput.id = 'package-key';
-    keyInput.pattern = '[a-z0-9_-]+';
+    keyInput.pattern = '^[a-z0-9_]+$';
     keyInput.required = true;
     keyInput.value = pkg.package_key || '';
+    keyInput.readOnly = !pkg.package_key || pkg.package_key === normalizePackageKey(pkg.name || '');
+    keyInput.style.cssText = 'flex: 1;';
+    
+    // Badge para key personalizada (inicialmente oculto)
+    const keyBadge = document.createElement('span');
+    keyBadge.id = 'package-key-badge';
+    keyBadge.textContent = '✏️ Key personalizada';
+    keyBadge.style.cssText = 'display: none; color: #fbbf24; font-size: 0.75rem; white-space: nowrap;';
+    
+    keyInputContainer.appendChild(keyInput);
+    keyInputContainer.appendChild(keyBadge);
+    
     keyGroup.appendChild(keyLabel);
-    keyGroup.appendChild(keyInput);
+    keyGroup.appendChild(keyInputContainer);
     identitySection.appendChild(keyGroup);
+    
+    // Inicializar estado: si el package_key no coincide con el normalizado del nombre, está editado manualmente
+    if (pkg.package_key && pkg.name) {
+      const normalizedFromName = normalizePackageKey(pkg.name);
+      packageKeyManuallyEdited = (pkg.package_key !== normalizedFromName);
+    } else if (pkg.package_key) {
+      // Si hay key pero no nombre, asumir que fue editado manualmente
+      packageKeyManuallyEdited = true;
+    } else {
+      packageKeyManuallyEdited = false;
+    }
+    
+    // Mostrar badge si está editado manualmente
+    if (packageKeyManuallyEdited) {
+      keyBadge.style.display = 'inline';
+      keyInput.readOnly = false;
+    }
+    
+    // Event listener para detectar edición manual del key
+    keyInput.addEventListener('input', () => {
+      if (!packageKeyManuallyEdited) {
+        packageKeyManuallyEdited = true;
+        keyInput.readOnly = false;
+        keyBadge.style.display = 'inline';
+      }
+    });
+    
+    // Event listener para autogenerar key desde nombre
+    // Usar la variable nameInput ya creada arriba (línea 763)
+    nameInput.addEventListener('input', () => {
+      // Solo autogenerar si el key NO fue editado manualmente
+      if (!packageKeyManuallyEdited) {
+        const normalizedKey = normalizePackageKey(nameInput.value);
+        keyInput.value = normalizedKey;
+      }
+    });
 
     // Descripción
     const descGroup = document.createElement('div');
@@ -427,23 +966,63 @@
     sourcesGroup.className = 'packages-v2-form-group';
     const sourcesLabel = document.createElement('label');
     sourcesLabel.textContent = 'Seleccionar Sources';
-    const sourcesSelect = document.createElement('select');
-    sourcesSelect.id = 'package-sources';
-    sourcesSelect.multiple = true;
-    sourcesSelect.size = 5;
-    sourcesSelect.style.cssText = 'width: 100%; padding: 8px; background: #0f172a; color: #fff; border: 2px solid #334155; border-radius: 8px;';
-    
-    sourcesData.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s.key || s.source_key || '';
-      opt.textContent = s.label || s.name || s.key || ''; // Backend devuelve 'label', no 'name'
-      sourcesSelect.appendChild(opt);
-    });
-    
     sourcesGroup.appendChild(sourcesLabel);
-    sourcesGroup.appendChild(sourcesSelect);
+    
+    // Preparar opciones para multi-select
+    const sourcesOptions = sourcesData.map(s => ({
+      value: s.key || s.source_key || '',
+      label: s.label || s.name || s.key || ''
+    })).filter(opt => opt.value);
+
+    // Valores seleccionados iniciales
+    // Manejar tanto arrays de strings (legacy) como arrays de objetos (nuevo formato)
+    // v3: PackageDefinition usa sources directamente, legacy usa sources_of_truth
+    const sourcesList = packageDefinition.sources || packageDefinition.sources_of_truth || [];
+    let initialSources = [];
+    if (Array.isArray(sourcesList)) {
+      initialSources = sourcesList.map(s => {
+        // Si es string, devolverlo directamente
+        if (typeof s === 'string') return s;
+        // Si es objeto, extraer source_key
+        if (typeof s === 'object' && s !== null) {
+          const sourceKey = s.source_key || s.source || '';
+          // Inicializar estado de reglas para este source si tiene selection_rules
+          if (sourceKey && s.selection_rules && typeof s.selection_rules === 'object') {
+            sourceStates[sourceKey] = { selection_rules: s.selection_rules };
+          }
+          return sourceKey;
+        }
+        return '';
+      }).filter(s => s); // Filtrar strings vacíos
+    }
+
+    const sourcesMultiSelect = createMultiSelect({
+      id: 'package-sources',
+      options: sourcesOptions,
+      selected: initialSources,
+      placeholder: 'Seleccionar source...',
+      onChange: () => {
+        // Actualizar JSON automáticamente si el botón de generar está conectado
+        updateSelectionRulesPanels();
+        generatePackageDefinition();
+      }
+    });
+    sourcesMultiSelect.id = 'package-sources-container';
+    sourcesGroup.appendChild(sourcesMultiSelect);
     sourcesSection.appendChild(sourcesGroup);
+    
+    // Contenedor para paneles de reglas de selección (uno por cada source de transmutaciones)
+    const selectionRulesContainer = document.createElement('div');
+    selectionRulesContainer.id = 'selection-rules-container';
+    selectionRulesContainer.style.cssText = 'margin-top: 16px;';
+    sourcesSection.appendChild(selectionRulesContainer);
+    
     form.appendChild(sourcesSection);
+    
+    // Cargar paneles de reglas de selección iniciales (después de un pequeño delay para asegurar que el DOM está listo)
+    setTimeout(() => {
+      updateSelectionRulesPanels();
+    }, 100);
 
     // Sección: Contextos de Entrada
     const contextsSection = document.createElement('div');
@@ -458,21 +1037,32 @@
     contextsGroup.className = 'packages-v2-form-group';
     const contextsLabel = document.createElement('label');
     contextsLabel.textContent = 'Seleccionar Contextos';
-    const contextsSelect = document.createElement('select');
-    contextsSelect.id = 'package-contexts';
-    contextsSelect.multiple = true;
-    contextsSelect.size = 5;
-    contextsSelect.style.cssText = 'width: 100%; padding: 8px; background: #0f172a; color: #fff; border: 2px solid #334155; border-radius: 8px;';
-    
-    contextsData.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c.context_key || c.key || '';
-      opt.textContent = c.name || c.context_key || c.key || '';
-      contextsSelect.appendChild(opt);
-    });
-    
     contextsGroup.appendChild(contextsLabel);
-    contextsGroup.appendChild(contextsSelect);
+    
+    // Preparar opciones para multi-select
+    const contextsOptions = contextsData.map(c => ({
+      value: c.context_key || c.key || '',
+      label: c.name || c.context_key || c.key || ''
+    })).filter(opt => opt.value);
+
+    // Valores seleccionados iniciales
+    // v3: PackageDefinition usa contexts directamente, legacy usa context_contract.inputs
+    const contextsList = packageDefinition.contexts || packageDefinition.context_contract?.inputs || [];
+    const initialContexts = Array.isArray(contextsList)
+      ? contextsList.map(i => (typeof i === 'string' ? i : (i.context_key || i))).filter(k => k)
+      : [];
+
+    const contextsMultiSelect = createMultiSelect({
+      id: 'package-contexts',
+      options: contextsOptions,
+      selected: initialContexts,
+      placeholder: 'Seleccionar contexto...',
+      onChange: () => {
+        generatePackageDefinition();
+      }
+    });
+    contextsMultiSelect.id = 'package-contexts-container';
+    contextsGroup.appendChild(contextsMultiSelect);
     contextsSection.appendChild(contextsGroup);
     form.appendChild(contextsSection);
 
@@ -488,15 +1078,21 @@
     const outputsGroup = document.createElement('div');
     outputsGroup.className = 'packages-v2-form-group';
     const outputsLabel = document.createElement('label');
-    outputsLabel.textContent = 'Outputs (uno por línea, formato: key:description)';
-    const outputsTextarea = document.createElement('textarea');
-    outputsTextarea.id = 'package-outputs';
-    outputsTextarea.rows = 4;
-    outputsTextarea.placeholder = 'output1: Descripción del output 1\noutput2: Descripción del output 2';
-    const outputsValue = (promptContext.context_contract?.outputs || []).map(o => `${o.key || ''}: ${o.description || ''}`).join('\n');
-    outputsTextarea.value = outputsValue;
+    outputsLabel.textContent = 'Añadir Outputs';
     outputsGroup.appendChild(outputsLabel);
-    outputsGroup.appendChild(outputsTextarea);
+    
+    // Valores iniciales
+    // v3: PackageDefinition usa outputs directamente, legacy usa context_contract.outputs
+    const initialOutputs = packageDefinition.outputs || packageDefinition.context_contract?.outputs || [];
+    const outputsManager = createOutputsManager({
+      id: 'package-outputs',
+      initialOutputs: Array.isArray(initialOutputs) ? initialOutputs : [],
+      onChange: () => {
+        generatePackageDefinition();
+      }
+    });
+    outputsManager.id = 'package-outputs-container';
+    outputsGroup.appendChild(outputsManager);
     outputsSection.appendChild(outputsGroup);
     form.appendChild(outputsSection);
 
@@ -513,23 +1109,30 @@
     signalsGroup.className = 'packages-v2-form-group';
     const signalsLabel = document.createElement('label');
     signalsLabel.textContent = 'Seleccionar Señales';
-    const signalsSelect = document.createElement('select');
-    signalsSelect.id = 'package-signals';
-    signalsSelect.multiple = true;
-    signalsSelect.size = 5;
-    signalsSelect.style.cssText = 'width: 100%; padding: 8px; background: #0f172a; color: #fff; border: 2px solid #334155; border-radius: 8px;';
-    
-    signalsData.forEach(s => {
-      const opt = document.createElement('option');
-      // Usar signal_key como valor (key semántica, NO ID)
-      opt.value = s.signal_key || s.key || '';
-      // Usar name o label como texto mostrado
-      opt.textContent = s.name || s.label || s.signal_key || s.key || '';
-      signalsSelect.appendChild(opt);
-    });
-    
     signalsGroup.appendChild(signalsLabel);
-    signalsGroup.appendChild(signalsSelect);
+    
+    // Preparar opciones para multi-select
+    const signalsOptions = signalsData.map(s => ({
+      value: s.signal_key || s.key || '',
+      label: s.name || s.label || s.signal_key || s.key || ''
+    })).filter(opt => opt.value);
+
+    // Valores seleccionados iniciales
+    // v3: PackageDefinition usa signals directamente, legacy usa signals_emitted
+    const signalsList = packageDefinition.signals || packageDefinition.signals_emitted || [];
+    const initialSignals = Array.isArray(signalsList) ? signalsList : [];
+
+    const signalsMultiSelect = createMultiSelect({
+      id: 'package-signals',
+      options: signalsOptions,
+      selected: initialSignals,
+      placeholder: 'Seleccionar señal...',
+      onChange: () => {
+        generatePackageDefinition();
+      }
+    });
+    signalsMultiSelect.id = 'package-signals-container';
+    signalsGroup.appendChild(signalsMultiSelect);
     signalsSection.appendChild(signalsGroup);
     form.appendChild(signalsSection);
 
@@ -550,7 +1153,9 @@
     rulesTextarea.id = 'package-rules';
     rulesTextarea.rows = 4;
     rulesTextarea.placeholder = 'Regla 1\nRegla 2';
-    const rulesValue = (promptContext.context_rules || []).join('\n');
+    // v3: PackageDefinition no tiene context_rules (esas serán parte del Resolver v1)
+    // Mantener compatibilidad con legacy por ahora
+    const rulesValue = (packageDefinition.context_rules || []).join('\n');
     rulesTextarea.value = rulesValue;
     rulesGroup.appendChild(rulesLabel);
     rulesGroup.appendChild(rulesTextarea);
@@ -562,9 +1167,9 @@
     actionsDiv.className = 'packages-v2-form-actions';
     const generateBtn = document.createElement('button');
     generateBtn.type = 'button';
-    generateBtn.id = 'generate-prompt-context-btn';
+    generateBtn.id = 'generate-package-definition-btn';
     generateBtn.className = 'packages-v2-btn packages-v2-btn-primary';
-    generateBtn.textContent = '🔧 Generar JSON';
+    generateBtn.textContent = '🔧 Generar PackageDefinition';
     actionsDiv.appendChild(generateBtn);
     form.appendChild(actionsDiv);
 
@@ -575,13 +1180,13 @@
     
     const jsonTitle = document.createElement('h3');
     jsonTitle.style.cssText = 'color: #fff; margin-bottom: 16px;';
-    jsonTitle.textContent = 'Package Prompt Context JSON (Readonly)';
+    jsonTitle.textContent = 'PackageDefinition JSON (Readonly)';
     jsonSection.appendChild(jsonTitle);
 
     const jsonGroup = document.createElement('div');
     jsonGroup.className = 'packages-v2-form-group';
     const jsonTextarea = document.createElement('textarea');
-    jsonTextarea.id = 'prompt-context-json';
+    jsonTextarea.id = 'package-definition-json';
     jsonTextarea.className = 'code';
     jsonTextarea.rows = 15;
     jsonTextarea.readOnly = true;
@@ -590,164 +1195,519 @@
 
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
-    copyBtn.id = 'copy-prompt-context-btn';
+    copyBtn.id = 'copy-package-definition-btn';
     copyBtn.className = 'packages-v2-btn packages-v2-btn-secondary';
-    copyBtn.textContent = '📋 Copiar para GPT';
+    copyBtn.textContent = '📋 Copiar PackageDefinition';
     jsonSection.appendChild(copyBtn);
     form.appendChild(jsonSection);
 
     container.appendChild(form);
 
-    // Asignar valores dinámicos usando .value
-    jsonTextarea.value = JSON.stringify(promptContext || {}, null, 2);
-
-    // Seleccionar valores actuales en los selectores
-    // Compatibilidad: aceptar tanto 'sources' (legacy) como 'sources_of_truth' (canónico)
-    const sourcesList = promptContext.sources_of_truth || promptContext.sources;
-    if (sourcesList && Array.isArray(sourcesList)) {
-      const sourcesSelect = document.getElementById('package-sources');
-      Array.from(sourcesSelect.options).forEach(opt => {
-        if (sourcesList.includes(opt.value)) {
-          opt.selected = true;
-        }
-      });
-    }
-
-    if (promptContext.context_contract?.inputs && Array.isArray(promptContext.context_contract.inputs)) {
-      const contextsSelect = document.getElementById('package-contexts');
-      Array.from(contextsSelect.options).forEach(opt => {
-        if (promptContext.context_contract.inputs.some(i => i.context_key === opt.value)) {
-          opt.selected = true;
-        }
-      });
-    }
-
-    if (promptContext.signals_emitted && Array.isArray(promptContext.signals_emitted)) {
-      const signalsSelect = document.getElementById('package-signals');
-      Array.from(signalsSelect.options).forEach(opt => {
-        if (promptContext.signals_emitted.includes(opt.value)) {
-          opt.selected = true;
-        }
-      });
-    }
+    // Asignar valores dinámicos usando .value (v3: packageDefinition)
+    // packageDefinition ya está declarado arriba (línea 742)
+    jsonTextarea.value = JSON.stringify(packageDefinition, null, 2);
+    
+    // Actualizar viewer en panel derecho también
+    updatePackageDefinitionViewer(packageDefinition);
 
     // Event listeners
-    document.getElementById('copy-prompt-context-btn')?.addEventListener('click', () => {
-      const json = document.getElementById('prompt-context-json').value;
+    document.getElementById('copy-package-definition-btn')?.addEventListener('click', async () => {
+      const json = document.getElementById('package-definition-json').value;
       if (!json) {
-        alert('No hay prompt context para copiar');
+        showToast('⚠️ No hay PackageDefinition para copiar', 2000);
         return;
       }
-      navigator.clipboard.writeText(json).then(() => {
-        alert('Copiado al portapapeles');
-      }).catch(err => {
-        handleError(err, 'copyPromptContext');
-      });
+      
+      // Método de copia que evita modales del navegador
+      try {
+        // Intentar usar la API moderna del clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(json);
+          showToast('✔ Copiado al portapapeles', 2000);
+        } else {
+          // Fallback: usar método antiguo (sin modales del navegador)
+          const textArea = document.createElement('textarea');
+          textArea.value = json;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            showToast('✔ Copiado al portapapeles', 2000);
+          } catch (err) {
+            throw new Error('No se pudo copiar');
+          } finally {
+            document.body.removeChild(textArea);
+          }
+        }
+      } catch (err) {
+        console.error('Error copiando al portapapeles:', err);
+        showToast('❌ Error al copiar', 2000);
+      }
     });
 
-    document.getElementById('generate-prompt-context-btn')?.addEventListener('click', () => {
-      generatePromptContextFromForm();
+    document.getElementById('generate-package-definition-btn')?.addEventListener('click', () => {
+      generatePackageDefinition();
     });
+  }
+
+  /**
+   * Obtener reglas de selección de un source desde el estado
+   */
+  function getSourceSelectionRules(sourceKey) {
+    if (!sourceStates[sourceKey]) {
+      sourceStates[sourceKey] = { selection_rules: {} };
+    }
+    return sourceStates[sourceKey].selection_rules || {};
+  }
+  
+  /**
+   * Guardar reglas de selección de un source en el estado
+   * @param {string} sourceKey - Clave del source
+   * @param {Object} rules - Reglas de selección (se hace merge con reglas existentes)
+   * @param {boolean} updateJSON - Si debe actualizar el JSON (default: false para evitar bucles)
+   */
+  function setSourceSelectionRules(sourceKey, rules, updateJSON = false) {
+    if (!sourceStates[sourceKey]) {
+      sourceStates[sourceKey] = { selection_rules: {} };
+    }
+    // Hacer merge con reglas existentes (no reemplazar completamente)
+    const currentRules = sourceStates[sourceKey].selection_rules || {};
+    sourceStates[sourceKey].selection_rules = { ...currentRules, ...(rules || {}) };
+    // Solo actualizar JSON si se solicita explícitamente (evitar bucles infinitos)
+    if (updateJSON) {
+      generatePromptContextFromForm();
+    }
+  }
+  
+  /**
+   * Actualizar paneles de reglas de selección para sources de transmutaciones
+   */
+  async function updateSelectionRulesPanels() {
+    const container = document.getElementById('selection-rules-container');
+    if (!container) return;
+    
+    // Obtener sources seleccionados
+    const sourcesContainer = document.getElementById('package-sources-container');
+    const selectedSources = sourcesContainer && typeof sourcesContainer.getSelectedValues === 'function'
+      ? sourcesContainer.getSelectedValues()
+      : [];
+    
+    // Filtrar solo transmutaciones_energeticas (por ahora solo este source soporta reglas)
+    const transmutacionesSources = selectedSources.filter(s => s === 'transmutaciones_energeticas');
+    
+    // Obtener paneles existentes (no limpiar todo, solo actualizar)
+    const existingPanels = {};
+    Array.from(container.children).forEach(panel => {
+      const sourceKey = panel.dataset.sourceKey;
+      if (sourceKey) {
+        existingPanels[sourceKey] = panel;
+      }
+    });
+    
+    // Eliminar paneles de sources que ya no están seleccionados
+    Object.keys(existingPanels).forEach(sourceKey => {
+      if (!transmutacionesSources.includes(sourceKey)) {
+        container.removeChild(existingPanels[sourceKey]);
+        delete existingPanels[sourceKey];
+      }
+    });
+    
+    // Si no hay sources de transmutaciones, no mostrar nada
+    if (transmutacionesSources.length === 0) {
+      return;
+    }
+    
+    // Cargar datos de clasificación (fail-open: si falla, continuar sin datos)
+    let classificationData = { categories: [], subtypes: [], tags: [], lists: [] };
+    try {
+      // El endpoint correcto es GET /admin/api/transmutaciones/classification que devuelve todo
+      const [classificationRes, listsRes] = await Promise.all([
+        fetchSilent('/admin/api/transmutaciones/classification'),
+        fetchSilent('/api/transmutaciones/listas')
+      ]);
+      
+      // El endpoint devuelve { success: true, data: { categories, subtypes, tags } }
+      if (classificationRes && classificationRes.data) {
+        classificationData.categories = Array.isArray(classificationRes.data.categories) ? classificationRes.data.categories : [];
+        classificationData.subtypes = Array.isArray(classificationRes.data.subtypes) ? classificationRes.data.subtypes : [];
+        classificationData.tags = Array.isArray(classificationRes.data.tags) ? classificationRes.data.tags : [];
+      }
+      
+      classificationData.lists = Array.isArray(listsRes?.listas) ? listsRes.listas : [];
+    } catch (err) {
+      console.warn(`${PREFIX} Error cargando datos de clasificación:`, err);
+    }
+    
+    // Crear o actualizar panel para cada source de transmutaciones
+    transmutacionesSources.forEach(sourceKey => {
+      // Si el panel ya existe, actualizar sus reglas desde el estado
+      if (existingPanels[sourceKey]) {
+        const existingRules = getSourceSelectionRules(sourceKey);
+        updateSelectionRulesPanelValues(sourceKey, existingRules);
+      } else {
+        // Crear nuevo panel
+        const existingRules = getSourceSelectionRules(sourceKey);
+        const panel = createSelectionRulesPanel(sourceKey, classificationData, existingRules);
+        panel.dataset.sourceKey = sourceKey; // Marcar con source_key para identificación
+        container.appendChild(panel);
+      }
+    });
+  }
+  
+  /**
+   * Actualizar valores de un panel de reglas existente
+   * NOTA: Esta función solo actualiza el DOM, NO modifica el estado
+   * El estado ya debe estar sincronizado antes de llamar a esta función
+   */
+  function updateSelectionRulesPanelValues(sourceKey, rules) {
+    const ruleFields = [
+      'include_categories', 'exclude_categories',
+      'include_subtypes', 'exclude_subtypes',
+      'include_tags', 'exclude_tags',
+      'explicit_include_list_ids', 'explicit_exclude_list_ids'
+    ];
+    
+    ruleFields.forEach(fieldKey => {
+      const ruleContainer = document.getElementById(`selection-rule-${sourceKey}-${fieldKey}`);
+      if (ruleContainer && typeof ruleContainer.setSelectedValues === 'function') {
+        const values = Array.isArray(rules[fieldKey]) ? rules[fieldKey] : [];
+        // setSelectedValues puede disparar onChange, pero como el estado ya está sincronizado,
+        // el callback solo actualizará el JSON (que es lo que queremos)
+        ruleContainer.setSelectedValues(values);
+      }
+    });
+  }
+  
+  /**
+   * Crear panel de reglas de selección para un source de transmutaciones
+   */
+  function createSelectionRulesPanel(sourceKey, classificationData, existingRules = {}) {
+    const panel = document.createElement('div');
+    panel.className = 'packages-v2-selection-rules-panel';
+    panel.style.cssText = 'background: #0f172a; border: 2px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 16px;';
+    panel.dataset.sourceKey = sourceKey; // Marcar con source_key para identificación
+    
+    // Header plegable
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px; margin: -8px; border-radius: 4px;';
+    header.addEventListener('mouseenter', () => {
+      header.style.background = '#1e293b';
+    });
+    header.addEventListener('mouseleave', () => {
+      header.style.background = 'transparent';
+    });
+    
+    const headerText = document.createElement('span');
+    headerText.style.cssText = 'color: #fff; font-weight: 600;';
+    headerText.textContent = `⚙️ Reglas de selección: ${sourceKey} (opcional)`;
+    header.appendChild(headerText);
+    
+    const chevron = document.createElement('span');
+    chevron.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    chevron.textContent = '▶';
+    chevron.id = `chevron-${sourceKey}`;
+    header.appendChild(chevron);
+    
+    // Contenido plegable
+    const content = document.createElement('div');
+    content.id = `selection-rules-content-${sourceKey}`;
+    content.style.cssText = 'display: none; margin-top: 16px;';
+    
+    // Toggle al hacer click en header
+    header.addEventListener('click', () => {
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+      chevron.textContent = isHidden ? '▼' : '▶';
+    });
+    
+    // Campos de reglas
+    const fields = [
+      { key: 'include_categories', label: 'Include Categories', type: 'multiselect', options: classificationData.categories.map(c => ({ value: c.category_key, label: c.label })) },
+      { key: 'exclude_categories', label: 'Exclude Categories', type: 'multiselect', options: classificationData.categories.map(c => ({ value: c.category_key, label: c.label })) },
+      { key: 'include_subtypes', label: 'Include Subtypes', type: 'multiselect', options: classificationData.subtypes.map(s => ({ value: s.subtype_key, label: s.label })) },
+      { key: 'exclude_subtypes', label: 'Exclude Subtypes', type: 'multiselect', options: classificationData.subtypes.map(s => ({ value: s.subtype_key, label: s.label })) },
+      { key: 'include_tags', label: 'Include Tags', type: 'multiselect', options: classificationData.tags.map(t => ({ value: t.tag_key, label: t.label })) },
+      { key: 'exclude_tags', label: 'Exclude Tags', type: 'multiselect', options: classificationData.tags.map(t => ({ value: t.tag_key, label: t.label })) },
+      { key: 'explicit_include_list_ids', label: 'Explicit Include Lists', type: 'list-selector', options: classificationData.lists.map(l => ({ value: l.id, label: l.nombre })) },
+      { key: 'explicit_exclude_list_ids', label: 'Explicit Exclude Lists', type: 'list-selector', options: classificationData.lists.map(l => ({ value: l.id, label: l.nombre })) }
+    ];
+    
+    fields.forEach(field => {
+      const fieldGroup = document.createElement('div');
+      fieldGroup.className = 'packages-v2-form-group';
+      fieldGroup.style.cssText = 'margin-bottom: 16px;';
+      
+      const label = document.createElement('label');
+      label.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; margin-bottom: 8px; display: block;';
+      label.textContent = field.label;
+      fieldGroup.appendChild(label);
+      
+      if (field.type === 'multiselect' || field.type === 'list-selector') {
+        const multiselect = createMultiSelect({
+          id: `selection-rule-${sourceKey}-${field.key}`,
+          options: field.options,
+          selected: Array.isArray(existingRules[field.key]) ? existingRules[field.key] : [],
+          placeholder: field.type === 'list-selector' ? 'Seleccionar listas...' : `Seleccionar ${field.label.toLowerCase()}...`,
+          onChange: (selectedValues) => {
+            // Actualizar directamente el estado con los valores del callback (NO leer del DOM)
+            const currentRules = getSourceSelectionRules(sourceKey);
+            const updatedRules = { ...currentRules };
+            
+            // Actualizar solo el campo específico
+            if (selectedValues && selectedValues.length > 0) {
+              updatedRules[field.key] = selectedValues;
+            } else {
+              // Si no hay valores, eliminar el campo (no incluir arrays vacíos)
+              delete updatedRules[field.key];
+            }
+            
+            // Guardar en estado (solo actualiza sourceStates, NO genera JSON)
+            setSourceSelectionRules(sourceKey, updatedRules, false);
+            
+            // Actualizar JSON después de guardar en estado
+            generatePackageDefinition();
+          }
+        });
+        fieldGroup.appendChild(multiselect);
+      }
+      
+      content.appendChild(fieldGroup);
+    });
+    
+    // Preseleccionar energia_indeseable en exclude_subtypes si existe y no hay reglas previas
+    if (classificationData.subtypes.some(s => s.subtype_key === 'energia_indeseable') && 
+        Object.keys(existingRules).length === 0) {
+      const excludeSubtypesContainer = document.getElementById(`selection-rule-${sourceKey}-exclude_subtypes`);
+      if (excludeSubtypesContainer && typeof excludeSubtypesContainer.getSelectedValues === 'function') {
+        const currentValues = excludeSubtypesContainer.getSelectedValues();
+        if (!currentValues.includes('energia_indeseable')) {
+          // Añadir energia_indeseable si no está ya seleccionado
+          excludeSubtypesContainer.setSelectedValues([...currentValues, 'energia_indeseable']);
+          // Guardar en estado (sin actualizar JSON para evitar bucles en inicialización)
+          saveSourceSelectionRulesFromDOM(sourceKey, false);
+        }
+      }
+    }
+    
+    panel.appendChild(header);
+    panel.appendChild(content);
+    
+    return panel;
+  }
+  
+  /**
+   * Guardar reglas de selección de un source desde el DOM al estado
+   * @param {string} sourceKey - Clave del source
+   * @param {boolean} updateJSON - Si debe actualizar el JSON (default: false para evitar bucles)
+   */
+  function saveSourceSelectionRulesFromDOM(sourceKey, updateJSON = false) {
+    const selectionRules = {};
+    const ruleFields = [
+      'include_categories', 'exclude_categories',
+      'include_subtypes', 'exclude_subtypes',
+      'include_tags', 'exclude_tags',
+      'explicit_include_list_ids', 'explicit_exclude_list_ids'
+    ];
+    
+    ruleFields.forEach(fieldKey => {
+      const ruleContainer = document.getElementById(`selection-rule-${sourceKey}-${fieldKey}`);
+      if (ruleContainer && typeof ruleContainer.getSelectedValues === 'function') {
+        const values = ruleContainer.getSelectedValues();
+        if (values && values.length > 0) {
+          selectionRules[fieldKey] = values;
+        }
+      }
+    });
+    
+    // Guardar en estado (solo si hay al menos una regla)
+    // NO actualizar JSON aquí para evitar bucles (los callbacks de multiselect ya lo hacen)
+    const rulesToSave = Object.keys(selectionRules).length > 0 ? selectionRules : {};
+    console.log(`[PDE][PACKAGES_V2] Guardando reglas para ${sourceKey}:`, rulesToSave);
+    setSourceSelectionRules(sourceKey, rulesToSave, updateJSON);
   }
 
   /**
    * Generar Prompt Context desde formulario
    */
-  function generatePromptContextFromForm() {
+  /**
+   * Genera PackageDefinition desde el formulario (v3)
+   * 
+   * PRINCIPIO: Función determinista que solo ensambla, sin lógica.
+   * Genera PackageDefinition canónico que será consumido por el futuro Resolver v1.
+   */
+  async function generatePackageDefinition() {
     const name = document.getElementById('package-name')?.value || '';
     const packageKey = document.getElementById('package-key')?.value || '';
     const description = document.getElementById('package-description')?.value || '';
 
-    // Sources seleccionadas
-    const sourcesSelect = document.getElementById('package-sources');
-    const sources = Array.from(sourcesSelect.selectedOptions).map(opt => opt.value);
+    // Sources seleccionadas (desde componente multi-select)
+    const sourcesContainer = document.getElementById('package-sources-container');
+    const sourceKeys = sourcesContainer && typeof sourcesContainer.getSelectedValues === 'function'
+      ? sourcesContainer.getSelectedValues()
+      : [];
 
-    // Contextos seleccionados
-    const contextsSelect = document.getElementById('package-contexts');
-    const contextInputs = Array.from(contextsSelect.selectedOptions).map(opt => ({
-      context_key: opt.value
+    // Construir array de sources (estructura simplificada para PackageDefinition)
+    const sources = sourceKeys.map(sourceKey => ({
+      source_type: sourceKey, // Por ahora igual a source_key, puede extenderse
+      source_key: sourceKey,
+      options: {
+        allow_video: true,
+        allow_text: true,
+        allow_audio: false
+      }
     }));
 
-    // Outputs (parsear desde textarea)
-    const outputsText = document.getElementById('package-outputs')?.value || '';
-    const outputs = outputsText.split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        const [key, ...descParts] = line.split(':');
-        return {
-          key: key.trim(),
-          description: descParts.join(':').trim()
-        };
-      })
-      .filter(o => o.key);
+    // Contextos seleccionados (desde componente multi-select)
+    const contextsContainer = document.getElementById('package-contexts-container');
+    const contextKeys = contextsContainer && typeof contextsContainer.getSelectedValues === 'function'
+      ? contextsContainer.getSelectedValues()
+      : [];
 
-    // Señales seleccionadas
-    const signalsSelect = document.getElementById('package-signals');
-    const signalsEmitted = Array.from(signalsSelect.selectedOptions).map(opt => opt.value);
+    // Outputs (desde componente outputs manager)
+    const outputsContainer = document.getElementById('package-outputs-container');
+    const outputs = outputsContainer && typeof outputsContainer.getOutputs === 'function'
+      ? outputsContainer.getOutputs()
+      : [];
 
-    // Reglas
-    const rulesText = document.getElementById('package-rules')?.value || '';
-    const contextRules = rulesText.split('\n').filter(line => line.trim());
+    // Señales seleccionadas (desde componente multi-select)
+    const signalsContainer = document.getElementById('package-signals-container');
+    const signals = signalsContainer && typeof signalsContainer.getSelectedValues === 'function'
+      ? signalsContainer.getSelectedValues()
+      : [];
 
-    const promptContext = {
+    // Construir PackageDefinition canónico
+    // NOTA: Los mappings se obtendrán en el backend desde el servicio de mappings
+    const packageDefinitionInput = {
       package_key: packageKey,
-      package_name: name,
-      description: description,
-      sources_of_truth: sources, // Array de catalog_key (keys semánticas, NO IDs)
-      context_contract: {
-        inputs: contextInputs,
-        outputs: outputs
-      },
-      signals_emitted: signalsEmitted,
-      context_rules: contextRules
+      label: name,
+      description: description || null,
+      sources: sources,
+      context_keys: contextKeys,
+      outputs: outputs,
+      signals: signals
     };
 
-    const textarea = document.getElementById('prompt-context-json');
-    if (textarea) {
-      textarea.value = JSON.stringify(promptContext, null, 2);
+    // Llamar al backend para construir el PackageDefinition completo (incluye mappings)
+    try {
+      const response = await apiFetch('/admin/api/packages/build-definition', {
+        method: 'POST',
+        body: JSON.stringify(packageDefinitionInput)
+      });
+
+      if (response.package_definition) {
+        const packageDefinition = response.package_definition;
+        
+        // Mostrar en textarea del editor
+        const textarea = document.getElementById('package-definition-json');
+        if (textarea) {
+          textarea.value = JSON.stringify(packageDefinition, null, 2);
+        }
+        
+        // Actualizar viewer en panel derecho
+        updatePackageDefinitionViewer(packageDefinition);
+        
+        // Actualizar dataset del form
+        const form = document.getElementById('package-assembler-form');
+        if (form) {
+          form.dataset.packageDefinition = JSON.stringify(packageDefinition);
+        }
+        
+        return packageDefinition;
+      } else {
+        throw new Error('Backend no devolvió package_definition');
+      }
+    } catch (error) {
+      handleError(error, 'generatePackageDefinition');
+      // Fallback: construir PackageDefinition básico sin mappings
+      const fallbackDefinition = {
+        package_key: packageKey,
+        label: name,
+        description: description || null,
+        sources: sources,
+        contexts: contextKeys.map(key => ({
+          context_key: key,
+          type: 'string',
+          default: null
+        })),
+        mappings: {},
+        outputs: outputs,
+        signals: signals,
+        meta: {
+          version: 1,
+          created_at: new Date().toISOString()
+        }
+      };
+      
+      const textarea = document.getElementById('package-definition-json');
+      if (textarea) {
+        textarea.value = JSON.stringify(fallbackDefinition, null, 2);
+      }
+      
+      // Actualizar viewer en panel derecho
+      updatePackageDefinitionViewer(fallbackDefinition);
+      
+      return fallbackDefinition;
     }
   }
 
   /**
-   * Renderizar editor de JSON Ensamblado
+   * DEPRECATED: Función legacy para generar Package Prompt Context
+   * 
+   * @deprecated Usar generatePackageDefinition() en su lugar
+   */
+  function generatePromptContextFromForm() {
+    // Redirigir a la nueva función
+    return generatePackageDefinition();
+  }
+
+  /**
+   * Renderizar editor de PackageDefinition (v3)
    */
   function renderAssembledEditor(pkg) {
     const container = document.getElementById('assembled-editor');
     if (!container) return;
 
     const draft = pkg.draft || {};
-    const assembled = draft.assembled_json || {};
+    // v3: Mostrar package_definition en lugar de assembled_json
+    const packageDefinition = draft.package_definition || draft.prompt_context_json || {};
 
-    // Limpiar container
-    container.innerHTML = '';
+    // Limpiar container usando DOM API
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
 
-    // Grupo: Textarea de JSON
+    // Grupo: Textarea de PackageDefinition (READONLY)
     const jsonGroup = document.createElement('div');
     jsonGroup.className = 'packages-v2-form-group';
     const jsonLabel = document.createElement('label');
-    jsonLabel.textContent = 'JSON Ensamblado (de GPT/Ollama)';
+    jsonLabel.textContent = 'PackageDefinition JSON (Readonly)';
     const jsonTextarea = document.createElement('textarea');
-    jsonTextarea.id = 'assembled-json';
+    jsonTextarea.id = 'package-definition-viewer';
     jsonTextarea.className = 'code';
     jsonTextarea.rows = 20;
-    jsonTextarea.value = JSON.stringify(assembled || {}, null, 2);
+    jsonTextarea.readOnly = true;
+    jsonTextarea.value = JSON.stringify(packageDefinition || {}, null, 2);
     jsonGroup.appendChild(jsonLabel);
     jsonGroup.appendChild(jsonTextarea);
     container.appendChild(jsonGroup);
+    
+    // Info sobre PackageDefinition
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'packages-v2-alert packages-v2-alert-info';
+    infoDiv.style.marginTop = '16px';
+    infoDiv.textContent = 'ℹ️ Este PackageDefinition es READONLY y correcto por diseño. Se genera automáticamente desde el formulario.';
+    container.appendChild(infoDiv);
 
     // Botones de acción
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'packages-v2-form-actions';
     
-    const validateBtn = document.createElement('button');
-    validateBtn.type = 'button';
-    validateBtn.id = 'validate-json-btn';
-    validateBtn.className = 'packages-v2-btn packages-v2-btn-primary';
-    validateBtn.textContent = '✅ Validar';
-    validateBtn.addEventListener('click', () => {
-      validateJSON();
-    });
-    actionsDiv.appendChild(validateBtn);
+      // v3: Ya no se valida JSON ensamblado (PackageDefinition es READONLY)
+      // El botón de validar se eliminó porque PackageDefinition es correcto por diseño
 
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
@@ -778,25 +1738,13 @@
   }
 
   /**
-   * Validar JSON
+   * DEPRECATED: Validar JSON (ya no se usa en v3)
+   * 
+   * @deprecated PackageDefinition es READONLY y correcto por diseño, no necesita validación
    */
   function validateJSON() {
-    try {
-      const json = document.getElementById('assembled-json')?.value || '';
-      if (!json.trim()) {
-        alert('No hay JSON para validar');
-        return;
-      }
-
-      try {
-        JSON.parse(json);
-        showValidationResult('✅ JSON válido', 'success');
-      } catch (parseError) {
-        showValidationResult(`❌ Error de JSON: ${parseError.message}`, 'error');
-      }
-    } catch (error) {
-      handleError(error, 'validateJSON');
-    }
+    // v3: PackageDefinition no se valida porque es READONLY y correcto por diseño
+    showValidationResult('ℹ️ PackageDefinition es READONLY y correcto por diseño', 'info');
   }
 
   /**
@@ -806,7 +1754,9 @@
     const container = document.getElementById('validation-result');
     if (!container) return;
 
-    container.innerHTML = '';
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
     const alertDiv = document.createElement('div');
     alertDiv.className = `packages-v2-alert ${type === 'success' ? 'packages-v2-alert-success' : 'packages-v2-alert-error'}`;
     alertDiv.textContent = message;
@@ -826,14 +1776,20 @@
       const name = document.getElementById('package-name')?.value;
       const packageKey = document.getElementById('package-key')?.value;
       const description = document.getElementById('package-description')?.value;
-      const assembledJson = document.getElementById('assembled-json')?.value;
       
-      // Generar prompt context desde formulario
-      generatePromptContextFromForm();
-      const promptContextJson = document.getElementById('prompt-context-json')?.value;
+      // Generar PackageDefinition desde formulario (v3)
+      await generatePackageDefinition();
+      const packageDefinitionJson = document.getElementById('package-definition-json')?.value;
 
       if (!name || !packageKey) {
         alert('Nombre y Package Key son obligatorios');
+        return;
+      }
+      
+      // Validar package_key
+      if (!isValidPackageKey(packageKey)) {
+        alert('Package Key inválido. Debe contener solo letras minúsculas, números y guiones bajos (a-z, 0-9, _)');
+        document.getElementById('package-key')?.focus();
         return;
       }
 
@@ -843,30 +1799,19 @@
         body: JSON.stringify({ name, description })
       });
 
-      // Parsear prompt context
-      let promptContext;
+      // Parsear PackageDefinition
+      let packageDefinition;
       try {
-        promptContext = JSON.parse(promptContextJson);
+        packageDefinition = JSON.parse(packageDefinitionJson);
       } catch (err) {
-        throw new Error(`Prompt Context JSON inválido: ${err.message}`);
+        throw new Error(`PackageDefinition JSON inválido: ${err.message}`);
       }
 
-      // Parsear assembled JSON
-      let assembled = null;
-      if (assembledJson && assembledJson.trim()) {
-        try {
-          assembled = JSON.parse(assembledJson);
-        } catch (err) {
-          throw new Error(`Assembled JSON inválido: ${err.message}`);
-        }
-      }
-
-      // Guardar draft
+      // Guardar draft (v3: solo package_definition, ya no se usa assembled_json)
       await apiFetch(`/admin/api/packages/${currentPackageId}/draft`, {
         method: 'POST',
         body: JSON.stringify({
-          prompt_context_json: promptContext,
-          assembled_json: assembled,
+          package_definition: packageDefinition,
           validation_status: 'pending'
         })
       });
@@ -891,6 +1836,11 @@
     if (!name || !packageKey) {
       throw new Error('Nombre y Package Key son obligatorios para crear un paquete');
     }
+    
+    // Validar package_key
+    if (!isValidPackageKey(packageKey)) {
+      throw new Error('Package Key inválido. Debe contener solo letras minúsculas, números y guiones bajos (a-z, 0-9, _)');
+    }
 
     const response = await apiFetch('/admin/api/packages', {
       method: 'POST',
@@ -898,7 +1848,7 @@
         package_key: packageKey, 
         name, 
         description,
-        status: 'draft',
+        status: 'active', // status debe ser 'active' o 'inactive', los drafts se gestionan en pde_package_drafts
         definition: {}
       })
     });
@@ -909,14 +1859,17 @@
 
   /**
    * Eliminar paquete
+   * 
+   * REGLA: Usa package_key si está disponible, sino usa ID
    */
-  async function deletePackage(packageId, packageName) {
+  async function deletePackage(packageIdOrKey, packageName) {
     try {
       if (!confirm(`¿Eliminar el paquete "${packageName}"? Esta acción no se puede deshacer.`)) {
         return;
       }
 
-      await apiFetch(`/admin/api/packages/${packageId}`, {
+      // El endpoint acepta tanto UUID como package_key
+      await apiFetch(`/admin/api/packages/${encodeURIComponent(packageIdOrKey)}`, {
         method: 'DELETE'
       });
 
@@ -924,11 +1877,19 @@
       currentPackageId = null;
       await loadPackages();
       
-      // Limpiar editores
+      // Limpiar editores usando DOM API
       const promptEditor = document.getElementById('prompt-context-editor');
       const assembledEditor = document.getElementById('assembled-editor');
-      if (promptEditor) promptEditor.innerHTML = '';
-      if (assembledEditor) assembledEditor.innerHTML = '';
+      if (promptEditor) {
+        while (promptEditor.firstChild) {
+          promptEditor.removeChild(promptEditor.firstChild);
+        }
+      }
+      if (assembledEditor) {
+        while (assembledEditor.firstChild) {
+          assembledEditor.removeChild(assembledEditor.firstChild);
+        }
+      }
     } catch (error) {
       handleError(error, 'deletePackage');
       alert(`Error eliminando paquete: ${error.message}`);
@@ -942,6 +1903,19 @@
     try {
       if (!currentPackageId) {
         alert('Primero debes guardar el draft');
+        return;
+      }
+      
+      // Validar package_key antes de publicar
+      const packageKey = document.getElementById('package-key')?.value;
+      if (!packageKey) {
+        alert('Package Key es obligatorio');
+        return;
+      }
+      
+      if (!isValidPackageKey(packageKey)) {
+        alert('Package Key inválido. Debe contener solo letras minúsculas, números y guiones bajos (a-z, 0-9, _)');
+        document.getElementById('package-key')?.focus();
         return;
       }
 
@@ -976,45 +1950,69 @@
   function handleCreateNewPackage() {
     currentPackageId = null;
     
+    // Limpiar estado de sources
+    Object.keys(sourceStates).forEach(key => {
+      delete sourceStates[key];
+    });
+    
+    // Resetear estado de autogeneración de package_key
+    packageKeyManuallyEdited = false;
+    
     // Limpiar formularios
     const promptEditor = document.getElementById('prompt-context-editor');
     const assembledEditor = document.getElementById('assembled-editor');
     
     if (promptEditor) {
-      // Cargar datos para selectores
-      loadFormDataForNewPackage().then(() => {
-        // El HTML se renderiza en renderPromptContextEditor con datos vacíos
-        renderPromptContextEditor({}).catch(err => {
+      // Cargar datos para selectores y renderizar editor vacío
+      loadFormDataForNewPackage().then(async () => {
+        try {
+          // El HTML se renderiza en renderPromptContextEditor con datos vacíos
+          await renderPromptContextEditor({});
+          log('Editor de nuevo paquete renderizado correctamente');
+        } catch (err) {
+          console.error('[PDE][PACKAGES_V2] Error renderizando editor:', err);
           handleError(err, 'renderPromptContextEditor for new package');
-        });
+        }
+      }).catch(err => {
+        console.error('[PDE][PACKAGES_V2] Error cargando datos para nuevo paquete:', err);
+        handleError(err, 'loadFormDataForNewPackage');
       });
+    } else {
+      log('Warning: prompt-context-editor no encontrado');
     }
 
     if (assembledEditor) {
-      assembledEditor.innerHTML = '';
+      // Limpiar editor usando DOM API
+      while (assembledEditor.firstChild) {
+        assembledEditor.removeChild(assembledEditor.firstChild);
+      }
       
+      // v3: Mostrar PackageDefinition (READONLY) en lugar de JSON ensamblado
       const jsonGroup = document.createElement('div');
       jsonGroup.className = 'packages-v2-form-group';
       const jsonLabel = document.createElement('label');
-      jsonLabel.textContent = 'JSON Ensamblado (de GPT/Ollama)';
+      jsonLabel.textContent = 'PackageDefinition JSON (Readonly)';
       const jsonTextarea = document.createElement('textarea');
-      jsonTextarea.id = 'assembled-json';
+      jsonTextarea.id = 'package-definition-viewer';
       jsonTextarea.className = 'code';
       jsonTextarea.rows = 20;
+      jsonTextarea.readOnly = true;
+      jsonTextarea.value = JSON.stringify({}, null, 2);
       jsonGroup.appendChild(jsonLabel);
       jsonGroup.appendChild(jsonTextarea);
       assembledEditor.appendChild(jsonGroup);
+      
+      // Info sobre PackageDefinition
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'packages-v2-alert packages-v2-alert-info';
+      infoDiv.style.marginTop = '16px';
+      infoDiv.textContent = 'ℹ️ Este PackageDefinition es READONLY y correcto por diseño. Se genera automáticamente desde el formulario.';
+      assembledEditor.appendChild(infoDiv);
 
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'packages-v2-form-actions';
       
-      const validateBtn = document.createElement('button');
-      validateBtn.type = 'button';
-      validateBtn.id = 'validate-json-btn';
-      validateBtn.className = 'packages-v2-btn packages-v2-btn-primary';
-      validateBtn.textContent = '✅ Validar';
-      validateBtn.addEventListener('click', validateJSON);
-      actionsDiv.appendChild(validateBtn);
+      // v3: Ya no se valida JSON ensamblado (PackageDefinition es READONLY y correcto por diseño)
 
       const saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -1050,16 +2048,26 @@
    * Inicialización
    */
   function init() {
-    log('Initializing packages creator v2');
-    
-    // Botón crear nuevo paquete
-    const createBtn = document.getElementById('create-package-btn');
-    if (createBtn) {
-      createBtn.addEventListener('click', handleCreateNewPackage);
-    }
+    try {
+      log('Initializing packages creator v2');
+      
+      // Botón crear nuevo paquete
+      const createBtn = document.getElementById('create-package-btn');
+      if (createBtn) {
+        createBtn.addEventListener('click', handleCreateNewPackage);
+        log('Create package button event listener attached');
+      } else {
+        log('Warning: create-package-btn not found');
+      }
 
-    // Cargar paquetes
-    loadPackages();
+      // Cargar paquetes
+      loadPackages().catch(err => {
+        handleError(err, 'init - loadPackages');
+      });
+    } catch (error) {
+      console.error('[PDE][PACKAGES_V2] Error en init:', error);
+      handleError(error, 'init');
+    }
   }
 
   // Inicializar cuando el DOM esté listo

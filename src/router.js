@@ -194,7 +194,7 @@ async function routerFunction(request, env, ctx) {
       const ext = fullPath.split('.').pop().toLowerCase();
       const contentType = {
         'css': 'text/css',
-        'js': 'application/javascript',
+        'js': 'application/javascript; charset=UTF-8',
         'json': 'application/json',
         'png': 'image/png',
         'jpg': 'image/jpeg',
@@ -742,6 +742,18 @@ async function routerFunction(request, env, ctx) {
         return adminContextsApiHandler(request, env, ctx);
       }
 
+      // Endpoints API de Resolvers PDE (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/resolvers")) {
+        const adminResolversApiHandler = (await import("./endpoints/admin-resolvers-api.js")).default;
+        return adminResolversApiHandler(request, env, ctx);
+      }
+      
+      // GET/POST/PATCH/DELETE /admin/api/context-mappings
+      if (path.startsWith('/admin/api/context-mappings')) {
+        const adminContextMappingsApiHandler = (await import("./endpoints/admin-context-mappings-api.js")).default;
+        return adminContextMappingsApiHandler(request, env, ctx);
+      }
+
       // Endpoints API de Señales (Admin) - ANTES del catch-all
       if (path.startsWith("/admin/api/senales")) {
         const adminSenalesApiHandler = (await import("./endpoints/admin-senales-api.js")).default;
@@ -765,10 +777,58 @@ async function routerFunction(request, env, ctx) {
         }
       }
 
+      // Endpoints API de Clasificación de Transmutaciones (Admin) - ANTES del catch-all
+      if (path.startsWith("/admin/api/transmutaciones/classification") || (path.startsWith("/admin/api/transmutaciones/lists/") && path.includes("/classification"))) {
+        const adminTransmutacionesClassificationApiHandler = (await import("./endpoints/admin-transmutaciones-classification-api.js")).default;
+        return adminTransmutacionesClassificationApiHandler(request, env, ctx);
+      }
+
+      // UI del Creador de Paquetes v2 (Admin) - ANTES del catch-all
+      if (path === "/admin/pde/packages-v2" || path.startsWith("/admin/pde/packages-v2/")) {
+        const adminPackagesV2UiHandler = (await import("./endpoints/admin-packages-v2-ui.js")).default;
+        return adminPackagesV2UiHandler(request, env, ctx);
+      }
+
+      // UI de Resolvers Studio (Admin) - ANTES del catch-all
+      if (path === "/admin/resolvers" || path.startsWith("/admin/resolvers/")) {
+        const adminResolversStudioHandler = (await import("./endpoints/admin-resolvers-studio.js")).default;
+        return adminResolversStudioHandler(request, env, ctx);
+      }
+
       // UI del Creador de Paquetes (Admin) - ANTES del catch-all
       if (path === "/admin/packages" || path.startsWith("/admin/packages/")) {
-        const adminPackagesUiHandler = (await import("./endpoints/admin-packages-ui.js")).default;
-        return adminPackagesUiHandler(request, env, ctx);
+        // #region agent log
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:769',message:'Router: ruta /admin/packages detectada',data:{path,method:request.method,host},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        try {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:772',message:'Router: antes de import admin-packages-ui',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          const adminPackagesUiHandler = (await import("./endpoints/admin-packages-ui.js")).default;
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:775',message:'Router: después de import admin-packages-ui',data:{hasHandler:!!adminPackagesUiHandler,isFunction:typeof adminPackagesUiHandler === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:777',message:'Router: antes de llamar adminPackagesUiHandler',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          const result = await adminPackagesUiHandler(request, env, ctx);
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:780',message:'Router: después de llamar adminPackagesUiHandler',data:{isResponse:result instanceof Response,status:result?.status,statusText:result?.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          return result;
+        } catch (error) {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:785',message:'Router: ERROR en admin-packages-ui',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+          console.error('[Router] Error en admin-packages-ui:', error);
+          throw error;
+        }
+      }
+
+      // UI del Creador de Widgets v2 (Admin) - ANTES del catch-all
+      if (path === "/admin/pde/widgets-v2" || path.startsWith("/admin/pde/widgets-v2/")) {
+        const adminWidgetsV2UiHandler = (await import("./endpoints/admin-widgets-v2-ui.js")).default;
+        return adminWidgetsV2UiHandler(request, env, ctx);
       }
 
       // UI del Creador de Widgets (Admin) - ANTES del catch-all
@@ -820,8 +880,11 @@ async function routerFunction(request, env, ctx) {
       // NO mover esta línea antes de las "islas" (rutas específicas).
       // ============================================
       // #region agent log
+      if (path === '/admin/packages' || path.startsWith('/admin/packages/')) {
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:827',message:'Router: WARNING - ruta /admin/packages cayendo al catch-all (NO DEBERÍA PASAR)',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      }
       if (path === '/admin/automations' || path.startsWith('/admin/automations/')) {
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:800',message:'Router: WARNING - ruta /admin/automations cayendo al catch-all',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:831',message:'Router: WARNING - ruta /admin/automations cayendo al catch-all',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       }
       // #endregion
       const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;

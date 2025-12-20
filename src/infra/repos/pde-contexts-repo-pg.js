@@ -54,45 +54,60 @@ export class PdeContextsRepo {
       sql += ` AND status = 'active'`;
     }
 
+    // FASE 2: FILTRADO CANÓNICO OBLIGATORIO (v5.27.0+)
+    // Solo devolver contextos que cumplen el contrato canónico:
+    // - scope, type, kind NOT NULL
+    // - Si type = 'enum', allowed_values NOT NULL
+    sql += ` AND scope IS NOT NULL`;
+    sql += ` AND type IS NOT NULL`;
+    sql += ` AND kind IS NOT NULL`;
+    sql += ` AND (type != 'enum' OR allowed_values IS NOT NULL)`;
+
     sql += ` ORDER BY context_key ASC`;
 
     const result = await query(sql, params);
     // Parsear JSONB fields de forma segura
-    return result.rows.map(row => {
-      let parsedDefinition = row.definition;
-      if (typeof parsedDefinition === 'string') {
-        try {
-          parsedDefinition = JSON.parse(parsedDefinition);
-        } catch (e) {
-          parsedDefinition = row.definition;
+    return result.rows
+      .filter(row => {
+        // FILTRADO CRÍTICO: Verificación adicional por si acaso
+        // Asegurar que deleted_at es NULL (aunque la query ya lo filtra)
+        return !row.deleted_at;
+      })
+      .map(row => {
+        let parsedDefinition = row.definition;
+        if (typeof parsedDefinition === 'string') {
+          try {
+            parsedDefinition = JSON.parse(parsedDefinition);
+          } catch (e) {
+            parsedDefinition = row.definition;
+          }
         }
-      }
-      
-      let parsedAllowedValues = row.allowed_values;
-      if (parsedAllowedValues && typeof parsedAllowedValues === 'string') {
-        try {
-          parsedAllowedValues = JSON.parse(parsedAllowedValues);
-        } catch (e) {
-          parsedAllowedValues = row.allowed_values;
+        
+        let parsedAllowedValues = row.allowed_values;
+        if (parsedAllowedValues && typeof parsedAllowedValues === 'string') {
+          try {
+            parsedAllowedValues = JSON.parse(parsedAllowedValues);
+          } catch (e) {
+            parsedAllowedValues = row.allowed_values;
+          }
         }
-      }
-      
-      let parsedDefaultValue = row.default_value;
-      if (parsedDefaultValue && typeof parsedDefaultValue === 'string') {
-        try {
-          parsedDefaultValue = JSON.parse(parsedDefaultValue);
-        } catch (e) {
-          parsedDefaultValue = row.default_value;
+        
+        let parsedDefaultValue = row.default_value;
+        if (parsedDefaultValue && typeof parsedDefaultValue === 'string') {
+          try {
+            parsedDefaultValue = JSON.parse(parsedDefaultValue);
+          } catch (e) {
+            parsedDefaultValue = row.default_value;
+          }
         }
-      }
-      
-      return {
-        ...row,
-        definition: parsedDefinition,
-        allowed_values: parsedAllowedValues,
-        default_value: parsedDefaultValue
-      };
-    });
+        
+        return {
+          ...row,
+          definition: parsedDefinition,
+          allowed_values: parsedAllowedValues,
+          default_value: parsedDefaultValue
+        };
+      });
   }
 
   /**
@@ -132,6 +147,13 @@ export class PdeContextsRepo {
       sql += ` AND deleted_at IS NULL`;
     }
 
+    // FASE 2: FILTRADO CANÓNICO OBLIGATORIO (v5.27.0+)
+    // Solo devolver contextos que cumplen el contrato canónico
+    sql += ` AND scope IS NOT NULL`;
+    sql += ` AND type IS NOT NULL`;
+    sql += ` AND kind IS NOT NULL`;
+    sql += ` AND (type != 'enum' OR allowed_values IS NOT NULL)`;
+
     const result = await query(sql, params);
     
     if (result.rows.length === 0) {
@@ -139,6 +161,13 @@ export class PdeContextsRepo {
     }
 
     const row = result.rows[0];
+    
+    // FILTRADO CRÍTICO: Verificación adicional por si acaso
+    // Asegurar que deleted_at es NULL (aunque la query ya lo filtra)
+    if (row.deleted_at) {
+      return null;
+    }
+    
     return {
       ...row,
       definition: typeof row.definition === 'string' ? JSON.parse(row.definition) : row.definition

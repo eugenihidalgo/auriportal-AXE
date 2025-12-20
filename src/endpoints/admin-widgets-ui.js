@@ -44,8 +44,11 @@ export async function renderWidgetsCreator(request, env) {
     console.error('Error cargando datos para creador de widgets:', error);
   }
 
-  // Preparar datos para el frontend
-  const widgetsJson = JSON.stringify(widgets);
+  // Preparar datos para el frontend - MÉTODO ULTRA-SEGURO
+  // El problema: Insertar JSON en un template literal puede romper la sintaxis si contiene backticks, ${}, etc.
+  // Solución: Codificar el JSON en Base64 y decodificarlo en el cliente
+  const widgetsJsonRaw = JSON.stringify(widgets);
+  const widgetsJsonB64 = Buffer.from(widgetsJsonRaw, 'utf8').toString('base64');
 
   // Template HTML completo
   const content = `
@@ -183,9 +186,14 @@ export async function renderWidgetsCreator(request, env) {
       </div>
     </div>
 
+    <script id="widgets-data-b64" type="text/plain">${widgetsJsonB64}</script>
     <script>
-      const widgetsData = ${widgetsJson};
-      let currentWidgetId = null;
+      // Esperar a que el DOM esté listo
+      document.addEventListener('DOMContentLoaded', function() {
+        try {
+          // Decodificar Base64 y parsear JSON
+          const widgetsData = JSON.parse(atob(document.getElementById('widgets-data-b64').textContent));
+          let currentWidgetId = null;
 
       // Renderizar lista de widgets
       function renderWidgetsList() {
@@ -201,35 +209,23 @@ export async function renderWidgetsCreator(request, env) {
             : '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 text-xs rounded">Draft</span>';
           
           const versionInfo = w.latestVersion 
-            ? \`<span class="text-xs text-gray-400">v\${w.latestVersion.version}</span>\`
+            ? '<span class="text-xs text-gray-400">v' + w.latestVersion.version + '</span>'
             : '';
 
-          return \`
-            <div class="bg-slate-700 p-4 rounded flex justify-between items-center">
-              <div>
-                <h3 class="font-semibold text-white">\${w.name}</h3>
-                <p class="text-sm text-gray-400 font-mono">\${w.widget_key}</p>
-                <div class="mt-2 flex gap-2 items-center">
-                  \${statusBadge}
-                  \${versionInfo}
-                </div>
-              </div>
-              <div class="flex gap-2">
-                <button 
-                  onclick="editWidget('\${w.id}')"
-                  class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
-                >
-                  Editar
-                </button>
-                <button 
-                  onclick="viewVersions('\${w.id}')"
-                  class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded"
-                >
-                  Versiones
-                </button>
-              </div>
-            </div>
-          \`;
+          return '<div class="bg-slate-700 p-4 rounded flex justify-between items-center">' +
+            '<div>' +
+            '<h3 class="font-semibold text-white">' + w.name + '</h3>' +
+            '<p class="text-sm text-gray-400 font-mono">' + w.widget_key + '</p>' +
+            '<div class="mt-2 flex gap-2 items-center">' +
+            statusBadge +
+            versionInfo +
+            '</div>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+            '<button onclick="editWidget(\'' + w.id + '\')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">Editar</button>' +
+            '<button onclick="viewVersions(\'' + w.id + '\')" class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded">Versiones</button>' +
+            '</div>' +
+            '</div>';
         }).join('');
       }
 
@@ -432,6 +428,11 @@ export async function renderWidgetsCreator(request, env) {
 
       // Inicializar
       renderWidgetsList();
+        } catch (error) {
+          console.error('Error inicializando creador de widgets:', error);
+          alert('Error cargando la página. Por favor, recarga.');
+        }
+      });
     </script>
   `;
 

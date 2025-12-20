@@ -196,3 +196,4 @@ COMMENT ON COLUMN pde_signals.tags IS 'Array de tags para categorización';
 COMMENT ON TABLE pde_signal_audit_log IS 'Log de auditoría append-only para cambios en señales';
 
 
+

@@ -1,0 +1,481 @@
+<!-- Contenido del Creador de Paquetes PDE v2 -->
+<style>
+  .packages-v2-container {
+    padding: 24px;
+  }
+  
+  .packages-v2-header {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .packages-v2-header h1 {
+    color: #fff;
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+  
+  .packages-v2-header p {
+    color: #94a3b8;
+    font-size: 0.95rem;
+  }
+  
+  .packages-v2-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  
+  @media (max-width: 1400px) {
+    .packages-v2-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .packages-v2-panel {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .packages-v2-panel h2 {
+    color: #fff;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #334155;
+    padding-bottom: 8px;
+  }
+  
+  .package-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .package-item {
+    background: #334155;
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+  }
+  
+  .package-item:hover {
+    background: #475569;
+    border-color: #64748b;
+  }
+  
+  .package-item.active {
+    border-color: #3b82f6;
+    background: #1e3a8a;
+  }
+  
+  .package-item h3 {
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+  }
+  
+  .package-item .package-key {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+    margin-bottom: 8px;
+  }
+  
+  .package-item .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  
+  .status-draft {
+    background: #f59e0b;
+    color: #fff;
+  }
+  
+  .status-ok {
+    background: #10b981;
+    color: #fff;
+  }
+  
+  .status-broken {
+    background: #ef4444;
+    color: #fff;
+  }
+  
+  .status-published {
+    background: #3b82f6;
+    color: #fff;
+  }
+  
+  .packages-v2-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  
+  .packages-v2-btn-primary {
+    background: #3b82f6;
+    color: #fff;
+  }
+  
+  .packages-v2-btn-primary:hover {
+    background: #2563eb;
+  }
+  
+  .packages-v2-btn-secondary {
+    background: #64748b;
+    color: #fff;
+  }
+  
+  .packages-v2-btn-secondary:hover {
+    background: #475569;
+  }
+  
+  .packages-v2-btn-success {
+    background: #10b981;
+    color: #fff;
+  }
+  
+  .packages-v2-btn-success:hover {
+    background: #059669;
+  }
+  
+  .packages-v2-btn-delete {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    opacity: 0.7;
+  }
+  
+  .packages-v2-btn-delete:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.1);
+  }
+  
+  .packages-v2-form-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #334155;
+  }
+  
+  .packages-v2-form-section:last-child {
+    border-bottom: none;
+  }
+  
+  .packages-v2-form-group {
+    margin-bottom: 16px;
+  }
+  
+  .packages-v2-form-group label {
+    display: block;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  
+  .packages-v2-form-group label .required {
+    color: #ef4444;
+  }
+  
+  .packages-v2-form-group input,
+  .packages-v2-form-group textarea {
+    width: 100%;
+    padding: 12px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+  }
+  
+  .packages-v2-form-group input:focus,
+  .packages-v2-form-group textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  
+  .packages-v2-form-group textarea {
+    resize: vertical;
+    min-height: 120px;
+  }
+  
+  .packages-v2-form-group textarea.code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    min-height: 300px;
+  }
+  
+  .packages-v2-form-group select[multiple] {
+    font-family: inherit;
+  }
+  
+  .packages-v2-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  
+  .packages-v2-alert {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  
+  .packages-v2-alert-success {
+    background: #065f46;
+    color: #6ee7b7;
+    border: 1px solid #10b981;
+  }
+  
+  .packages-v2-alert-error {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border: 1px solid #ef4444;
+  }
+  
+  .packages-v2-alert-info {
+    background: #1e3a8a;
+    color: #93c5fd;
+    border: 1px solid #3b82f6;
+  }
+  
+  .packages-v2-loading {
+    text-align: center;
+    padding: 40px;
+    color: #94a3b8;
+  }
+  
+  .packages-v2-empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #64748b;
+  }
+  
+  #error-banner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #7f1d1d;
+    color: #fca5a5;
+    padding: 16px;
+    text-align: center;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  #error-banner.show {
+    display: block;
+  }
+
+  /* Multi-select con chips */
+  .packages-v2-multiselect {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .packages-v2-chips-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    align-items: flex-start;
+  }
+
+  .packages-v2-chips-empty {
+    color: #64748b;
+    font-style: italic;
+    padding: 4px 0;
+  }
+
+  .packages-v2-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .packages-v2-chip:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  }
+
+  .packages-v2-chip-label {
+    user-select: none;
+    color: #fff;
+  }
+
+  .packages-v2-chip-content {
+    user-select: none;
+    color: #fff;
+  }
+
+  .packages-v2-chip-content strong {
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .packages-v2-chip-remove {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+    opacity: 0.8;
+  }
+
+  .packages-v2-chip-remove:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+  }
+
+  .packages-v2-chip-remove:active {
+    transform: scale(0.95);
+  }
+
+  .packages-v2-multiselect-dropdown {
+    width: 100%;
+    padding: 12px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .packages-v2-multiselect-dropdown:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+
+  .packages-v2-multiselect-dropdown:hover {
+    border-color: #475569;
+  }
+
+  /* Outputs Manager */
+  .packages-v2-outputs-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .packages-v2-outputs-add {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .packages-v2-outputs-add input {
+    font-size: 1rem;
+    font-family: inherit;
+  }
+
+  .packages-v2-outputs-add input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+
+  .packages-v2-btn-add-output {
+    transition: all 0.2s;
+  }
+
+  .packages-v2-btn-add-output:hover {
+    background: #2563eb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  }
+
+  .packages-v2-btn-add-output:active {
+    transform: translateY(0);
+  }
+</style>
+
+<div class="packages-v2-container">
+  <div id="error-banner"></div>
+  
+  <div class="packages-v2-header">
+    <h1>📦 Creador de Paquetes PDE v2</h1>
+    <p>Sistema robusto con JS externo y carga de datos vía fetch()</p>
+  </div>
+  
+  <div class="packages-v2-layout">
+    <!-- Panel izquierdo: Lista de paquetes -->
+    <div class="packages-v2-panel">
+      <h2>Paquetes</h2>
+      <button id="create-package-btn" class="packages-v2-btn packages-v2-btn-primary">➕ Nuevo Paquete</button>
+      <div id="packages-list" class="package-list">
+        <div class="packages-v2-loading">Cargando paquetes...</div>
+      </div>
+    </div>
+    
+    <!-- Panel central: Package Assembler (v3) -->
+    <div class="packages-v2-panel">
+      <h2>Package Assembler</h2>
+      <div id="prompt-context-editor">
+        <div class="packages-v2-empty-state">Selecciona un paquete para editar o crea uno nuevo</div>
+      </div>
+    </div>
+    
+    <!-- Panel derecho: PackageDefinition JSON (v3) -->
+    <div class="packages-v2-panel">
+      <h2>PackageDefinition JSON</h2>
+      <div id="assembled-editor">
+        <div class="packages-v2-empty-state">El PackageDefinition aparecerá aquí</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Script externo -->
+<script src="/js/pde-packages-v2.js?v=2.0.0"></script>
+

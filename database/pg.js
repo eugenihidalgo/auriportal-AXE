@@ -2,6 +2,8 @@
 // Gestor de Base de Datos PostgreSQL para AuriPortal v4 (Sovereign Edition)
 // PostgreSQL es la ÚNICA fuente de verdad del sistema
 
+import 'dotenv/config';
+
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -10,19 +12,43 @@ let pool = null;
 
 /**
  * Inicializa la conexión a PostgreSQL
+ * 
+ * CONFIGURACIÓN CANÓNICA:
+ * - Usa DATABASE_URL si existe
+ * - Fallback a variables PG* (PGUSER, PGPASSWORD, PGHOST, PGPORT, PGDATABASE, PGSSL)
+ * - Fail-open y robusto
  */
 export function initPostgreSQL() {
   try {
-    const connectionString = process.env.DATABASE_URL || 
-      `postgresql://${process.env.PGUSER || 'postgres'}:${process.env.PGPASSWORD || ''}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'aurelinportal'}`;
+    // Configuración canónica del Pool
+    // Prioridad 1: DATABASE_URL (connection string completo)
+    // Prioridad 2: Variables PG* individuales
+    const poolConfig = process.env.DATABASE_URL
+      ? {
+          connectionString: process.env.DATABASE_URL,
+          ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
+          max: 20, // Máximo de conexiones en el pool
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
+        }
+      : {
+          host: process.env.PGHOST || 'localhost',
+          port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+          user: process.env.PGUSER || 'postgres',
+          password: process.env.PGPASSWORD || '', // Asegurar que sea string, no undefined
+          database: process.env.PGDATABASE || 'aurelinportal',
+          ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
+          max: 20, // Máximo de conexiones en el pool
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
+        };
     
-    pool = new Pool({
-      connectionString,
-      ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
-      max: 20, // Máximo de conexiones en el pool
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    pool = new Pool(poolConfig);
+    
+    // Log informativo de arranque (una sola vez)
+    console.log('[PG] Pool inicializado con',
+      process.env.DATABASE_URL ? 'DATABASE_URL' : 'PG* variables'
+    );
 
     // Test de conexión
     pool.query('SELECT NOW()', (err, res) => {

@@ -1,0 +1,342 @@
+<!-- Contenido del Creador de Widgets PDE v2 -->
+<style>
+  .widgets-v2-container {
+    padding: 24px;
+  }
+  
+  .widgets-v2-header {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .widgets-v2-header h1 {
+    color: #fff;
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+  
+  .widgets-v2-header p {
+    color: #94a3b8;
+    font-size: 0.95rem;
+  }
+  
+  .widgets-v2-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  
+  @media (max-width: 1400px) {
+    .widgets-v2-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .widgets-v2-panel {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .widgets-v2-panel h2 {
+    color: #fff;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #334155;
+    padding-bottom: 8px;
+  }
+  
+  .widget-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .widget-item {
+    background: #334155;
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+  }
+  
+  .widget-item:hover {
+    background: #475569;
+    border-color: #64748b;
+  }
+  
+  .widget-item.active {
+    border-color: #3b82f6;
+    background: #1e3a8a;
+  }
+  
+  .widget-item h3 {
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+  }
+  
+  .widget-item .widget-key {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+    margin-bottom: 8px;
+  }
+  
+  .widget-item .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  
+  .status-draft {
+    background: #f59e0b;
+    color: #fff;
+  }
+  
+  .status-ok {
+    background: #10b981;
+    color: #fff;
+  }
+  
+  .status-broken {
+    background: #ef4444;
+    color: #fff;
+  }
+  
+  .status-published {
+    background: #3b82f6;
+    color: #fff;
+  }
+  
+  .widgets-v2-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  
+  .widgets-v2-btn-primary {
+    background: #3b82f6;
+    color: #fff;
+  }
+  
+  .widgets-v2-btn-primary:hover {
+    background: #2563eb;
+  }
+  
+  .widgets-v2-btn-secondary {
+    background: #64748b;
+    color: #fff;
+  }
+  
+  .widgets-v2-btn-secondary:hover {
+    background: #475569;
+  }
+  
+  .widgets-v2-btn-success {
+    background: #10b981;
+    color: #fff;
+  }
+  
+  .widgets-v2-btn-success:hover {
+    background: #059669;
+  }
+  
+  .widgets-v2-btn-delete {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    opacity: 0.7;
+  }
+  
+  .widgets-v2-btn-delete:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.1);
+  }
+  
+  .widgets-v2-form-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #334155;
+  }
+  
+  .widgets-v2-form-section:last-child {
+    border-bottom: none;
+  }
+  
+  .widgets-v2-form-group {
+    margin-bottom: 16px;
+  }
+  
+  .widgets-v2-form-group select[multiple] {
+    font-family: inherit;
+  }
+  
+  .widgets-v2-form-group label {
+    display: block;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  
+  .widgets-v2-form-group label .required {
+    color: #ef4444;
+  }
+  
+  .widgets-v2-form-group input,
+  .widgets-v2-form-group textarea {
+    width: 100%;
+    padding: 12px;
+    background: #0f172a;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+  }
+  
+  .widgets-v2-form-group input:focus,
+  .widgets-v2-form-group textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  
+  .widgets-v2-form-group textarea {
+    resize: vertical;
+    min-height: 120px;
+  }
+  
+  .widgets-v2-form-group select[multiple] {
+    font-family: inherit;
+  }
+  
+  .widgets-v2-form-group textarea.code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    min-height: 300px;
+  }
+  
+  .widgets-v2-form-group select[multiple] {
+    font-family: inherit;
+  }
+  
+  .widgets-v2-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  
+  .widgets-v2-alert {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  
+  .widgets-v2-alert-success {
+    background: #065f46;
+    color: #6ee7b7;
+    border: 1px solid #10b981;
+  }
+  
+  .widgets-v2-alert-error {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border: 1px solid #ef4444;
+  }
+  
+  .widgets-v2-alert-info {
+    background: #1e3a8a;
+    color: #93c5fd;
+    border: 1px solid #3b82f6;
+  }
+  
+  .widgets-v2-loading {
+    text-align: center;
+    padding: 40px;
+    color: #94a3b8;
+  }
+  
+  .widgets-v2-empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #64748b;
+  }
+  
+  #error-banner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #7f1d1d;
+    color: #fca5a5;
+    padding: 16px;
+    text-align: center;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  #error-banner.show {
+    display: block;
+  }
+</style>
+
+<div class="widgets-v2-container">
+  <div id="error-banner"></div>
+  
+  <div class="widgets-v2-header">
+    <h1>🧩 Creador de Widgets PDE v2</h1>
+    <p>Sistema robusto con JS externo y carga de datos vía fetch()</p>
+  </div>
+  
+  <div class="widgets-v2-layout">
+    <!-- Panel izquierdo: Lista de widgets -->
+    <div class="widgets-v2-panel">
+      <h2>Widgets</h2>
+      <button id="create-widget-btn" class="widgets-v2-btn widgets-v2-btn-primary">➕ Nuevo Widget</button>
+      <div id="widgets-list" class="widget-list">
+        <div class="widgets-v2-loading">Cargando widgets...</div>
+      </div>
+    </div>
+    
+    <!-- Panel central: Widget Prompt Context Builder -->
+    <div class="widgets-v2-panel">
+      <h2>Widget Prompt Context Builder</h2>
+      <div id="prompt-context-editor">
+        <div class="widgets-v2-empty-state">Selecciona un widget para editar</div>
+      </div>
+    </div>
+    
+    <!-- Panel derecho: Código ensamblado -->
+    <div class="widgets-v2-panel">
+      <h2>Código Ensamblado</h2>
+      <div id="code-editor">
+        <div class="widgets-v2-empty-state">El código aparecerá aquí</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Script externo -->
+<script src="/js/pde-widgets-v2.js?v=2.0.0"></script>

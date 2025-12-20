@@ -48,3 +48,4 @@ Puede estar activo simultáneamente con aplica_energias_indeseables.';
 
 
 
+

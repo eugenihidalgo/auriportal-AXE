@@ -892,3 +892,4 @@ Este diseño es **conceptual** y **no incluye código de implementación**. Un d
 
 
 
+

@@ -299,14 +299,16 @@ async function handleDeleteWidget(id, request, env, authCtx) {
       });
     }
 
+    console.log(`[PDE][WIDGETS_V2][DELETE] Widget eliminado: ${id}`);
+
     return new Response(JSON.stringify({
       ok: true,
-      message: 'Widget eliminado'
+      message: 'Widget eliminado correctamente'
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('[AXE][WIDGETS] Error eliminando widget:', error);
+    console.error('[PDE][WIDGETS_V2][DELETE] Error eliminando widget:', error);
     return new Response(JSON.stringify({ 
       ok: false,
       error: error.message 
@@ -450,3 +452,75 @@ async function handlePublishDraft(id, request, env, authCtx) {
   }
 }
 
+
+/**
+ * Valida código y contrato de un widget
+ */
+async function handleValidateWidget(id, request, env, authCtx) {
+  try {
+    const body = await request.json();
+    const { code, prompt_context_json } = body;
+
+    const widget = await widgetsRepo.getWidgetById(id) || await widgetsRepo.getWidgetByKey(id);
+    if (!widget) {
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'Widget no encontrado'
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const errors = [];
+    const warnings = [];
+
+    // Validar código JavaScript (sintaxis básica)
+    if (code) {
+      try {
+        new Function(code);
+      } catch (syntaxError) {
+        errors.push(`Error de sintaxis en código: ${syntaxError.message}`);
+      }
+    }
+
+    // Validar prompt context JSON
+    if (prompt_context_json) {
+      try {
+        const parsed = typeof prompt_context_json === 'string' 
+          ? JSON.parse(prompt_context_json) 
+          : prompt_context_json;
+        
+        if (!parsed.widget_key) {
+          errors.push('prompt_context_json debe tener widget_key');
+        }
+        if (!parsed.inputs || !Array.isArray(parsed.inputs)) {
+          warnings.push('prompt_context_json debería tener inputs como array');
+        }
+        if (!parsed.outputs || !Array.isArray(parsed.outputs)) {
+          warnings.push('prompt_context_json debería tener outputs como array');
+        }
+      } catch (parseError) {
+        errors.push(`Error parseando prompt_context_json: ${parseError.message}`);
+      }
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      valid: errors.length === 0,
+      errors,
+      warnings
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[AXE][WIDGETS] Error validando widget:', error);
+    return new Response(JSON.stringify({ 
+      ok: false,
+      error: error.message 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}

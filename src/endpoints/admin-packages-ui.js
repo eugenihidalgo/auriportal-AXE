@@ -34,7 +34,13 @@ function replace(html, placeholders) {
  * Renderiza el creador de paquetes (SISTEMA NUEVO)
  */
 export async function renderPackagesCreator(request, env) {
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:36',message:'renderPackagesCreator: inicio',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const authCtx = await requireAdminContext(request, env);
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:39',message:'renderPackagesCreator: después de requireAdminContext',data:{isResponse:authCtx instanceof Response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (authCtx instanceof Response) {
     return authCtx;
   }
@@ -44,9 +50,21 @@ export async function renderPackagesCreator(request, env) {
   let packages = [];
 
   try {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:49',message:'renderPackagesCreator: antes de listAvailableSources',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     availableSources = await listAvailableSources();
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:52',message:'renderPackagesCreator: después de listAvailableSources',data:{sourcesCount:availableSources.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     const packagesRepo = getDefaultPdePackagesRepo();
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:55',message:'renderPackagesCreator: antes de listPackages',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     packages = await packagesRepo.listPackages({ onlyActive: false, includeDeleted: false });
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:58',message:'renderPackagesCreator: después de listPackages',data:{packagesCount:packages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     // Enriquecer con drafts y versiones
     for (const pkg of packages) {
@@ -58,14 +76,24 @@ export async function renderPackagesCreator(request, env) {
       }
     }
   } catch (error) {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:71',message:'renderPackagesCreator: ERROR cargando datos',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     console.error('Error cargando datos para creador de paquetes:', error);
   }
 
-  // Preparar datos para el frontend
-  const sourcesJson = JSON.stringify(availableSources);
-  const packagesJson = JSON.stringify(packages);
+  // Preparar datos para el frontend - MÉTODO ULTRA-SEGURO
+  // El problema: Insertar JSON en un template literal puede romper la sintaxis si contiene backticks, ${}, etc.
+  // Solución: Codificar el JSON en Base64 y decodificarlo en el cliente
+  const sourcesJsonRaw = JSON.stringify(availableSources);
+  const packagesJsonRaw = JSON.stringify(packages);
+  
+  // Codificar en Base64 para evitar cualquier problema con caracteres especiales
+  const sourcesJsonB64 = Buffer.from(sourcesJsonRaw, 'utf8').toString('base64');
+  const packagesJsonB64 = Buffer.from(packagesJsonRaw, 'utf8').toString('base64');
 
   // Template HTML completo
+  // NOTA: NO interpolar JSON directamente aquí - usar escapeForScriptTag
   const content = `
     <div class="p-8">
       <div class="mb-6">
@@ -201,10 +229,16 @@ export async function renderPackagesCreator(request, env) {
       </div>
     </div>
 
+    <script id="packages-data-b64" type="text/plain">${packagesJsonB64}</script>
+    <script id="sources-data-b64" type="text/plain">${sourcesJsonB64}</script>
     <script>
-      const packagesData = ${packagesJson};
-      const sourcesData = ${sourcesJson};
-      let currentPackageId = null;
+      // Esperar a que el DOM esté listo
+      document.addEventListener('DOMContentLoaded', function() {
+        try {
+          // Decodificar Base64 y parsear JSON
+          const packagesData = JSON.parse(atob(document.getElementById('packages-data-b64').textContent));
+          const sourcesData = JSON.parse(atob(document.getElementById('sources-data-b64').textContent));
+          let currentPackageId = null;
 
       // Renderizar lista de paquetes
       function renderPackagesList() {
@@ -220,35 +254,27 @@ export async function renderPackagesCreator(request, env) {
             : '<span class="px-2 py-1 bg-yellow-900 text-yellow-200 text-xs rounded">Draft</span>';
           
           const versionInfo = pkg.latestVersion 
-            ? `<span class="text-xs text-gray-400">v${pkg.latestVersion.version}</span>`
+            ? '<span class="text-xs text-gray-400">v' + String(pkg.latestVersion.version || '').replace(/'/g, "\\'") + '</span>'
             : '';
 
-          return \`
-            <div class="bg-slate-700 p-4 rounded flex justify-between items-center">
-              <div>
-                <h3 class="font-semibold text-white">\${pkg.name}</h3>
-                <p class="text-sm text-gray-400 font-mono">\${pkg.package_key}</p>
-                <div class="mt-2 flex gap-2 items-center">
-                  \${statusBadge}
-                  \${versionInfo}
-                </div>
-              </div>
-              <div class="flex gap-2">
-                <button 
-                  onclick="editPackage('\${pkg.id}')"
-                  class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
-                >
-                  Editar
-                </button>
-                <button 
-                  onclick="viewVersions('\${pkg.id}')"
-                  class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded"
-                >
-                  Versiones
-                </button>
-              </div>
-            </div>
-          \`;
+          const nameEscaped = (pkg.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const keyEscaped = (pkg.package_key || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const idEscaped = String(pkg.id || '').replace(/'/g, "\\'");
+          
+          return '<div class="bg-slate-700 p-4 rounded flex justify-between items-center">' +
+            '<div>' +
+            '<h3 class="font-semibold text-white">' + nameEscaped + '</h3>' +
+            '<p class="text-sm text-gray-400 font-mono">' + keyEscaped + '</p>' +
+            '<div class="mt-2 flex gap-2 items-center">' +
+            statusBadge +
+            versionInfo +
+            '</div>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+            '<button onclick="editPackage(\'' + idEscaped + '\')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">Editar</button>' +
+            '<button onclick="viewVersions(\'' + idEscaped + '\')" class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded">Versiones</button>' +
+            '</div>' +
+            '</div>';
         }).join('');
       }
 
@@ -300,7 +326,7 @@ export async function renderPackagesCreator(request, env) {
 
           if (currentPackageId) {
             // Actualizar paquete existente
-            const response = await fetch(\`/admin/api/packages/\${currentPackageId}\`, {
+            const response = await fetch('/admin/api/packages/' + currentPackageId, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name, description })
@@ -309,7 +335,7 @@ export async function renderPackagesCreator(request, env) {
             if (!response.ok) throw new Error('Error actualizando paquete');
 
             // Guardar draft
-            const draftResponse = await fetch(\`/admin/api/packages/\${currentPackageId}/draft\`, {
+            const draftResponse = await fetch('/admin/api/packages/' + currentPackageId + '/draft', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -325,7 +351,13 @@ export async function renderPackagesCreator(request, env) {
             const createResponse = await fetch('/admin/api/packages', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ package_key: packageKey, name, description, status: 'draft' })
+              body: JSON.stringify({ 
+                package_key: packageKey, 
+                name, 
+                description, 
+                status: 'draft',
+                definition: {} // Definition vacío, se guardará en draft
+              })
             });
 
             if (!createResponse.ok) throw new Error('Error creando paquete');
@@ -333,7 +365,7 @@ export async function renderPackagesCreator(request, env) {
             currentPackageId = newPackage.id;
 
             // Guardar draft
-            const draftResponse = await fetch(\`/admin/api/packages/\${newPackage.id}/draft\`, {
+            const draftResponse = await fetch('/admin/api/packages/' + newPackage.id + '/draft', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -366,7 +398,7 @@ export async function renderPackagesCreator(request, env) {
         }
 
         try {
-          const response = await fetch(\`/admin/api/packages/\${currentPackageId}/publish\`, {
+          const response = await fetch('/admin/api/packages/' + currentPackageId + '/publish', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
@@ -387,15 +419,54 @@ export async function renderPackagesCreator(request, env) {
         currentPackageId = null;
       });
 
+      // Función helper para mostrar toast no bloqueante
+      function showToast(message, duration = 2000) {
+        let toast = document.getElementById('packages-toast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'packages-toast';
+          toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 10000;
+            font-size: 0.875rem;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+          `;
+          document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(10px)';
+        }, duration);
+      }
+
       // Copiar prompt context para GPT
       document.getElementById('copy-prompt-context-btn').addEventListener('click', () => {
         const promptContext = document.getElementById('prompt-context-json').value;
         if (!promptContext) {
-          alert('Primero debes crear el Package Prompt Context');
+          showToast('⚠️ Primero debes crear el Package Prompt Context', 2000);
           return;
         }
-        navigator.clipboard.writeText(promptContext);
-        alert('Copiado al portapapeles');
+        // Copiar directamente al clipboard sin interrupciones
+        navigator.clipboard.writeText(promptContext).then(() => {
+          // Feedback discreto no bloqueante
+          showToast('✔ Copiado al portapapeles', 2000);
+        }).catch(err => {
+          console.error('Error copiando al portapapeles:', err);
+          showToast('❌ Error al copiar', 2000);
+        });
       });
 
       // Validar prompt context
@@ -410,19 +481,11 @@ export async function renderPackagesCreator(request, env) {
           const parsed = JSON.parse(promptContext);
           const statusDiv = document.getElementById('validation-status');
           statusDiv.classList.remove('hidden');
-          statusDiv.innerHTML = \`
-            <div class="bg-green-900 text-green-200 p-3 rounded">
-              ✅ JSON válido
-            </div>
-          \`;
+          statusDiv.innerHTML = '<div class="bg-green-900 text-green-200 p-3 rounded">✅ JSON válido</div>';
         } catch (error) {
           const statusDiv = document.getElementById('validation-status');
           statusDiv.classList.remove('hidden');
-          statusDiv.innerHTML = \`
-            <div class="bg-red-900 text-red-200 p-3 rounded">
-              ❌ Error de JSON: \${error.message}
-            </div>
-          \`;
+          statusDiv.innerHTML = '<div class="bg-red-900 text-red-200 p-3 rounded">❌ Error de JSON: ' + error.message + '</div>';
         }
       });
 
@@ -453,6 +516,11 @@ export async function renderPackagesCreator(request, env) {
 
       // Inicializar
       renderPackagesList();
+        } catch (error) {
+          console.error('Error inicializando creador de paquetes:', error);
+          alert('Error cargando la página. Por favor, recarga.');
+        }
+      });
     </script>
   `;
 
@@ -471,14 +539,38 @@ export async function renderPackagesCreator(request, env) {
  * Handler principal del endpoint
  */
 export default async function adminPackagesUiHandler(request, env, ctx) {
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:488',message:'adminPackagesUiHandler: inicio',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const url = new URL(request.url);
   const path = url.pathname;
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:492',message:'adminPackagesUiHandler: path y method',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 
   // GET /admin/packages - UI principal
   if (path === '/admin/packages' && request.method === 'GET') {
-    return await renderPackagesCreator(request, env);
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:497',message:'adminPackagesUiHandler: antes de renderPackagesCreator',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    try {
+      const result = await renderPackagesCreator(request, env);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:501',message:'adminPackagesUiHandler: después de renderPackagesCreator',data:{isResponse:result instanceof Response,status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return result;
+    } catch (error) {
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:505',message:'adminPackagesUiHandler: ERROR en renderPackagesCreator',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      console.error('[admin-packages-ui] Error:', error);
+      throw error;
+    }
   }
 
   // Ruta no encontrada
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:513',message:'adminPackagesUiHandler: ruta no encontrada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   return new Response('Ruta no encontrada', { status: 404 });
 }

@@ -307,9 +307,21 @@ export class PdePackagesRepo {
     if (!result.rows[0]) return null;
 
     const draft = result.rows[0];
-    if (typeof draft.prompt_context_json === 'string') {
-      draft.prompt_context_json = JSON.parse(draft.prompt_context_json);
+    
+    // Priorizar package_definition (v3), fallback a prompt_context_json (legacy)
+    if (draft.package_definition) {
+      if (typeof draft.package_definition === 'string') {
+        draft.package_definition = JSON.parse(draft.package_definition);
+      }
+    } else if (draft.prompt_context_json) {
+      if (typeof draft.prompt_context_json === 'string') {
+        draft.prompt_context_json = JSON.parse(draft.prompt_context_json);
+      }
+      // Migrar automáticamente: usar prompt_context_json como package_definition temporal
+      draft.package_definition = draft.prompt_context_json;
     }
+    
+    // Mantener assembled_json por compatibilidad (pero ya no se usa)
     if (draft.assembled_json && typeof draft.assembled_json === 'string') {
       draft.assembled_json = JSON.parse(draft.assembled_json);
     }
@@ -319,11 +331,19 @@ export class PdePackagesRepo {
 
   /**
    * Crea o actualiza el draft de un paquete
+   * 
+   * v3: Usa package_definition en lugar de prompt_context_json
    */
   async saveDraft(packageId, draftData, updatedBy = null) {
+    // Priorizar package_definition (v3), fallback a prompt_context_json (legacy)
+    const package_definition = draftData.package_definition || draftData.prompt_context_json;
+    
+    // Validación: package_definition es obligatorio
+    if (!package_definition) {
+      throw new Error('package_definition es obligatorio');
+    }
+
     const {
-      prompt_context_json,
-      assembled_json = null,
       validation_status = 'pending',
       validation_errors = [],
       validation_warnings = []
@@ -339,18 +359,17 @@ export class PdePackagesRepo {
       // Actualizar draft existente
       const result = await query(`
         UPDATE pde_package_drafts
-        SET prompt_context_json = $1,
-            assembled_json = $2,
-            validation_status = $3,
-            validation_errors = $4,
-            validation_warnings = $5,
+        SET package_definition = $1,
+            prompt_context_json = $1,
+            validation_status = $2,
+            validation_errors = $3,
+            validation_warnings = $4,
             updated_at = CURRENT_TIMESTAMP,
-            updated_by = $6
-        WHERE draft_id = $7
+            updated_by = $5
+        WHERE draft_id = $6
         RETURNING *
       `, [
-        JSON.stringify(prompt_context_json),
-        assembled_json ? JSON.stringify(assembled_json) : null,
+        JSON.stringify(package_definition),
         validation_status,
         JSON.stringify(validation_errors),
         JSON.stringify(validation_warnings),
@@ -363,15 +382,14 @@ export class PdePackagesRepo {
       // Crear nuevo draft
       const result = await query(`
         INSERT INTO pde_package_drafts (
-          package_id, prompt_context_json, assembled_json, validation_status,
+          package_id, package_definition, prompt_context_json, validation_status,
           validation_errors, validation_warnings, updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $2, $3, $4, $5, $6)
         RETURNING *
       `, [
         packageId,
-        JSON.stringify(prompt_context_json),
-        assembled_json ? JSON.stringify(assembled_json) : null,
+        JSON.stringify(package_definition),
         validation_status,
         JSON.stringify(validation_errors),
         JSON.stringify(validation_warnings),
@@ -389,11 +407,12 @@ export class PdePackagesRepo {
       `, [draft.draft_id, packageId]);
     }
 
-    if (typeof draft.prompt_context_json === 'string') {
-      draft.prompt_context_json = JSON.parse(draft.prompt_context_json);
+    // Parsear JSONB fields
+    if (draft.package_definition && typeof draft.package_definition === 'string') {
+      draft.package_definition = JSON.parse(draft.package_definition);
     }
-    if (draft.assembled_json && typeof draft.assembled_json === 'string') {
-      draft.assembled_json = JSON.parse(draft.assembled_json);
+    if (draft.prompt_context_json && typeof draft.prompt_context_json === 'string') {
+      draft.prompt_context_json = JSON.parse(draft.prompt_context_json);
     }
 
     // Log de auditoría
@@ -428,11 +447,21 @@ export class PdePackagesRepo {
     }
 
     const draftData = draft.rows[0];
-    if (typeof draftData.prompt_context_json === 'string') {
-      draftData.prompt_context_json = JSON.parse(draftData.prompt_context_json);
+    
+    // Priorizar package_definition (v3), fallback a prompt_context_json (legacy)
+    let package_definition_data = null;
+    if (draftData.package_definition) {
+      package_definition_data = typeof draftData.package_definition === 'string' 
+        ? JSON.parse(draftData.package_definition)
+        : draftData.package_definition;
+    } else if (draftData.prompt_context_json) {
+      package_definition_data = typeof draftData.prompt_context_json === 'string'
+        ? JSON.parse(draftData.prompt_context_json)
+        : draftData.prompt_context_json;
     }
-    if (draftData.assembled_json && typeof draftData.assembled_json === 'string') {
-      draftData.assembled_json = JSON.parse(draftData.assembled_json);
+
+    if (!package_definition_data) {
+      throw new Error('Draft no tiene package_definition ni prompt_context_json');
     }
 
     // Obtener el siguiente número de versión
@@ -440,25 +469,17 @@ export class PdePackagesRepo {
       ? pkg.current_published_version + 1 
       : 1;
 
-    // Construir definition canónica desde prompt_context_json y assembled_json
-    const definition = {
-      ...draftData.prompt_context_json,
-      assembled: draftData.assembled_json
-    };
-
-    // Crear versión publicada
+    // Crear versión publicada (v3: usar package_definition, mantener prompt_context_json por compatibilidad)
     const versionResult = await query(`
       INSERT INTO pde_package_versions (
-        package_id, version, prompt_context_json, assembled_json, definition, published_by
+        package_id, version, package_definition, prompt_context_json, definition, published_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $3, $3, $4)
       RETURNING *
     `, [
       packageId,
       nextVersion,
-      JSON.stringify(draftData.prompt_context_json),
-      draftData.assembled_json ? JSON.stringify(draftData.assembled_json) : null,
-      JSON.stringify(definition),
+      JSON.stringify(package_definition_data),
       publishedBy
     ]);
 
@@ -504,14 +525,21 @@ export class PdePackagesRepo {
     if (!result.rows[0]) return null;
 
     const version = result.rows[0];
-    if (typeof version.prompt_context_json === 'string') {
+    
+    // Parsear JSONB fields
+    if (version.package_definition && typeof version.package_definition === 'string') {
+      version.package_definition = JSON.parse(version.package_definition);
+    }
+    if (version.prompt_context_json && typeof version.prompt_context_json === 'string') {
       version.prompt_context_json = JSON.parse(version.prompt_context_json);
     }
-    if (version.assembled_json && typeof version.assembled_json === 'string') {
-      version.assembled_json = JSON.parse(version.assembled_json);
-    }
-    if (typeof version.definition === 'string') {
+    if (version.definition && typeof version.definition === 'string') {
       version.definition = JSON.parse(version.definition);
+    }
+    
+    // Si no hay package_definition pero hay prompt_context_json, usar como fallback
+    if (!version.package_definition && version.prompt_context_json) {
+      version.package_definition = version.prompt_context_json;
     }
 
     return version;
@@ -531,15 +559,22 @@ export class PdePackagesRepo {
     `, [packageId]);
 
     return result.rows.map(row => {
-      if (typeof row.prompt_context_json === 'string') {
+      // Parsear JSONB fields
+      if (row.package_definition && typeof row.package_definition === 'string') {
+        row.package_definition = JSON.parse(row.package_definition);
+      }
+      if (row.prompt_context_json && typeof row.prompt_context_json === 'string') {
         row.prompt_context_json = JSON.parse(row.prompt_context_json);
       }
-      if (row.assembled_json && typeof row.assembled_json === 'string') {
-        row.assembled_json = JSON.parse(row.assembled_json);
-      }
-      if (typeof row.definition === 'string') {
+      if (row.definition && typeof row.definition === 'string') {
         row.definition = JSON.parse(row.definition);
       }
+      
+      // Si no hay package_definition pero hay prompt_context_json, usar como fallback
+      if (!row.package_definition && row.prompt_context_json) {
+        row.package_definition = row.prompt_context_json;
+      }
+      
       return row;
     });
   }

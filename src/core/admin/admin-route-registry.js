@@ -131,6 +131,27 @@ export const ADMIN_ROUTES = [
     type: 'api',
     method: 'GET'
   },
+  {
+    key: 'api-transmutaciones-classification',
+    path: '/admin/api/transmutaciones/classification',
+    type: 'api'
+  },
+  {
+    key: 'api-transmutaciones-lists-classification',
+    path: '/admin/api/transmutaciones/lists/:list_id/classification',
+    type: 'api',
+    method: 'PATCH'
+  },
+  {
+    key: 'api-context-mappings',
+    path: '/admin/api/context-mappings',
+    type: 'api'
+  },
+  {
+    key: 'api-resolvers',
+    path: '/admin/api/resolvers',
+    type: 'api'
+  },
 
   // ============================================
   // ISLAS (Handlers específicos antes del catch-all)
@@ -178,8 +199,18 @@ export const ADMIN_ROUTES = [
     type: 'island'
   },
   {
+    key: 'packages-creator-v2',
+    path: '/admin/pde/packages-v2',
+    type: 'island'
+  },
+  {
     key: 'widgets-creator',
     path: '/admin/widgets',
+    type: 'island'
+  },
+  {
+    key: 'widgets-creator-v2',
+    path: '/admin/pde/widgets-v2',
     type: 'island'
   },
   {
@@ -195,6 +226,11 @@ export const ADMIN_ROUTES = [
   {
     key: 'automations-manager',
     path: '/admin/automations',
+    type: 'island'
+  },
+  {
+    key: 'resolvers-studio',
+    path: '/admin/resolvers',
     type: 'island'
   },
 

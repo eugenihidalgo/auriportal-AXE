@@ -259,3 +259,4 @@ COMMENT ON COLUMN pde_package_versions.prompt_context_json IS 'Package Prompt Co
 COMMENT ON COLUMN pde_package_versions.assembled_json IS 'JSON ensamblado (snapshot al momento de publicación)';
 COMMENT ON TABLE pde_package_audit_log IS 'Log de auditoría append-only para cambios en paquetes';
 
+

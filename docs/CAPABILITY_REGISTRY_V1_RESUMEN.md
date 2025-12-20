@@ -342,3 +342,4 @@ Ver `docs/CAPABILITY_REGISTRY_V1.md` para documentación detallada.
 
 
 
+

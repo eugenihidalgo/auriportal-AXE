@@ -133,3 +133,4 @@ COMMENT ON COLUMN pde_contexts.context_key IS 'Clave única del contexto (slug, 
 COMMENT ON TABLE pde_context_audit_log IS 'Log de auditoría append-only para cambios en contextos';
 
 
+

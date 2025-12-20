@@ -406,6 +406,15 @@ export const sidebarRegistry = [
     order: 1.5
   },
   {
+    id: 'resolvers-studio',
+    label: 'Resolvers',
+    icon: '🧠',
+    route: '/admin/resolvers',
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 1.6
+  },
+  {
     id: 'widgets-creator-v2',
     label: 'Widgets',
     icon: '🧩',

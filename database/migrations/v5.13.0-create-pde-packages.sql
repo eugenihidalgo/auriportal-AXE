@@ -163,3 +163,4 @@ COMMENT ON TABLE pde_source_templates IS 'Templates reutilizables por Source of 
 COMMENT ON COLUMN pde_source_templates.definition IS 'JSON que define cómo se muestra el contenido del Source';
 
 
+

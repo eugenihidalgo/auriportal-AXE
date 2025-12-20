@@ -160,3 +160,4 @@ function generarDescripcionDiferencia(actual, simulated, diff) {
 
 
 
+

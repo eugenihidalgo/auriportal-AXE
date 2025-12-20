@@ -20,3 +20,4 @@ COMMENT ON COLUMN pausas.motivo IS 'Motivo de la pausa (requerido para pausas ma
 
 
 
+

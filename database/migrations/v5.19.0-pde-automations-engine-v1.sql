@@ -232,3 +232,4 @@ COMMENT ON TABLE pde_automation_executions IS 'Registro de ejecuciones de automa
 COMMENT ON COLUMN pde_automation_executions.fingerprint IS 'Fingerprint determinista sha256 para dedupe (único)';
 
 
+

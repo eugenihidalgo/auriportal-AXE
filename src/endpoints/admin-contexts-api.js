@@ -264,8 +264,23 @@ async function handleCreateContext(request, env) {
       status 
     } = body;
 
+    // Logs de campos recibidos para debugging
+    console.log('[AXE][CONTEXTS][CREATE] Campos recibidos:', {
+      context_key: context_key ? String(context_key).substring(0, 50) : null,
+      scope: scope ? String(scope).substring(0, 50) : null,
+      type: type ? String(type).substring(0, 50) : null,
+      kind: kind ? String(kind).substring(0, 50) : null,
+      has_label: !!label,
+      has_description: !!description,
+      has_definition: !!definition
+    });
+
     // Validaciones básicas
     if (!context_key || !label) {
+      console.error('[AXE][CONTEXTS][CREATE] Error: context_key o label faltantes', {
+        context_key: context_key ? String(context_key).substring(0, 50) : null,
+        has_label: !!label
+      });
       return new Response(JSON.stringify({ 
         ok: false,
         error: 'context_key y label son obligatorios' 
@@ -277,6 +292,9 @@ async function handleCreateContext(request, env) {
 
     // Validar context_key (slug)
     if (!isValidContextKey(context_key)) {
+      console.error('[AXE][CONTEXTS][CREATE] Error: context_key inválido', {
+        context_key: String(context_key).substring(0, 100)
+      });
       return new Response(JSON.stringify({ 
         ok: false,
         error: 'context_key inválido: solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)' 
@@ -303,6 +321,14 @@ async function handleCreateContext(request, env) {
     const validation = validateContextDefinition(normalizedDef, { strict: true });
     
     if (!validation.valid) {
+      console.error('[AXE][CONTEXTS][CREATE] Error: Definición inválida', {
+        context_key: String(context_key).substring(0, 50),
+        scope: normalizedDef.scope,
+        type: normalizedDef.type,
+        kind: normalizedDef.kind,
+        errors: validation.errors,
+        warnings: validation.warnings
+      });
       return new Response(JSON.stringify({ 
         ok: false,
         error: 'Definición de contexto inválida',
@@ -351,7 +377,11 @@ async function handleCreateContext(request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('[AXE][CONTEXTS] Error creando contexto:', error);
+    console.error('[AXE][CONTEXTS][CREATE] Error creando contexto:', {
+      error: error.message,
+      stack: error.stack?.substring(0, 500),
+      body_received: error.body ? JSON.stringify(error.body).substring(0, 200) : null
+    });
     
     if (error.message && error.message.includes('ya existe')) {
       return new Response(JSON.stringify({ 
@@ -363,6 +393,7 @@ async function handleCreateContext(request, env) {
       });
     }
     
+    // Asegurar que siempre devolvemos JSON, incluso en errores
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error creando contexto',
@@ -479,7 +510,12 @@ async function handleUpdateContext(contextKey, request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error(`[AXE][CONTEXTS] Error actualizando contexto '${contextKey}':`, error);
+    console.error(`[AXE][CONTEXTS][UPDATE] Error actualizando contexto '${contextKey}':`, {
+      context_key: contextKey,
+      error: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
+    // Asegurar que siempre devolvemos JSON, incluso en errores
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error actualizando contexto',
