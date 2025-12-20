@@ -38,34 +38,59 @@ export async function listContexts(options = {}) {
       includeArchived
     });
 
-    // Crear mapa de contextos de DB (por context_key)
+    // Crear mapa de contextos de DB (por context_key) - solo activos
     const dbMap = new Map();
     for (const ctx of dbContexts) {
       dbMap.set(ctx.context_key, ctx);
     }
 
+    // CRÍTICO: Verificar si existen en DB (incluyendo eliminados) antes de mostrar virtuales
+    // Si un contexto está eliminado en DB, NO mostrar el virtual del sistema
+    const dbContextsIncludingDeleted = await contextsRepo.list({
+      onlyActive: false,
+      includeDeleted: true,  // Incluir eliminados para verificar existencia
+      includeArchived: true
+    });
+    const dbMapAllIncludingDeleted = new Map();
+    for (const ctx of dbContextsIncludingDeleted) {
+      dbMapAllIncludingDeleted.set(ctx.context_key, ctx);
+    }
+
     // Combinar: DB tiene prioridad, luego defaults del sistema (pero solo si no están eliminados en DB)
     const result = [];
-
-    // Crear mapa de contextos de DB por context_key (para verificar existencia)
-    const dbMapAll = new Map();
-    for (const ctx of dbContexts) {
-      dbMapAll.set(ctx.context_key, ctx);
-    }
 
     // NO mostrar contextos de sistema virtuales si están eliminados en DB
     // Solo mostrar virtuales si NO existen en DB en absoluto (ni eliminados ni activos)
     for (const defaultCtx of SYSTEM_CONTEXT_DEFAULTS) {
-      const dbCtx = dbMapAll.get(defaultCtx.context_key);
-      // Solo mostrar virtual si NO existe en DB (ni activo ni eliminado)
-      if (!dbCtx) {
+      const dbCtxDeleted = dbMapAllIncludingDeleted.get(defaultCtx.context_key);
+      
+      // Si existe en DB (aunque esté eliminado), NO mostrar el virtual
+      if (dbCtxDeleted) {
+        // Verificar si está eliminado
+        if (dbCtxDeleted.deleted_at) {
+          // Está eliminado en DB, NO mostrar virtual
+          console.debug('[CTX_VISIBILITY] virtual ocultado (eliminado en DB):', defaultCtx.context_key);
+          continue;
+        }
+        // Existe y está activo, ya se añadirá desde dbContexts
+        continue;
+      }
+      
+      // Solo mostrar virtual si NO existe en DB en absoluto (ni activo ni eliminado)
+      if (!dbCtxDeleted) {
         const def = normalizeContextDefinition(defaultCtx.definition);
+        // Normalizar scope: 'recorrido' legacy se mapea a 'package'
+        let normalizedScope = def.scope || 'package';
+        if (normalizedScope === 'recorrido') {
+          normalizedScope = 'package';
+        }
+        
         const virtualCtx = {
           context_key: defaultCtx.context_key,
           label: defaultCtx.label,
           description: def.description || null,
           definition: def,
-          scope: def.scope || 'package',
+          scope: normalizedScope,
           kind: def.kind || 'normal',
           injected: def.injected !== undefined ? def.injected : false,
           type: def.type || 'string',
@@ -79,6 +104,8 @@ export async function listContexts(options = {}) {
         // Aplicar resolver canónico de visibilidad
         if (resolveContextVisibility(virtualCtx)) {
           result.push(virtualCtx);
+        } else {
+          console.debug('[CTX_VISIBILITY] virtual ocultado (resolver):', defaultCtx.context_key);
         }
       }
       // Si existe en DB (aunque esté eliminado), NO lo mostramos (respetamos el deleted_at)
