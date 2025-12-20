@@ -556,10 +556,12 @@
     jsonTextarea.value = JSON.stringify(promptContext || {}, null, 2);
 
     // Seleccionar valores actuales en los selectores
-    if (promptContext.sources && Array.isArray(promptContext.sources)) {
+    // Compatibilidad: aceptar tanto 'sources' (legacy) como 'sources_of_truth' (canónico)
+    const sourcesList = promptContext.sources_of_truth || promptContext.sources;
+    if (sourcesList && Array.isArray(sourcesList)) {
       const sourcesSelect = document.getElementById('package-sources');
       Array.from(sourcesSelect.options).forEach(opt => {
-        if (promptContext.sources.includes(opt.value)) {
+        if (sourcesList.includes(opt.value)) {
           opt.selected = true;
         }
       });
@@ -645,7 +647,7 @@
       package_key: packageKey,
       package_name: name,
       description: description,
-      sources: sources,
+      sources_of_truth: sources, // Array de catalog_key (keys semánticas, NO IDs)
       context_contract: {
         inputs: contextInputs,
         outputs: outputs

@@ -12,7 +12,7 @@
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultPdePackagesRepo } from '../infra/repos/pde-packages-repo-pg.js';
 import { previewPackage, getStudentLevel } from '../core/packages/package-engine.js';
-import { listAvailableSources } from '../services/pde-source-of-truth-registry.js';
+import { listCatalogs } from '../services/pde-catalog-registry-service.js';
 import { logError } from '../core/observability/logger.js';
 
 const packagesRepo = getDefaultPdePackagesRepo();
@@ -21,8 +21,8 @@ const packagesRepo = getDefaultPdePackagesRepo();
  * Handler principal de la API de paquetes
  */
 export default async function adminPackagesApiHandler(request, env, ctx) {
-  const authResult = await getAuthCtx(request, env);
-  if (authResult.error) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'No autenticado',
@@ -32,7 +32,6 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
       headers: { 'Content-Type': 'application/json' }
     });
   }
-  const { authCtx } = authResult;
 
   const url = new URL(request.url);
   const path = url.pathname;
@@ -252,38 +251,82 @@ async function handleUpdatePackage(id, request, env) {
  * Elimina un paquete (soft delete)
  */
 async function handleDeletePackage(id, request, env) {
-  const deleted = await packagesRepo.deletePackage(id);
-  
-  if (!deleted) {
-    return new Response(JSON.stringify({ error: 'Paquete no encontrado' }), {
-      status: 404,
+  try {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+
+    const deleted = await packagesRepo.deletePackage(id);
+    
+    if (!deleted) {
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'Paquete no encontrado' 
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`[PDE][PACKAGES_V2][DELETE] Paquete eliminado: ${id}`);
+
+    return new Response(JSON.stringify({ 
+      ok: true,
+      message: 'Paquete eliminado correctamente'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[PDE][PACKAGES_V2][DELETE] Error eliminando paquete:', error);
+    return new Response(JSON.stringify({ 
+      ok: false,
+      error: error.message 
+    }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }
-
-  console.log(`[AXE][PACKAGES] Paquete eliminado: ${id}`);
-
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 /**
  * Lista Sources of Truth disponibles (del registry canónico)
  */
+/**
+ * Lista Sources of Truth desde el Catálogo Registry PDE canónico
+ * 
+ * REGLA DE ORO: Un Source of Truth es SIEMPRE un CATÁLOGO PDE REGISTRADO.
+ * Este endpoint NO tiene lógica propia, es SOLO un adaptador del Catálogo Registry.
+ */
 async function handleListSources(request, env) {
   try {
-    const sources = await listAvailableSources();
-    return new Response(JSON.stringify({ sources }), {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+
+    // Leer directamente del Catálogo Registry PDE canónico
+    const catalogs = await listCatalogs({ onlyActive: true });
+
+    // Mapear a formato para Package Prompt Context Builder
+    // IMPORTANTE: Solo keys semánticas (catalog_key), nunca IDs
+    const sources = catalogs.map(catalog => ({
+      key: catalog.catalog_key, // catalog_key como valor semántico
+      label: catalog.label, // Nombre humano para mostrar en UI
+      description: catalog.description || null // Descripción opcional
+    }));
+
+    return new Response(JSON.stringify({ sources: sources || [] }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('[AXE][PACKAGES] Error listando sources:', error);
+    console.error('[PDE][PACKAGES_V2] Error listando sources desde catálogo registry:', error);
     return new Response(JSON.stringify({ 
+      sources: [],
       error: 'Error al listar sources',
       message: error.message 
     }), {
-      status: 500,
+      status: 200, // Retornar 200 con array vacío para que no rompa la UI
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -401,9 +444,10 @@ async function handleGetDraft(id, request, env) {
  * Guarda un draft de paquete
  */
 async function handleSaveDraft(id, request, env) {
-  const authResult = await getAuthCtx(request, env);
-  if (authResult.error) return authResult.error;
-  const { authCtx } = authResult;
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
 
   try {
     const body = await request.json();
@@ -466,9 +510,10 @@ async function handleSaveDraft(id, request, env) {
  * Publica un draft de paquete
  */
 async function handlePublishDraft(id, request, env) {
-  const authResult = await getAuthCtx(request, env);
-  if (authResult.error) return authResult.error;
-  const { authCtx } = authResult;
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
 
   try {
     const pkg = await packagesRepo.getPackageById(id) || await packagesRepo.getPackageByKey(id);
