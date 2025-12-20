@@ -16,21 +16,42 @@
       </button>
     </div>
 
-    <!-- Tabs -->
-    <div class="border-b border-slate-600 mb-4">
+    <!-- Tabs por scope -->
+    <div class="border-b border-slate-600 mb-4 flex flex-wrap gap-2">
       <button 
         onclick="mostrarScopeTab('system')" 
         id="tabSystem" 
         class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium"
       >
-        🧠 Contextos de Sistema
+        🧠 Sistema
       </button>
       <button 
-        onclick="mostrarScopeTab('recorrido')" 
-        id="tabRecorrido" 
+        onclick="mostrarScopeTab('structural')" 
+        id="tabStructural" 
         class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
       >
-        🔁 Contextos de Recorridos
+        🏗️ Estructurales
+      </button>
+      <button 
+        onclick="mostrarScopeTab('personal')" 
+        id="tabPersonal" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        👤 Personales
+      </button>
+      <button 
+        onclick="mostrarScopeTab('package')" 
+        id="tabPackage" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        📦 Package
+      </button>
+      <button 
+        onclick="mostrarScopeTab('mappings')" 
+        id="tabMappings" 
+        class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-medium"
+      >
+        🗺️ Mappings
       </button>
     </div>
 
@@ -41,6 +62,31 @@
 
     <div id="contextsList" class="space-y-2">
       <!-- Se llena dinámicamente -->
+    </div>
+
+    <!-- Tab Mappings (solo para contextos enum) -->
+    <div id="mappingsTabContent" class="hidden">
+      <div class="mb-4 p-3 bg-slate-700 rounded text-sm text-slate-300">
+        <strong>Context Mappings:</strong> Traduce valores de enum en parámetros derivados reutilizables (ej: minutos, cantidades, límites).
+        <br>Selecciona un contexto enum para gestionar sus mappings.
+      </div>
+
+      <!-- Selector de contexto -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Contexto (solo enum)</label>
+        <select 
+          id="mappingContextSelector" 
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          onchange="cargarMappings()"
+        >
+          <option value="">-- Seleccionar contexto enum --</option>
+        </select>
+      </div>
+
+      <!-- Lista de mappings -->
+      <div id="mappingsList" class="space-y-2">
+        <!-- Se llena dinámicamente -->
+      </div>
     </div>
   </div>
 </div>
@@ -137,8 +183,8 @@
         <p class="text-xs text-slate-500 mt-1">Escribe un valor por línea</p>
       </div>
 
-      <!-- Scope y Origin -->
-      <div class="grid grid-cols-2 gap-4 mb-4">
+      <!-- Scope, Kind, Injected -->
+      <div class="grid grid-cols-3 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium text-slate-300 mb-2">Scope <span class="text-red-400">*</span></label>
           <select 
@@ -146,38 +192,62 @@
             class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             onchange="actualizarScopeEnFormulario()"
           >
-            <option value="recorrido">Recorrido</option>
-            <option value="system">Sistema</option>
+            <option value="package">Package</option>
+            <option value="system">System</option>
+            <option value="structural">Structural</option>
+            <option value="personal">Personal</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">
-            <strong>Recorrido:</strong> Para usar en paquetes y recorridos<br>
-            <strong>Sistema:</strong> Contextos del sistema (ej: nivel_efectivo)
+            <strong>Package:</strong> Definido por experiencia<br>
+            <strong>System:</strong> Global del sistema<br>
+            <strong>Structural:</strong> Estado estructural<br>
+            <strong>Personal:</strong> Estado personal
           </p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-2">Origin</label>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Kind</label>
           <select 
-            id="contextOrigin" 
+            id="contextKind" 
             class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="user_choice">User Choice</option>
-            <option value="system">System</option>
-            <option value="derived">Derived</option>
+            <option value="normal">Normal</option>
+            <option value="level">Level</option>
           </select>
+          <p class="text-xs text-slate-500 mt-1">
+            <strong>Normal:</strong> Contexto estándar<br>
+            <strong>Level:</strong> Contexto de nivel
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-2">Injected</label>
+          <div class="mt-2">
+            <label class="flex items-center gap-2 text-slate-300">
+              <input 
+                type="checkbox" 
+                id="contextInjected" 
+                class="w-4 h-4"
+              />
+              El runtime lo inyecta automáticamente
+            </label>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Si está marcado, el runtime inyecta este contexto automáticamente
+          </p>
         </div>
       </div>
 
-      <!-- Usable en paquetes (solo para system) -->
-      <div class="mb-4 hidden" id="usableEnPaquetesContainer">
-        <label class="block text-sm font-medium text-slate-300 mb-2">
-          <input 
-            type="checkbox" 
-            id="usableEnPaquetes" 
-            class="mr-2"
-          />
-          Usable en Paquetes
-        </label>
-        <p class="text-xs text-slate-500 mt-1">Permite usar este contexto de sistema en paquetes</p>
+      <!-- Origin (legacy, mantener para compatibilidad) -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Origin (legacy)</label>
+        <select 
+          id="contextOrigin" 
+          class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="user_choice">User Choice</option>
+          <option value="system">System</option>
+          <option value="derived">Derived</option>
+        </select>
+        <p class="text-xs text-slate-500 mt-1">Campo legacy, se mantiene para compatibilidad</p>
       </div>
 
       <!-- UI Config (opcional) -->
@@ -234,41 +304,91 @@ let currentScopeTab = 'system'; // Tab activo: 'system' o 'recorrido'
 // Cargar contextos al iniciar
 document.addEventListener('DOMContentLoaded', () => {
   contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
-  mostrarScopeTab('system'); // Mostrar tab de sistema por defecto
+  mostrarScopeTab('package'); // Mostrar tab de package por defecto
+  // Pre-cargar contextos enum para el selector de mappings
+  cargarContextosEnum();
 });
 
 // Mostrar tab por scope
 function mostrarScopeTab(scope) {
   currentScopeTab = scope;
   
-  // Actualizar tabs
-  if (scope === 'system') {
-    document.getElementById('tabSystem').classList.add('border-indigo-500', 'text-white');
-    document.getElementById('tabSystem').classList.remove('border-transparent', 'text-slate-400');
-    document.getElementById('tabRecorrido').classList.remove('border-indigo-500', 'text-white');
-    document.getElementById('tabRecorrido').classList.add('border-transparent', 'text-slate-400');
-    document.getElementById('scopeExplanation').innerHTML = '<strong>Contextos de Sistema:</strong> Variables globales del sistema (ej: nivel_efectivo). Pueden usarse en paquetes si están marcados como "Usable en Paquetes".';
-  } else {
-    document.getElementById('tabRecorrido').classList.add('border-indigo-500', 'text-white');
-    document.getElementById('tabRecorrido').classList.remove('border-transparent', 'text-slate-400');
-    document.getElementById('tabSystem').classList.remove('border-indigo-500', 'text-white');
-    document.getElementById('tabSystem').classList.add('border-transparent', 'text-slate-400');
-    document.getElementById('scopeExplanation').innerHTML = '<strong>Contextos de Recorridos:</strong> Variables específicas para paquetes y recorridos. Aparecen automáticamente en el selector del creador de paquetes.';
+  // Resetear todos los tabs
+  const tabs = ['tabSystem', 'tabStructural', 'tabPersonal', 'tabPackage', 'tabMappings'];
+  tabs.forEach(tabId => {
+    const tab = document.getElementById(tabId);
+    if (tab) {
+      tab.classList.remove('border-indigo-500', 'text-white');
+      tab.classList.add('border-transparent', 'text-slate-400');
+    }
+  });
+  
+  // Activar tab seleccionado
+  const activeTabId = scope === 'system' ? 'tabSystem' :
+                      scope === 'structural' ? 'tabStructural' :
+                      scope === 'personal' ? 'tabPersonal' :
+                      scope === 'package' ? 'tabPackage' :
+                      'tabMappings';
+  const activeTab = document.getElementById(activeTabId);
+  if (activeTab) {
+    activeTab.classList.add('border-indigo-500', 'text-white');
+    activeTab.classList.remove('border-transparent', 'text-slate-400');
   }
   
-  renderContexts();
+  // Mostrar/ocultar contenido
+  if (scope === 'mappings') {
+    document.getElementById('contextsList').classList.add('hidden');
+    document.getElementById('mappingsTabContent').classList.remove('hidden');
+    cargarContextosEnum();
+  } else {
+    document.getElementById('contextsList').classList.remove('hidden');
+    document.getElementById('mappingsTabContent').classList.add('hidden');
+    
+    // Actualizar explicación según scope
+    const explanations = {
+      'system': '<strong>Contextos de Sistema:</strong> Variables globales del sistema (ej: temporada). Inyectados automáticamente por el runtime.',
+      'structural': '<strong>Contextos Estructurales:</strong> Estado estructural del alumno (ej: nivel_pde). Inyectados automáticamente.',
+      'personal': '<strong>Contextos Personales:</strong> Estado personal variable del alumno. No inyectados automáticamente.',
+      'package': '<strong>Contextos de Package:</strong> Definidos por experiencias concretas. Aparecen en el selector del creador de paquetes.'
+    };
+    document.getElementById('scopeExplanation').innerHTML = explanations[scope] || '';
+    renderContexts();
+  }
 }
 
 // Actualizar formulario cuando cambia scope
 function actualizarScopeEnFormulario() {
   const scope = document.getElementById('contextScope').value;
-  const usableContainer = document.getElementById('usableEnPaquetesContainer');
+  const kindSelect = document.getElementById('contextKind');
+  const injectedCheckbox = document.getElementById('contextInjected');
   
-  if (scope === 'system') {
-    usableContainer.classList.remove('hidden');
-  } else {
-    usableContainer.classList.add('hidden');
-    document.getElementById('usableEnPaquetes').checked = false;
+  // Validaciones: impedir errores conceptuales
+  // nivel_pde debe ser structural + level + injected
+  const contextKey = document.getElementById('contextKey').value;
+  if (contextKey === 'nivel_pde') {
+    if (scope !== 'structural') {
+      alert('⚠️ nivel_pde DEBE tener scope=structural');
+      document.getElementById('contextScope').value = 'structural';
+    }
+    if (kindSelect.value !== 'level') {
+      alert('⚠️ nivel_pde DEBE tener kind=level');
+      kindSelect.value = 'level';
+    }
+    if (!injectedCheckbox.checked) {
+      alert('⚠️ nivel_pde DEBE tener injected=true');
+      injectedCheckbox.checked = true;
+    }
+  }
+  
+  // Si es system o structural, normalmente injected=true
+  if ((scope === 'system' || scope === 'structural') && !injectedCheckbox.checked) {
+    // Sugerir pero no forzar
+    console.log(`Sugerencia: contextos ${scope} normalmente tienen injected=true`);
+  }
+  
+  // Si es package, normalmente injected=false
+  if (scope === 'package' && injectedCheckbox.checked) {
+    console.log(`Sugerencia: contextos package normalmente tienen injected=false`);
   }
 }
 
@@ -304,8 +424,10 @@ function renderContexts() {
   // Filtrar contextos por scope activo
   const scope = currentScopeTab;
   const filteredContexts = contexts.filter(ctx => {
-    const def = ctx.definition || {};
-    return (def.scope || 'recorrido') === scope;
+    const ctxScope = ctx.scope || ctx.definition?.scope || 'package';
+    // Mapear 'recorrido' legacy a 'package'
+    const normalizedScope = ctxScope === 'recorrido' ? 'package' : ctxScope;
+    return normalizedScope === scope;
   });
 
   if (filteredContexts.length === 0) {
@@ -316,8 +438,10 @@ function renderContexts() {
   container.innerHTML = filteredContexts.map(ctx => {
     const def = ctx.definition || {};
     const isSystem = ctx.is_system || false;
-    const ctxScope = def.scope || 'recorrido';
-    const usableEnPaquetes = def.usable_en_paquetes || false;
+    const ctxScope = ctx.scope || def.scope || 'package';
+    const ctxKind = ctx.kind || def.kind || 'normal';
+    const ctxInjected = ctx.injected !== undefined ? ctx.injected : (def.injected !== undefined ? def.injected : false);
+    const ctxType = ctx.type || def.type || 'string';
     
     return `
       <div class="bg-slate-700 rounded p-4 flex justify-between items-start">
@@ -325,14 +449,15 @@ function renderContexts() {
           <div class="flex items-center gap-2 mb-2">
             <h3 class="text-lg font-semibold text-white">${escapeHtml(ctx.label)}</h3>
             <span class="text-xs px-2 py-1 rounded ${isSystem ? 'bg-blue-600' : 'bg-green-600'} text-white">${isSystem ? 'Sistema' : 'Usuario'}</span>
-            <span class="text-xs px-2 py-1 rounded ${ctxScope === 'system' ? 'bg-purple-600' : 'bg-indigo-600'} text-white">${ctxScope === 'system' ? 'SYSTEM' : 'RECORRIDO'}</span>
-            ${ctxScope === 'system' && usableEnPaquetes ? '<span class="text-xs px-2 py-1 rounded bg-yellow-600 text-white">Usable en Paquetes</span>' : ''}
+            <span class="text-xs px-2 py-1 rounded ${ctxScope === 'system' ? 'bg-purple-600' : ctxScope === 'structural' ? 'bg-orange-600' : ctxScope === 'personal' ? 'bg-pink-600' : 'bg-indigo-600'} text-white">${ctxScope.toUpperCase()}</span>
+            ${ctxKind === 'level' ? '<span class="text-xs px-2 py-1 rounded bg-yellow-600 text-white">LEVEL</span>' : ''}
+            ${ctxInjected ? '<span class="text-xs px-2 py-1 rounded bg-green-600 text-white">INJECTED</span>' : ''}
             <code class="text-xs text-slate-400">${escapeHtml(ctx.context_key)}</code>
           </div>
           <div class="text-sm text-slate-300">
-            <p><strong>Tipo:</strong> ${escapeHtml(def.type || 'string')}</p>
-            ${def.default_value !== null && def.default_value !== undefined ? `<p><strong>Default:</strong> ${escapeHtml(JSON.stringify(def.default_value))}</p>` : ''}
-            ${def.description ? `<p><strong>Descripción:</strong> ${escapeHtml(def.description)}</p>` : ''}
+            <p><strong>Tipo:</strong> ${escapeHtml(ctxType)}</p>
+            ${(ctx.default_value !== undefined ? ctx.default_value : def.default_value) !== null && (ctx.default_value !== undefined ? ctx.default_value : def.default_value) !== undefined ? `<p><strong>Default:</strong> ${escapeHtml(JSON.stringify(ctx.default_value !== undefined ? ctx.default_value : def.default_value))}</p>` : ''}
+            ${(ctx.description || def.description) ? `<p><strong>Descripción:</strong> ${escapeHtml(ctx.description || def.description)}</p>` : ''}
           </div>
         </div>
         <div class="flex gap-2">
@@ -449,14 +574,11 @@ function sincronizarHaciaJSON() {
     type,
     default_value: defaultValue,
     scope: document.getElementById('contextScope').value,
+    kind: document.getElementById('contextKind').value,
+    injected: document.getElementById('contextInjected').checked,
     origin: document.getElementById('contextOrigin').value,
     description: document.getElementById('contextDescription').value || ''
   };
-
-  // Añadir usable_en_paquetes si es scope system
-  if (definition.scope === 'system') {
-    definition.usable_en_paquetes = document.getElementById('usableEnPaquetes').checked;
-  }
 
   if (type === 'enum' && allowedValues.length > 0) {
     definition.allowed_values = allowedValues;
@@ -475,15 +597,14 @@ function sincronizarDesdeJSON() {
     const definition = JSON.parse(document.getElementById('contextDefinition').value);
     
     document.getElementById('contextType').value = definition.type || 'string';
-    document.getElementById('contextScope').value = definition.scope || 'recorrido';
+    document.getElementById('contextScope').value = definition.scope || 'package';
+    document.getElementById('contextKind').value = definition.kind || 'normal';
+    document.getElementById('contextInjected').checked = definition.injected !== undefined ? definition.injected : false;
     document.getElementById('contextOrigin').value = definition.origin || 'user_choice';
     document.getElementById('contextDescription').value = definition.description || '';
     
-    // Actualizar usable_en_paquetes
+    // Actualizar validaciones
     actualizarScopeEnFormulario();
-    if (definition.scope === 'system') {
-      document.getElementById('usableEnPaquetes').checked = definition.usable_en_paquetes || false;
-    }
     
     if (definition.ui_config) {
       document.getElementById('uiConfig').value = JSON.stringify(definition.ui_config, null, 2);
@@ -523,7 +644,9 @@ function abrirModalCrearContexto() {
   document.getElementById('contextLabel').value = '';
   document.getElementById('contextDescription').value = '';
   document.getElementById('contextType').value = 'string';
-  document.getElementById('contextScope').value = 'recorrido';
+  document.getElementById('contextScope').value = 'package';
+  document.getElementById('contextKind').value = 'normal';
+  document.getElementById('contextInjected').checked = false;
   document.getElementById('contextOrigin').value = 'user_choice';
   document.getElementById('uiConfig').value = '';
   document.getElementById('allowedValues').value = '';
@@ -537,7 +660,9 @@ function abrirModalCrearContexto() {
   document.getElementById('contextDefinition').value = JSON.stringify({
     type: 'string',
     default_value: '',
-    scope: 'recorrido',
+    scope: 'package',
+    kind: 'normal',
+    injected: false,
     origin: 'user_choice',
     description: ''
   }, null, 2);
@@ -565,16 +690,15 @@ function editarContexto(contextKey) {
   document.getElementById('contextLabel').value = ctx.label;
   
   const def = ctx.definition || {};
-  document.getElementById('contextType').value = def.type || 'string';
-  document.getElementById('contextScope').value = def.scope || 'recorrido';
+  document.getElementById('contextType').value = ctx.type || def.type || 'string';
+  document.getElementById('contextScope').value = ctx.scope || def.scope || 'package';
+  document.getElementById('contextKind').value = ctx.kind || def.kind || 'normal';
+  document.getElementById('contextInjected').checked = ctx.injected !== undefined ? ctx.injected : (def.injected !== undefined ? def.injected : false);
   document.getElementById('contextOrigin').value = def.origin || 'user_choice';
-  document.getElementById('contextDescription').value = def.description || '';
+  document.getElementById('contextDescription').value = ctx.description || def.description || '';
   
-  // Actualizar usable_en_paquetes
+  // Actualizar validaciones
   actualizarScopeEnFormulario();
-  if (def.scope === 'system') {
-    document.getElementById('usableEnPaquetes').checked = def.usable_en_paquetes || false;
-  }
   
   if (def.ui_config) {
     document.getElementById('uiConfig').value = JSON.stringify(def.ui_config, null, 2);
@@ -648,10 +772,57 @@ async function guardarContexto() {
     const url = editingContextKey ? `/admin/api/contexts/${encodeURIComponent(contextKey)}` : '/admin/api/contexts';
     const method = editingContextKey ? 'PUT' : 'POST';
 
+    // Obtener campos canónicos del formulario
+    const scope = document.getElementById('contextScope').value;
+    const kind = document.getElementById('contextKind').value;
+    const injected = document.getElementById('contextInjected').checked;
+    const type = document.getElementById('contextType').value;
+    const description = document.getElementById('contextDescription').value || null;
+    
+    // Obtener allowed_values y default_value
+    let allowedValues = undefined;
+    let defaultValue = undefined;
+    
+    if (type === 'enum') {
+      const allowedText = document.getElementById('allowedValues').value;
+      allowedValues = allowedText.split('\n').map(v => v.trim()).filter(v => v);
+    }
+    
+    const defaultValueEl = document.getElementById('defaultValue');
+    if (defaultValueEl) {
+      if (type === 'number') {
+        const val = defaultValueEl.value;
+        defaultValue = val === '' ? undefined : parseFloat(val);
+      } else if (type === 'boolean') {
+        defaultValue = defaultValueEl.value === 'true';
+      } else if (type === 'json') {
+        try {
+          defaultValue = defaultValueEl.value ? JSON.parse(defaultValueEl.value) : undefined;
+        } catch (e) {
+          defaultValue = undefined;
+        }
+      } else if (type === 'enum') {
+        defaultValue = defaultValueEl.value || undefined;
+      } else {
+        defaultValue = defaultValueEl.value || undefined;
+      }
+    }
+
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context_key: contextKey, label, definition })
+      body: JSON.stringify({ 
+        context_key: contextKey, 
+        label, 
+        description,
+        definition,
+        scope,
+        kind,
+        injected,
+        type,
+        allowed_values: allowedValues,
+        default_value: defaultValue
+      })
     });
 
     const contentType = response.headers.get('content-type');
@@ -724,6 +895,335 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ============================================
+// FUNCIONES PARA MAPPINGS
+// ============================================
+
+// Cargar contextos enum en el selector
+async function cargarContextosEnum() {
+  const selector = document.getElementById('mappingContextSelector');
+  if (!selector) return;
+
+  // Filtrar solo contextos enum
+  const enumContexts = contexts.filter(ctx => {
+    const def = ctx.definition || {};
+    return def.type === 'enum' && def.allowed_values && def.allowed_values.length > 0;
+  });
+
+  selector.innerHTML = '<option value="">-- Seleccionar contexto enum --</option>' +
+    enumContexts.map(ctx => 
+      `<option value="${escapeHtml(ctx.context_key)}">${escapeHtml(ctx.label)} (${escapeHtml(ctx.context_key)})</option>`
+    ).join('');
+
+  // Si hay un contexto seleccionado, cargar sus mappings
+  if (selector.value) {
+    await cargarMappings();
+  }
+}
+
+// Cargar mappings del contexto seleccionado
+async function cargarMappings() {
+  const selector = document.getElementById('mappingContextSelector');
+  const contextKey = selector.value;
+  const container = document.getElementById('mappingsList');
+  
+  if (!contextKey) {
+    container.innerHTML = '<p class="text-slate-400">Selecciona un contexto enum</p>';
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/api/context-mappings?context_key=${encodeURIComponent(contextKey)}`);
+    const data = await response.json();
+
+    if (!data.ok) {
+      container.innerHTML = `<p class="text-red-400">Error: ${escapeHtml(data.error || 'Error desconocido')}</p>`;
+      return;
+    }
+
+    const mappings = data.mappings || [];
+    const context = contexts.find(c => c.context_key === contextKey);
+    const def = context?.definition || {};
+    const allowedValues = def.allowed_values || [];
+
+    // Mostrar warnings si existen
+    if (data.warnings && data.warnings.length > 0) {
+      container.innerHTML = `<div class="mb-4 p-3 bg-yellow-900 border border-yellow-600 rounded text-yellow-200 text-sm">
+        <strong>⚠️ Advertencias:</strong><br>
+        ${data.warnings.map(w => escapeHtml(w)).join('<br>')}
+      </div>`;
+    } else {
+      container.innerHTML = '';
+    }
+
+    // Crear un mapping para cada valor permitido (si no existe, mostrar placeholder)
+    const mappingsMap = new Map(mappings.map(m => [m.mapping_key, m]));
+
+    container.innerHTML += allowedValues.map((value, index) => {
+      const mapping = mappingsMap.get(value);
+      const mappingId = mapping ? mapping.id : null;
+      const mappingLabel = mapping ? (mapping.label || value) : value;
+      const mappingDescription = mapping ? (mapping.description || '') : '';
+      const mappingData = mapping ? mapping.mapping_data : {};
+      const isActive = mapping ? mapping.active : true;
+      const sortOrder = mapping ? mapping.sort_order : index;
+
+      return `
+        <div class="bg-slate-700 rounded p-4 mb-2" data-mapping-key="${escapeHtml(value)}">
+          <div class="flex justify-between items-start mb-3">
+            <div class="flex-1">
+              <div class="mb-2">
+                <label class="block text-xs text-slate-400 mb-1">Label (humano) <span class="text-red-400">*</span></label>
+                <input 
+                  type="text" 
+                  id="mappingLabel_${escapeHtml(value)}" 
+                  value="${escapeHtml(mappingLabel)}"
+                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Etiqueta legible"
+                  onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
+                />
+              </div>
+              <div class="mb-2">
+                <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+                <textarea 
+                  id="mappingDescription_${escapeHtml(value)}" 
+                  rows="2"
+                  class="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  placeholder="Descripción opcional del mapping"
+                  onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
+                >${escapeHtml(mappingDescription)}</textarea>
+              </div>
+              <div class="text-xs text-slate-500 mb-2">
+                <code class="text-slate-400">${escapeHtml(contextKey)}.${escapeHtml(value)}</code>
+              </div>
+            </div>
+            <div class="flex flex-col gap-2 ml-4">
+              <label class="flex items-center gap-2 text-sm text-slate-300">
+                <input 
+                  type="checkbox" 
+                  ${isActive ? 'checked' : ''} 
+                  onchange="toggleMappingActive('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}', this.checked)"
+                  ${!mappingId ? 'disabled' : ''}
+                />
+                <span class="text-xs">Activo</span>
+              </label>
+              <input 
+                type="number" 
+                id="sortOrder_${escapeHtml(value)}" 
+                value="${sortOrder}"
+                class="w-16 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs"
+                placeholder="Orden"
+                onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
+              />
+              <span class="text-xs text-slate-500 text-center">Orden</span>
+              ${mappingId ? `
+                <button onclick="eliminarMapping('${mappingId}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded">🗑️</button>
+              ` : ''}
+            </div>
+          </div>
+          
+          <!-- Mapping Data (colapsable, modo avanzado) -->
+          <details class="mt-2">
+            <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-300 mb-2">
+              ⚙️ Mapping Data (JSON avanzado)
+            </summary>
+            <div class="mt-2">
+              <label class="block text-xs text-slate-400 mb-1">Mapping Data (JSON)</label>
+              <textarea 
+                id="mappingData_${escapeHtml(value)}" 
+                rows="4"
+                class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+                placeholder='{"max_aspects": 5, "minutes": 10}'
+                onblur="guardarMapping('${mappingId || 'new'}', '${escapeHtml(contextKey)}', '${escapeHtml(value)}')"
+              >${escapeHtml(JSON.stringify(mappingData, null, 2))}</textarea>
+              <p class="text-xs text-slate-500 mt-1">Parámetros derivados en formato JSON (solo semántica, NO lógica)</p>
+            </div>
+          </details>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Error cargando mappings:', error);
+    container.innerHTML = `<p class="text-red-400">Error cargando mappings: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+// Guardar mapping (auto-guardado al perder foco)
+async function guardarMapping(mappingId, contextKey, mappingKey) {
+  const labelInput = document.getElementById(`mappingLabel_${mappingKey}`);
+  const descriptionTextarea = document.getElementById(`mappingDescription_${mappingKey}`);
+  const dataTextarea = document.getElementById(`mappingData_${mappingKey}`);
+  const sortOrderInput = document.getElementById(`sortOrder_${mappingKey}`);
+  
+  if (!labelInput || !sortOrderInput) return;
+
+  const label = labelInput.value.trim();
+  if (!label) {
+    alert(`El label es obligatorio para el mapping '${mappingKey}'`);
+    labelInput.focus();
+    return;
+  }
+
+  const description = descriptionTextarea ? descriptionTextarea.value.trim() : null;
+
+  let mappingData = {};
+  if (dataTextarea && dataTextarea.value.trim()) {
+    try {
+      mappingData = JSON.parse(dataTextarea.value);
+    } catch (e) {
+      alert(`JSON inválido en mapping '${mappingKey}': ${e.message}`);
+      return;
+    }
+  }
+
+  const sortOrder = parseInt(sortOrderInput.value) || 0;
+
+  try {
+    const response = await fetch('/admin/api/context-mappings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context_key: contextKey,
+        mapping_key: mappingKey,
+        label: label,
+        description: description,
+        mapping_data: mappingData,
+        sort_order: sortOrder,
+        active: true
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert(`Error guardando mapping: ${data.error || 'Error desconocido'}`);
+      return;
+    }
+
+    // Mostrar warnings si existen
+    if (data.warnings && data.warnings.length > 0) {
+      console.warn('Warnings al guardar mapping:', data.warnings);
+    }
+
+    // Mostrar feedback visual (toast)
+    showMappingToast(`✅ Mapping guardado: ${label}`);
+
+    // Recargar mappings para actualizar IDs
+    await cargarMappings();
+  } catch (error) {
+    console.error('Error guardando mapping:', error);
+    alert(`Error guardando mapping: ${error.message}`);
+  }
+}
+
+// Mostrar toast para feedback de guardado
+function showMappingToast(message) {
+  let toast = document.getElementById('mapping-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'mapping-toast';
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      font-size: 0.875rem;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    `;
+    document.body.appendChild(toast);
+  }
+  
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateY(0)';
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+  }, 2000);
+}
+
+// Toggle active/inactive
+async function toggleMappingActive(mappingId, contextKey, mappingKey, active) {
+  if (mappingId === 'new') {
+    // Si no existe, crear con datos vacíos
+    await guardarMapping('new', contextKey, mappingKey);
+    // Recargar para obtener el ID
+    await cargarMappings();
+    // Toggle del nuevo mapping
+    const newMapping = document.querySelector(`[data-mapping-key="${mappingKey}"]`);
+    if (newMapping) {
+      // Buscar el mapping recién creado y actualizar
+      const response = await fetch(`/admin/api/context-mappings?context_key=${encodeURIComponent(contextKey)}`);
+      const data = await response.json();
+      const mapping = data.mappings?.find(m => m.mapping_key === mappingKey);
+      if (mapping) {
+        await updateMappingActive(mapping.id, active);
+      }
+    }
+    return;
+  }
+
+  await updateMappingActive(mappingId, active);
+}
+
+async function updateMappingActive(mappingId, active) {
+  try {
+    const response = await fetch(`/admin/api/context-mappings/${mappingId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active })
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert(`Error actualizando mapping: ${data.error || 'Error desconocido'}`);
+      // Revertir checkbox
+      const checkbox = document.querySelector(`input[onchange*="${mappingId}"]`);
+      if (checkbox) checkbox.checked = !active;
+    }
+  } catch (error) {
+    console.error('Error actualizando mapping:', error);
+    alert(`Error actualizando mapping: ${error.message}`);
+  }
+}
+
+// Eliminar mapping
+async function eliminarMapping(mappingId) {
+  if (!confirm('¿Estás seguro de eliminar este mapping?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/api/context-mappings/${mappingId}`, {
+      method: 'DELETE'
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      alert(`Error eliminando mapping: ${data.error || 'Error desconocido'}`);
+      return;
+    }
+
+    // Recargar mappings
+    await cargarMappings();
+  } catch (error) {
+    console.error('Error eliminando mapping:', error);
+    alert(`Error eliminando mapping: ${error.message}`);
+  }
 }
 </script>
 

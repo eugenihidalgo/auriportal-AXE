@@ -13,6 +13,8 @@ import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultPdePackagesRepo } from '../infra/repos/pde-packages-repo-pg.js';
 import { previewPackage, getStudentLevel } from '../core/packages/package-engine.js';
 import { listCatalogs } from '../services/pde-catalog-registry-service.js';
+import { listContexts } from '../services/pde-contexts-service.js';
+import { listSenales } from '../services/pde-senales-service.js';
 import { logError } from '../core/observability/logger.js';
 
 const packagesRepo = getDefaultPdePackagesRepo();
@@ -38,21 +40,50 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
   const method = request.method;
 
   try {
+    // ============================================
+    // RUTAS ESPECÍFICAS (ANTES de patrones dinámicos)
+    // ============================================
+    // CRÍTICO: Estas rutas deben verificarse ANTES de los patrones dinámicos
+    // para evitar que "sources", "contexts", "signals" sean capturados como IDs
+    
+    // GET /admin/api/packages/sources - Lista Sources of Truth disponibles
+    if (path === '/admin/api/packages/sources' && method === 'GET') {
+      return await handleListSources(request, env);
+    }
+
+    // GET /admin/api/packages/contexts - Lista Contextos disponibles
+    if (path === '/admin/api/packages/contexts' && method === 'GET') {
+      return await handleListContexts(request, env);
+    }
+
+    // GET /admin/api/packages/signals - Lista Señales disponibles
+    if (path === '/admin/api/packages/signals' && method === 'GET') {
+      return await handleListSignals(request, env);
+    }
+
+    // ============================================
+    // RUTAS PRINCIPALES
+    // ============================================
+    
     // GET /admin/api/packages - Lista todos los paquetes
     if (path === '/admin/api/packages' && method === 'GET') {
       return await handleListPackages(request, env);
     }
+
+    // POST /admin/api/packages - Crea un paquete
+    if (path === '/admin/api/packages' && method === 'POST') {
+      return await handleCreatePackage(request, env, authCtx);
+    }
+
+    // ============================================
+    // RUTAS DINÁMICAS (después de rutas específicas)
+    // ============================================
 
     // GET /admin/api/packages/:id - Obtiene un paquete
     const matchGet = path.match(/^\/admin\/api\/packages\/([^\/]+)$/);
     if (matchGet && method === 'GET') {
       const id = matchGet[1];
       return await handleGetPackage(id, request, env);
-    }
-
-    // POST /admin/api/packages - Crea un paquete
-    if (path === '/admin/api/packages' && method === 'POST') {
-      return await handleCreatePackage(request, env, authCtx);
     }
 
     // PUT /admin/api/packages/:id - Actualiza un paquete
@@ -62,11 +93,11 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
       return await handleUpdatePackage(id, request, env);
     }
 
-    // DELETE /admin/api/packages/:id - Elimina un paquete
+    // DELETE /admin/api/packages/:id - Elimina un paquete (acepta UUID o package_key)
     const matchDelete = path.match(/^\/admin\/api\/packages\/([^\/]+)$/);
     if (matchDelete && method === 'DELETE') {
-      const id = matchDelete[1];
-      return await handleDeletePackage(id, request, env);
+      const idOrKey = matchDelete[1];
+      return await handleDeletePackage(idOrKey, request, env);
     }
 
     // POST /admin/api/packages/:id/preview - Preview de un paquete
@@ -94,11 +125,6 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
     if (matchPublish && method === 'POST') {
       const id = matchPublish[1];
       return await handlePublishDraft(id, request, env);
-    }
-
-    // GET /admin/api/packages/sources - Lista Sources of Truth disponibles
-    if (path === '/admin/api/packages/sources' && method === 'GET') {
-      return await handleListSources(request, env);
     }
 
     // Ruta no encontrada
@@ -272,15 +298,39 @@ async function handleUpdatePackage(id, request, env) {
 
 /**
  * Elimina un paquete (soft delete)
+ * 
+ * REGLA: Acepta UUID o package_key
+ * Si es package_key, busca el paquete primero
  */
-async function handleDeletePackage(id, request, env) {
+async function handleDeletePackage(idOrKey, request, env) {
   try {
     const authCtx = await requireAdminContext(request, env);
     if (authCtx instanceof Response) {
       return authCtx;
     }
 
-    const deleted = await packagesRepo.deletePackage(id);
+    // Determinar si es UUID o package_key
+    // UUID tiene formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrKey);
+    
+    let packageId = idOrKey;
+    
+    // Si no es UUID, asumir que es package_key
+    if (!isUUID) {
+      const pkg = await packagesRepo.getPackageByKey(idOrKey);
+      if (!pkg) {
+        return new Response(JSON.stringify({ 
+          ok: false,
+          error: 'Paquete no encontrado' 
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      packageId = pkg.id;
+    }
+
+    const deleted = await packagesRepo.deletePackage(packageId);
     
     if (!deleted) {
       return new Response(JSON.stringify({ 
@@ -292,7 +342,7 @@ async function handleDeletePackage(id, request, env) {
       });
     }
 
-    console.log(`[PDE][PACKAGES_V2][DELETE] Paquete eliminado: ${id}`);
+    console.log(`[PDE][PACKAGES_V2][DELETE] Paquete eliminado: ${idOrKey} (ID: ${packageId})`);
 
     return new Response(JSON.stringify({ 
       ok: true,
@@ -366,6 +416,140 @@ async function handleListSources(request, env) {
     console.error('[PDE][PACKAGES][SOURCES][FATAL] Error crítico en handleListSources:', error);
     return new Response(JSON.stringify({ 
       sources: []
+    }), {
+      status: 200, // NUNCA devolver 500
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Lista Contextos disponibles desde pde_contexts
+ * 
+ * REGLA DE ORO: Este endpoint NUNCA puede devolver 500. FAIL-OPEN SIEMPRE.
+ * 
+ * FILTRADO CRÍTICO (FASE 4):
+ * - ❌ NO permitir seleccionar contextos con scope = system
+ * - ❌ NO permitir seleccionar contextos con scope = structural
+ * - ✅ SOLO permitir: scope = package (y kind = normal o level si es nivel local)
+ * 
+ * Los contextos system y structural están disponibles implícitamente en:
+ * - context_rules
+ * - runtime
+ * - widgets
+ */
+async function handleListContexts(request, env) {
+  try {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+
+    // Leer desde servicio de contextos (DB + defaults)
+    let contextsRaw = [];
+    try {
+      contextsRaw = await listContexts({ includeArchived: false });
+    } catch (contextError) {
+      console.error('[PDE][PACKAGES][CONTEXTS][FATAL] Error obteniendo contextos:', contextError);
+      contextsRaw = []; // Fail-open
+    }
+
+    // FILTRADO CRÍTICO: Solo contextos seleccionables para packages
+    // Permitir solo: scope = package (y kind = normal o level si es nivel local)
+    const selectableContexts = (contextsRaw || [])
+      .filter(ctx => {
+        if (!ctx || !ctx.context_key) return false;
+        
+        // Obtener scope (desde campo dedicado o definition legacy)
+        const scope = ctx.scope || ctx.definition?.scope;
+        const kind = ctx.kind || ctx.definition?.kind;
+        
+        // ❌ NO permitir system ni structural
+        if (scope === 'system' || scope === 'structural') {
+          return false;
+        }
+        
+        // ✅ SOLO permitir package
+        if (scope === 'package') {
+          // Permitir kind = normal o level (niveles locales)
+          return kind === 'normal' || kind === 'level' || !kind;
+        }
+        
+        // Si no tiene scope definido, asumir package (compatibilidad)
+        return true;
+      });
+
+    // Mapear a formato para Package Prompt Context Builder
+    // IMPORTANTE: Solo keys semánticas (context_key), nunca IDs
+    const contexts = selectableContexts
+      .map(ctx => ({
+        key: ctx.context_key || '',
+        context_key: ctx.context_key || '', // Compatibilidad
+        name: ctx.label || ctx.name || ctx.context_key || '',
+        label: ctx.label || ctx.name || ctx.context_key || '',
+        scope: ctx.scope || ctx.definition?.scope || 'package',
+        kind: ctx.kind || ctx.definition?.kind || 'normal'
+      }))
+      .filter(ctx => ctx.key); // Eliminar contextos sin key
+
+    return new Response(JSON.stringify({ contexts: contexts || [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    // Fail-open absoluto: cualquier error devuelve array vacío con 200
+    console.error('[PDE][PACKAGES][CONTEXTS][FATAL] Error crítico en handleListContexts:', error);
+    return new Response(JSON.stringify({ 
+      contexts: []
+    }), {
+      status: 200, // NUNCA devolver 500
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Lista Señales disponibles desde pde_signals
+ * 
+ * REGLA DE ORO: Este endpoint NUNCA puede devolver 500. FAIL-OPEN SIEMPRE.
+ */
+async function handleListSignals(request, env) {
+  try {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+
+    // Leer desde servicio de señales (DB + defaults)
+    let signalsRaw = [];
+    try {
+      signalsRaw = await listSenales({ includeArchived: false });
+    } catch (signalError) {
+      console.error('[PDE][PACKAGES][SIGNALS][FATAL] Error obteniendo señales:', signalError);
+      signalsRaw = []; // Fail-open
+    }
+
+    // Mapear a formato para Package Prompt Context Builder
+    // IMPORTANTE: Solo keys semánticas (signal_key), nunca IDs
+    const signals = (signalsRaw || [])
+      .filter(s => s && s.signal_key) // Solo señales válidas
+      .map(s => ({
+        key: s.signal_key || '',
+        signal_key: s.signal_key || '', // Compatibilidad
+        name: s.label || s.name || s.signal_key || '',
+        label: s.label || s.name || s.signal_key || ''
+      }))
+      .filter(s => s.key); // Eliminar señales sin key
+
+    return new Response(JSON.stringify({ signals: signals || [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    // Fail-open absoluto: cualquier error devuelve array vacío con 200
+    console.error('[PDE][PACKAGES][SIGNALS][FATAL] Error crítico en handleListSignals:', error);
+    return new Response(JSON.stringify({ 
+      signals: []
     }), {
       status: 200, // NUNCA devolver 500
       headers: { 'Content-Type': 'application/json' }

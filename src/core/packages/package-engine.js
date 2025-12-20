@@ -240,7 +240,8 @@ async function resolveSource(source, options) {
   const {
     source_key,
     filter_by_nivel = true,
-    template_key
+    template_key,
+    selection_rules = null // Nuevo: reglas de selección para transmutaciones
   } = source;
 
   // Obtener límite de la regla activa (si existe)
@@ -258,7 +259,8 @@ async function resolveSource(source, options) {
     template_key,
     filter_by_nivel,
     limit,
-    nivel_efectivo: nivel_efectivo || null
+    nivel_efectivo: nivel_efectivo || null,
+    selection_rules: selection_rules || null // Incluir reglas de selección
   };
 
   // Advertencias si falta información
@@ -430,6 +432,138 @@ function evaluateWhenCondition(when, contextUsed) {
 }
 
 /**
+ * Construye el Package Prompt Context JSON completo
+ * 
+ * Esta función genera el JSON que se envía a GPT como contexto del package.
+ * Incluye todos los sources resueltos con sus items, reglas de selección, etc.
+ * 
+ * @param {Object} packageDefinition - Definición JSON del paquete
+ * @param {Object} context - Contexto de ejecución
+ * @returns {Promise<Object>} Package Prompt Context JSON
+ */
+export async function buildPackagePromptContext(packageDefinition, context = {}) {
+  const warnings = [];
+  
+  try {
+    // Extraer definition si viene en packageDefinition.definition
+    const definition = packageDefinition.definition || packageDefinition;
+    
+    // Resolver el paquete
+    const resolved = await resolvePackage(definition, context);
+    
+    // Construir prompt context
+    const promptContext = {
+      package_key: packageDefinition.package_key || null,
+      package_name: packageDefinition.name || null,
+      context_used: resolved.context_used,
+      sources: []
+    };
+
+    // Integrar context_contract con mappings si existe
+    if (definition.context_contract && definition.context_contract.inputs) {
+      try {
+        const { listMappingsByContextKey } = await import('../../services/context-mappings-service.js');
+        
+        // Construir context_contract con mappings
+        const contextContract = {
+          inputs: await Promise.all(definition.context_contract.inputs.map(async (input) => {
+            const inputWithMappings = { ...input };
+            
+            // Si el input es enum y tiene context_key, buscar mappings
+            if (input.type === 'enum' && input.context_key) {
+              const { mappings } = await listMappingsByContextKey(input.context_key);
+              
+              if (mappings && mappings.length > 0) {
+                // Construir objeto mappings: { "valor": { ...mapping_data } }
+                const mappingsObj = {};
+                for (const mapping of mappings) {
+                  if (mapping.active && mapping.mapping_data) {
+                    mappingsObj[mapping.mapping_key] = mapping.mapping_data;
+                  }
+                }
+                
+                if (Object.keys(mappingsObj).length > 0) {
+                  inputWithMappings.mappings = mappingsObj;
+                }
+              }
+            }
+            
+            return inputWithMappings;
+          }))
+        };
+        
+        // Añadir outputs si existen
+        if (definition.context_contract.outputs) {
+          contextContract.outputs = definition.context_contract.outputs;
+        }
+        
+        promptContext.context_contract = contextContract;
+      } catch (error) {
+        console.error('[PDE][PACKAGES] Error integrando mappings en context_contract:', error);
+        warnings.push(`Error integrando mappings: ${error.message}`);
+        // Fail-open: incluir context_contract sin mappings
+        promptContext.context_contract = definition.context_contract;
+      }
+    }
+
+    // Resolver cada source y construir su bloque en el prompt context
+    for (const source of resolved.sources) {
+      if (source.source_key === 'transmutaciones_energeticas') {
+        // Resolver transmutaciones con reglas de selección
+        try {
+          const { buildTransmutationsPromptContext } = await import('../../services/pde-transmutaciones-resolver.js');
+          const transmutacionesContext = await buildTransmutationsPromptContext(
+            source,
+            source.selection_rules || {},
+            source.nivel_efectivo
+          );
+          
+          if (transmutacionesContext) {
+            promptContext.sources.push(transmutacionesContext);
+          } else {
+            warnings.push(`No se pudo construir contexto para source transmutaciones_energeticas (buildTransmutationsPromptContext devolvió null)`);
+          }
+        } catch (error) {
+          console.error('[PDE][PACKAGES] Error construyendo contexto de transmutaciones:', error);
+          warnings.push(`Error construyendo contexto de transmutaciones: ${error.message}`);
+          // Fail-open: continuar con otros sources
+        }
+      } else {
+        // Para otros sources, construir bloque básico (legacy)
+        promptContext.sources.push({
+          source: source.source_key,
+          filter_by_nivel: source.filter_by_nivel,
+          nivel_efectivo: source.nivel_efectivo,
+          limit: source.limit,
+          note: 'Este source aún no tiene resolución completa de items'
+        });
+      }
+    }
+
+    // Añadir señales si existen
+    if (resolved.resolved_senales && resolved.resolved_senales.length > 0) {
+      promptContext.senales = resolved.resolved_senales;
+    }
+
+    // Añadir warnings si existen
+    if (warnings.length > 0 || resolved.warnings.length > 0) {
+      promptContext.warnings = [...warnings, ...resolved.warnings];
+    }
+
+    return promptContext;
+
+  } catch (error) {
+    console.error('[PDE][PACKAGES] Error construyendo prompt context:', error);
+    // Fail-open: devolver estructura mínima
+    return {
+      package_key: packageDefinition.package_key || null,
+      error: error.message,
+      warnings: [...warnings, `Error construyendo prompt context: ${error.message}`]
+    };
+  }
+}
+
+/**
  * Preview de un paquete (simulación sin ejecutar runtime)
  * 
  * @param {Object} packageDefinition - Definición JSON del paquete
@@ -451,7 +585,8 @@ export async function previewPackage(packageDefinition, simulationContext = {}) 
       preview_info: {
         would_filter_by_nivel: source.filter_by_nivel,
         would_apply_limit: source.limit !== null,
-        estimated_items: source.limit || 'sin límite'
+        estimated_items: source.limit || 'sin límite',
+        has_selection_rules: !!(source.selection_rules && Object.keys(source.selection_rules).length > 0)
       }
     })),
     senales_info: {

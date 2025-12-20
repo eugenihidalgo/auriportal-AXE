@@ -13,6 +13,7 @@ import {
   validateContextDefinition,
   getDefaultValueForContext
 } from '../core/contexts/context-registry.js';
+import { syncContextMappings } from './context-mappings-service.js';
 
 const contextsRepo = getDefaultPdeContextsRepo();
 
@@ -48,10 +49,18 @@ export async function listContexts(options = {}) {
     // Primero añadir defaults del sistema (si no están en DB)
     for (const defaultCtx of SYSTEM_CONTEXT_DEFAULTS) {
       if (!dbMap.has(defaultCtx.context_key)) {
+        const def = normalizeContextDefinition(defaultCtx.definition);
         result.push({
           context_key: defaultCtx.context_key,
           label: defaultCtx.label,
-          definition: normalizeContextDefinition(defaultCtx.definition),
+          description: def.description || null,
+          definition: def,
+          scope: def.scope || 'package',
+          kind: def.kind || 'normal',
+          injected: def.injected !== undefined ? def.injected : false,
+          type: def.type || 'string',
+          allowed_values: def.allowed_values || null,
+          default_value: def.default_value !== undefined ? def.default_value : null,
           status: 'active',
           is_system: true
         });
@@ -172,6 +181,14 @@ export async function createContext(definition) {
     status
   });
 
+  // Sincronizar mappings automáticamente (si es enum)
+  try {
+    await syncContextMappings(context_key);
+  } catch (syncError) {
+    // Fail-open: no bloquear la creación si falla la sincronización
+    console.warn(`[AXE][CONTEXTS] Warning: Error sincronizando mappings para '${context_key}':`, syncError);
+  }
+
   return {
     ...created,
     is_system: false
@@ -204,6 +221,16 @@ export async function updateContext(contextKey, patch) {
   const updated = await contextsRepo.updateByKey(contextKey, patch);
   if (!updated) {
     return null;
+  }
+
+  // Sincronizar mappings automáticamente si se actualizó allowed_values o type
+  if (patch.allowed_values !== undefined || patch.type !== undefined || patch.definition) {
+    try {
+      await syncContextMappings(contextKey);
+    } catch (syncError) {
+      // Fail-open: no bloquear la actualización si falla la sincronización
+      console.warn(`[AXE][CONTEXTS] Warning: Error sincronizando mappings para '${contextKey}':`, syncError);
+    }
   }
 
   return {
@@ -265,5 +292,6 @@ export async function getDefaultValue(contextKey) {
   }
   return getDefaultValueForContext(ctx.definition);
 }
+
 
 

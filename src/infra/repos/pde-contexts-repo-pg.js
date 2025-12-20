@@ -28,7 +28,14 @@ export class PdeContextsRepo {
         id,
         context_key,
         label,
+        description,
         definition,
+        scope,
+        kind,
+        injected,
+        type,
+        allowed_values,
+        default_value,
         status,
         created_at,
         updated_at,
@@ -50,11 +57,42 @@ export class PdeContextsRepo {
     sql += ` ORDER BY context_key ASC`;
 
     const result = await query(sql, params);
-    // Parsear JSONB fields
-    return result.rows.map(row => ({
-      ...row,
-      definition: typeof row.definition === 'string' ? JSON.parse(row.definition) : row.definition
-    }));
+    // Parsear JSONB fields de forma segura
+    return result.rows.map(row => {
+      let parsedDefinition = row.definition;
+      if (typeof parsedDefinition === 'string') {
+        try {
+          parsedDefinition = JSON.parse(parsedDefinition);
+        } catch (e) {
+          parsedDefinition = row.definition;
+        }
+      }
+      
+      let parsedAllowedValues = row.allowed_values;
+      if (parsedAllowedValues && typeof parsedAllowedValues === 'string') {
+        try {
+          parsedAllowedValues = JSON.parse(parsedAllowedValues);
+        } catch (e) {
+          parsedAllowedValues = row.allowed_values;
+        }
+      }
+      
+      let parsedDefaultValue = row.default_value;
+      if (parsedDefaultValue && typeof parsedDefaultValue === 'string') {
+        try {
+          parsedDefaultValue = JSON.parse(parsedDefaultValue);
+        } catch (e) {
+          parsedDefaultValue = row.default_value;
+        }
+      }
+      
+      return {
+        ...row,
+        definition: parsedDefinition,
+        allowed_values: parsedAllowedValues,
+        default_value: parsedDefaultValue
+      };
+    });
   }
 
   /**
@@ -72,7 +110,14 @@ export class PdeContextsRepo {
         id,
         context_key,
         label,
+        description,
         definition,
+        scope,
+        kind,
+        injected,
+        type,
+        allowed_values,
+        default_value,
         status,
         created_at,
         updated_at,
@@ -106,7 +151,14 @@ export class PdeContextsRepo {
    * @param {Object} data - Datos del contexto
    * @param {string} data.context_key - Clave única del contexto
    * @param {string} data.label - Etiqueta legible
-   * @param {Object} data.definition - Definición JSON del contexto
+   * @param {string} [data.description] - Descripción opcional
+   * @param {Object} [data.definition] - Definición JSON del contexto (legacy, se migra a campos dedicados)
+   * @param {string} [data.scope='package'] - Scope: system, structural, personal, package
+   * @param {string} [data.kind='normal'] - Kind: normal, level
+   * @param {boolean} [data.injected=false] - Si el runtime lo inyecta automáticamente
+   * @param {string} [data.type='string'] - Tipo: string, number, boolean, enum, json
+   * @param {Array} [data.allowed_values] - Valores permitidos (solo para enum)
+   * @param {any} [data.default_value] - Valor por defecto
    * @param {string} [data.status='active'] - Estado del contexto
    * @returns {Promise<Object>} Contexto creado
    */
@@ -114,12 +166,19 @@ export class PdeContextsRepo {
     const {
       context_key,
       label,
-      definition,
+      description = null,
+      definition = null,
+      scope = 'package',
+      kind = 'normal',
+      injected = false,
+      type = 'string',
+      allowed_values = null,
+      default_value = null,
       status = 'active'
     } = data;
 
-    if (!context_key || !label || !definition) {
-      throw new Error('context_key, label y definition son obligatorios');
+    if (!context_key || !label) {
+      throw new Error('context_key y label son obligatorios');
     }
 
     // Validar que context_key no exista
@@ -128,14 +187,56 @@ export class PdeContextsRepo {
       throw new Error(`El contexto '${context_key}' ya existe`);
     }
 
+    // Si se proporciona definition (legacy), extraer campos
+    let finalType = type;
+    let finalAllowedValues = allowed_values;
+    let finalDefaultValue = default_value;
+    let finalScope = scope;
+    let finalKind = kind;
+    let finalInjected = injected;
+    let finalDescription = description;
+    
+    if (definition && typeof definition === 'object') {
+      if (definition.type) finalType = definition.type;
+      if (definition.allowed_values) finalAllowedValues = definition.allowed_values;
+      if (definition.default_value !== undefined) finalDefaultValue = definition.default_value;
+      if (definition.scope) finalScope = definition.scope;
+      if (definition.kind) finalKind = definition.kind;
+      if (definition.injected !== undefined) finalInjected = definition.injected;
+      if (definition.description && !finalDescription) finalDescription = definition.description;
+    }
+
+    // Construir definition mínimo si no se proporciona (obligatorio en DB)
+    let finalDefinition = definition;
+    if (!finalDefinition || typeof finalDefinition !== 'object') {
+      finalDefinition = {
+        type: finalType,
+        scope: finalScope,
+        origin: 'user_choice',
+        description: finalDescription || ''
+      };
+      if (finalAllowedValues) finalDefinition.allowed_values = finalAllowedValues;
+      if (finalDefaultValue !== null && finalDefaultValue !== undefined) finalDefinition.default_value = finalDefaultValue;
+    }
+
     const sql = `
-      INSERT INTO pde_contexts (context_key, label, definition, status)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO pde_contexts (
+        context_key, label, description, definition,
+        scope, kind, injected, type, allowed_values, default_value, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING 
         id,
         context_key,
         label,
+        description,
         definition,
+        scope,
+        kind,
+        injected,
+        type,
+        allowed_values,
+        default_value,
         status,
         created_at,
         updated_at,
@@ -145,15 +246,55 @@ export class PdeContextsRepo {
     const params = [
       context_key,
       label,
-      JSON.stringify(definition),
+      finalDescription,
+      JSON.stringify(finalDefinition),
+      finalScope,
+      finalKind,
+      finalInjected,
+      finalType,
+      finalAllowedValues ? JSON.stringify(finalAllowedValues) : null,
+      finalDefaultValue !== null && finalDefaultValue !== undefined ? JSON.stringify(finalDefaultValue) : null,
       status
     ];
 
     const result = await query(sql, params);
     const row = result.rows[0];
+    
+    // Parsear JSONB fields de forma segura
+    let parsedDefinition = row.definition;
+    if (typeof parsedDefinition === 'string') {
+      try {
+        parsedDefinition = JSON.parse(parsedDefinition);
+      } catch (e) {
+        // Si falla, mantener como string
+        parsedDefinition = row.definition;
+      }
+    }
+    
+    let parsedAllowedValues = row.allowed_values;
+    if (parsedAllowedValues && typeof parsedAllowedValues === 'string') {
+      try {
+        parsedAllowedValues = JSON.parse(parsedAllowedValues);
+      } catch (e) {
+        parsedAllowedValues = row.allowed_values;
+      }
+    }
+    
+    let parsedDefaultValue = row.default_value;
+    if (parsedDefaultValue && typeof parsedDefaultValue === 'string') {
+      try {
+        parsedDefaultValue = JSON.parse(parsedDefaultValue);
+      } catch (e) {
+        // Si falla, mantener como string (puede ser un string simple)
+        parsedDefaultValue = row.default_value;
+      }
+    }
+    
     return {
       ...row,
-      definition: typeof row.definition === 'string' ? JSON.parse(row.definition) : row.definition
+      definition: parsedDefinition,
+      allowed_values: parsedAllowedValues,
+      default_value: parsedDefaultValue
     };
   }
 
@@ -163,7 +304,14 @@ export class PdeContextsRepo {
    * @param {string} contextKey - Clave del contexto a actualizar
    * @param {Object} patch - Campos a actualizar
    * @param {string} [patch.label] - Nueva etiqueta
-   * @param {Object} [patch.definition] - Nueva definición
+   * @param {string} [patch.description] - Nueva descripción
+   * @param {Object} [patch.definition] - Nueva definición (legacy)
+   * @param {string} [patch.scope] - Nuevo scope
+   * @param {string} [patch.kind] - Nuevo kind
+   * @param {boolean} [patch.injected] - Nuevo injected
+   * @param {string} [patch.type] - Nuevo type
+   * @param {Array} [patch.allowed_values] - Nuevos allowed_values
+   * @param {any} [patch.default_value] - Nuevo default_value
    * @param {string} [patch.status] - Nuevo estado
    * @returns {Promise<Object|null>} Contexto actualizado o null si no existe
    */
@@ -181,9 +329,46 @@ export class PdeContextsRepo {
       params.push(patch.label);
     }
 
+    if (patch.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      params.push(patch.description);
+    }
+
     if (patch.definition !== undefined) {
       updates.push(`definition = $${paramIndex++}`);
       params.push(JSON.stringify(patch.definition));
+    }
+
+    if (patch.scope !== undefined) {
+      updates.push(`scope = $${paramIndex++}`);
+      params.push(patch.scope);
+    }
+
+    if (patch.kind !== undefined) {
+      updates.push(`kind = $${paramIndex++}`);
+      params.push(patch.kind);
+    }
+
+    if (patch.injected !== undefined) {
+      updates.push(`injected = $${paramIndex++}`);
+      params.push(patch.injected);
+    }
+
+    if (patch.type !== undefined) {
+      updates.push(`type = $${paramIndex++}`);
+      params.push(patch.type);
+    }
+
+    if (patch.allowed_values !== undefined) {
+      updates.push(`allowed_values = $${paramIndex++}`);
+      params.push(patch.allowed_values ? JSON.stringify(patch.allowed_values) : null);
+    }
+
+    if (patch.default_value !== undefined) {
+      updates.push(`default_value = $${paramIndex++}`);
+      params.push(patch.default_value !== null && patch.default_value !== undefined 
+        ? JSON.stringify(patch.default_value) 
+        : null);
     }
 
     if (patch.status !== undefined) {
@@ -207,7 +392,14 @@ export class PdeContextsRepo {
         id,
         context_key,
         label,
+        description,
         definition,
+        scope,
+        kind,
+        injected,
+        type,
+        allowed_values,
+        default_value,
         status,
         created_at,
         updated_at,
@@ -221,9 +413,40 @@ export class PdeContextsRepo {
     }
 
     const row = result.rows[0];
+    
+    // Parsear JSONB fields de forma segura
+    let parsedDefinition = row.definition;
+    if (typeof parsedDefinition === 'string') {
+      try {
+        parsedDefinition = JSON.parse(parsedDefinition);
+      } catch (e) {
+        parsedDefinition = row.definition;
+      }
+    }
+    
+    let parsedAllowedValues = row.allowed_values;
+    if (parsedAllowedValues && typeof parsedAllowedValues === 'string') {
+      try {
+        parsedAllowedValues = JSON.parse(parsedAllowedValues);
+      } catch (e) {
+        parsedAllowedValues = row.allowed_values;
+      }
+    }
+    
+    let parsedDefaultValue = row.default_value;
+    if (parsedDefaultValue && typeof parsedDefaultValue === 'string') {
+      try {
+        parsedDefaultValue = JSON.parse(parsedDefaultValue);
+      } catch (e) {
+        parsedDefaultValue = row.default_value;
+      }
+    }
+    
     return {
       ...row,
-      definition: typeof row.definition === 'string' ? JSON.parse(row.definition) : row.definition
+      definition: parsedDefinition,
+      allowed_values: parsedAllowedValues,
+      default_value: parsedDefaultValue
     };
   }
 
@@ -328,5 +551,6 @@ export function getDefaultPdeContextsRepo() {
   }
   return defaultRepo;
 }
+
 
 

@@ -338,7 +338,7 @@ export const sidebarRegistry = [
     icon: '📚',
     route: '/admin/pde/catalog-registry',
     section: '📚 Contenido PDE',
-    visible: true,
+    visible: false, // Movido a ✏️ EDITOR PDE
     order: 6
   },
   {
@@ -347,7 +347,7 @@ export const sidebarRegistry = [
     icon: '🧠',
     route: '/admin/motors',
     section: '📚 Contenido PDE',
-    visible: true,
+    visible: false,
     order: 7
   },
   {
@@ -370,31 +370,58 @@ export const sidebarRegistry = [
   },
   // 8. ✏️ EDITOR PDE (Nueva sección)
   {
-    id: 'packages-creator',
+    id: 'catalog-registry',
+    label: 'Registro de Catálogos',
+    icon: '📋',
+    route: '/admin/pde/catalog-registry',
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 0.5
+  },
+  {
+    id: 'packages-creator-v2',
     label: 'Paquetes',
     icon: '📦',
-    route: '/admin/packages',
+    route: '/admin/pde/packages-v2',
     section: '✏️ EDITOR PDE',
     visible: true,
     order: 1
   },
   {
-    id: 'widgets-creator',
+    id: 'packages-creator',
+    label: 'Paquetes (Legacy)',
+    icon: '📦',
+    route: '/admin/packages',
+    section: '✏️ EDITOR PDE',
+    visible: false,
+    order: 99
+  },
+  {
+    id: 'contexts-manager',
+    label: 'Contextos & Mappings',
+    icon: '🗺️',
+    route: '/admin/contexts',
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 1.5
+  },
+  {
+    id: 'widgets-creator-v2',
     label: 'Widgets',
     icon: '🧩',
-    route: '/admin/widgets',
+    route: '/admin/pde/widgets-v2',
     section: '✏️ EDITOR PDE',
     visible: true,
     order: 2
   },
   {
-    id: 'contexts-manager',
-    label: 'Contextos',
-    icon: '🔧',
-    route: '/admin/contexts',
+    id: 'widgets-creator',
+    label: 'Widgets (Legacy)',
+    icon: '🧩',
+    route: '/admin/widgets',
     section: '✏️ EDITOR PDE',
-    visible: true,
-    order: 3
+    visible: false,
+    order: 99
   },
   {
     id: 'senales-manager',
@@ -411,7 +438,7 @@ export const sidebarRegistry = [
     icon: '⚡',
     route: '/admin/automations',
     section: '📚 Contenido PDE',
-    visible: true,
+    visible: false,
     order: 13,
     badge: 'V2',
     badgeColor: 'blue'
