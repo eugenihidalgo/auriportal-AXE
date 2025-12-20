@@ -14,6 +14,7 @@ import {
   getDefaultValueForContext
 } from '../core/contexts/context-registry.js';
 import { syncContextMappings } from './context-mappings-service.js';
+import { resolveContextVisibility, filterVisibleContexts } from '../core/context/resolve-context-visibility.js';
 
 const contextsRepo = getDefaultPdeContextsRepo();
 
@@ -43,14 +44,23 @@ export async function listContexts(options = {}) {
       dbMap.set(ctx.context_key, ctx);
     }
 
-    // Combinar: DB tiene prioridad, luego defaults del sistema
+    // Combinar: DB tiene prioridad, luego defaults del sistema (pero solo si no están eliminados en DB)
     const result = [];
 
-    // Primero añadir defaults del sistema (si no están en DB)
+    // Crear mapa de contextos de DB por context_key (para verificar existencia)
+    const dbMapAll = new Map();
+    for (const ctx of dbContexts) {
+      dbMapAll.set(ctx.context_key, ctx);
+    }
+
+    // NO mostrar contextos de sistema virtuales si están eliminados en DB
+    // Solo mostrar virtuales si NO existen en DB en absoluto (ni eliminados ni activos)
     for (const defaultCtx of SYSTEM_CONTEXT_DEFAULTS) {
-      if (!dbMap.has(defaultCtx.context_key)) {
+      const dbCtx = dbMapAll.get(defaultCtx.context_key);
+      // Solo mostrar virtual si NO existe en DB (ni activo ni eliminado)
+      if (!dbCtx) {
         const def = normalizeContextDefinition(defaultCtx.definition);
-        result.push({
+        const virtualCtx = {
           context_key: defaultCtx.context_key,
           label: defaultCtx.label,
           description: def.description || null,
@@ -62,30 +72,58 @@ export async function listContexts(options = {}) {
           allowed_values: def.allowed_values || null,
           default_value: def.default_value !== undefined ? def.default_value : null,
           status: 'active',
-          is_system: true
-        });
+          is_system: true,
+          is_virtual: true  // Marcar como virtual para permitir eliminación especial
+        };
+        
+        // Aplicar resolver canónico de visibilidad
+        if (resolveContextVisibility(virtualCtx)) {
+          result.push(virtualCtx);
+        }
+      }
+      // Si existe en DB (aunque esté eliminado), NO lo mostramos (respetamos el deleted_at)
+    }
+
+    // Añadir contextos de DB aplicando el resolver canónico
+    for (const dbCtx of dbContexts) {
+      const ctxWithMetadata = {
+        ...dbCtx,
+        is_system: false,
+        is_virtual: false
+      };
+      
+      // Aplicar resolver canónico de visibilidad (única fuente de verdad)
+      if (resolveContextVisibility(ctxWithMetadata)) {
+        result.push(ctxWithMetadata);
+      } else {
+        // Log de debug temporal
+        console.debug('[CTX_VISIBILITY] ocultado:', dbCtx.context_key);
       }
     }
 
-    // Luego añadir contextos de DB (tienen prioridad)
-    for (const dbCtx of dbContexts) {
-      result.push({
-        ...dbCtx,
-        is_system: false
-      });
-    }
-
-    return result;
+    // Filtrar una vez más con el resolver por si acaso (defensa en profundidad)
+    return filterVisibleContexts(result);
   } catch (error) {
     console.error('[AXE][CONTEXTS] Error listando contextos:', error);
-    // Fail-open: devolver solo defaults del sistema
-    return SYSTEM_CONTEXT_DEFAULTS.map(ctx => ({
-      context_key: ctx.context_key,
-      label: ctx.label,
-      definition: normalizeContextDefinition(ctx.definition),
-      status: 'active',
-      is_system: true
-    }));
+    // Fail-open: devolver solo defaults del sistema (marcados como virtuales) aplicando resolver
+    const fallbackContexts = SYSTEM_CONTEXT_DEFAULTS.map(ctx => {
+      const def = normalizeContextDefinition(ctx.definition);
+      return {
+        context_key: ctx.context_key,
+        label: ctx.label,
+        definition: def,
+        scope: def.scope || 'package',
+        kind: def.kind || 'normal',
+        type: def.type || 'string',
+        allowed_values: def.allowed_values || null,
+        status: 'active',
+        is_system: true,
+        is_virtual: true
+      };
+    });
+    
+    // Aplicar resolver canónico de visibilidad
+    return filterVisibleContexts(fallbackContexts);
   }
 }
 
@@ -103,25 +141,47 @@ export async function getContext(contextKey) {
   }
 
   try {
-    // Buscar en DB primero
-    const dbCtx = await contextsRepo.getByKey(contextKey);
+    // Buscar en DB primero (getByKey por defecto excluye eliminados)
+    const dbCtx = await contextsRepo.getByKey(contextKey, false); // includeDeleted = false explícito
     if (dbCtx) {
-      return {
+      const ctxWithMetadata = {
         ...dbCtx,
         is_system: false
       };
+      
+      // Aplicar resolver canónico de visibilidad (única fuente de verdad)
+      if (resolveContextVisibility(ctxWithMetadata)) {
+        return ctxWithMetadata;
+      } else {
+        // Log de debug temporal
+        console.debug('[CTX_VISIBILITY] ocultado:', contextKey);
+        return null;
+      }
     }
 
     // Buscar en defaults del sistema
     const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
     if (systemCtx) {
-      return {
+      const def = normalizeContextDefinition(systemCtx.definition);
+      const virtualCtx = {
         context_key: systemCtx.context_key,
         label: systemCtx.label,
-        definition: normalizeContextDefinition(systemCtx.definition),
+        definition: def,
+        scope: def.scope || 'package',
+        kind: def.kind || 'normal',
+        type: def.type || 'string',
+        allowed_values: def.allowed_values || null,
         status: 'active',
         is_system: true
       };
+      
+      // Aplicar resolver canónico de visibilidad
+      if (resolveContextVisibility(virtualCtx)) {
+        return virtualCtx;
+      } else {
+        console.debug('[CTX_VISIBILITY] ocultado (system default):', contextKey);
+        return null;
+      }
     }
 
     return null;
@@ -130,13 +190,23 @@ export async function getContext(contextKey) {
     // Fail-open: buscar en defaults del sistema
     const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
     if (systemCtx) {
-      return {
+      const def = normalizeContextDefinition(systemCtx.definition);
+      const virtualCtx = {
         context_key: systemCtx.context_key,
         label: systemCtx.label,
-        definition: normalizeContextDefinition(systemCtx.definition),
+        definition: def,
+        scope: def.scope || 'package',
+        kind: def.kind || 'normal',
+        type: def.type || 'string',
+        allowed_values: def.allowed_values || null,
         status: 'active',
         is_system: true
       };
+      
+      // Aplicar resolver canónico de visibilidad
+      if (resolveContextVisibility(virtualCtx)) {
+        return virtualCtx;
+      }
     }
     return null;
   }
@@ -250,17 +320,14 @@ export async function archiveContext(contextKey) {
     return null;
   }
 
-  // No se pueden archivar contextos del sistema
-  const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
-  if (systemCtx) {
-    throw new Error('No se pueden archivar contextos del sistema');
-  }
-
+  // Permitir archivar cualquier contexto (incluidos los de sistema si están en DB)
   return await contextsRepo.archiveByKey(contextKey);
 }
 
 /**
  * Elimina un contexto (soft delete)
+ * 
+ * Si el contexto es virtual (no está en DB), lo crea con deleted_at para ocultarlo
  * 
  * @param {string} contextKey - Clave del contexto
  * @returns {Promise<boolean>} true si se eliminó, false si no existía
@@ -270,13 +337,43 @@ export async function deleteContext(contextKey) {
     return false;
   }
 
-  // No se pueden eliminar contextos del sistema
-  const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
-  if (systemCtx) {
-    throw new Error('No se pueden eliminar contextos del sistema');
+  // Verificar si existe en DB (incluyendo eliminados)
+  const existing = await contextsRepo.getByKey(contextKey, true); // includeDeleted = true
+  
+  if (existing) {
+    // Existe en DB, hacer soft delete normal
+    return await contextsRepo.softDeleteByKey(contextKey);
+  } else {
+    // Es virtual (no existe en DB), crearlo en DB ya eliminado para ocultarlo
+    const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
+    if (systemCtx) {
+      try {
+        const def = normalizeContextDefinition(systemCtx.definition);
+        // Crear el contexto
+        await contextsRepo.create({
+          context_key: systemCtx.context_key,
+          label: systemCtx.label,
+          description: def.description || null,
+          definition: def,
+          scope: def.scope || 'package',
+          kind: def.kind || 'normal',
+          injected: def.injected !== undefined ? def.injected : false,
+          type: def.type || 'string',
+          allowed_values: def.allowed_values || null,
+          default_value: def.default_value !== undefined ? def.default_value : null,
+          status: 'active'
+        });
+        // Inmediatamente hacer soft delete para ocultarlo
+        const deleted = await contextsRepo.softDeleteByKey(contextKey);
+        return deleted;
+      } catch (error) {
+        // Si falla al crear (puede que ya exista), intentar soft delete de todas formas
+        console.warn(`[AXE][CONTEXTS] Error creando contexto virtual antes de eliminar '${contextKey}':`, error.message);
+        return await contextsRepo.softDeleteByKey(contextKey);
+      }
+    }
+    return false;
   }
-
-  return await contextsRepo.softDeleteByKey(contextKey);
 }
 
 /**

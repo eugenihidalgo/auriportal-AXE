@@ -11,11 +11,12 @@
 
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultPdePackagesRepo } from '../infra/repos/pde-packages-repo-pg.js';
-import { previewPackage, getStudentLevel } from '../core/packages/package-engine.js';
+import { previewPackage, getStudentLevel, buildPackageDefinition } from '../core/packages/package-engine.js';
 import { listCatalogs } from '../services/pde-catalog-registry-service.js';
-import { listContexts } from '../services/pde-contexts-service.js';
+import { listContexts, getContext } from '../services/pde-contexts-service.js';
 import { listSenales } from '../services/pde-senales-service.js';
 import { logError } from '../core/observability/logger.js';
+import { resolveContextVisibility, filterVisibleContexts } from '../core/context/resolve-context-visibility.js';
 
 const packagesRepo = getDefaultPdePackagesRepo();
 
@@ -59,6 +60,11 @@ export default async function adminPackagesApiHandler(request, env, ctx) {
     // GET /admin/api/packages/signals - Lista Señales disponibles
     if (path === '/admin/api/packages/signals' && method === 'GET') {
       return await handleListSignals(request, env);
+    }
+
+    // POST /admin/api/packages/build-definition - Construye PackageDefinition canónico
+    if (path === '/admin/api/packages/build-definition' && method === 'POST') {
+      return await handleBuildPackageDefinition(request, env);
     }
 
     // ============================================
@@ -237,11 +243,12 @@ async function handleCreatePackage(request, env, authCtx) {
 
     try {
     // Crear paquete sin definition (se guardará en draft)
+    // NOTA: status debe ser 'active' o 'inactive' (constraint), los drafts se gestionan en pde_package_drafts
     const pkg = await packagesRepo.createPackage({
       package_key,
       name,
       description,
-      status: status || 'draft',
+      status: status === 'inactive' ? 'inactive' : 'active',
       definition: {} // Definition vacío, se guardará en draft
     });
 
@@ -455,12 +462,17 @@ async function handleListContexts(request, env) {
     }
 
     // FILTRADO CRÍTICO: Solo contextos seleccionables para packages
-    // Permitir solo: scope = package (y kind = normal o level si es nivel local)
-    const selectableContexts = (contextsRaw || [])
+    // Usar resolver canónico de visibilidad (única fuente de verdad)
+    // El servicio ya aplica resolveContextVisibility, pero aplicamos una vez más por defensa en profundidad
+    const visibleContexts = filterVisibleContexts(contextsRaw || []);
+    
+    // FASE 2: Validación canónica estricta para packages
+    // Permitir solo: scope = package, kind = normal o level
+    const selectableContexts = visibleContexts
       .filter(ctx => {
         if (!ctx || !ctx.context_key) return false;
         
-        // Obtener scope (desde campo dedicado o definition legacy)
+        // Obtener campos canónicos (desde campo dedicado o definition legacy)
         const scope = ctx.scope || ctx.definition?.scope;
         const kind = ctx.kind || ctx.definition?.kind;
         
@@ -472,11 +484,11 @@ async function handleListContexts(request, env) {
         // ✅ SOLO permitir package
         if (scope === 'package') {
           // Permitir kind = normal o level (niveles locales)
-          return kind === 'normal' || kind === 'level' || !kind;
+          return kind === 'normal' || kind === 'level';
         }
         
-        // Si no tiene scope definido, asumir package (compatibilidad)
-        return true;
+        // Si no es package, no permitir
+        return false;
       });
 
     // Mapear a formato para Package Prompt Context Builder
@@ -666,6 +678,73 @@ async function handleGetDraft(id, request, env) {
 }
 
 /**
+ * Valida que todos los contextos en un package_definition sean canónicos
+ * 
+ * FASE 2: Validación fuerte antes de guardar/publicar paquetes
+ * 
+ * @param {Object} packageDefinition - PackageDefinition a validar
+ * @returns {Promise<{valid: boolean, errors: Array<string>}>}
+ */
+async function validateCanonicalContexts(packageDefinition) {
+  const errors = [];
+  
+  if (!packageDefinition || typeof packageDefinition !== 'object') {
+    return { valid: false, errors: ['package_definition debe ser un objeto'] };
+  }
+
+  // Extraer context_keys del package_definition
+  const contextKeys = packageDefinition.context_keys || packageDefinition.input_contexts || [];
+  
+  if (!Array.isArray(contextKeys) || contextKeys.length === 0) {
+    // No hay contextos, es válido
+    return { valid: true, errors: [] };
+  }
+
+  // Validar cada contexto
+  for (const contextKey of contextKeys) {
+    if (!contextKey || typeof contextKey !== 'string') {
+      errors.push(`Context key inválido: ${contextKey}`);
+      continue;
+    }
+
+    try {
+      const context = await getContext(contextKey);
+      
+      if (!context) {
+        errors.push(`El contexto '${contextKey}' no existe`);
+        continue;
+      }
+
+      // Validar contrato canónico
+      const scope = context.scope || context.definition?.scope;
+      const type = context.type || context.definition?.type;
+      const kind = context.kind || context.definition?.kind;
+      const allowedValues = context.allowed_values || context.definition?.allowed_values;
+
+      if (!scope) {
+        errors.push(`El contexto '${contextKey}' no tiene scope definido (no es canónico)`);
+      }
+      if (!type) {
+        errors.push(`El contexto '${contextKey}' no tiene type definido (no es canónico)`);
+      }
+      if (!kind) {
+        errors.push(`El contexto '${contextKey}' no tiene kind definido (no es canónico)`);
+      }
+      if (type === 'enum' && !allowedValues) {
+        errors.push(`El contexto '${contextKey}' es tipo enum pero no tiene allowed_values definido (no es canónico)`);
+      }
+    } catch (error) {
+      errors.push(`Error validando contexto '${contextKey}': ${error.message}`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
  * Guarda un draft de paquete
  */
 async function handleSaveDraft(id, request, env) {
@@ -676,18 +755,33 @@ async function handleSaveDraft(id, request, env) {
 
   try {
     const body = await request.json();
+    
+    // v3: Priorizar package_definition, fallback a prompt_context_json (legacy)
+    const package_definition = body.package_definition || body.prompt_context_json;
+    
     const {
-      prompt_context_json,
-      assembled_json = null,
       validation_status = 'pending',
       validation_errors = [],
       validation_warnings = []
     } = body;
 
-    if (!prompt_context_json) {
+    if (!package_definition) {
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'prompt_context_json es obligatorio'
+        error: 'package_definition es obligatorio'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // FASE 2: Validación fuerte de contextos canónicos antes de guardar
+    const contextValidation = await validateCanonicalContexts(package_definition);
+    if (!contextValidation.valid) {
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'El paquete contiene contextos no válidos o incompletos. Solo se permiten contextos canónicos (scope=package, type definido).',
+        validation_errors: contextValidation.errors
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -706,8 +800,7 @@ async function handleSaveDraft(id, request, env) {
     }
 
     const draft = await packagesRepo.saveDraft(pkg.id, {
-      prompt_context_json,
-      assembled_json,
+      package_definition,
       validation_status,
       validation_errors,
       validation_warnings
@@ -724,6 +817,58 @@ async function handleSaveDraft(id, request, env) {
     return new Response(JSON.stringify({ 
       ok: false,
       error: error.message 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Construye PackageDefinition canónico desde datos del formulario
+ */
+async function handleBuildPackageDefinition(request, env) {
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    return authCtx;
+  }
+
+  try {
+    const body = await request.json();
+    
+    // Validar campos obligatorios
+    if (!body.package_key || !body.label) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'package_key y label son obligatorios'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Construir PackageDefinition usando la función determinista
+    const packageDefinition = await buildPackageDefinition({
+      package_key: body.package_key,
+      label: body.label,
+      description: body.description || null,
+      sources: body.sources || [],
+      context_keys: body.context_keys || [],
+      outputs: body.outputs || [],
+      signals: body.signals || []
+    });
+
+    return new Response(JSON.stringify({
+      ok: true,
+      package_definition: packageDefinition
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[AXE][PACKAGES] Error construyendo PackageDefinition:', error);
+    return new Response(JSON.stringify({
+      ok: false,
+      error: error.message
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -750,6 +895,23 @@ async function handlePublishDraft(id, request, env) {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // FASE 2: Validación fuerte de contextos canónicos antes de publicar
+    // Obtener el draft actual para validar su package_definition
+    const currentDraft = await packagesRepo.getCurrentDraft(pkg.id);
+    if (currentDraft && currentDraft.package_definition) {
+      const contextValidation = await validateCanonicalContexts(currentDraft.package_definition);
+      if (!contextValidation.valid) {
+        return new Response(JSON.stringify({ 
+          ok: false,
+          error: 'El paquete contiene contextos no válidos o incompletos. Solo se permiten contextos canónicos (scope=package, type definido).',
+          validation_errors: contextValidation.errors
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     const version = await packagesRepo.publishDraft(pkg.id, authCtx.adminId || null);

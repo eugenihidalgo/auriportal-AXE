@@ -20,6 +20,7 @@ import {
 } from '../services/pde-contexts-service.js';
 import { isValidContextKey, normalizeContextDefinition, validateContextDefinition } from '../core/contexts/context-registry.js';
 import { logError } from '../core/observability/logger.js';
+import { resolveContextVisibility, filterVisibleContexts } from '../core/context/resolve-context-visibility.js';
 
 /**
  * Handler principal de la API de contextos
@@ -43,6 +44,11 @@ export default async function adminContextsApiHandler(request, env, ctx) {
   const method = request.method;
 
   try {
+    // GET /admin/api/context-definitions - Lista todas las definiciones completas de contextos
+    if (path === '/admin/api/context-definitions' && method === 'GET') {
+      return await handleListContextDefinitions(request, env);
+    }
+
     // GET /admin/api/contexts - Lista todos los contextos
     if (path === '/admin/api/contexts' && method === 'GET') {
       return await handleListContexts(request, env);
@@ -103,6 +109,52 @@ export default async function adminContextsApiHandler(request, env, ctx) {
 }
 
 /**
+ * Lista todas las definiciones completas de contextos (para Package Prompt Context)
+ * Devuelve las definiciones canónicas con type, allowed_values, default, description, etc.
+ */
+async function handleListContextDefinitions(request, env) {
+  try {
+    const contextsRaw = await listContexts({ includeArchived: false });
+
+    // El servicio ya aplica resolveContextVisibility, pero aplicamos una vez más por defensa en profundidad
+    const visibleContexts = filterVisibleContexts(contextsRaw);
+
+    // Devolver definiciones completas para resolver en el Package Prompt Context
+    const definitions = visibleContexts.map(ctx => {
+      const def = ctx.definition || {};
+      return {
+        context_key: ctx.context_key || ctx.key,
+        type: ctx.type || def.type || 'string',
+        allowed_values: ctx.allowed_values || def.allowed_values || (def.type === 'enum' ? [] : undefined),
+        default: ctx.default_value !== undefined ? ctx.default_value : (def.default_value !== undefined ? def.default_value : null),
+        description: ctx.description || def.description || ctx.label || '',
+        scope: ctx.scope || def.scope || 'package',
+        kind: ctx.kind || def.kind || 'normal',
+        injected: ctx.injected !== undefined ? ctx.injected : (def.injected !== undefined ? def.injected : false),
+        ui_config: def.ui_config || null
+      };
+    });
+
+    return new Response(JSON.stringify({ 
+      ok: true,
+      definitions 
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[AXE][CONTEXTS] Error listando definiciones de contextos:', error);
+    return new Response(JSON.stringify({ 
+      ok: false,
+      error: 'Error listando definiciones de contextos',
+      message: error.message 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
  * Lista todos los contextos
  */
 async function handleListContexts(request, env) {
@@ -112,8 +164,11 @@ async function handleListContexts(request, env) {
   try {
     const contextsRaw = await listContexts({ includeArchived });
 
+    // El servicio ya aplica resolveContextVisibility, pero aplicamos una vez más por defensa en profundidad
+    const visibleContexts = filterVisibleContexts(contextsRaw);
+
     // Para Package Prompt Context Builder: devolver solo keys y names (NO IDs)
-    const contexts = contextsRaw.map(ctx => ({
+    const contexts = visibleContexts.map(ctx => ({
       key: ctx.context_key || ctx.key,
       context_key: ctx.context_key || ctx.key, // Compatibilidad
       name: ctx.label || ctx.name || ctx.context_key || ctx.key, // name para el UI
@@ -157,6 +212,18 @@ async function handleGetContext(contextKey, request, env) {
       });
     }
 
+    // Verificar visibilidad con resolver canónico (el servicio ya lo hace, pero defensa en profundidad)
+    if (!resolveContextVisibility(context)) {
+      console.debug('[CTX_VISIBILITY] endpoint ocultado:', contextKey);
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'Contexto no encontrado' 
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({ 
       ok: true,
       context 
@@ -183,13 +250,25 @@ async function handleCreateContext(request, env) {
   try {
     const body = await request.json();
     
-    const { context_key, label, definition, status } = body;
+    const { 
+      context_key, 
+      label, 
+      description,
+      definition, 
+      scope,
+      kind,
+      injected,
+      type,
+      allowed_values,
+      default_value,
+      status 
+    } = body;
 
     // Validaciones básicas
-    if (!context_key || !label || !definition) {
+    if (!context_key || !label) {
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'context_key, label y definition son obligatorios' 
+        error: 'context_key y label son obligatorios' 
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -207,8 +286,20 @@ async function handleCreateContext(request, env) {
       });
     }
 
+    // Construir definición (combinar campos directos con definition legacy)
+    let finalDefinition = definition || {};
+    
+    // Si se proporcionan campos directos, usarlos (prioridad sobre definition)
+    if (type) finalDefinition.type = type;
+    if (allowed_values !== undefined) finalDefinition.allowed_values = allowed_values;
+    if (default_value !== undefined) finalDefinition.default_value = default_value;
+    if (scope) finalDefinition.scope = scope;
+    if (kind) finalDefinition.kind = kind;
+    if (injected !== undefined) finalDefinition.injected = injected;
+    if (description && !finalDefinition.description) finalDefinition.description = description;
+
     // Normalizar y validar definition
-    const normalizedDef = normalizeContextDefinition(definition);
+    const normalizedDef = normalizeContextDefinition(finalDefinition);
     const validation = validateContextDefinition(normalizedDef, { strict: true });
     
     if (!validation.valid) {
@@ -223,10 +314,29 @@ async function handleCreateContext(request, env) {
       });
     }
 
-    const context = await createContext({
+    // Extraer campos canónicos de la definición normalizada
+    const finalScope = scope || normalizedDef.scope || 'package';
+    const finalKind = kind || normalizedDef.kind || 'normal';
+    const finalInjected = injected !== undefined ? injected : (normalizedDef.injected || false);
+    const finalType = type || normalizedDef.type || 'string';
+    const finalAllowedValues = allowed_values !== undefined ? allowed_values : normalizedDef.allowed_values;
+    const finalDefaultValue = default_value !== undefined ? default_value : normalizedDef.default_value;
+
+    // Usar repositorio directamente para incluir campos canónicos
+    const { getDefaultPdeContextsRepo } = await import('../infra/repos/pde-contexts-repo-pg.js');
+    const repo = getDefaultPdeContextsRepo();
+    
+    const context = await repo.create({
       context_key,
       label,
+      description: description || null,
       definition: normalizedDef,
+      scope: finalScope,
+      kind: finalKind,
+      injected: finalInjected,
+      type: finalType,
+      allowed_values: finalAllowedValues,
+      default_value: finalDefaultValue,
       status: status || 'active'
     });
 
@@ -277,8 +387,37 @@ async function handleUpdateContext(contextKey, request, env) {
       patch.label = body.label;
     }
 
+    if (body.description !== undefined) {
+      patch.description = body.description;
+    }
+
+    // Campos canónicos directos
+    if (body.scope !== undefined) {
+      patch.scope = body.scope;
+    }
+
+    if (body.kind !== undefined) {
+      patch.kind = body.kind;
+    }
+
+    if (body.injected !== undefined) {
+      patch.injected = body.injected;
+    }
+
+    if (body.type !== undefined) {
+      patch.type = body.type;
+    }
+
+    if (body.allowed_values !== undefined) {
+      patch.allowed_values = body.allowed_values;
+    }
+
+    if (body.default_value !== undefined) {
+      patch.default_value = body.default_value;
+    }
+
     if (body.definition !== undefined) {
-      // Normalizar y validar definition
+      // Normalizar y validar definition (legacy)
       const normalizedDef = normalizeContextDefinition(body.definition);
       const validation = validateContextDefinition(normalizedDef, { strict: true });
       
@@ -295,6 +434,14 @@ async function handleUpdateContext(contextKey, request, env) {
       }
       
       patch.definition = normalizedDef;
+      
+      // Si no se proporcionaron campos directos, extraer de definition
+      if (patch.scope === undefined && normalizedDef.scope) patch.scope = normalizedDef.scope;
+      if (patch.kind === undefined && normalizedDef.kind) patch.kind = normalizedDef.kind;
+      if (patch.injected === undefined && normalizedDef.injected !== undefined) patch.injected = normalizedDef.injected;
+      if (patch.type === undefined && normalizedDef.type) patch.type = normalizedDef.type;
+      if (patch.allowed_values === undefined && normalizedDef.allowed_values) patch.allowed_values = normalizedDef.allowed_values;
+      if (patch.default_value === undefined && normalizedDef.default_value !== undefined) patch.default_value = normalizedDef.default_value;
     }
 
     if (body.status !== undefined) {

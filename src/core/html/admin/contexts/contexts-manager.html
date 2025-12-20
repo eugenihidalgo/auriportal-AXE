@@ -302,12 +302,46 @@ let editingContextKey = null;
 let currentScopeTab = 'system'; // Tab activo: 'system' o 'recorrido'
 
 // Cargar contextos al iniciar
-document.addEventListener('DOMContentLoaded', () => {
-  contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+document.addEventListener('DOMContentLoaded', async () => {
+  // Limpiar cualquier cache local previo
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('pde_contexts');
+    localStorage.removeItem('contexts_cache');
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('pde_contexts');
+    sessionStorage.removeItem('contexts_cache');
+  }
+  
+  // Cargar contextos iniciales desde el servidor (sin cache)
+  await recargarContextosDesdeServidor();
   mostrarScopeTab('package'); // Mostrar tab de package por defecto
   // Pre-cargar contextos enum para el selector de mappings
   cargarContextosEnum();
 });
+
+// Recargar contextos desde el servidor (siempre fresh, sin cache)
+async function recargarContextosDesdeServidor() {
+  try {
+    const response = await fetch('/admin/api/contexts', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'  // Forzar fetch fresh
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      contexts = data.contexts || [];
+    } else {
+      // Fallback a datos iniciales del servidor si falla el fetch
+      contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+    }
+  } catch (error) {
+    console.error('Error recargando contextos:', error);
+    // Fallback a datos iniciales del servidor si falla
+    contexts = JSON.parse('{{CONTEXTS_JSON}}' || '[]');
+  }
+}
 
 // Mostrar tab por scope
 function mostrarScopeTab(scope) {
@@ -448,7 +482,6 @@ function renderContexts() {
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-2">
             <h3 class="text-lg font-semibold text-white">${escapeHtml(ctx.label)}</h3>
-            <span class="text-xs px-2 py-1 rounded ${isSystem ? 'bg-blue-600' : 'bg-green-600'} text-white">${isSystem ? 'Sistema' : 'Usuario'}</span>
             <span class="text-xs px-2 py-1 rounded ${ctxScope === 'system' ? 'bg-purple-600' : ctxScope === 'structural' ? 'bg-orange-600' : ctxScope === 'personal' ? 'bg-pink-600' : 'bg-indigo-600'} text-white">${ctxScope.toUpperCase()}</span>
             ${ctxKind === 'level' ? '<span class="text-xs px-2 py-1 rounded bg-yellow-600 text-white">LEVEL</span>' : ''}
             ${ctxInjected ? '<span class="text-xs px-2 py-1 rounded bg-green-600 text-white">INJECTED</span>' : ''}
@@ -461,10 +494,8 @@ function renderContexts() {
           </div>
         </div>
         <div class="flex gap-2">
-          <button onclick="editarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">✏️ Editar</button>
-          ${!isSystem ? `
-            <button onclick="eliminarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded">🗑️ Eliminar</button>
-          ` : '<span class="text-xs text-slate-500">Sistema</span>'}
+          <button onclick="editarContexto('${escapeHtml(ctx.context_key)}')" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors">✏️ Editar</button>
+          <button onclick="eliminarContexto('${escapeHtml(ctx.context_key)}', this)" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors">🗑️ Eliminar</button>
         </div>
       </div>
     `;
@@ -840,13 +871,9 @@ async function guardarContexto() {
       return;
     }
 
-    // Recargar contextos
-    const contextsResponse = await fetch('/admin/api/contexts');
-    if (contextsResponse.ok) {
-      const contextsData = await contextsResponse.json();
-      contexts = contextsData.contexts || [];
-      renderContexts();
-    }
+    // Recargar contextos desde el servidor (sin cache)
+    await recargarContextosDesdeServidor();
+    renderContexts();
 
     cerrarModalContexto();
     alert('Contexto guardado exitosamente');
@@ -857,12 +884,24 @@ async function guardarContexto() {
 }
 
 // Eliminar contexto
-async function eliminarContexto(contextKey) {
-  if (!confirm(`¿Estás seguro de eliminar el contexto '${contextKey}'?`)) {
+async function eliminarContexto(contextKey, buttonElement) {
+  // Confirmación con más información
+  const ctx = contexts.find(c => c.context_key === contextKey);
+  const ctxLabel = ctx ? ctx.label : contextKey;
+  if (!confirm(`¿Estás seguro de eliminar el contexto '${ctxLabel}' (${contextKey})?\n\nEsta acción no se puede deshacer.`)) {
     return;
   }
 
   try {
+    // Mostrar indicador de carga
+    let originalText = '';
+    if (buttonElement) {
+      originalText = buttonElement.innerHTML;
+      buttonElement.disabled = true;
+      buttonElement.innerHTML = '⏳ Eliminando...';
+      buttonElement.classList.add('opacity-50');
+    }
+    
     const response = await fetch(`/admin/api/contexts/${encodeURIComponent(contextKey)}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
@@ -871,23 +910,67 @@ async function eliminarContexto(contextKey) {
     const data = await response.json();
 
     if (!data.ok) {
-      alert('Error: ' + (data.error || 'Error desconocido'));
+      if (buttonElement) {
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalText;
+        buttonElement.classList.remove('opacity-50');
+      }
+      alert('❌ Error: ' + (data.error || 'Error desconocido'));
       return;
     }
 
-    // Recargar contextos
-    const contextsResponse = await fetch('/admin/api/contexts');
-    if (contextsResponse.ok) {
-      const contextsData = await contextsResponse.json();
-      contexts = contextsData.contexts || [];
-      renderContexts();
-    }
-
-    alert('Contexto eliminado exitosamente');
+    // Recargar contextos desde el servidor (sin cache)
+    await recargarContextosDesdeServidor();
+    // Re-renderizar la lista para reflejar los cambios
+    renderContexts();
+    // Mostrar mensaje de éxito
+    showToast('✅ Contexto eliminado exitosamente', 'success');
   } catch (error) {
     console.error('Error eliminando contexto:', error);
-    alert('Error al eliminar contexto: ' + (error.message || 'Error desconocido'));
+    alert('❌ Error al eliminar contexto: ' + (error.message || 'Error desconocido'));
+    
+    // Restaurar botón si existe
+    if (buttonElement) {
+      buttonElement.disabled = false;
+      buttonElement.innerHTML = '🗑️ Eliminar';
+      buttonElement.classList.remove('opacity-50');
+    }
   }
+}
+
+// Helper para mostrar toast de éxito/error
+function showToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: ${type === 'success' ? '#10b981' : '#ef4444'};
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10000;
+    font-size: 0.875rem;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  `;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // Animar entrada
+  setTimeout(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  }, 10);
+  
+  // Remover después de 3 segundos
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
 }
 
 // Helper para escapar HTML
