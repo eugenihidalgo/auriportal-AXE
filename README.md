@@ -207,6 +207,76 @@ GET http://localhost:3000/import-kajabi
 - `better-sqlite3` - Base de datos SQLite (opcional)
 - `dotenv` - Variables de entorno
 
+## 📋 Contratos y Verificaciones
+
+### Contrato de Creación de Entidades Vivas
+
+AuriPortal define un contrato canónico para la creación de "entidades vivas" (Alumno, Práctica, etc.) que introducen hechos en el sistema.
+
+**Documentación completa**: `CONTRATO_CANONICO_CREACION_ENTIDADES_VIVAS.md`
+
+**Checklist para PRs**: `docs/checklists/CHECKLIST_ENTIDADES_VIVAS.md`
+
+**Verificación automática**:
+```bash
+npm run verify:contract:entities
+```
+
+Este script detecta violaciones obvias del contrato, como creación directa desde endpoints o módulos de negocio.
+
+**Reglas de proyecto**: `.cursor/rules/CONTRATO_A_ENTIDADES_VIVAS.yml`
+
+### Contrato de Mutación de Entidades Vivas
+
+AuriPortal define un contrato canónico para la mutación de "entidades vivas" (Alumno, Práctica, etc.) que modifican el estado del sistema.
+
+**Documentación completa**: `CONTRATO_CANONICO_MUTACION_ENTIDADES_VIVAS.md`
+
+**Checklist para PRs**: `docs/checklists/CHECKLIST_MUTACION_ENTIDADES_VIVAS.md`
+
+**Verificación automática**:
+```bash
+npm run verify:contract:mutations
+```
+
+Este script detecta violaciones obvias del contrato, como mutación directa desde endpoints o módulos de negocio.
+
+**Reglas de proyecto**: `.cursor/rules/CONTRATO_B_MUTACION_ENTIDADES_VIVAS.yml`
+
+### Contrato de Señales Canónicas
+
+AuriPortal define un contrato canónico para las "señales" que describen hechos ocurridos en el sistema.
+
+**Documentación completa**: `CONTRATO_CANONICO_SENALES.md`
+
+**Checklist para PRs**: `docs/checklists/CHECKLIST_SENALES.md`
+
+**Verificación automática**:
+```bash
+npm run verify:contract:signals
+```
+
+Este script detecta violaciones obvias del contrato, como emisión de señales desde servicios canónicos o ejecución de automatizaciones al preparar señales.
+
+**Reglas de proyecto**: `.cursor/rules/CONTRATO_C_SENALES.yml`
+
+### Contrato de Automatizaciones Canónicas
+
+AuriPortal define un contrato canónico para las "automatizaciones" que consumen señales emitidas y ejecutan acciones registradas.
+
+**Documentación completa**: `CONTRATO_CANONICO_AUTOMATIZACIONES.md`
+
+**Checklist para PRs**: `docs/checklists/CHECKLIST_AUTOMATIZACIONES.md`
+
+**Verificación automática**:
+```bash
+npm run verify:contract:automations
+```
+
+Este script detecta violaciones obvias del contrato, como ejecución de automatizaciones desde servicios canónicos o mutación de estado directamente.
+
+**Reglas de proyecto**: `.cursor/rules/CONTRATO_D_AUTOMATIZACIONES.yml`
+
 ## 🔄 Migración desde Workers
 
 Este proyecto fue migrado desde Cloudflare Workers a Node.js. Los cambios principales:

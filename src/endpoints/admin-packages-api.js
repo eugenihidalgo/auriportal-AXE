@@ -17,6 +17,9 @@ import { listContexts, getContext } from '../services/pde-contexts-service.js';
 import { listSenales } from '../services/pde-senales-service.js';
 import { logError } from '../core/observability/logger.js';
 import { resolveContextVisibility, filterVisibleContexts } from '../core/context/resolve-context-visibility.js';
+import { assertSystemWritable } from '../core/system/system-modes.js';
+import { getOrCreateTraceId } from '../core/observability/with-trace.js';
+import { toErrorResponse } from '../core/observability/error-contract.js';
 
 const packagesRepo = getDefaultPdePackagesRepo();
 
@@ -217,6 +220,19 @@ async function handleGetPackage(id, request, env) {
  * Crea un nuevo paquete
  */
 async function handleCreatePackage(request, env, authCtx) {
+  // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+  const traceId = getOrCreateTraceId(request);
+  try {
+    assertSystemWritable({}, traceId);
+  } catch (modeError) {
+    return toErrorResponse({
+      code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+      message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+      trace_id: traceId,
+      status: modeError.status || 503
+    });
+  }
+  
   const body = await request.json();
   
   const { package_key, name, description, status, definition } = body;
@@ -275,6 +291,19 @@ async function handleCreatePackage(request, env, authCtx) {
  * Actualiza un paquete existente
  */
 async function handleUpdatePackage(id, request, env) {
+  // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+  const traceId = getOrCreateTraceId(request);
+  try {
+    assertSystemWritable({}, traceId);
+  } catch (modeError) {
+    return toErrorResponse({
+      code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+      message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+      trace_id: traceId,
+      status: modeError.status || 503
+    });
+  }
+  
   const body = await request.json();
   
   // Validar que definition sea objeto si está presente
@@ -311,6 +340,19 @@ async function handleUpdatePackage(id, request, env) {
  */
 async function handleDeletePackage(idOrKey, request, env) {
   try {
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
+      });
+    }
+    
     const authCtx = await requireAdminContext(request, env);
     if (authCtx instanceof Response) {
       return authCtx;

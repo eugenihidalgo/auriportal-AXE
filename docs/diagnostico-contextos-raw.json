@@ -1,0 +1,529 @@
+{
+  "estructura": [
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": "gen_random_uuid()",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "context_key",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "label",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "definition",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'active'::text",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "deleted_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "scope",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "column_default": "'package'::context_scope",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "kind",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "column_default": "'normal'::context_kind",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "injected",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false",
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "type",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "allowed_values",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null
+    },
+    {
+      "column_name": "default_value",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null
+    }
+  ],
+  "registros": [
+    {
+      "id": "fde6e502-21d6-4ade-82f4-c810e0c9ad74",
+      "context_key": "asdfa",
+      "label": "asdfasdf",
+      "description": null,
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "",
+        "default_value": null,
+        "allowed_values": [
+          "asdfas"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "asdfas"
+      ],
+      "default_value": null,
+      "status": "active",
+      "created_at": "2025-12-20T20:23:24.217Z",
+      "updated_at": "2025-12-20T20:23:24.217Z",
+      "deleted_at": "2025-12-20T20:23:29.701Z"
+    },
+    {
+      "id": "8d4f163c-e74e-4096-b4e4-78025532886d",
+      "context_key": "nivel_efectivo",
+      "label": "Nivel Efectivo",
+      "description": "Nivel efectivo del estudiante (1-7)",
+      "definition": {
+        "kind": "normal",
+        "type": "number",
+        "scope": "system",
+        "origin": "system",
+        "injected": true,
+        "description": "Nivel efectivo del estudiante (1-7)",
+        "default_value": 1
+      },
+      "scope": "system",
+      "kind": "normal",
+      "injected": true,
+      "type": "number",
+      "allowed_values": null,
+      "default_value": 1,
+      "status": "active",
+      "created_at": "2025-12-20T19:03:12.800Z",
+      "updated_at": "2025-12-20T19:03:12.800Z",
+      "deleted_at": "2025-12-20T19:03:12.800Z"
+    },
+    {
+      "id": "99533d07-af1e-4bc3-95fd-2bd8d549d9f7",
+      "context_key": "nivel_efectivo_pde",
+      "label": "Nivel efectivo de la PDE",
+      "description": "contexto de nivel del alumno de PDE",
+      "definition": {
+        "type": "number",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "contexto de nivel del alumno de PDE",
+        "default_value": 0,
+        "allowed_values": []
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "number",
+      "allowed_values": [],
+      "default_value": 0,
+      "status": "active",
+      "created_at": "2025-12-20T20:26:51.255Z",
+      "updated_at": "2025-12-20T20:35:15.783Z",
+      "deleted_at": null
+    },
+    {
+      "id": "24a2fcb4-8af4-45de-bf9b-15df963ef18f",
+      "context_key": "test_contexto_verificacion",
+      "label": "Contexto de Verificación",
+      "description": "Contexto de prueba para verificar el sistema",
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "Contexto de prueba para verificar el sistema",
+        "default_value": "opcion1",
+        "allowed_values": [
+          "opcion1",
+          "opcion2",
+          "opcion3"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "opcion1",
+        "opcion2",
+        "opcion3"
+      ],
+      "default_value": "opcion1",
+      "status": "active",
+      "created_at": "2025-12-20T17:26:10.396Z",
+      "updated_at": "2025-12-20T17:26:10.396Z",
+      "deleted_at": "2025-12-20T17:26:22.771Z"
+    },
+    {
+      "id": "139f09ea-a750-458d-9316-0464aac79fbe",
+      "context_key": "test_contexto_verificacion_1766251626214",
+      "label": "Contexto de Verificación",
+      "description": "Contexto de prueba para verificar el sistema",
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "Contexto de prueba para verificar el sistema",
+        "default_value": "opcion1",
+        "allowed_values": [
+          "opcion1",
+          "opcion2",
+          "opcion3"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "opcion1",
+        "opcion2",
+        "opcion3"
+      ],
+      "default_value": "opcion1",
+      "status": "active",
+      "created_at": "2025-12-20T17:27:06.216Z",
+      "updated_at": "2025-12-20T17:27:06.216Z",
+      "deleted_at": "2025-12-20T17:27:06.224Z"
+    },
+    {
+      "id": "49f3f4cb-a31d-4d3b-a2ba-e6c3889d1fd5",
+      "context_key": "test_contexto_verificacion_1766251653096",
+      "label": "Contexto de Verificación",
+      "description": "Contexto de prueba para verificar el sistema",
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "Contexto de prueba para verificar el sistema",
+        "default_value": "opcion1",
+        "allowed_values": [
+          "opcion1",
+          "opcion2",
+          "opcion3"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "opcion1",
+        "opcion2",
+        "opcion3"
+      ],
+      "default_value": "opcion1",
+      "status": "active",
+      "created_at": "2025-12-20T17:27:33.098Z",
+      "updated_at": "2025-12-20T17:27:33.098Z",
+      "deleted_at": "2025-12-20T17:27:33.615Z"
+    },
+    {
+      "id": "252402db-277e-4c59-a666-8869b29b246a",
+      "context_key": "tipo_limpieza",
+      "label": "Tipo de Limpieza",
+      "description": "Tipo de limpieza energética a realizar",
+      "definition": {
+        "kind": "normal",
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "injected": false,
+        "description": "Tipo de limpieza energética a realizar",
+        "default_value": "basica",
+        "allowed_values": [
+          "rapida",
+          "basica",
+          "profunda",
+          "maestro"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "rapida",
+        "basica",
+        "profunda",
+        "maestro"
+      ],
+      "default_value": "basica",
+      "status": "active",
+      "created_at": "2025-12-20T19:03:12.795Z",
+      "updated_at": "2025-12-20T19:03:12.795Z",
+      "deleted_at": "2025-12-20T19:03:12.795Z"
+    },
+    {
+      "id": "6fc7ff11-743c-4c7a-99cf-8899fb09ce60",
+      "context_key": "tipo_limpieza_diaria",
+      "label": "Tipo de limpieza diaria",
+      "description": "Tipo de limpieza energética a realizar diaria",
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "Tipo de limpieza energética a realizar diaria",
+        "default_value": null,
+        "allowed_values": [
+          "rapida",
+          "basica",
+          "profunda",
+          "maestro"
+        ]
+      },
+      "scope": "package",
+      "kind": "level",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "rapida",
+        "basica",
+        "profunda",
+        "maestro"
+      ],
+      "default_value": null,
+      "status": "active",
+      "created_at": "2025-12-20T19:22:02.062Z",
+      "updated_at": "2025-12-20T19:24:44.133Z",
+      "deleted_at": "2025-12-20T19:43:36.059Z"
+    },
+    {
+      "id": "33fdc3d3-bb53-4022-9d2b-9d15f08a90aa",
+      "context_key": "tipo_limpieza_diariav2",
+      "label": "Tipo de limpieza diaria v2",
+      "description": null,
+      "definition": {
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "description": "",
+        "default_value": null,
+        "allowed_values": [
+          "rapida",
+          "basica",
+          "profunda",
+          "maestro"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "rapida",
+        "basica",
+        "profunda",
+        "maestro"
+      ],
+      "default_value": null,
+      "status": "active",
+      "created_at": "2025-12-20T20:23:56.741Z",
+      "updated_at": "2025-12-20T20:23:56.741Z",
+      "deleted_at": null
+    },
+    {
+      "id": "fa95cf59-c3a6-4203-97cc-54d5ce768535",
+      "context_key": "tipo_practica",
+      "label": "Tipo de Práctica",
+      "description": "Tipo de práctica a realizar",
+      "definition": {
+        "kind": "normal",
+        "type": "enum",
+        "scope": "package",
+        "origin": "user_choice",
+        "injected": false,
+        "description": "Tipo de práctica a realizar",
+        "default_value": "diaria",
+        "allowed_values": [
+          "diaria",
+          "semanal",
+          "mensual",
+          "especial"
+        ]
+      },
+      "scope": "package",
+      "kind": "normal",
+      "injected": false,
+      "type": "enum",
+      "allowed_values": [
+        "diaria",
+        "semanal",
+        "mensual",
+        "especial"
+      ],
+      "default_value": "diaria",
+      "status": "active",
+      "created_at": "2025-12-20T19:03:12.798Z",
+      "updated_at": "2025-12-20T19:03:12.798Z",
+      "deleted_at": "2025-12-20T19:03:12.798Z"
+    }
+  ],
+  "duplicados": {
+    "activos": [],
+    "todos": []
+  },
+  "nulos": [],
+  "combinaciones": [],
+  "soft_deletes": [
+    {
+      "context_key": "asdfa",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "fde6e502-21d6-4ade-82f4-c810e0c9ad74"
+      ],
+      "estados": [
+        "2025-12-20 20:23:29.701946+00"
+      ]
+    },
+    {
+      "context_key": "nivel_efectivo",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "8d4f163c-e74e-4096-b4e4-78025532886d"
+      ],
+      "estados": [
+        "2025-12-20 19:03:12.800964+00"
+      ]
+    },
+    {
+      "context_key": "test_contexto_verificacion",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "24a2fcb4-8af4-45de-bf9b-15df963ef18f"
+      ],
+      "estados": [
+        "2025-12-20 17:26:22.771467+00"
+      ]
+    },
+    {
+      "context_key": "test_contexto_verificacion_1766251626214",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "139f09ea-a750-458d-9316-0464aac79fbe"
+      ],
+      "estados": [
+        "2025-12-20 17:27:06.224268+00"
+      ]
+    },
+    {
+      "context_key": "test_contexto_verificacion_1766251653096",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "49f3f4cb-a31d-4d3b-a2ba-e6c3889d1fd5"
+      ],
+      "estados": [
+        "2025-12-20 17:27:33.615534+00"
+      ]
+    },
+    {
+      "context_key": "tipo_limpieza",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "252402db-277e-4c59-a666-8869b29b246a"
+      ],
+      "estados": [
+        "2025-12-20 19:03:12.795456+00"
+      ]
+    },
+    {
+      "context_key": "tipo_limpieza_diaria",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "6fc7ff11-743c-4c7a-99cf-8899fb09ce60"
+      ],
+      "estados": [
+        "2025-12-20 19:43:36.059492+00"
+      ]
+    },
+    {
+      "context_key": "tipo_practica",
+      "total": "1",
+      "activos": "0",
+      "eliminados": "1",
+      "ids": [
+        "fa95cf59-c3a6-4203-97cc-54d5ce768535"
+      ],
+      "estados": [
+        "2025-12-20 19:03:12.798513+00"
+      ]
+    }
+  ],
+  "definiciones": []
+}

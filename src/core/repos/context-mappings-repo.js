@@ -78,3 +78,10 @@ export function softDeleteMapping(id) {
   throw new Error('softDeleteMapping debe ser implementado por el repositorio concreto');
 }
 
+
+
+
+
+
+
+

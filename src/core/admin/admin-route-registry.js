@@ -99,6 +99,11 @@ export const ADMIN_ROUTES = [
     type: 'api'
   },
   {
+    key: 'api-classifications',
+    path: '/admin/api/classifications',
+    type: 'api'
+  },
+  {
     key: 'api-packages-sources',
     path: '/admin/api/packages/sources',
     type: 'api',
@@ -115,6 +120,57 @@ export const ADMIN_ROUTES = [
     type: 'api'
   },
   {
+    key: 'api-automation-definitions-list',
+    path: '/admin/api/automations',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-automation-definitions-detail',
+    path: '/admin/api/automations/:id',
+    type: 'api',
+    method: 'GET'
+  },
+  // ============================================
+  // AUTOMATIZACIONES - ESCRITURA (Fase 7)
+  // ============================================
+  {
+    key: 'api-automation-definitions-create',
+    path: '/admin/api/automations',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-automation-definitions-update',
+    path: '/admin/api/automations/:id',
+    type: 'api',
+    method: 'PUT'
+  },
+  {
+    key: 'api-automation-definitions-activate',
+    path: '/admin/api/automations/:id/activate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-automation-definitions-deactivate',
+    path: '/admin/api/automations/:id/deactivate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-automation-definitions-execute-dry-run',
+    path: '/admin/api/automations/:id/execute/dry-run',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-automation-definitions-execute-live-run',
+    path: '/admin/api/automations/:id/execute/live-run',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'api-automations',
     path: '/admin/api/automations',
     type: 'api'
@@ -124,6 +180,24 @@ export const ADMIN_ROUTES = [
     path: '/admin/api/automations/preview',
     type: 'api',
     method: 'POST'
+  },
+  {
+    key: 'api-automation-runs',
+    path: '/admin/api/automation-runs',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-automation-runs-detail',
+    path: '/admin/api/automation-runs/:id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-automation-runs-steps',
+    path: '/admin/api/automation-runs/:id/steps',
+    type: 'api',
+    method: 'GET'
   },
   {
     key: 'api-actions-catalog',
@@ -146,6 +220,65 @@ export const ADMIN_ROUTES = [
     key: 'api-context-mappings',
     path: '/admin/api/context-mappings',
     type: 'api'
+  },
+  {
+    key: 'api-interactive-resources',
+    path: '/admin/api/interactive-resources',
+    type: 'api'
+  },
+  {
+    key: 'api-tecnicas-limpieza',
+    path: '/admin/api/tecnicas-limpieza',
+    type: 'api'
+  },
+  {
+    key: 'api-system-diagnostics',
+    path: '/admin/api/system/diagnostics',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'system-diagnostics-page',
+    path: '/admin/system/diagnostics',
+    type: 'island'
+  },
+  // ============================================
+  // ASSEMBLY CHECK SYSTEM (ACS) v1.0
+  // ============================================
+  {
+    key: 'api-assembly-status',
+    path: '/admin/api/assembly/status',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-assembly-run',
+    path: '/admin/api/assembly/run',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-assembly-runs',
+    path: '/admin/api/assembly/runs',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-assembly-run-detail',
+    path: '/admin/api/assembly/runs/:run_id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-assembly-initialize',
+    path: '/admin/api/assembly/initialize',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'assembly-check-page',
+    path: '/admin/system/assembly',
+    type: 'island'
   },
   {
     key: 'api-resolvers',
@@ -224,8 +357,65 @@ export const ADMIN_ROUTES = [
     type: 'island'
   },
   {
-    key: 'automations-manager',
+    key: 'automation-definitions-list',
     path: '/admin/automations',
+    type: 'island'
+  },
+  {
+    key: 'automation-definitions-detail',
+    path: '/admin/automations/:id',
+    type: 'island'
+  },
+  {
+    key: 'automation-definitions-create',
+    path: '/admin/automations/new',
+    type: 'island'
+  },
+  {
+    key: 'automation-definitions-edit',
+    path: '/admin/automations/:id/edit',
+    type: 'island'
+  },
+  // ============================================
+  // FEATURE FLAGS
+  // ============================================
+  {
+    key: 'api-feature-flags-list',
+    path: '/admin/api/feature-flags',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-feature-flags-enable',
+    path: '/admin/api/feature-flags/:key/enable',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-feature-flags-disable',
+    path: '/admin/api/feature-flags/:key/disable',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-feature-flags-reset',
+    path: '/admin/api/feature-flags/:key/reset',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'feature-flags-ui',
+    path: '/admin/feature-flags',
+    type: 'island'
+  },
+  {
+    key: 'automation-runs-list',
+    path: '/admin/automations/runs',
+    type: 'island'
+  },
+  {
+    key: 'automation-runs-detail',
+    path: '/admin/automations/runs/:id',
     type: 'island'
   },
   {
@@ -235,297 +425,424 @@ export const ADMIN_ROUTES = [
   },
 
   // ============================================
-  // LEGACY (Rutas que van a admin-panel-v4.js)
+  // AUTH ADMIN (Login/Logout)
   // ============================================
   {
-    key: 'dashboard',
-    path: '/admin',
-    type: 'legacy'
+    key: 'admin-login',
+    path: '/admin/login',
+    type: 'island'
   },
   {
-    key: 'dashboard-alt',
-    path: '/admin/dashboard',
-    type: 'legacy'
+    key: 'admin-logout',
+    path: '/admin/logout',
+    type: 'island',
+    method: 'POST'
   },
+  
+  // ============================================
+  // DASHBOARD ADMIN V1 (POST-LEGACY)
+  // ============================================
+  {
+    key: 'admin-dashboard',
+    path: '/admin',
+    type: 'island'
+  },
+  {
+    key: 'admin-dashboard-alias',
+    path: '/admin/dashboard',
+    type: 'island'
+  },
+  
+  // ============================================
+  // LEGACY (Rutas que van a admin-panel-v4.js) - DESHABILITADAS
+  // ============================================
   {
     key: 'alumnos',
     path: '/admin/alumnos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'progreso-v4',
     path: '/admin/progreso-v4',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'modo-maestro',
     path: '/admin/modo-maestro',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'comunicacion-directa',
     path: '/admin/comunicacion-directa',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'respuestas',
     path: '/admin/respuestas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'email',
     path: '/admin/email',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'transmutaciones-personas',
     path: '/admin/transmutaciones/personas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'transmutaciones-lugares',
     path: '/admin/transmutaciones/lugares',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'transmutaciones-proyectos',
     path: '/admin/transmutaciones/proyectos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'transmutaciones-energeticas',
-    path: '/admin/transmutaciones-energeticas',
-    type: 'legacy'
+    path: '/admin/pde/transmutaciones-energeticas',
+    type: 'island'
   },
   {
     key: 'tecnicas-limpieza',
     path: '/admin/tecnicas-limpieza',
-    type: 'legacy'
+    type: 'island'
   },
   {
     key: 'preparaciones-practica',
     path: '/admin/preparaciones-practica',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'tecnicas-post-practica',
     path: '/admin/tecnicas-post-practica',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'protecciones-energeticas',
     path: '/admin/protecciones-energeticas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'decretos',
     path: '/admin/decretos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'motors',
     path: '/admin/motors',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'motors-api',
     path: '/admin/pde/motors',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'frases',
     path: '/admin/frases',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'tarot',
     path: '/admin/tarot',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'iad-alumnos',
     path: '/admin/iad-alumnos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'recorridos',
     path: '/admin/recorridos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'recorridos-new',
     path: '/admin/recorridos/new',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'recorrido-pedagogico',
     path: '/admin/recorrido-pedagogico',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion-workflow',
     path: '/admin/configuracion-workflow',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion-caminos',
     path: '/admin/configuracion-caminos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'editor-pantallas',
     path: '/admin/editor-pantallas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'screen-templates',
     path: '/admin/screen-templates',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion-aspectos',
     path: '/admin/configuracion-aspectos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'sellos',
     path: '/admin/sellos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'recursos-tecnicos-musicas',
     path: '/admin/recursos-tecnicos/musicas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'recursos-tecnicos-tonos',
     path: '/admin/recursos-tecnicos/tonos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'niveles-energeticos',
     path: '/admin/niveles-energeticos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion-racha',
     path: '/admin/configuracion-racha',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'logros',
     path: '/admin/logros',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'analytics',
     path: '/admin/analytics',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'analytics-resumen',
     path: '/admin/analytics-resumen',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'system-capabilities',
     path: '/admin/system/capabilities',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion-favoritos',
     path: '/admin/configuracion-favoritos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'modulos',
     path: '/admin/modulos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'configuracion',
     path: '/admin/configuracion',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'logs',
     path: '/admin/logs',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-overview',
     path: '/admin/master-insight/overview',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-alertas',
     path: '/admin/master-insight/alertas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-sugerencias',
     path: '/admin/master-insight/sugerencias',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-salud-energetica',
     path: '/admin/master-insight/salud-energetica',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-patrones',
     path: '/admin/master-insight/patrones',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-lugares',
     path: '/admin/master-insight/lugares',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-proyectos',
     path: '/admin/master-insight/proyectos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-apadrinados',
     path: '/admin/master-insight/apadrinados',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-ritmos',
     path: '/admin/master-insight/ritmos',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-eventos-especiales',
     path: '/admin/master-insight/eventos-especiales',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-historial',
     path: '/admin/master-insight/historial',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'master-insight-configuracion',
     path: '/admin/master-insight/configuracion',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'themes-ui',
     path: '/admin/themes/ui',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'themes-apariencia',
     path: '/admin/apariencia/temas',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'themes-api',
     path: '/admin/themes',
-    type: 'legacy'
+    type: 'legacy',
+    disabled: true,
+    disabledReason: 'LEGACY_NOT_MIGRATED'
   },
   {
     key: 'test-html',

@@ -48,6 +48,8 @@
  * 16. Cerrar sesión
  */
 
+import { resolveSidebarState } from './sidebar/sidebar-resolver.js';
+
 // Orden canónico de secciones (menor número = primero)
 export const SECTION_ORDER = {
   'Dashboard': 1,
@@ -280,7 +282,7 @@ export const sidebarRegistry = [
     id: 'transmutaciones-energeticas',
     label: 'Transmutaciones Energéticas',
     icon: '🔮',
-    route: '/admin/transmutaciones-energeticas',
+    route: '/admin/pde/transmutaciones-energeticas',
     section: '🌟 Transmutación energética de la PDE',
     visible: true,
     order: 4
@@ -384,17 +386,8 @@ export const sidebarRegistry = [
     icon: '📦',
     route: '/admin/pde/packages-v2',
     section: '✏️ EDITOR PDE',
-    visible: true,
+    visible: false, // Legacy desactivado - bloqueado en router
     order: 1
-  },
-  {
-    id: 'packages-creator',
-    label: 'Paquetes (Legacy)',
-    icon: '📦',
-    route: '/admin/packages',
-    section: '✏️ EDITOR PDE',
-    visible: false,
-    order: 99
   },
   {
     id: 'contexts-manager',
@@ -406,13 +399,22 @@ export const sidebarRegistry = [
     order: 1.5
   },
   {
+    id: 'packages-creator',
+    label: 'Creador de Paquetes',
+    icon: '📦',
+    route: '/admin/packages',
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 1.6
+  },
+  {
     id: 'resolvers-studio',
     label: 'Resolvers',
     icon: '🧠',
     route: '/admin/resolvers',
     section: '✏️ EDITOR PDE',
     visible: true,
-    order: 1.6
+    order: 1.7
   },
   {
     id: 'widgets-creator-v2',
@@ -446,11 +448,28 @@ export const sidebarRegistry = [
     label: 'Automatizaciones V2',
     icon: '⚡',
     route: '/admin/automations',
-    section: '📚 Contenido PDE',
-    visible: false,
-    order: 13,
-    badge: 'V2',
-    badgeColor: 'blue'
+    section: '✏️ EDITOR PDE',
+    visible: true,
+    order: 5
+  },
+  {
+    id: 'automation-definitions-list',
+    label: 'Definiciones',
+    icon: '🧩',
+    route: '/admin/automations',
+    section: '⚙️ Automatizaciones',
+    visible: true,
+    featureFlag: 'admin.automations.ui', // Flag que controla visibilidad
+    order: 1
+  },
+  {
+    id: 'automation-runs-list',
+    label: 'Ejecuciones',
+    icon: '📊',
+    route: '/admin/automations/runs',
+    section: '⚙️ Automatizaciones',
+    visible: true,
+    order: 2
   },
 
   // 8. 💡 I+D de los alumnos
@@ -956,6 +975,34 @@ export const sidebarRegistry = [
     visible: true,
     order: 5
   },
+  {
+    id: 'system-diagnostics',
+    label: 'Diagnostics',
+    icon: '🔍',
+    route: '/admin/system/diagnostics',
+    section: '⚙️ System / Configuración',
+    visible: true,
+    order: 6
+  },
+  {
+    id: 'assembly-check',
+    label: 'Assembly Check',
+    icon: '🔧',
+    route: '/admin/system/assembly',
+    section: '⚙️ System / Configuración',
+    visible: true,
+    order: 6.5
+  },
+  {
+    id: 'feature-flags',
+    label: 'Feature Flags',
+    icon: '🏷️',
+    route: '/admin/feature-flags',
+    section: '⚙️ System / Configuración',
+    visible: true, // Visible solo si admin.feature_flags.ui === true (se resuelve en runtime)
+    featureFlag: 'admin.feature_flags.ui', // Flag que controla visibilidad
+    order: 7
+  },
 
   // ⚙️ AUTOMATIZACIONES (TODAS OCULTAS)
   {
@@ -1069,10 +1116,15 @@ export function findItemByRoute(route) {
 }
 
 /**
- * GENERADOR CANÓNICO DE SIDEBAR HTML
+ * GENERADOR CANÓNICO DE SIDEBAR HTML v2
  * 
  * Esta es la ÚNICA función válida para generar el HTML del sidebar del admin.
  * Todas las vistas admin DEBEN usar esta función.
+ * 
+ * ARQUITECTURA:
+ * - Usa Sidebar Contract (fuente de verdad)
+ * - Usa Sidebar Resolver (filtra y marca activos)
+ * - Integra con Sidebar Runtime State (persistencia)
  * 
  * ORDEN CANÓNICO (FIJO):
  * 1. Dashboard
@@ -1093,18 +1145,36 @@ export function findItemByRoute(route) {
  * 16. Cerrar sesión
  * 
  * @param {string} currentPath - Ruta actual para resaltar el item activo
+ * @param {Object} userContext - Contexto del usuario (permisos, roles, etc.)
  * @returns {string} HTML del sidebar completo
  */
-export function generateSidebarHTML(currentPath = '') {
-  const grouped = getVisibleSidebarItems();
+export function generateSidebarHTML(currentPath = '', userContext = {}) {
+  // SISTEMA GOBERNADO: Usar sidebar-contract + sidebar-resolver
+  // Fail-open: Si hay error, usar sistema legacy como fallback
+  let resolved;
+  try {
+    resolved = resolveSidebarState(currentPath, userContext);
+  } catch (error) {
+    console.error('[SIDEBAR] Error en resolveSidebarState, usando fallback:', error);
+    // Fallback: usar sistema legacy
+    return generateSidebarHTMLLegacy(currentPath, userContext);
+  }
+  
+  if (!resolved || !resolved.grouped) {
+    console.warn('[SIDEBAR] resolveSidebarState devolvió resultado inválido, usando fallback');
+    return generateSidebarHTMLLegacy(currentPath, userContext);
+  }
+  
   let html = '';
   
   // 1. Dashboard (siempre primero, sin sección)
-  const dashboardItem = grouped['Dashboard']?.[0] || grouped[null]?.[0];
-  if (dashboardItem) {
-    const activeClass = currentPath === dashboardItem.route ? 'menu-item-active' : '';
+  const dashboardItems = resolved.grouped['Dashboard'] || [];
+  if (dashboardItems.length > 0) {
+    const dashboardItem = dashboardItems[0];
+    const isActive = resolved.activeItem && resolved.activeItem.id === dashboardItem.id;
+    const activeClass = isActive ? 'menu-item-active' : '';
     html += `
-          <a href="${dashboardItem.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}">
+          <a href="${dashboardItem.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}" data-item-id="${dashboardItem.id}">
             <span class="mr-3 text-lg">${dashboardItem.icon}</span>
             ${dashboardItem.label}
           </a>`;
@@ -1123,48 +1193,35 @@ export function generateSidebarHTML(currentPath = '') {
             <p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>
           </div>`;
   
-  // Orden canónico de secciones (FIJO - NO MODIFICAR)
-  const sectionOrder = [
-    '🧠 MASTER INSIGHT',           // 3
-    '👤 Gestión del alumno',       // 4
-    '💬 Comunicación con los alumnos', // 5
-    '🌟 Transmutación energética de la PDE', // 6
-    '📚 Contenido PDE',            // 7
-    '✏️ EDITOR PDE',               // 8
-    '💡 I+D de los alumnos',       // 9
-    '🧭 Navegaciones',             // 10
-    '🗺️ Recorridos',              // 11
-    '🎨 Apariencia',               // 12
-    '🎵 Recursos técnicos',        // 13
-    '🏷️ Clasificaciones',         // 14
-    '📊 Analytics',                // 15
-    '⚙️ System / Configuración'   // 16
-  ];
+  // 3. Generar secciones colapsables en el orden canónico
+  const sectionOrder = resolved.sections || [];
   
-  // Generar secciones en el orden canónico
   for (const section of sectionOrder) {
-    const items = grouped[section];
+    const items = resolved.grouped[section];
     if (!items || items.length === 0) continue;
     
+    // Determinar si la sección está activa (contiene el item activo)
+    const isActiveSection = resolved.activeSection === section;
+    const sectionId = section.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+    
+    // Generar header de sección colapsable
     html += `
           <!-- Divider -->
           <div class="my-2 border-t border-slate-800"></div>
-          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            ${section}
-          </div>`;
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="${sectionId}" 
+               data-section-name="${section}"
+               role="button"
+               aria-expanded="${isActiveSection ? 'true' : 'false'}">
+            <span>${section}</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content ${isActiveSection ? 'open' : ''}" data-section-id="${sectionId}">`;
     
-    // Los items ya vienen ordenados por su propiedad `order` desde getVisibleSidebarItems()
+    // Generar items de la sección
     for (const item of items) {
-      // Determinar si el item está activo
-      let activeClass = '';
-      if (currentPath === item.route) {
-        activeClass = 'menu-item-active';
-      } else if (item.route.includes('/') && currentPath.startsWith(item.route + '/')) {
-        activeClass = 'menu-item-active';
-      } else if (item.route.includes('/') && currentPath.includes(item.route)) {
-        // Para rutas como /admin/recursos-tecnicos/musicas
-        activeClass = 'menu-item-active';
-      }
+      const isActive = resolved.activeItem && resolved.activeItem.id === item.id;
+      const activeClass = isActive ? 'menu-item-active' : '';
       
       // Generar badge si existe
       let badgeHtml = '';
@@ -1180,16 +1237,17 @@ export function generateSidebarHTML(currentPath = '') {
       }
       
       html += `
-          <!-- ${item.label} -->
-          <a href="${item.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}">
+          <a href="${item.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}" data-item-id="${item.id}" data-section="${section}">
             <span class="mr-3 text-lg">${item.icon}</span>
             <span class="flex-1">${item.label}</span>
             ${badgeHtml}
           </a>`;
     }
+    
+    html += `</div>`;
   }
   
-  // 16. Cerrar sesión (siempre al final)
+  // 4. Cerrar sesión (siempre al final)
   html += `
           <!-- Divider -->
           <div class="my-2 border-t border-slate-800"></div>
@@ -1202,6 +1260,123 @@ export function generateSidebarHTML(currentPath = '') {
             </button>
           </form>`;
   
+  // Envolver en contenedor con atributos de datos
+  html = `<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="${currentPath}" data-active-section="${resolved.activeSection || ''}">${html}</div>`;
+  
   return html;
+}
+
+/**
+ * Función de fallback legacy para robustez
+ * Se usa si el sistema gobernado falla
+ */
+function generateSidebarHTMLLegacy(currentPath = '', userContext = {}) {
+  try {
+    let grouped = getVisibleSidebarItems();
+    let html = '';
+    
+    // Dashboard
+    const dashboardItem = grouped['Dashboard']?.[0] || grouped[null]?.[0];
+    if (dashboardItem) {
+      const isActive = currentPath === dashboardItem.route || 
+                       (dashboardItem.route && currentPath.startsWith(dashboardItem.route + '/'));
+      const activeClass = isActive ? 'menu-item-active' : '';
+      html += `
+          <a href="${dashboardItem.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}" data-item-id="${dashboardItem.id}">
+            <span class="mr-3 text-lg">${dashboardItem.icon}</span>
+            ${dashboardItem.label}
+          </a>`;
+    }
+    
+    // Favoritos
+    html += `
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⭐ Favoritos
+          </div>
+          <div id="favoritos-container">
+            <p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>
+          </div>`;
+    
+    // Secciones simples (sin colapsar en fallback)
+    const sectionOrder = [
+      '🧠 MASTER INSIGHT',
+      '👤 Gestión del alumno',
+      '💬 Comunicación con los alumnos',
+      '🌟 Transmutación energética de la PDE',
+      '📚 Contenido PDE',
+      '✏️ EDITOR PDE',
+      '💡 I+D de los alumnos',
+      '🧭 Navegaciones',
+      '🗺️ Recorridos',
+      '🎨 Apariencia',
+      '🎵 Recursos técnicos',
+      '🏷️ Clasificaciones',
+      '📊 Analytics',
+      '⚙️ System / Configuración'
+    ];
+    
+    for (const section of sectionOrder) {
+      const items = grouped[section];
+      if (!items || items.length === 0) continue;
+      
+      html += `
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ${section}
+          </div>`;
+      
+      for (const item of items) {
+        let activeClass = '';
+        if (currentPath === item.route || 
+            (item.route && currentPath.startsWith(item.route + '/'))) {
+          activeClass = 'menu-item-active';
+        }
+        
+        let badgeHtml = '';
+        if (item.badge) {
+          const colorMap = {
+            yellow: 'bg-yellow-900 text-yellow-200',
+            green: 'bg-green-900 text-green-200',
+            red: 'bg-red-900 text-red-200',
+            blue: 'bg-blue-900 text-blue-200'
+          };
+          const colorClass = colorMap[item.badgeColor] || colorMap.yellow;
+          badgeHtml = `<span class="ml-2 px-2 py-0.5 text-xs ${colorClass} rounded">${item.badge}</span>`;
+        }
+        
+        html += `
+          <a href="${item.route}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors ${activeClass}" data-item-id="${item.id}" data-section="${section}">
+            <span class="mr-3 text-lg">${item.icon}</span>
+            <span class="flex-1">${item.label}</span>
+            ${badgeHtml}
+          </a>`;
+      }
+    }
+    
+    html += `
+          <div class="my-2 border-t border-slate-800"></div>
+          <form method="POST" action="/admin/logout" class="w-full">
+            <button type="submit" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-red-900 bg-red-950 text-red-200 transition-colors">
+              <span class="mr-3 text-lg">🔴</span>
+              Cerrar Sesión
+            </button>
+          </form>`;
+    
+    html = `<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="${currentPath}" data-active-section="">${html}</div>`;
+    
+    return html;
+  } catch (error) {
+    console.error('[SIDEBAR] Error crítico en fallback legacy:', error);
+    // Último recurso: sidebar mínimo
+    return `<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="${currentPath}">
+      <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+        <span class="mr-3 text-lg">📊</span>
+        Dashboard
+      </a>
+      <div class="my-2 border-t border-slate-800"></div>
+      <p class="px-3 py-2 text-xs text-slate-500">Error cargando sidebar</p>
+    </div>`;
+  }
 }
 

@@ -215,3 +215,10 @@ describe('ScreenTemplateDefinition Contract', () => {
 
 
 
+
+
+
+
+
+
+

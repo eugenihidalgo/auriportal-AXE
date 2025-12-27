@@ -54,3 +54,10 @@ COMMENT ON COLUMN protecciones_energeticas.updated_at IS 'Fecha de última actua
 
 
 
+
+
+
+
+
+
+

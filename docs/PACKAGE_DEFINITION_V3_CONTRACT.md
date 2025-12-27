@@ -187,3 +187,10 @@ El PackageDefinition es válido si:
 - `src/infra/repos/pde-packages-repo-pg.js` → Repositorio que guarda PackageDefinition
 - `database/migrations/v5.27.0-refactor-packages-to-package-definition.sql` → Migración SQL
 
+
+
+
+
+
+
+

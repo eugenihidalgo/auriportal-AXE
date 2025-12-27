@@ -198,3 +198,10 @@ SET
   description = 'Tipo de limpieza energética'
 WHERE context_key = 'tipo_limpieza' AND deleted_at IS NULL;
 
+
+
+
+
+
+
+

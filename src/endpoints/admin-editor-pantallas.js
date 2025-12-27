@@ -5,13 +5,10 @@ import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from '
 import { fileURLToPath } from 'url';
 import { dirname, join, extname, basename } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Cargar template base
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Reemplaza placeholders en templates
@@ -788,13 +785,14 @@ export async function renderEditorPantallas(request, env) {
     </script>
   `;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Editor de Pantallas HTML',
-    CONTENT: content
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Editor de Pantallas HTML',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

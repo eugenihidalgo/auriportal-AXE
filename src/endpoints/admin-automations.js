@@ -5,33 +5,10 @@ import { query } from '../../database/pg.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
-// Función helper para reemplazar placeholders
-async function replace(html, placeholders) {
-  let output = html;
-  
-  // VALIDACIÓN CRÍTICA: Detectar Promises antes de reemplazar
-  for (const key in placeholders) {
-    let value = placeholders[key] ?? "";
-    
-    // DETECCIÓN DE PROMISE: Si value es una Promise, lanzar error visible
-    if (value && typeof value === 'object' && typeof value.then === 'function') {
-      const errorMsg = `DEBUG: PLACEHOLDER ${key} IS A PROMISE (MISSING AWAIT)`;
-      console.error(`[REPLACE] ${errorMsg}`);
-      value = `<div style="padding:8px;color:#fca5a5;background:#1e293b;border:2px solid #fca5a5;border-radius:4px;margin:8px;font-weight:bold;">${errorMsg}</div>`;
-    }
-    
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  
-  return output;
-}
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
-const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
 
 // Almacenamiento en memoria (prototipo)
 // En producción, esto debería ser una tabla en PostgreSQL
@@ -247,21 +224,21 @@ export async function renderAutomationsOverview(request, env) {
     </script>
   `;
   
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: 'AUTOMATIZACIONES - Overview',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/automations'
-  });
-  
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'AUTOMATIZACIONES - Overview',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
 /**
  * Renderiza placeholder para otras secciones de automatizaciones
  */
-export async function renderAutomationsPlaceholder(sectionName, sectionTitle) {
+export async function renderAutomationsPlaceholder(request, sectionName, sectionTitle) {
   const content = `
     <div class="p-6">
       <div class="bg-slate-800 rounded-lg p-8 border border-slate-700 text-center">
@@ -279,14 +256,14 @@ export async function renderAutomationsPlaceholder(sectionName, sectionTitle) {
     </div>
   `;
   
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: `AUTOMATIZACIONES - ${sectionTitle}`,
-    CONTENT: content,
-    CURRENT_PATH: `/admin/automations/${sectionName}`
-  });
-  
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: `AUTOMATIZACIONES - ${sectionTitle}`,
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

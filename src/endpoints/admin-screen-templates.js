@@ -8,11 +8,10 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 async function replace(html, placeholders) {
   let output = html;
@@ -87,14 +86,14 @@ export async function renderListadoScreenTemplates(request, env) {
     </script>
   `;
 
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Screen Templates',
-    CONTENT: listadoHtml,
-    CURRENT_PATH: '/admin/screen-templates'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Screen Templates',
+    contentHtml: listadoHtml,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -322,14 +321,14 @@ export async function renderEditorScreenTemplate(request, env, templateId) {
     </script>
   `;
 
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: `Editor de Screen Template${templateId ? `: ${templateId}` : ''}`,
-    CONTENT: editorHtml,
-    CURRENT_PATH: `/admin/screen-templates/${templateId || 'new'}/edit`
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: `Editor de Screen Template${templateId ? `: ${templateId}` : ''}`,
+    contentHtml: editorHtml,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -360,6 +359,13 @@ export default async function adminScreenTemplatesHandler(request, env, ctx) {
   // 404
   return new Response('Página no encontrada', { status: 404 });
 }
+
+
+
+
+
+
+
 
 
 

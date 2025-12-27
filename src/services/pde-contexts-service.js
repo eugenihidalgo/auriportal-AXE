@@ -242,10 +242,19 @@ export async function getContext(contextKey) {
 /**
  * Crea un nuevo contexto
  * 
+ * FASE 2 (v5.30.0): Columnas dedicadas son la única fuente de verdad
+ * - No se requiere definition, se construye desde columnas
+ * 
  * @param {Object} definition - Definición del contexto
  * @param {string} definition.context_key - Clave única del contexto
  * @param {string} definition.label - Etiqueta legible
- * @param {Object} definition.definition - Definición JSON (type, default_value, etc.)
+ * @param {string} [definition.scope='package'] - Scope
+ * @param {string} [definition.kind='normal'] - Kind
+ * @param {string} [definition.type='string'] - Type
+ * @param {boolean} [definition.injected=false] - Injected
+ * @param {Array} [definition.allowed_values] - Allowed values (para enum)
+ * @param {any} [definition.default_value] - Default value
+ * @param {string} [definition.description] - Description
  * @param {string} [definition.status='active'] - Estado
  * @returns {Promise<Object>} Contexto creado
  */
@@ -253,28 +262,31 @@ export async function createContext(definition) {
   const {
     context_key,
     label,
-    definition: def,
+    scope = 'package',
+    kind = 'normal',
+    type = 'string',
+    injected = false,
+    allowed_values = null,
+    default_value = null,
+    description = null,
     status = 'active'
   } = definition;
 
-  if (!context_key || !label || !def) {
-    throw new Error('context_key, label y definition son obligatorios');
+  if (!context_key || !label) {
+    throw new Error('context_key y label son obligatorios');
   }
 
-  // Normalizar definición
-  const normalizedDef = normalizeContextDefinition(def);
-
-  // Validar (con warnings, no bloquea)
-  const validation = validateContextDefinition(normalizedDef, { strict: false });
-  if (validation.warnings.length > 0) {
-    console.warn(`[AXE][CONTEXTS] Warnings al crear contexto '${context_key}':`, validation.warnings);
-  }
-
-  // Crear en DB
+  // FASE 2: Crear en DB usando columnas dedicadas (definition se construye automáticamente)
   const created = await contextsRepo.create({
     context_key,
     label,
-    definition: normalizedDef,
+    scope,
+    kind,
+    type,
+    injected,
+    allowed_values,
+    default_value,
+    description,
     status
   });
 
@@ -295,8 +307,11 @@ export async function createContext(definition) {
 /**
  * Actualiza un contexto existente
  * 
+ * FASE 2 (v5.30.0): Columnas dedicadas son la única fuente de verdad
+ * - No se actualiza definition directamente, se reconstruye desde columnas
+ * 
  * @param {string} contextKey - Clave del contexto
- * @param {Object} patch - Campos a actualizar
+ * @param {Object} patch - Campos a actualizar (columnas dedicadas)
  * @returns {Promise<Object|null>} Contexto actualizado o null si no existe
  */
 export async function updateContext(contextKey, patch) {
@@ -304,24 +319,16 @@ export async function updateContext(contextKey, patch) {
     throw new Error('context_key es obligatorio');
   }
 
-  // Si se actualiza definition, normalizar
-  if (patch.definition) {
-    patch.definition = normalizeContextDefinition(patch.definition);
-    
-    // Validar (con warnings, no bloquea)
-    const validation = validateContextDefinition(patch.definition, { strict: false });
-    if (validation.warnings.length > 0) {
-      console.warn(`[AXE][CONTEXTS] Warnings al actualizar contexto '${contextKey}':`, validation.warnings);
-    }
-  }
+  // FASE 2: Eliminar definition del patch (se reconstruye automáticamente)
+  const { definition, ...patchWithoutDefinition } = patch;
 
-  const updated = await contextsRepo.updateByKey(contextKey, patch);
+  const updated = await contextsRepo.updateByKey(contextKey, patchWithoutDefinition);
   if (!updated) {
     return null;
   }
 
   // Sincronizar mappings automáticamente si se actualizó allowed_values o type
-  if (patch.allowed_values !== undefined || patch.type !== undefined || patch.definition) {
+  if (patch.allowed_values !== undefined || patch.type !== undefined) {
     try {
       await syncContextMappings(contextKey);
     } catch (syncError) {
@@ -354,7 +361,7 @@ export async function archiveContext(contextKey) {
 /**
  * Elimina un contexto (soft delete)
  * 
- * Si el contexto es virtual (no está en DB), lo crea con deleted_at para ocultarlo
+ * FASE 2 (v5.30.0): Simplificado - solo elimina si existe en DB
  * 
  * @param {string} contextKey - Clave del contexto
  * @returns {Promise<boolean>} true si se eliminó, false si no existía
@@ -364,43 +371,39 @@ export async function deleteContext(contextKey) {
     return false;
   }
 
-  // Verificar si existe en DB (incluyendo eliminados)
-  const existing = await contextsRepo.getByKey(contextKey, true); // includeDeleted = true
+  // Verificar si existe en DB (solo activos)
+  const existing = await contextsRepo.getByKey(contextKey, false); // includeDeleted = false
   
   if (existing) {
     // Existe en DB, hacer soft delete normal
     return await contextsRepo.softDeleteByKey(contextKey);
-  } else {
-    // Es virtual (no existe en DB), crearlo en DB ya eliminado para ocultarlo
-    const systemCtx = SYSTEM_CONTEXT_DEFAULTS.find(ctx => ctx.context_key === contextKey);
-    if (systemCtx) {
-      try {
-        const def = normalizeContextDefinition(systemCtx.definition);
-        // Crear el contexto
-        await contextsRepo.create({
-          context_key: systemCtx.context_key,
-          label: systemCtx.label,
-          description: def.description || null,
-          definition: def,
-          scope: def.scope || 'package',
-          kind: def.kind || 'normal',
-          injected: def.injected !== undefined ? def.injected : false,
-          type: def.type || 'string',
-          allowed_values: def.allowed_values || null,
-          default_value: def.default_value !== undefined ? def.default_value : null,
-          status: 'active'
-        });
-        // Inmediatamente hacer soft delete para ocultarlo
-        const deleted = await contextsRepo.softDeleteByKey(contextKey);
-        return deleted;
-      } catch (error) {
-        // Si falla al crear (puede que ya exista), intentar soft delete de todas formas
-        console.warn(`[AXE][CONTEXTS] Error creando contexto virtual antes de eliminar '${contextKey}':`, error.message);
-        return await contextsRepo.softDeleteByKey(contextKey);
-      }
-    }
-    return false;
   }
+  
+  return false;
+}
+
+/**
+ * Restaura un contexto eliminado (soft delete)
+ * 
+ * FASE 2 (v5.30.0): Método explícito para restaurar contextos eliminados
+ * 
+ * @param {string} contextKey - Clave del contexto
+ * @returns {Promise<Object|null>} Contexto restaurado o null si no existía o no estaba eliminado
+ */
+export async function restoreContext(contextKey) {
+  if (!contextKey) {
+    return null;
+  }
+
+  const restored = await contextsRepo.restoreByKey(contextKey);
+  if (!restored) {
+    return null;
+  }
+
+  return {
+    ...restored,
+    is_system: false
+  };
 }
 
 /**

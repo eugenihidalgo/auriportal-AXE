@@ -9,11 +9,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultPdeWidgetsRepo } from '../infra/repos/pde-widgets-repo-pg.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Renderiza el creador de widgets
@@ -436,14 +435,14 @@ export async function renderWidgetsCreator(request, env) {
     </script>
   `;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Creador de Widgets',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/widgets'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Creador de Widgets',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

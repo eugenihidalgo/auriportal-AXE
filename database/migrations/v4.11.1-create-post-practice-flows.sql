@@ -38,3 +38,10 @@ COMMENT ON COLUMN post_practice_flows.active IS 'Si el flujo está activo y debe
 
 
 
+
+
+
+
+
+
+

@@ -171,3 +171,10 @@ function calcularNivelPorDiasActivosSimulados(diasActivos) {
 
 
 
+
+
+
+
+
+
+

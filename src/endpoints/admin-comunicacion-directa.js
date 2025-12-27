@@ -6,24 +6,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
 import { validarSuscripcionActiva } from '../services/notas-master.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Cargar templates
-const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
-const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 /**
  * Renderizar vista de Comunicación Directa
@@ -249,15 +235,15 @@ export async function renderComunicacionDirecta(request, env) {
       </script>
     `;
     
-    return new Response(
-      replace(baseTemplate, {
-        TITLE: 'Comunicación Directa',
-        CONTENT: content
-      }),
-      {
-        headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-      }
-    );
+    const url = new URL(request.url);
+    const activePath = url.pathname;
+
+    return renderAdminPage({
+      title: 'Comunicación Directa',
+      contentHtml: content,
+      activePath,
+      userContext: { isAdmin: true }
+    });
   } catch (error) {
     console.error('❌ Error en renderComunicacionDirecta:', error);
     return new Response(

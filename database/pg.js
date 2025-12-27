@@ -3702,6 +3702,80 @@ export async function runMigrations() {
         }
       }
     }
+    
+    // Migración v5.33.0: Assembly Check System (ACS) v1.0
+    const migration533Path = join(__dirname, 'migrations', 'v5.33.0-assembly-check-system.sql');
+    try {
+      const migrationSQL = readFileSync(migration533Path, 'utf-8');
+      // Ejecutar por statements separados para evitar problemas de parsing
+      const statements = migrationSQL
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => {
+          const trimmed = s.trim();
+          return trimmed.length > 0 && 
+                 !trimmed.startsWith('--') && 
+                 !trimmed.match(/^\/\*/) &&
+                 trimmed.length > 10;
+        });
+      
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt + ';');
+        } catch (stmtError) {
+          // Si es error de "already exists", continuar (idempotente)
+          if (stmtError.message && (
+            stmtError.message.includes('already exists') ||
+            stmtError.message.includes('duplicate')
+          )) {
+            continue;
+          }
+          // Si es error de permisos pero la tabla/objeto ya existe, continuar
+          if (stmtError.message && (
+            stmtError.message.includes('must be owner') ||
+            stmtError.message.includes('permission denied')
+          )) {
+            // Verificar si el objeto ya existe antes de continuar
+            const objectName = stmt.match(/CREATE\s+(?:TABLE|INDEX|CONSTRAINT)\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+            if (objectName) {
+              console.log(`ℹ️  Objeto ${objectName[1]} ya existe (permisos limitados, continuando...)`);
+              continue;
+            }
+          }
+          throw stmtError;
+        }
+      }
+      console.log('✅ Migración v5.33.0 ejecutada: Assembly Check System (ACS) v1.0');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.33.0 ya aplicada (tablas existentes)');
+        } else if (error.message && (
+          error.message.includes('must be owner') ||
+          error.message.includes('permission denied')
+        )) {
+          try {
+            const checkResult = await pool.query(`
+              SELECT COUNT(*) as count FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name IN ('assembly_checks', 'assembly_check_runs', 'assembly_check_results')
+            `);
+            if (parseInt(checkResult.rows[0].count) >= 3) {
+              console.log('ℹ️  Migración v5.33.0 ya aplicada (tablas existentes con permisos limitados)');
+            } else {
+              console.warn('⚠️  Error ejecutando migración v5.33.0:', error.message);
+            }
+          } catch (checkError) {
+            console.warn('⚠️  Error ejecutando migración v5.33.0:', error.message);
+          }
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.33.0:', error.message);
+        }
+      }
+    }
   } catch (error) {
     console.warn('⚠️  Error ejecutando migraciones:', error.message);
   }

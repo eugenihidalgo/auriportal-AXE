@@ -70,85 +70,65 @@ export function getCategoriaNivel(nivel) {
 /**
  * Actualiza el nivel del estudiante en ClickUp si es necesario
  * 
- * REGLAS:
- * 1. ClickUp es la fuente de verdad - siempre leemos el nivel actual desde ClickUp
- * 2. Solo actualiza si el nivel automático es mayor al actual (respeta cambios manuales)
- * 3. NO actualiza si la suscripción NO está activa (pausada)
- * 4. Después de actualizar ClickUp, sincroniza SQL como caché
+ * ⚠️ LEGACY DESHABILITADO - FASE 2.1
+ * 
+ * Esta función viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md:
+ * - Lee nivel desde ClickUp (prohibido)
+ * - Escribe en ClickUp como autoridad (prohibido)
+ * - Escribe en SQLite (prohibido)
+ * 
+ * USAR EN SU LUGAR: src/modules/nivel-v4.js → actualizarNivelSiCorresponde()
  * 
  * @param {Object} student - Objeto estudiante normalizado desde ClickUp
  * @param {Object} env - Variables de entorno
  * @returns {number} Nivel actual (puede ser el mismo o el actualizado)
+ * @throws {Error} Siempre lanza error - función deshabilitada
  */
 export async function actualizarNivelSiNecesario(student, env) {
-  // El nivel actual siempre viene de ClickUp (fuente de verdad)
-  const nivelActual = student.nivel || 1;
-  const nivelAutomatico = calcularNivelAutomatico(student.fechaInscripcion);
-
-  // Verificar si la suscripción está activa
-  // Si no está activa, NO actualizar el nivel (pausar aumento de nivel)
-  const suscripcionActiva = student.suscripcionActiva !== false; // Por defecto true si no existe
-  
-  if (!suscripcionActiva) {
-    console.log(`⏸️  Nivel pausado para ${student.email} - Suscripción no activa`);
-    return nivelActual; // No actualizar si está pausado
-  }
-
-  // Solo actualizar si el nivel automático es MAYOR (progresión natural)
-  // Esto respeta si alguien manualmente bajó o subió el nivel en ClickUp
-  if (nivelAutomatico > nivelActual) {
-    try {
-      await clickup.updateCustomFields(env, student.id, [
-        { id: CLICKUP.CF_NIVEL_AURELIN, value: nivelAutomatico }
-      ]);
-
-      // Sincronizar SQL con el cambio
-      if (student.email) {
-        try {
-          const db = getDatabase();
-          db.prepare('UPDATE students SET nivel = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?')
-            .run(nivelAutomatico, student.email);
-          console.log(`✅ Nivel actualizado en SQL: ${student.email} → ${nivelAutomatico}`);
-        } catch (err) {
-          console.error("Error actualizando nivel en SQL:", err);
-        }
-      }
-
-      return nivelAutomatico;
-    } catch (err) {
-      console.error("Error actualizando nivel:", err);
-      return nivelActual;
-    }
-  }
-
-  return nivelActual;
+  const error = new Error(
+    `LEGACY DESHABILITADO: actualizarNivelSiNecesario() viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md. ` +
+    `PostgreSQL es el ÚNICO Source of Truth del Alumno. ` +
+    `Usar en su lugar: src/modules/nivel-v4.js → actualizarNivelSiCorresponde()`
+  );
+  error.code = 'LEGACY_DISABLED';
+  error.module = 'nivel.js';
+  error.alternative = 'nivel-v4.js';
+  console.error('[LEGACY] ❌ Intento de usar actualizarNivelSiNecesario() deshabilitado:', {
+    email: student?.email,
+    error: error.message
+  });
+  throw error;
 }
 
 /**
  * Obtiene información completa del nivel
  * 
- * IMPORTANTE: El objeto `student` debe venir de ClickUp (usando findStudentByEmail o getOrCreateStudent)
- * ClickUp es la fuente de verdad para el nivel. El nivel en `student.nivel` siempre viene de ClickUp.
+ * ⚠️ LEGACY DESHABILITADO - FASE 2.1
+ * 
+ * Esta función viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md:
+ * - Asume que student.nivel viene de ClickUp (prohibido)
+ * - No consulta PostgreSQL como Source of Truth
+ * 
+ * USAR EN SU LUGAR: src/core/progress-engine.js → computeProgress()
  * 
  * @param {Object} student - Objeto estudiante normalizado desde ClickUp (normalizeStudent)
  * @returns {Object} Información completa del nivel incluyendo nivel actual, nombre, categoría, etc.
+ * @throws {Error} Siempre lanza error - función deshabilitada
  */
 export function getNivelInfo(student) {
-  // El nivel siempre viene de ClickUp (fuente de verdad)
-  const nivel = student.nivel || 1;
-  const nombre = getNombreNivel(nivel);
-  const categoria = getCategoriaNivel(nivel);
-  const nivelAutomatico = calcularNivelAutomatico(student.fechaInscripcion);
-  
-  return {
-    nivel,
-    nombre,
-    categoria,
-    esManual: nivel !== nivelAutomatico,
-    nivelAutomatico,
-    nombreAutomatico: getNombreNivel(nivelAutomatico),
-    categoriaAutomatica: getCategoriaNivel(nivelAutomatico)
-  };
+  const error = new Error(
+    `LEGACY DESHABILITADO: getNivelInfo() viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md. ` +
+    `PostgreSQL es el ÚNICO Source of Truth del Alumno. ` +
+    `Usar en su lugar: src/core/progress-engine.js → computeProgress()`
+  );
+  error.code = 'LEGACY_DISABLED';
+  error.module = 'nivel.js';
+  error.alternative = 'progress-engine.js';
+  console.error('[LEGACY] ❌ Intento de usar getNivelInfo() deshabilitado:', {
+    email: student?.email,
+    error: error.message
+  });
+  throw error;
 }
 
 

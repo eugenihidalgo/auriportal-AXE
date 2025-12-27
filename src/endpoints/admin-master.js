@@ -15,7 +15,7 @@ import { gestionarEstadoSuscripcion } from '../modules/suscripcion-v4.js';
 import { calcularDiasPausados, estaPausada } from '../modules/pausa-v4.js';
 import { logAuditEvent } from '../core/audit/audit-service.js';
 import { requireAdminContext } from '../core/auth-context.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,9 +58,7 @@ async function columnaExiste(nombreTabla, nombreColumna) {
   }
 }
 
-// Cargar templates
-const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
-const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
+// Templates ya no se cargan aquí, se usan a través de renderAdminPage
 
 async function replace(html, placeholders) {
   let output = html;
@@ -840,16 +838,16 @@ export async function renderMaster(request, env, alumnoId) {
       </script>
     `;
     
-    // Renderizar usando baseTemplate
     // Usar apodo como identificador principal en el título
     const tituloPagina = alumno.apodo || alumno.nombre_completo || alumno.email;
-    const html = await replaceAdminTemplate(baseTemplate, {
-      TITLE: `Modo Master: ${tituloPagina}`,
-      CONTENT: content
-    });
+    const url = new URL(request.url);
+    const activePath = url.pathname;
 
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+    return renderAdminPage({
+      title: `Modo Master: ${tituloPagina}`,
+      contentHtml: content,
+      activePath,
+      userContext: { isAdmin: true }
     });
   } catch (error) {
     console.error('❌ Error en renderMaster:', error);

@@ -458,3 +458,10 @@ El sistema de contextos y mappings es la **columna vertebral** de AuriPortal par
 **Fecha:** 2025-01-XX  
 **Autor:** Sistema AuriPortal
 
+
+
+
+
+
+
+

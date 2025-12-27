@@ -242,3 +242,10 @@ Este step SOLO muestra información, NO ejecuta lógica de racha.
 
 
 
+
+
+
+
+
+
+

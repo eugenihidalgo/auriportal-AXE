@@ -6,11 +6,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { listMotors, getMotorById } from '../services/pde-motors-service.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 function replace(html, placeholders) {
   let output = html;
@@ -74,14 +73,14 @@ export async function renderListadoMotors(request, env) {
     MOTORS_ROWS: motorsRows
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Diseñador de Motores',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/motors'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Diseñador de Motores',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -147,14 +146,14 @@ export async function renderEditarMotor(request, env, motorId) {
     SUBTITLE: subtitle
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Diseñador de Motores',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/motors'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Diseñador de Motores',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

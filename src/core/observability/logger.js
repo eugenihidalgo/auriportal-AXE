@@ -217,6 +217,126 @@ export function logError(domain, message, meta = {}) {
   createLog(LOG_LEVELS.ERROR, domain, message, meta);
 }
 
+// ============================================================================
+// LOGGER CANÓNICO v1 - API ESTRUCTURADA
+// ============================================================================
+// Nueva API canónica: logInfo(event, fields), logWarn(event, fields), logError(event, fields)
+// Salida: JSON por línea con ts, level, event, trace_id, route_key, path, method, etc.
+
+/**
+ * Trunca un stack trace a un tamaño razonable
+ * @param {string} stack - Stack trace completo
+ * @param {number} maxLines - Máximo de líneas (default: 10)
+ * @returns {string} Stack truncado
+ */
+function truncateStack(stack, maxLines = 10) {
+  if (!stack) return undefined;
+  const lines = stack.split('\n');
+  if (lines.length <= maxLines) return stack;
+  return lines.slice(0, maxLines).join('\n') + '\n... (truncated)';
+}
+
+/**
+ * Extrae información de error de forma segura
+ * @param {Error|Object} err - Error object
+ * @returns {Object} Información del error
+ */
+function extractErrorInfo(err) {
+  if (!err) return undefined;
+  
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: err.message,
+      stack: truncateStack(err.stack)
+    };
+  }
+  
+  if (typeof err === 'object') {
+    return {
+      name: err.name || 'Error',
+      message: err.message || String(err),
+      stack: truncateStack(err.stack)
+    };
+  }
+  
+  return {
+    name: 'Error',
+    message: String(err)
+  };
+}
+
+/**
+ * Logger canónico v1 - Log Info
+ * @param {string} event - Nombre del evento
+ * @param {Object} fields - Campos adicionales (route_key, path, method, admin_id, student_id, duration_ms, etc.)
+ */
+export function logInfoCanonical(event, fields = {}) {
+  const traceId = getRequestId();
+  const ts = new Date().toISOString();
+  
+  const logEntry = {
+    ts,
+    level: 'INFO',
+    event,
+    ...(traceId && { trace_id: traceId }),
+    ...fields
+  };
+  
+  // Salida JSON por línea
+  console.log(JSON.stringify(logEntry));
+}
+
+/**
+ * Logger canónico v1 - Log Warn
+ * @param {string} event - Nombre del evento
+ * @param {Object} fields - Campos adicionales
+ */
+export function logWarnCanonical(event, fields = {}) {
+  const traceId = getRequestId();
+  const ts = new Date().toISOString();
+  
+  const logEntry = {
+    ts,
+    level: 'WARN',
+    event,
+    ...(traceId && { trace_id: traceId }),
+    ...fields
+  };
+  
+  // Salida JSON por línea
+  console.log(JSON.stringify(logEntry));
+}
+
+/**
+ * Logger canónico v1 - Log Error
+ * @param {string} event - Nombre del evento
+ * @param {Object} fields - Campos adicionales (puede incluir err)
+ */
+export function logErrorCanonical(event, fields = {}) {
+  const traceId = getRequestId();
+  const ts = new Date().toISOString();
+  
+  // Extraer información de error si existe
+  const err = fields.err || fields.error;
+  const errInfo = err ? extractErrorInfo(err) : undefined;
+  
+  // Construir log entry sin el error original, pero con err estructurado
+  const { err: _, error: __, ...restFields } = fields;
+  
+  const logEntry = {
+    ts,
+    level: 'ERROR',
+    event,
+    ...(traceId && { trace_id: traceId }),
+    ...restFields,
+    ...(errInfo && { err: errInfo })
+  };
+  
+  // Salida JSON por línea (usar console.error para errores)
+  console.error(JSON.stringify(logEntry));
+}
+
 /**
  * Helper para extraer metadatos de un alumno
  * Útil para incluir información relevante en los logs
@@ -235,6 +355,13 @@ export function extractStudentMeta(student) {
     estado_suscripcion: student.estado_suscripcion || student.suscripcionActiva ? 'activa' : null
   };
 }
+
+
+
+
+
+
+
 
 
 

@@ -14,21 +14,10 @@ import {
   marcarTodosAlumnosLimpiosPorAspectoIndeseable
 } from '../services/aspectos-indeseables.js';
 import { query } from '../../database/pg.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 // ============================================
 // ENERGÍAS INDESEABLES - IMPUREZAS Y DENSIDADES
@@ -575,8 +564,14 @@ export async function renderEnergiasIndeseables(request, env) {
     </script>
   `;
 
-  return new Response(replace(baseTemplate, { TITLE: 'Energías Indeseables', CONTENT: content }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Energías Indeseables',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

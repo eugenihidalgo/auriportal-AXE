@@ -134,3 +134,10 @@ COMMENT ON TABLE pde_context_audit_log IS 'Log de auditoría append-only para ca
 
 
 
+
+
+
+
+
+
+

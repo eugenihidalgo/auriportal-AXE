@@ -359,3 +359,10 @@ v5.28.0: Resolver v1 (DB+API+Studio+Preview+GPT panel)
 **Description:**
 Se implementa Resolver v1 canónico con tabla pde_resolvers + audit log, servicio determinista resolvePackage, endpoints admin CRUD/publish/preview, UI Resolvers Studio con editor de policy v1, preview sobre packages y panel GPT generador de policy (copy/paste). Sidebar integrado bajo Contextos & Mappings. Tests y docs incluidos. Fail-open y DOM API estrictos.
 
+
+
+
+
+
+
+

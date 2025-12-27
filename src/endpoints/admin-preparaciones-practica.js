@@ -7,11 +7,10 @@ import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { listarPreparaciones, crearPreparacion, actualizarPreparacion, eliminarPreparacion } from '../services/preparaciones-practica.js';
 import { listarMusicas } from '../services/musicas-meditacion.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 function replace(html, placeholders) {
   let output = html;
@@ -531,14 +530,11 @@ export default async function adminPreparacionesPracticaHandler(request, env) {
     </script>
   `;
 
-  return new Response(replace(baseTemplate, {
-    TITLE: 'Preparación para la práctica',
-    BODY_CLASSES: 'flex h-full',
-    CURRENT_PATH: currentPath,
-    CONTENT: content,
-    ACTIVE_MENU_ITEM: '/admin/preparaciones-practica'
-  }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  return renderAdminPage({
+    title: 'Preparación para la práctica',
+    contentHtml: content,
+    activePath: currentPath,
+    userContext: { isAdmin: true }
   });
 }
 

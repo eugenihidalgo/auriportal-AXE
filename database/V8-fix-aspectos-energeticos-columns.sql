@@ -51,3 +51,10 @@ SELECT '✅ Columnas añadidas correctamente a aspectos_energeticos' AS resultad
 
 
 
+
+
+
+
+
+
+

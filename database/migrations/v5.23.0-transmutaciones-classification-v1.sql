@@ -124,3 +124,10 @@ COMMENT ON COLUMN listas_transmutaciones.category_key IS 'Clave de categoría (o
 COMMENT ON COLUMN listas_transmutaciones.subtype_key IS 'Clave de subtipo (opcional, independiente de categoría, referencia a pde_transmutation_subtypes)';
 COMMENT ON COLUMN listas_transmutaciones.tags IS 'Array JSONB de tag_key strings (opcional, referencia a pde_transmutation_tags)';
 
+
+
+
+
+
+
+

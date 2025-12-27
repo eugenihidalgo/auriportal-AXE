@@ -260,3 +260,10 @@ COMMENT ON COLUMN pde_package_versions.assembled_json IS 'JSON ensamblado (snaps
 COMMENT ON TABLE pde_package_audit_log IS 'Log de auditoría append-only para cambios en paquetes';
 
 
+
+
+
+
+
+
+

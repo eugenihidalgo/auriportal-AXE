@@ -36,6 +36,7 @@ import healthAuthHandler from "./endpoints/health-auth.js";
 // ============================================
 
 import { ADMIN_ROUTES, validateAdminRouteRegistry } from './core/admin/admin-route-registry.js';
+import { resolveAdminRoute, createAdmin404Response } from './core/admin/admin-router-resolver.js';
 
 // Validar el registry al arrancar (solo una vez)
 // Si hay error, el servidor NO arranca (esto es deseado)
@@ -84,10 +85,17 @@ async function routerFunction(request, env, ctx) {
         console.error('[Router] request o request.url no disponible');
         // Headers defensivos para evitar caché de errores 400
         const { getErrorDefensiveHeaders } = await import('./core/responses.js');
-        return new Response("Bad Request: URL no disponible", {
+        const { getRequestId } = await import('./core/observability/request-context.js');
+        const traceId = getRequestId() || `router-${Date.now()}`;
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Bad Request: URL no disponible',
+          code: 'MISSING_URL',
+          trace_id: traceId
+        }), {
           status: 400,
           headers: { 
-            "Content-Type": "text/plain",
+            "Content-Type": "application/json",
             ...getErrorDefensiveHeaders()
           }
         });
@@ -172,7 +180,17 @@ async function routerFunction(request, env, ctx) {
       const publicDir = join(projectRoot, 'public');
       if (!fullPath.startsWith(publicDir)) {
         console.error(`[Router] Ruta fuera de public: ${fullPath}`);
-        return new Response("Forbidden", { status: 403 });
+        const { getRequestId } = await import('./core/observability/request-context.js');
+        const traceId = getRequestId() || `router-${Date.now()}`;
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Forbidden',
+          code: 'FORBIDDEN',
+          trace_id: traceId
+        }), { 
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
       
       // Verificar que el archivo existe
@@ -181,10 +199,17 @@ async function routerFunction(request, env, ctx) {
         // 404 limpio - nunca debe convertirse en 500
         // Headers defensivos para evitar caché de errores 404
         const { getErrorDefensiveHeaders } = await import('./core/responses.js');
-        return new Response("Not Found", { 
+        const { getRequestId } = await import('./core/observability/request-context.js');
+        const traceId = getRequestId() || `router-${Date.now()}`;
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Not Found',
+          code: 'NOT_FOUND',
+          trace_id: traceId
+        }), { 
           status: 404,
           headers: { 
-            "Content-Type": "text/plain",
+            "Content-Type": "application/json",
             ...getErrorDefensiveHeaders()
           }
         });
@@ -238,6 +263,117 @@ async function routerFunction(request, env, ctx) {
           ...getErrorDefensiveHeaders()
         }
       });
+    }
+  }
+  
+  // ============================================
+  // BLOQUEO DE RUTAS LEGACY /admin/pde/*
+  // ============================================
+  // Interceptar rutas legacy PDE antes de que lleguen al resolver
+  // Esto evita ROUTER_ERROR y mezclar eras del Admin
+  // 
+  // WHITELIST: Rutas PDE modernas que tienen handler canónico registrado
+  // Estas rutas deben estar en Admin Route Registry y tener handler moderno
+  const PDE_MODERN_ROUTES = [
+    '/admin/pde/catalog-registry',  // Primera pantalla Source of Truth PDE certificada
+    '/admin/pde/transmutaciones-energeticas'  // Segunda pantalla Source of Truth PDE certificada
+    // Añadir aquí las siguientes pantallas PDE modernas conforme se certifiquen:
+    // '/admin/pde/tecnicas-limpieza',
+    // etc.
+  ];
+  
+  if (path.startsWith("/admin/pde/")) {
+    // EXCEPCIÓN: Permitir rutas modernas PDE registradas en whitelist
+    const isModernRoute = PDE_MODERN_ROUTES.some(route => 
+      path === route || path.startsWith(route + '/')
+    );
+    
+    if (isModernRoute) {
+      // Ruta moderna: dejar que pase al Admin Route Registry
+      // El registry resolverá el handler correcto
+    } else {
+      // Ruta legacy: bloquear con mensaje
+      const { getRequestId } = await import('./core/observability/request-context.js');
+      const { getOrCreateTraceId } = await import('./core/observability/with-trace.js');
+      const { logWarnCanonical } = await import('./core/observability/logger.js');
+      const { renderAdminPage } = await import('./core/admin/admin-page-renderer.js');
+      
+      const traceId = getOrCreateTraceId(request);
+      
+      // Logging
+      logWarnCanonical('legacy_pde_route_blocked', {
+        path,
+        method: request.method,
+        trace_id: traceId
+      });
+      
+      // Respuesta controlada: página admin con mensaje claro
+      return renderAdminPage({
+        title: 'Sección desactivada',
+        contentHtml: `
+          <div style="padding: 2rem; max-width: 800px; margin: 0 auto;">
+            <h1 style="color: #ef4444; margin-bottom: 1rem;">⚠️ Sección desactivada</h1>
+            <p style="color: #6b7280; margin-bottom: 1rem; line-height: 1.6;">
+              El Admin PDE legacy ha sido desactivado.
+            </p>
+            <p style="color: #6b7280; margin-bottom: 1.5rem; line-height: 1.6;">
+              Usa el nuevo editor en <a href="/admin/packages" style="color: #3b82f6; text-decoration: underline;">/admin/packages</a>.
+            </p>
+            <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.5rem;">
+              <strong>Trace ID:</strong> <code style="background: #1f2937; padding: 0.25rem 0.5rem; border-radius: 4px; color: #9ca3af;">${traceId}</code>
+            </p>
+            <a href="/admin/packages" style="display: inline-block; background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 500;">
+              Ir al Editor de Paquetes
+            </a>
+          </div>
+        `,
+        activePath: '/admin/packages'
+      });
+    }
+  }
+  
+  // ============================================
+  // ADMIN ROUTER - Gobernado por Admin Route Registry
+  // ============================================
+  // PRIORIDAD ABSOLUTA: Todas las rutas /admin/* pasan PRIMERO por el resolver
+  // Esto garantiza que el registry es la fuente de verdad, no los bloques legacy
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
+    console.error(`[ROUTER] resolving admin route path=${path} method=${request.method} trace_id=${traceId}`);
+    
+    let resolved;
+    try {
+      resolved = await resolveAdminRoute(path, request.method);
+    } catch (resolveError) {
+      console.error(`[ROUTER] ERROR in resolveAdminRoute path=${path} trace_id=${traceId}`, resolveError);
+      throw resolveError; // Relanzar para que el catch del router lo capture
+    }
+    
+    if (resolved) {
+      // Ruta encontrada en el registry, ejecutar handler
+      console.error(`[ROUTER] route resolved, executing handler routeKey=${resolved.route.key} type=${resolved.type} trace_id=${traceId}`);
+      try {
+        const handlerResult = await resolved.handler(request, env, ctx);
+        console.error(`[ROUTER] handler executed routeKey=${resolved.route.key} resultType=${typeof handlerResult} isResponse=${handlerResult instanceof Response} trace_id=${traceId}`);
+        
+        if (!handlerResult || !(handlerResult instanceof Response)) {
+          console.error(`[ROUTER] ERROR handler returned invalid result routeKey=${resolved.route.key} result=${handlerResult} resultType=${typeof handlerResult} trace_id=${traceId}`);
+          // Esto causará que el catch del router capture el error
+          throw new Error(`Handler ${resolved.route.key} devolvió resultado inválido: ${typeof handlerResult}`);
+        }
+        
+        return handlerResult;
+      } catch (handlerError) {
+        console.error(`[ROUTER] ERROR executing handler routeKey=${resolved.route.key} trace_id=${traceId}`, handlerError);
+        throw handlerError; // Relanzar para que el catch del router lo capture
+      }
+    } else {
+      // Ruta NO encontrada en el registry
+      console.error(`[ROUTER] route not found in registry path=${path} trace_id=${traceId}`);
+      // PROHIBIDO: Fallback a legacy eliminado permanentemente
+      // Si una ruta no existe en el registry, devolver 404 controlado
+      const { createAdmin404Response } = await import('./core/admin/admin-router-resolver.js');
+      return createAdmin404Response(path, request.method);
     }
   }
   
@@ -534,18 +670,8 @@ async function routerFunction(request, env, ctx) {
         return adminNavigationApiHandler(request, env, ctx);
       }
       
-      // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
-      // Rutas HTML sin prefijo /api (solo páginas)
-      if (path.startsWith("/admin/navigation")) {
-        const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
-        return adminNavigationPagesHandler(request, env, ctx);
-      }
-      
-      // Delegar rutas /admin/* al Admin Panel (incluye /admin/progreso-v4)
-      if (path === "/admin" || path.startsWith("/admin/")) {
-        const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
-        return adminPanelV4Handler(request, env, ctx);
-      }
+      // NOTA: Las rutas /admin/* ahora se resuelven ARRIBA (antes de este bloque)
+      // usando el Admin Route Registry. Este catch-all ya no es necesario.
       
       // Por defecto, redirigir a /enter
       return enterHandler(request, env, ctx);
@@ -700,23 +826,18 @@ async function routerFunction(request, env, ctx) {
         return adminNavigationPagesHandler(request, env, ctx);
       }
       
-      // Registro de Catálogos PDE (Admin) - Isla especial
-      // IMPORTANTE: Debe ir ANTES del catch-all admin-panel-v4
-      // #region agent log
-      if (path.startsWith("/admin/pde/catalog-registry")) {
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:517',message:'Router: ruta catalog-registry detectada (admin.pdeeugenihidalgo.org)',data:{path,method:request.method,host},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
-        // #region agent log
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:521',message:'Router: llamando handler catalog-registry',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        const response = await adminCatalogRegistryHandler(request, env, ctx);
-        // #region agent log
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:525',message:'Router: respuesta de catalog-registry',data:{path,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        return response;
-      }
-      // #endregion
+      // NOTA: Rutas PDE modernas (como /admin/pde/catalog-registry) ahora se resuelven
+      // mediante el Admin Route Registry (líneas 313-356) después de pasar el bloqueo
+      // con whitelist (líneas 269-311). Este bloque legacy queda comentado para
+      // referencia histórica pero ya no se ejecuta.
+      
+      // LEGACY COMMENTED: Registro de Catálogos PDE (Admin) - Isla especial
+      // Esta ruta ahora se resuelve mediante Admin Route Registry (whitelist PDE_MODERN_ROUTES)
+      // if (path.startsWith("/admin/pde/catalog-registry")) {
+      //   const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
+      //   const response = await adminCatalogRegistryHandler(request, env, ctx);
+      //   return response;
+      // }
       
       // Endpoints API de Paquetes PDE (Admin) - ANTES del catch-all
       if (path.startsWith("/admin/api/packages")) {
@@ -754,6 +875,12 @@ async function routerFunction(request, env, ctx) {
         return adminContextMappingsApiHandler(request, env, ctx);
       }
 
+      // GET /admin/api/system/diagnostics - Runtime Diagnostics API
+      if (path === '/admin/api/system/diagnostics' && request.method === 'GET') {
+        const adminSystemDiagnosticsApiHandler = (await import("./endpoints/admin-system-diagnostics-api.js")).default;
+        return adminSystemDiagnosticsApiHandler(request, env, ctx);
+      }
+
       // Endpoints API de Señales (Admin) - ANTES del catch-all
       if (path.startsWith("/admin/api/senales")) {
         const adminSenalesApiHandler = (await import("./endpoints/admin-senales-api.js")).default;
@@ -781,6 +908,12 @@ async function routerFunction(request, env, ctx) {
       if (path.startsWith("/admin/api/transmutaciones/classification") || (path.startsWith("/admin/api/transmutaciones/lists/") && path.includes("/classification"))) {
         const adminTransmutacionesClassificationApiHandler = (await import("./endpoints/admin-transmutaciones-classification-api.js")).default;
         return adminTransmutacionesClassificationApiHandler(request, env, ctx);
+      }
+
+      // GET/POST/DELETE /admin/api/classifications/* - API canónica de términos de clasificación
+      if (path.startsWith("/admin/api/classifications")) {
+        const adminClassificationsApiHandler = (await import("./endpoints/admin-classifications-api.js")).default;
+        return adminClassificationsApiHandler(request, env, ctx);
       }
 
       // UI del Creador de Paquetes v2 (Admin) - ANTES del catch-all
@@ -865,30 +998,9 @@ async function routerFunction(request, env, ctx) {
         return response;
       }
       
-      // ============================================
-      // ADMIN LEGACY - Catch-all para todas las demás rutas
-      // ============================================
-      // IMPORTANTE: Esta es la última ruta del admin.
-      // Todas las rutas /admin/* que no hayan sido capturadas arriba
-      // se delegan a admin-panel-v4.js.
-      // 
-      // admin-panel-v4.js maneja:
-      // - Rutas explícitas /admin/* (incluye /admin/progreso-v4)
-      // - Rutas raíz "/" o "" (las normaliza a /admin)
-      // - Cualquier otra ruta (las normaliza internamente)
-      // 
-      // NO mover esta línea antes de las "islas" (rutas específicas).
-      // ============================================
-      // #region agent log
-      if (path === '/admin/packages' || path.startsWith('/admin/packages/')) {
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:827',message:'Router: WARNING - ruta /admin/packages cayendo al catch-all (NO DEBERÍA PASAR)',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      }
-      if (path === '/admin/automations' || path.startsWith('/admin/automations/')) {
-        fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:831',message:'Router: WARNING - ruta /admin/automations cayendo al catch-all',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      }
-      // #endregion
-      const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
-      return adminPanelV4Handler(request, env, ctx);
+      // NOTA: Las rutas /admin/* ahora se resuelven ARRIBA (línea 274, antes de este bloque)
+      // usando el Admin Route Registry. Este catch-all ya no es necesario.
+      // Si llegamos aquí, es porque la ruta no es /admin/*, así que continuar con el siguiente bloque.
     }
   }
 
@@ -1263,87 +1375,8 @@ async function routerFunction(request, env, ctx) {
     return adminOllamaHealthHandler(request, env, ctx);
   }
   
-  // Endpoint admin para Capability Registry v1 (Recorridos)
-  if (path === "/admin/api/registry" && request.method === "GET") {
-    const adminRegistryHandler = (await import("./endpoints/admin-registry.js")).default;
-    return adminRegistryHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Navegación (Admin) - Editor de Navegación v1
-  // Rutas API con prefijo explícito /admin/api/navigation
-  if (path.startsWith("/admin/api/navigation")) {
-    const adminNavigationApiHandler = (await import("./endpoints/admin-navigation-api.js")).default;
-    return adminNavigationApiHandler(request, env, ctx);
-  }
-  
-  // Endpoints UI de Navegación (Admin) - Editor de Navegación v1
-  // Rutas HTML sin prefijo /api (solo páginas)
-  if (path.startsWith("/admin/navigation")) {
-    const adminNavigationPagesHandler = (await import("./endpoints/admin-navigation-pages.js")).default;
-    return adminNavigationPagesHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Recorridos (Admin)
-  if (path.startsWith("/admin/api/recorridos")) {
-    const adminRecorridosApiHandler = (await import("./endpoints/admin-recorridos-api.js")).default;
-    return adminRecorridosApiHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Temas v3 (Admin) - ANTES del catch-all
-  if (path.startsWith("/admin/api/themes-v3")) {
-    const adminThemesV3ApiHandler = (await import("./endpoints/admin-themes-v3-api.js")).default;
-    return adminThemesV3ApiHandler(request, env, ctx);
-  }
-
-  // Theme Catalog endpoint (antes del catch-all de /admin/api/themes)
-  if (path === "/admin/api/themes/catalog" && request.method === "GET") {
-    const adminThemesCatalogHandler = (await import("./endpoints/admin-themes-catalog-api.js")).default;
-    return adminThemesCatalogHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Temas (Admin)
-  if (path.startsWith("/admin/api/themes")) {
-    const adminThemesApiHandler = (await import("./endpoints/admin-themes-api.js")).default;
-    const adminScreenTemplatesHandler = (await import("./endpoints/admin-screen-templates.js")).default;
-    const adminScreenTemplatesApiHandler = (await import("./endpoints/admin-screen-templates-api.js")).default;
-    return adminThemesApiHandler(request, env, ctx);
-  }
-
-  // Preview Host de Recorridos (isla canónica, antes del catch-all)
-  if (path === "/admin/recorridos/preview") {
-    const adminRecorridosPreviewUIHandler = (await import("./endpoints/admin-recorridos-preview-ui.js")).default;
-    return adminRecorridosPreviewUIHandler(request, env, ctx);
-  }
-  
-  // Endpoints UI de Recorridos (Admin)
-  if (path.startsWith("/admin/recorridos")) {
-    const adminRecorridosHandler = (await import("./endpoints/admin-recorridos.js")).default;
-    return adminRecorridosHandler(request, env, ctx);
-  }
-
-  // Theme Studio v3 UI (Admin) - ANTES del catch-all
-  if (path === "/admin/themes/studio-v3" || path.startsWith("/admin/themes/studio-v3/")) {
-    const adminThemesV3UIHandler = (await import("./endpoints/admin-themes-v3-ui.js")).default;
-    return adminThemesV3UIHandler(request, env, ctx);
-  }
-
-  // Endpoints UI de Temas (Admin)
-  if (path.startsWith("/admin/themes")) {
-    const adminThemesHandler = (await import("./endpoints/admin-themes.js")).default;
-    return adminThemesHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Screen Templates (Admin)
-  if (path.startsWith("/api/admin/screen-templates")) {
-    const adminScreenTemplatesApiHandler = (await import("./endpoints/admin-screen-templates-api.js")).default;
-    return adminScreenTemplatesApiHandler(request, env, ctx);
-  }
-
-  // Endpoints UI de Screen Templates (Admin)
-  if (path.startsWith("/admin/screen-templates")) {
-    const adminScreenTemplatesHandler = (await import("./endpoints/admin-screen-templates.js")).default;
-    return adminScreenTemplatesHandler(request, env, ctx);
-  }
+  // NOTA: Todas las rutas /admin/* ahora se resuelven ARRIBA (línea 274, antes de los bloques de host)
+  // usando el Admin Route Registry. Este bloque duplicado ha sido eliminado.
 
   // Endpoint de Navegación v1 (alumnos)
   // GET /api/navigation - Devuelve navegación filtrada según visibility_rules
@@ -1370,46 +1403,26 @@ async function routerFunction(request, env, ctx) {
     return recorridosRuntimeHandler(request, env, ctx);
   }
 
-  // Registro de Catálogos PDE (Admin) - Antes de admin-panel-v4
-  // #region agent log
-  if (path.startsWith("/admin/pde/catalog-registry")) {
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:900',message:'Router: ruta catalog-registry detectada',data:{path,method:request.method,host:url.hostname},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    const adminCatalogRegistryHandler = (await import("./endpoints/admin-catalog-registry.js")).default;
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:902',message:'Router: llamando handler catalog-registry',data:{path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    const response = await adminCatalogRegistryHandler(request, env, ctx);
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:905',message:'Router: respuesta de catalog-registry',data:{path,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    return response;
-  }
-  // #endregion
-
-  // Endpoints API de Motores PDE (Admin)
-  if (path.startsWith("/admin/pde/motors")) {
-    const adminMotorsApiHandler = (await import("./endpoints/admin-motors-api.js")).default;
-    return adminMotorsApiHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Paquetes PDE (Admin)
-  if (path.startsWith("/admin/api/packages")) {
-    const adminPackagesApiHandler = (await import("./endpoints/admin-packages-api.js")).default;
-    return adminPackagesApiHandler(request, env, ctx);
-  }
-
-  // Endpoints API de Source Templates (Admin)
-  if (path.startsWith("/admin/api/source-templates")) {
-    const adminSourceTemplatesApiHandler = (await import("./endpoints/admin-source-templates-api.js")).default;
-    return adminSourceTemplatesApiHandler(request, env, ctx);
-  }
-
-  // UI del Creador de Paquetes (Admin)
-  if (path === "/admin/packages" || path.startsWith("/admin/packages/")) {
-    const adminPackagesUiHandler = (await import("./endpoints/admin-packages-ui.js")).default;
-    return adminPackagesUiHandler(request, env, ctx);
-  }
-
-  // Panel de control administrativo
-  if (path === "/admin" || path === "/control" || path.startsWith("/admin/")) {
-    const adminPanelV4Handler = (await import("./endpoints/admin-panel-v4.js")).default;
-    return adminPanelV4Handler(request, env, ctx);
+  // NOTA: Todas las rutas /admin/* ahora se resuelven arriba usando el Admin Route Registry
+  // Las rutas específicas anteriores han sido eliminadas porque el resolver las maneja
+  
+  // Manejar /control (no está en el registry, redirigir a /admin)
+  if (path === "/control") {
+    const { getErrorDefensiveHeaders } = await import('./core/responses.js');
+    const { getRequestId } = await import('./core/observability/request-context.js');
+    const traceId = getRequestId() || `router-${Date.now()}`;
+    return new Response(JSON.stringify({
+      ok: false,
+      error: 'Ruta /control deshabilitada. Use /admin en su lugar.',
+      code: 'ROUTE_DISABLED',
+      trace_id: traceId
+    }), {
+      status: 404,
+      headers: { 
+        "Content-Type": "application/json",
+        ...getErrorDefensiveHeaders()
+      }
+    });
   }
 
   // Panel SQL de administración
@@ -1505,16 +1518,24 @@ async function routerFunction(request, env, ctx) {
   } catch (error) {
     // CRÍTICO: Capturar TODOS los errores no manejados en el router
     // Esto previene que errores se propaguen y generen 500
+    // El Runtime Guard también capturará esto, pero es mejor devolver JSON directamente
     console.error('[Router] Error no manejado:', error);
     console.error('[Router] Stack:', error.stack);
     
-    // Devolver respuesta de error válida (nunca lanzar excepción)
+    // Devolver respuesta de error JSON válida (nunca lanzar excepción)
     // Headers defensivos para evitar caché de errores 500
     const { getErrorDefensiveHeaders } = await import('./core/responses.js');
-    return new Response("Error interno del servidor", {
+    const { getRequestId } = await import('./core/observability/request-context.js');
+    const traceId = getRequestId() || `router-error-${Date.now()}`;
+    return new Response(JSON.stringify({
+      ok: false,
+      error: 'Error interno del servidor',
+      code: 'ROUTER_ERROR',
+      trace_id: traceId
+    }), {
       status: 500,
       headers: { 
-        "Content-Type": "text/plain",
+        "Content-Type": "application/json",
         ...getErrorDefensiveHeaders()
       }
     });

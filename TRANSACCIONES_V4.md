@@ -373,3 +373,10 @@ const nivel = calcularNivelPorDiasActivos(150); // Retorna nivel 6
 
 
 
+
+
+
+
+
+
+

@@ -61,3 +61,10 @@ COMMENT ON COLUMN analytics_events.props IS 'Propiedades adicionales del evento 
 
 
 
+
+
+
+
+
+
+

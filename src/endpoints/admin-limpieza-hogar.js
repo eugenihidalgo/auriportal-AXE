@@ -1,12 +1,12 @@
 // src/endpoints/admin-panel-v8-modulos.js
 // Endpoints del Admin Panel para módulos V8.0
 
-import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 import { query } from '../../database/pg.js';
 import { isActivo, isBeta } from '../services/modulos.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 import { 
   listarAspectosGlobales,
   crearAspectoRapido,
@@ -28,17 +28,6 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 // ============================================
 // ANATOMÍA ENERGÉTICA - ASPECTOS A LIMPIAR (PRIORITARIO)
@@ -545,8 +534,14 @@ export async function renderAnatomiaEnergetica(request, env) {
     </script>
   `;
 
-  return new Response(replace(baseTemplate, { TITLE: 'Anatomía Energética', CONTENT: content }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Anatomía Energética',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -613,8 +608,14 @@ export async function renderCreacionObjetivos(request, env) {
     </div>
   `;
 
-  return new Response(replace(baseTemplate, { TITLE: 'Objetivos de Creación', CONTENT: content }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Objetivos de Creación',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -679,15 +680,27 @@ export async function renderCreacionVersionFutura(request, env) {
     </div>
   `;
 
-  return new Response(replace(baseTemplate, { TITLE: 'Versión Futura', CONTENT: content }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Versión Futura',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
 // Placeholders para otros endpoints
 export async function renderCreacionProblemas(request, env) {
-  return new Response(replace(baseTemplate, { TITLE: 'Problemas Iniciales', CONTENT: '<div class="p-6"><h1 class="text-3xl font-bold text-white">Problemas Iniciales - En desarrollo</h1></div>' }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Problemas Iniciales',
+    contentHtml: '<div class="p-6"><h1 class="text-3xl font-bold text-white">Problemas Iniciales - En desarrollo</h1></div>',
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

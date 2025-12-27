@@ -496,22 +496,27 @@ export async function buildPackageDefinition(input) {
   }
 
   // Ensamblar contexts (solo scope=package, obtener definiciones del registry)
+  // FASE 2 (v5.30.0): Usar columnas dedicadas como fuente de verdad
   try {
     const { getContext } = await import('../services/pde-contexts-service.js');
     
     for (const contextKey of context_keys) {
       try {
         const contextDef = await getContext(contextKey);
-        if (contextDef && contextDef.definition) {
-          const def = contextDef.definition;
-          const scope = def.scope || contextDef.scope;
+        if (contextDef) {
+          // FASE 2: Usar columnas dedicadas (scope, type, default_value) como fuente de verdad
+          const scope = contextDef.scope || (contextDef.definition?.scope);
+          const type = contextDef.type || (contextDef.definition?.type) || 'string';
+          const default_value = contextDef.default_value !== undefined 
+            ? contextDef.default_value 
+            : (contextDef.definition?.default_value !== undefined ? contextDef.definition.default_value : null);
           
           // Solo incluir si es scope=package
           if (scope === 'package' || !scope) {
             packageDefinition.contexts.push({
               context_key: contextKey,
-              type: def.type || 'string',
-              default: def.default !== undefined ? def.default : null
+              type: type,
+              default: default_value
             });
           }
         } else {

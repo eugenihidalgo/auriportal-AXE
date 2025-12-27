@@ -63,3 +63,10 @@ COMMENT ON COLUMN pde_package_versions.package_definition IS
 -- NOTA: Mantenemos prompt_context_json y assembled_json por compatibilidad temporal
 --       Se eliminarán en una migración futura después de verificar que todo funciona
 
+
+
+
+
+
+
+

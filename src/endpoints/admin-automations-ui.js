@@ -8,11 +8,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultAutomationRepo } from '../infra/repos/automation-repo-pg.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Renderiza el gestor de automatizaciones
@@ -305,14 +304,14 @@ export async function renderAutomationsManager(request, env) {
     </script>
   `;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Gestor de Automatizaciones',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/automations'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Gestor de Automatizaciones',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

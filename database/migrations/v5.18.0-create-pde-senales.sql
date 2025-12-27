@@ -197,3 +197,10 @@ COMMENT ON TABLE pde_signal_audit_log IS 'Log de auditoría append-only para cam
 
 
 
+
+
+
+
+
+
+

@@ -8,11 +8,10 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 const widgetsV2Template = readFileSync(join(__dirname, '../core/html/admin/pde/widgets-v2.html'), 'utf-8');
 
 /**
@@ -24,18 +23,14 @@ export async function renderWidgetsCreatorV2(request, env) {
     return authCtx;
   }
 
-  // Usar el template base del admin
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Creador de Widgets PDE v2',
-    CONTENT: widgetsV2Template,
-    CURRENT_PATH: '/admin/pde/widgets-v2'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 
-      'Content-Type': 'text/html; charset=UTF-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
-    }
+  return renderAdminPage({
+    title: 'Creador de Widgets PDE v2',
+    contentHtml: widgetsV2Template,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -62,5 +57,12 @@ export default async function adminWidgetsV2UiHandler(request, env, ctx) {
   // Ruta no encontrada
   return new Response('Ruta no encontrada', { status: 404 });
 }
+
+
+
+
+
+
+
 
 

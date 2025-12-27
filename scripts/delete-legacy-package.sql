@@ -38,3 +38,10 @@ WHERE package_key = 'limpiezas_energeticas_diarias';
 
 -- Si la consulta anterior devuelve 0 filas, el borrado fue exitoso
 
+
+
+
+
+
+
+

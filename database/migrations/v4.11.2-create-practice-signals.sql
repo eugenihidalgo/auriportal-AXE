@@ -41,3 +41,10 @@ COMMENT ON COLUMN practice_signals.value IS 'Valor de la señal: número (scale)
 
 
 
+
+
+
+
+
+
+

@@ -13,7 +13,8 @@
 // 3. Auditoría: todas las emisiones se registran
 // 4. No bloquea: ejecución asíncrona en background
 
-import { runAutomationsForSignal } from '../automations/automation-engine.js';
+import { runAutomationsForSignal } from '../automations/automation-engine-v2.js';
+import { isFeatureEnabled } from '../flags/feature-flags.js';
 import { query } from '../../../database/pg.js';
 import { randomUUID } from 'crypto';
 
@@ -56,12 +57,13 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
     context: signalEnvelope.context || {}
   };
 
-  console.log(`[AXE][SIGNAL_DISPATCHER] Dispatch signal=${normalizedEnvelope.signal_key} trace_id=${traceId} dryRun=${dryRun}`);
+  console.log(`[SIGNAL_DISPATCHER] Dispatch signal=${normalizedEnvelope.signal_key} trace_id=${traceId} dryRun=${dryRun}`);
 
   // 1. Persistir emisión de señal (fail-open: si falla, continuar)
+  let signalId = randomUUID(); // Generar ID único para la señal
   if (!dryRun) {
     try {
-      await query(`
+      const result = await query(`
         INSERT INTO pde_signal_emissions (
           signal_key,
           payload,
@@ -70,6 +72,7 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
           source_type,
           source_id
         ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
       `, [
         normalizedEnvelope.signal_key,
         JSON.stringify(normalizedEnvelope.payload),
@@ -78,44 +81,67 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
         source.type || null,
         source.id || null
       ]);
-      console.log(`[AXE][SIGNAL_DISPATCHER] Señal persistida: ${normalizedEnvelope.signal_key}`);
+      // Usar el ID generado por PostgreSQL si está disponible
+      if (result.rows && result.rows[0] && result.rows[0].id) {
+        signalId = result.rows[0].id;
+      }
+      console.log(`[SIGNAL_DISPATCHER] Señal persistida: ${normalizedEnvelope.signal_key} signal_id=${signalId}`);
     } catch (error) {
-      console.error('[AXE][SIGNAL_DISPATCHER] Error persistiendo emisión (fail-open, continuando):', error.message);
+      console.error('[SIGNAL_DISPATCHER] Error persistiendo emisión (fail-open, continuando):', error.message);
       // Fail-open: continuar aunque falle la persistencia
     }
   }
 
-  // 2. Llamar SIEMPRE al automation engine
-  try {
-    const automationResult = await runAutomationsForSignal(normalizedEnvelope, {
-      dryRun,
-      actor_admin_id: null
-    });
+  // 2. Llamar al Automation Engine v2 (controlado por feature flag)
+  const automationsFlag = isFeatureEnabled('AUTOMATIONS_ENGINE_ENABLED');
+  
+  if (automationsFlag !== 'off') {
+    try {
+      const automationResult = await runAutomationsForSignal({
+        signal_id: signalId,
+        signal_type: normalizedEnvelope.signal_key,
+        payload: normalizedEnvelope.payload || {},
+        metadata: {
+          trace_id: traceId,
+          day_key: dayKey,
+          runtime: normalizedEnvelope.runtime,
+          context: normalizedEnvelope.context,
+          emitted_at: new Date().toISOString()
+        }
+      });
 
-    console.log(`[AXE][SIGNAL_DISPATCHER] Engine ejecutado: signal=${normalizedEnvelope.signal_key} matched=${automationResult.matched.length} skipped=${automationResult.skipped.length} failed=${automationResult.failed.length}`);
+      console.log(`[SIGNAL_DISPATCHER] Automation engine invoked: signal=${normalizedEnvelope.signal_key} runs=${automationResult.runs?.length || 0} errors=${automationResult.errors?.length || 0}`);
 
-    return {
-      ok: true,
-      signal_key: normalizedEnvelope.signal_key,
-      trace_id: traceId,
-      day_key: dayKey,
-      automation_result: automationResult,
-      dry_run: dryRun
-    };
-  } catch (error) {
-    console.error('[AXE][SIGNAL_DISPATCHER] Error ejecutando automation engine:', error);
-    
-    // Fail-open: no lanzar error, retornar resultado con error
-    return {
-      ok: false,
-      signal_key: normalizedEnvelope.signal_key,
-      trace_id: traceId,
-      day_key: dayKey,
-      error: error.message,
-      automation_result: null,
-      dry_run: dryRun
-    };
+      return {
+        ok: true,
+        signal_key: normalizedEnvelope.signal_key,
+        signal_id: signalId,
+        trace_id: traceId,
+        day_key: dayKey,
+        automation_result: automationResult,
+        dry_run: dryRun
+      };
+    } catch (error) {
+      console.warn('[SIGNAL_DISPATCHER] Automation engine error (ignored):', {
+        signal_id: signalId,
+        signal_key: normalizedEnvelope.signal_key,
+        error: error.message
+      });
+      // Fail-open: no romper la emisión de la señal por errores del engine
+    }
+  } else {
+    console.log(`[SIGNAL_DISPATCHER] Automation engine skipped (flag off): signal=${normalizedEnvelope.signal_key}`);
   }
+
+  // Retornar resultado exitoso (la señal se emitió correctamente)
+  return {
+    ok: true,
+    signal_key: normalizedEnvelope.signal_key,
+    signal_id: signalId,
+    trace_id: traceId,
+    day_key: dayKey,
+    dry_run: dryRun
+  };
 }
 
 /**
@@ -125,6 +151,13 @@ function getTodayKey() {
   const now = new Date();
   return now.toISOString().substring(0, 10);
 }
+
+
+
+
+
+
+
 
 
 

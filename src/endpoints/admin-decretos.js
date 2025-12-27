@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { requireAdminContext } from '../core/auth-context.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 import { 
   listarDecretos, 
   obtenerDecreto, 
@@ -18,7 +18,6 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 function replace(html, placeholders) {
   let output = html;
@@ -78,14 +77,14 @@ export async function renderListadoDecretos(request, env) {
     DECRETOS_ROWS: decretosRows
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Biblioteca de Decretos',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/decretos'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Biblioteca de Decretos',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

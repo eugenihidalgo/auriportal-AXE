@@ -8,11 +8,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { listSenales } from '../services/pde-senales-service.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Helper local para reemplazar placeholders en templates de contenido
@@ -49,19 +48,19 @@ export async function renderSenalesManager(request, env) {
   // Preparar datos para el frontend
   const senalesJson = JSON.stringify(senales);
 
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
   const contentTemplate = readFileSync(join(__dirname, '../core/html/admin/senales/senales-manager.html'), 'utf-8');
-  const content = replace(contentTemplate, {
+  const contentHtml = replace(contentTemplate, {
     SENALES_JSON: senalesJson
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Gestor de Señales',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/senales'
-  });
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Gestor de Señales',
+    contentHtml,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -78,6 +77,13 @@ export default async function adminSenalesUiHandler(request, env, ctx) {
 
   return new Response('Not Found', { status: 404 });
 }
+
+
+
+
+
+
+
 
 
 

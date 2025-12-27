@@ -286,3 +286,10 @@ Permite agregar nuevos tipos sin migraciones.';
 
 
 
+
+
+
+
+
+
+

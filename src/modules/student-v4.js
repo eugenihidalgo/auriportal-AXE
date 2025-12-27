@@ -169,97 +169,212 @@ export async function createOrUpdateStudent(env, { email, apodo = "", nombreKaja
 
 /**
  * Actualiza el nivel de un alumno
+ * 
+ * FASE 2.2 - Paso 5 (Parte 1): REFACTORIZADO para usar servicio canónico
+ * 
+ * Esta función ahora delega completamente en StudentMutationService.updateNivel(),
+ * que garantiza escritura canónica, auditoría y preparación para señales.
+ * 
+ * @param {string|number} identifier - Email o ID del alumno
+ * @param {number} nivel - Nuevo nivel
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object>} Alumno normalizado actualizado
+ * @throws {Error} Si validación falla o escritura falla
  */
-export async function updateStudentNivel(email, nivel) {
-  const repo = getStudentRepo();
+export async function updateStudentNivel(identifier, nivel, client = null) {
+  // FASE 2.2: Delegar completamente en el servicio canónico de mutación
+  // El servicio canónico garantiza:
+  // - Escritura canónica en PostgreSQL
+  // - Auditoría completa
+  // - Preparación para señales
+  // - Manejo de transacciones
   
-  // Obtener nivel anterior para el log
-  const alumnoAnterior = await repo.getByEmail(email);
-  const nivelAnterior = alumnoAnterior?.nivel_actual || alumnoAnterior?.nivel_manual || null;
+  const { getStudentMutationService } = await import('../core/services/student-mutation-service.js');
+  const mutationService = getStudentMutationService();
   
-  const alumno = await repo.updateNivel(email, nivel);
-  const normalized = normalizeAlumno(alumno);
+  // Convertir identifier a email si es necesario (el servicio canónico solo acepta email)
+  let email;
+  if (typeof identifier === 'number') {
+    // Si es ID, obtener email desde repositorio
+    const repo = getStudentRepo();
+    const alumno = await repo.getById(identifier, client);
+    if (!alumno) {
+      throw new Error(`Alumno no encontrado: ${identifier}`);
+    }
+    email = alumno.email;
+  } else {
+    email = identifier;
+  }
   
-  // Log de actualización de nivel
-  logInfo('student', 'Nivel actualizado', {
-    ...extractStudentMeta(normalized),
-    nivel_anterior: nivelAnterior,
-    nivel_nuevo: nivel
-  });
+  // Construir actor: esta función se llama desde módulos de sistema (nivel-v4.js),
+  // así que actor es 'system'
+  // Nota: No tenemos el ID del sistema en el contexto actual, usar null
+  const actor = {
+    type: 'system',
+    id: null // TODO: En el futuro, obtener ID del sistema desde contexto
+  };
   
-  return normalized;
+  // Delegar en el servicio canónico
+  // El servicio maneja toda la lógica: validación, escritura, auditoría, señal, log
+  return await mutationService.updateNivel(email, nivel, actor, client);
 }
 
 /**
  * Actualiza el streak de un alumno
  * 
- * @param {string} email - Email del alumno
+ * FASE 2.2 - Paso 5 (Parte 2): REFACTORIZADO para usar servicio canónico
+ * 
+ * Esta función ahora delega completamente en StudentMutationService.updateStreak(),
+ * que garantiza escritura canónica, auditoría y preparación para señales.
+ * 
+ * @param {string|number} identifier - Email o ID del alumno
  * @param {number} streak - Nuevo streak
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} Alumno normalizado actualizado
+ * @throws {Error} Si validación falla o escritura falla
  */
-export async function updateStudentStreak(email, streak, client = null) {
-  const repo = getStudentRepo();
+export async function updateStudentStreak(identifier, streak, client = null) {
+  // FASE 2.2: Delegar completamente en el servicio canónico de mutación
+  // El servicio canónico garantiza:
+  // - Escritura canónica en PostgreSQL
+  // - Auditoría completa
+  // - Preparación para señales
+  // - Manejo de transacciones
   
-  // Obtener streak anterior para el log
-  const alumnoAnterior = await repo.getByEmail(email, client);
-  const streakAnterior = alumnoAnterior?.streak || 0;
+  const { getStudentMutationService } = await import('../core/services/student-mutation-service.js');
+  const mutationService = getStudentMutationService();
   
-  const alumno = await repo.updateStreak(email, streak, client);
-  const normalized = normalizeAlumno(alumno);
+  // Convertir identifier a email si es necesario (el servicio canónico solo acepta email)
+  let email;
+  if (typeof identifier === 'number') {
+    // Si es ID, obtener email desde repositorio
+    const repo = getStudentRepo();
+    const alumno = await repo.getById(identifier, client);
+    if (!alumno) {
+      throw new Error(`Alumno no encontrado: ${identifier}`);
+    }
+    email = alumno.email;
+  } else {
+    email = identifier;
+  }
   
-  // Log de actualización de streak
-  logInfo('student', 'Streak actualizado', {
-    ...extractStudentMeta(normalized),
-    streak_anterior: streakAnterior,
-    streak_nuevo: streak
-  });
+  // Construir actor: esta función se llama desde módulos de sistema (flujos automáticos),
+  // así que actor es 'system'
+  // Nota: No tenemos el ID del sistema en el contexto actual, usar null
+  const actor = {
+    type: 'system',
+    id: null // TODO: En el futuro, obtener ID del sistema desde contexto
+  };
   
-  return normalized;
+  // Delegar en el servicio canónico
+  // El servicio maneja toda la lógica: validación, escritura, auditoría, señal, log
+  return await mutationService.updateStreak(email, streak, actor, client);
 }
 
 /**
  * Actualiza la última práctica de un alumno
  * 
- * @param {string} email - Email del alumno
+ * FASE 2.2 - Paso 5 (Parte 3): REFACTORIZADO para usar servicio canónico
+ * 
+ * Esta función ahora delega completamente en StudentMutationService.updateUltimaPractica(),
+ * que garantiza escritura canónica, auditoría y preparación para señales.
+ * 
+ * @param {string|number} identifier - Email o ID del alumno
  * @param {Date|string} fecha - Fecha de última práctica
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} Alumno normalizado actualizado
+ * @throws {Error} Si validación falla o escritura falla
  */
-export async function updateStudentUltimaPractica(email, fecha, client = null) {
-  const repo = getStudentRepo();
-  const alumno = await repo.updateUltimaPractica(email, fecha, client);
-  return normalizeAlumno(alumno);
+export async function updateStudentUltimaPractica(identifier, fecha, client = null) {
+  // FASE 2.2: Delegar completamente en el servicio canónico de mutación
+  // El servicio canónico garantiza:
+  // - Escritura canónica en PostgreSQL
+  // - Auditoría completa
+  // - Preparación para señales
+  // - Manejo de transacciones
+  
+  const { getStudentMutationService } = await import('../core/services/student-mutation-service.js');
+  const mutationService = getStudentMutationService();
+  
+  // Convertir identifier a email si es necesario (el servicio canónico solo acepta email)
+  let email;
+  if (typeof identifier === 'number') {
+    // Si es ID, obtener email desde repositorio
+    const repo = getStudentRepo();
+    const alumno = await repo.getById(identifier, client);
+    if (!alumno) {
+      throw new Error(`Alumno no encontrado: ${identifier}`);
+    }
+    email = alumno.email;
+  } else {
+    email = identifier;
+  }
+  
+  // Construir actor: esta función se llama desde módulos de sistema (flujos automáticos),
+  // así que actor es 'system'
+  // Nota: No tenemos el ID del sistema en el contexto actual, usar null
+  const actor = {
+    type: 'system',
+    id: null // TODO: En el futuro, obtener ID del sistema desde contexto
+  };
+  
+  // Delegar en el servicio canónico
+  // El servicio maneja toda la lógica: validación, escritura, auditoría, señal, log
+  return await mutationService.updateUltimaPractica(email, fecha, actor, client);
 }
 
 /**
  * Actualiza el estado de suscripción de un alumno
  * 
- * @param {string} email - Email del alumno
+ * FASE 2.2 - Paso 5 (Parte 4): REFACTORIZADO para usar servicio canónico
+ * 
+ * Esta función ahora delega completamente en StudentMutationService.updateEstadoSuscripcion(),
+ * que garantiza escritura canónica, auditoría y preparación para señales.
+ * 
+ * @param {string|number} identifier - Email o ID del alumno
  * @param {string} estado - Nuevo estado ('activa', 'pausada', 'cancelada')
- * @param {Date|string|null} fechaReactivacion - Fecha de reactivación (opcional)
+ * @param {Date|string|null} [fechaReactivacion] - Fecha de reactivación (opcional)
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} Alumno normalizado actualizado
+ * @throws {Error} Si validación falla o escritura falla
  */
-export async function updateStudentEstadoSuscripcion(email, estado, fechaReactivacion = null, client = null) {
-  const repo = getStudentRepo();
+export async function updateStudentEstadoSuscripcion(identifier, estado, fechaReactivacion = null, client = null) {
+  // FASE 2.2: Delegar completamente en el servicio canónico de mutación
+  // El servicio canónico garantiza:
+  // - Escritura canónica en PostgreSQL
+  // - Auditoría completa
+  // - Preparación para señales
+  // - Manejo de transacciones
   
-  // Obtener estado anterior para el log
-  const alumnoAnterior = await repo.getByEmail(email, client);
-  const estadoAnterior = alumnoAnterior?.estado_suscripcion || null;
+  const { getStudentMutationService } = await import('../core/services/student-mutation-service.js');
+  const mutationService = getStudentMutationService();
   
-  const alumno = await repo.updateEstadoSuscripcion(email, estado, fechaReactivacion, client);
-  const normalized = normalizeAlumno(alumno);
+  // Convertir identifier a email si es necesario (el servicio canónico solo acepta email)
+  let email;
+  if (typeof identifier === 'number') {
+    // Si es ID, obtener email desde repositorio
+    const repo = getStudentRepo();
+    const alumno = await repo.getById(identifier, client);
+    if (!alumno) {
+      throw new Error(`Alumno no encontrado: ${identifier}`);
+    }
+    email = alumno.email;
+  } else {
+    email = identifier;
+  }
   
-  // Log de cambio de estado de suscripción
-  logInfo('student', 'Estado de suscripción actualizado', {
-    ...extractStudentMeta(normalized),
-    estado_anterior: estadoAnterior,
-    estado_nuevo: estado,
-    fecha_reactivacion: fechaReactivacion ? new Date(fechaReactivacion).toISOString() : null
-  });
+  // Construir actor: esta función se llama desde módulos de sistema (flujos automáticos),
+  // así que actor es 'system'
+  // Nota: No tenemos el ID del sistema en el contexto actual, usar null
+  const actor = {
+    type: 'system',
+    id: null // TODO: En el futuro, obtener ID del sistema desde contexto
+  };
   
-  return normalized;
+  // Delegar en el servicio canónico
+  // El servicio maneja toda la lógica: validación, escritura, auditoría, señal, log
+  // NOTA: El servicio canónico tiene la firma: updateEstadoSuscripcion(email, estado, actor, fechaReactivacion, client)
+  return await mutationService.updateEstadoSuscripcion(email, estado, actor, fechaReactivacion, client);
 }
 
 /**
@@ -268,69 +383,38 @@ export async function updateStudentEstadoSuscripcion(email, estado, fechaReactiv
  * El apodo es el identificador humano principal del alumno en el sistema.
  * NO se calcula, NO se versiona como snapshot, vive en la entidad alumno.
  * 
+ * FASE 2.2 - Paso 3: REFACTORIZADO para usar servicio canónico
+ * 
+ * Esta función ahora delega completamente en StudentMutationService.updateApodo(),
+ * que garantiza escritura canónica, auditoría y preparación para señales.
+ * 
  * @param {string|number} identifier - Email o ID del alumno
  * @param {string|null} nuevoApodo - Nuevo apodo (puede ser null para limpiarlo)
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} Alumno normalizado actualizado
+ * @throws {Error} Si validación falla o escritura falla
  */
 export async function updateStudentApodo(identifier, nuevoApodo, client = null) {
-  const repo = getStudentRepo();
-  const auditRepo = getDefaultAuditRepo();
+  // FASE 2.2: Delegar completamente en el servicio canónico de mutación
+  // El servicio canónico garantiza:
+  // - Escritura canónica en PostgreSQL
+  // - Auditoría completa
+  // - Preparación para señales
+  // - Manejo de transacciones
   
-  // Obtener alumno anterior para auditoría
-  const alumnoAnterior = typeof identifier === 'number' 
-    ? await repo.getById(identifier, client)
-    : await repo.getByEmail(identifier, client);
+  const { getStudentMutationService } = await import('../core/services/student-mutation-service.js');
+  const mutationService = getStudentMutationService();
   
-  if (!alumnoAnterior) {
-    throw new Error(`Alumno no encontrado: ${identifier}`);
-  }
+  // Construir actor: esta función se llama desde Admin, así que actor es 'admin'
+  // Nota: No tenemos el ID del admin en el contexto actual, usar null
+  const actor = {
+    type: 'admin',
+    id: null // TODO: En el futuro, obtener ID del admin desde contexto de sesión
+  };
   
-  const apodoAnterior = alumnoAnterior.apodo || null;
-  const alumnoId = alumnoAnterior.id;
-  
-  // Actualizar apodo
-  const alumno = typeof identifier === 'number'
-    ? await repo.updateApodoById(identifier, nuevoApodo, client)
-    : await repo.updateApodo(identifier, nuevoApodo, client);
-  
-  if (!alumno) {
-    throw new Error(`Error al actualizar apodo para alumno: ${identifier}`);
-  }
-  
-  const normalized = normalizeAlumno(alumno);
-  
-  // Determinar tipo de evento de auditoría
-  const eventType = apodoAnterior === null ? 'APODO_SET' : 'APODO_UPDATED';
-  
-  // Registrar evento de auditoría
-  try {
-    await auditRepo.recordEvent({
-      eventType,
-      actorType: 'admin',
-      actorId: alumnoId.toString(),
-      severity: 'info',
-      data: {
-        alumno_id: alumnoId,
-        email: alumno.email,
-        apodo_anterior: apodoAnterior,
-        apodo_nuevo: nuevoApodo || null,
-        accion: apodoAnterior === null ? 'apodo_establecido' : 'apodo_actualizado'
-      }
-    }, client);
-  } catch (error) {
-    // No bloquear la operación si falla la auditoría
-    console.warn('⚠️ Error registrando auditoría de apodo (no crítico):', error.message);
-  }
-  
-  // Log de actualización de apodo
-  logInfo('student', 'Apodo actualizado', {
-    ...extractStudentMeta(normalized),
-    apodo_anterior: apodoAnterior,
-    apodo_nuevo: nuevoApodo || null
-  });
-  
-  return normalized;
+  // Delegar en el servicio canónico
+  // El servicio maneja toda la lógica: validación, escritura, auditoría, señal, log
+  return await mutationService.updateApodo(identifier, nuevoApodo, actor, client);
 }
 
 /**

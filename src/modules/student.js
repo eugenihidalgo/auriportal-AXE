@@ -63,9 +63,34 @@ function normalizeStudent(task) {
 /*                         BÚSQUEDA DE ALUMNOS                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ⚠️ LEGACY DESHABILITADO - FASE 2.1
+ * 
+ * Esta función viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md:
+ * - Lee estado del alumno desde ClickUp (prohibido)
+ * - ClickUp NO es Source of Truth del Alumno
+ * 
+ * USAR EN SU LUGAR: src/modules/student-v4.js → findStudentByEmail()
+ * 
+ * @param {Object} env - Variables de entorno
+ * @param {string} email - Email del alumno
+ * @returns {Promise<Object|null>} Alumno normalizado
+ * @throws {Error} Siempre lanza error - función deshabilitada
+ */
 export async function findStudentByEmail(env, email) {
-  const task = await clickup.findTaskByEmail(env, email);
-  return task ? normalizeStudent(task) : null;
+  const error = new Error(
+    `LEGACY DESHABILITADO: findStudentByEmail() viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md. ` +
+    `PostgreSQL es el ÚNICO Source of Truth del Alumno. ` +
+    `Usar en su lugar: src/modules/student-v4.js → findStudentByEmail()`
+  );
+  error.code = 'LEGACY_DISABLED';
+  error.module = 'student.js';
+  error.alternative = 'student-v4.js';
+  console.error('[LEGACY] ❌ Intento de usar findStudentByEmail() deshabilitado:', {
+    email,
+    error: error.message
+  });
+  throw error;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -102,11 +127,34 @@ export async function createStudent(env, { email, apodo = "", nombreKajabi = nul
 /*              FUNCIÓN PRINCIPAL PARA OBTENER O CREAR ALUMNO                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ⚠️ LEGACY DESHABILITADO - FASE 2.1
+ * 
+ * Esta función viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md:
+ * - Usa findStudentByEmail() que lee desde ClickUp (prohibido)
+ * - Usa createStudent() que crea en ClickUp (prohibido)
+ * 
+ * USAR EN SU LUGAR: src/modules/student-v4.js → getOrCreateStudent()
+ * 
+ * @param {string} email - Email del alumno
+ * @param {Object} env - Variables de entorno
+ * @returns {Promise<Object>} Alumno normalizado
+ * @throws {Error} Siempre lanza error - función deshabilitada
+ */
 export async function getOrCreateStudent(email, env) {
-  let student = await findStudentByEmail(env, email);
-  if (student) return student;
-
-  return await createStudent(env, { email });
+  const error = new Error(
+    `LEGACY DESHABILITADO: getOrCreateStudent() viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md. ` +
+    `PostgreSQL es el ÚNICO Source of Truth del Alumno. ` +
+    `Usar en su lugar: src/modules/student-v4.js → getOrCreateStudent()`
+  );
+  error.code = 'LEGACY_DISABLED';
+  error.module = 'student.js';
+  error.alternative = 'student-v4.js';
+  console.error('[LEGACY] ❌ Intento de usar getOrCreateStudent() deshabilitado:', {
+    email,
+    error: error.message
+  });
+  throw error;
 }
 
 /* -------------------------------------------------------------------------- */

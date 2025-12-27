@@ -192,6 +192,19 @@ export async function requireAdminContext(request, env) {
     // Si no hay sesión válida → pantalla de login admin
     console.log(`⚠️  [auth-context] No hay sesión admin válida, mostrando login`);
     
+    // Si está intentando acceder a /admin/login o /admin/logout, permitir (evitar loop)
+    const url = new URL(request.url);
+    if (url.pathname === '/admin/login' || url.pathname === '/admin/logout') {
+      // Permitir acceso a /admin/login y /admin/logout sin autenticación
+      return {
+        user: null,
+        isAdmin: false,
+        isAuthenticated: false,
+        request,
+        requestId: getRequestId()
+      };
+    }
+    
     // Registrar evento de auditoría (sin datos sensibles)
     try {
       const auditRepo = getDefaultAuditRepo();

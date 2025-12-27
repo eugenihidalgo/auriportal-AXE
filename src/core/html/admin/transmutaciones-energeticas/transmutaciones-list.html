@@ -1,0 +1,1658 @@
+<div class="p-6">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold text-white mb-2">🔮 Transmutaciones Energéticas</h1>
+    <p class="text-slate-400">Source of Truth canónico - Biblioteca Maestra para gestión de transmutaciones.</p>
+  </div>
+
+  <!-- FILTRO DE TIPO (Tabs superiores: Recurrentes / Una vez) -->
+  <div class="mb-4 border-b border-slate-700">
+    <div class="flex gap-4">
+      <button 
+        data-tipo="recurrente"
+        class="tab-tipo px-4 py-2 text-sm font-medium transition-colors border-b-2 border-indigo-500 text-indigo-400"
+      >
+        🔄 Recurrentes
+      </button>
+      <button 
+        data-tipo="una_vez"
+        class="tab-tipo px-4 py-2 text-sm font-medium transition-colors border-b-2 border-transparent text-slate-400"
+      >
+        ⚡ Una Sola Vez
+      </button>
+    </div>
+  </div>
+
+  <!-- TABS DE LISTAS (Navegación horizontal rápida) -->
+  <div class="mb-6 flex items-center gap-3">
+    <div id="listas-tabs-container" class="flex gap-2 overflow-x-auto pb-2 flex-1">
+      <!-- Se llenan dinámicamente -->
+    </div>
+    <button 
+      id="btn-crear-lista"
+      class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors whitespace-nowrap"
+    >
+      ➕ Nueva Lista
+    </button>
+  </div>
+
+  <!-- CONTENIDO DE LA LISTA SELECCIONADA -->
+  <div id="lista-content" class="hidden">
+    <!-- Header de lista -->
+    <div class="bg-slate-800 rounded-lg shadow-lg p-4 mb-4">
+      <div class="flex justify-between items-start">
+        <div class="flex-1">
+          <h2 id="lista-nombre-display" class="text-xl font-bold text-white mb-2"></h2>
+          <p id="lista-descripcion-display" class="text-slate-400 text-sm"></p>
+        </div>
+        <div class="flex gap-2">
+          <button 
+            id="btn-editar-lista-header"
+            class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors"
+          >
+            ⚙️
+          </button>
+          <button 
+            id="btn-eliminar-lista-header"
+            class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+          >
+            ❌
+          </button>
+        </div>
+      </div>
+
+      <!-- Clasificaciones (plegable) -->
+      <div class="mt-4 border-t border-slate-700 pt-4">
+        <button 
+          id="btn-toggle-clasificaciones"
+          class="flex items-center gap-2 text-slate-300 text-sm font-medium hover:text-white transition-colors"
+        >
+          <span>▼</span>
+          <span>Clasificaciones</span>
+        </button>
+        <div id="clasificaciones-panel" class="hidden mt-3 bg-slate-700 rounded p-3">
+          <!-- Términos asociados actuales -->
+          <div id="clasificaciones-actuales" class="mb-4">
+            <div class="text-xs text-slate-400 mb-2">Clasificaciones actuales:</div>
+            <div id="clasificaciones-tags" class="flex flex-wrap gap-2">
+              <!-- Se llenan dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Agregar nuevas clasificaciones -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Category Key</label>
+              <div class="relative">
+                <input 
+                  type="text" 
+                  id="lista-category-key" 
+                  class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                  placeholder="Escribe o selecciona..."
+                  autocomplete="off"
+                />
+                <div id="autocomplete-category-key" class="hidden absolute z-10 w-full mt-1 bg-slate-900 border border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto"></div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Subtype Key</label>
+              <div class="relative">
+                <input 
+                  type="text" 
+                  id="lista-subtype-key" 
+                  class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                  placeholder="Escribe o selecciona..."
+                  autocomplete="off"
+                />
+                <div id="autocomplete-subtype-key" class="hidden absolute z-10 w-full mt-1 bg-slate-900 border border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto"></div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Tag</label>
+              <div class="relative">
+                <input 
+                  type="text" 
+                  id="lista-tag-nuevo" 
+                  class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+                  placeholder="Escribe o selecciona..."
+                  autocomplete="off"
+                />
+                <div id="autocomplete-tag" class="hidden absolute z-10 w-full mt-1 bg-slate-900 border border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto"></div>
+              </div>
+              <button 
+                id="btn-agregar-tag"
+                class="mt-2 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors"
+              >
+                ➕ Agregar Tag
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editor inline de lista (oculto por defecto) -->
+      <div id="editor-lista-header" class="hidden mt-4 border-t border-slate-700 pt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+            <input 
+              type="text" 
+              id="editor-lista-nombre" 
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+            <input 
+              type="text" 
+              id="editor-lista-descripcion" 
+              class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+            />
+          </div>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button 
+            id="btn-guardar-lista-header"
+            class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+          >
+            ✓ Guardar
+          </button>
+          <button 
+            id="btn-cancelar-editar-lista"
+            class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LÍNEA RÁPIDA DE CREACIÓN (arriba de items) -->
+    <div class="bg-slate-700 rounded p-3 mb-4 border border-slate-600">
+      <form id="form-crear-item" class="flex gap-2 items-end">
+        <input type="hidden" id="crear-item-lista-id" />
+        <div class="w-20">
+          <label class="block text-xs text-slate-400 mb-1">Nivel</label>
+          <input 
+            type="number" 
+            id="crear-item-nivel" 
+            min="1"
+            class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+            placeholder="1"
+          />
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+          <input 
+            type="text" 
+            id="crear-item-nombre" 
+            required
+            class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+            placeholder="Nombre del ítem"
+          />
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+          <input 
+            type="text" 
+            id="crear-item-descripcion" 
+            class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+            placeholder="Descripción opcional"
+          />
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs text-slate-400 mb-1" id="crear-item-campo-label">Días / Veces</label>
+          <input 
+            type="number" 
+            id="crear-item-campo" 
+            min="1"
+            class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm"
+          />
+        </div>
+        <div class="w-32">
+          <button 
+            type="submit"
+            class="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors"
+          >
+            Crear (Enter)
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- LISTA DE ÍTEMS (ordenados por nivel ASC) - Tabla compacta -->
+    <div class="bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-slate-900">
+          <tr>
+            <th class="py-2 px-3 text-left text-xs font-semibold text-slate-300 w-16">Nivel</th>
+            <th class="py-2 px-3 text-left text-xs font-semibold text-slate-300">Nombre</th>
+            <th class="py-2 px-3 text-left text-xs font-semibold text-slate-300">Descripción</th>
+            <th class="py-2 px-3 text-left text-xs font-semibold text-slate-300 w-20" id="items-header-campo">Días</th>
+            <th class="py-2 px-3 text-left text-xs font-semibold text-slate-300 w-40">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="items-container">
+          <!-- Se llenan dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty state cuando no hay lista seleccionada -->
+  <div id="empty-state" class="text-center py-12 text-slate-400">
+    <p>Selecciona una lista para comenzar</p>
+  </div>
+</div>
+
+<!-- Modal ver alumnos (stub por ahora) -->
+<div id="modal-alumnos" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 id="modal-alumnos-titulo" class="text-2xl font-bold text-white"></h2>
+      <button 
+        id="btn-cerrar-modal-alumnos"
+        class="text-slate-400 hover:text-white text-2xl"
+      >
+        ×
+      </button>
+    </div>
+    <div id="modal-alumnos-content">
+      <!-- Se llena dinámicamente -->
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// CÓDIGO SEGURO: Sin template strings en atributos HTML
+// ============================================================================
+
+(function() {
+  'use strict';
+  
+  // Estado local mínimo
+  let tipoActivo = 'recurrente';
+  let listaActiva = null;
+  let ultimoNivelUsado = null;
+  let listasPorTipo = {};
+  
+  // Inicialización
+  document.addEventListener('DOMContentLoaded', function() {
+    inicializarTabsTipo();
+    cargarListasPorTipo();
+    inicializarFormularios();
+  });
+
+  // NAVEGACIÓN: Tabs de tipo (Recurrentes / Una vez)
+  function inicializarTabsTipo() {
+    const tabs = document.querySelectorAll('.tab-tipo');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', function() {
+        const nuevoTipo = this.getAttribute('data-tipo');
+        cambiarTipo(nuevoTipo);
+      });
+    });
+  }
+
+  function cambiarTipo(tipo) {
+    tipoActivo = tipo;
+    
+    // Actualizar UI de tabs
+    document.querySelectorAll('.tab-tipo').forEach(tab => {
+      const isActive = tab.getAttribute('data-tipo') === tipo;
+      if (isActive) {
+        tab.classList.add('border-indigo-500', 'text-indigo-400');
+        tab.classList.remove('border-transparent', 'text-slate-400');
+      } else {
+        tab.classList.remove('border-indigo-500', 'text-indigo-400');
+        tab.classList.add('border-transparent', 'text-slate-400');
+      }
+    });
+    
+    // Renderizar tabs de listas
+    renderizarTabsListas();
+  }
+
+  // CARGAR LISTAS POR TIPO
+  async function cargarListasPorTipo() {
+    for (const tipo of ['recurrente', 'una_vez']) {
+      try {
+        const response = await fetch('/admin/pde/transmutaciones-energeticas/api/listas?tipo=' + encodeURIComponent(tipo));
+        if (!response.ok) continue;
+        
+        const data = await response.json();
+        if (data.success) {
+          listasPorTipo[tipo] = data.listas || [];
+        }
+      } catch (error) {
+        console.error('Error cargando listas ' + tipo + ':', error);
+        listasPorTipo[tipo] = [];
+      }
+    }
+    
+    renderizarTabsListas();
+  }
+
+  // RENDERIZAR TABS DE LISTAS (horizontales, compactos) - DOM API
+  function renderizarTabsListas() {
+    const container = document.getElementById('listas-tabs-container');
+    const listas = listasPorTipo[tipoActivo] || [];
+    
+    // Limpiar container
+    container.textContent = '';
+    
+    if (listas.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-slate-400 text-sm';
+      p.textContent = 'No hay listas en esta categoría';
+      container.appendChild(p);
+      return;
+    }
+    
+    // Crear cada tab usando DOM API
+    listas.forEach(lista => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-tab-lista px-3 py-1 text-sm rounded transition-colors whitespace-nowrap';
+      
+      const isActive = listaActiva && listaActiva.id === lista.id;
+      if (isActive) {
+        btn.classList.add('bg-indigo-600', 'text-white');
+      } else {
+        btn.classList.add('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+      }
+      
+      btn.setAttribute('data-lista-id', String(lista.id || ''));
+      btn.textContent = lista.nombre || 'Sin nombre';
+      
+      btn.addEventListener('click', function() {
+        const listaId = this.getAttribute('data-lista-id');
+        seleccionarLista(listaId);
+      });
+      
+      container.appendChild(btn);
+    });
+  }
+
+  // SELECCIONAR LISTA Y CARGAR CONTENIDO
+  async function seleccionarLista(listaId) {
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/' + encodeURIComponent(listaId));
+      if (!response.ok) throw new Error('Error cargando lista');
+      
+      const data = await response.json();
+      if (!data.success || !data.lista) throw new Error('Lista no encontrada');
+      
+      listaActiva = data.lista;
+      
+      // Asegurar que la lista tenga el Category Key correspondiente al tipo
+      await asegurarCategoryKeyAutomatico(listaId, listaActiva.tipo);
+      
+      // Actualizar tabs
+      renderizarTabsListas();
+      
+      // Cargar items
+      await cargarItems(listaId);
+      
+      // Mostrar contenido
+      mostrarContenidoLista(listaActiva);
+    } catch (error) {
+      console.error('Error seleccionando lista:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // ASEGURAR CATEGORY KEY AUTOMÁTICO SEGÚN TIPO
+  async function asegurarCategoryKeyAutomatico(listaId, tipo) {
+    if (!listaId || !tipo) return;
+    
+    // Mapeo de tipo a Category Key
+    const categoryKeyMap = {
+      'recurrente': 'Limpiezas recurrentes',
+      'una_vez': 'Una vez'
+    };
+    
+    const categoryKeyValue = categoryKeyMap[tipo];
+    if (!categoryKeyValue) return;
+    
+    try {
+      // Verificar si ya tiene un category key de tipo 'key'
+      const responseCurrent = await fetch('/admin/api/classifications/lista/' + encodeURIComponent(listaId));
+      if (responseCurrent.ok) {
+        const dataCurrent = await responseCurrent.json();
+        if (dataCurrent.success && dataCurrent.classifications && dataCurrent.classifications.key) {
+          // Ya tiene un category key, verificar si es el correcto
+          const tieneCorrecto = dataCurrent.classifications.key.some(
+            term => term.normalized === categoryKeyValue.toLowerCase()
+              .replace(/á/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i')
+              .replace(/ó/g, 'o').replace(/ú/g, 'u').replace(/ñ/g, 'n')
+              .replace(/ü/g, 'u').trim()
+          );
+          
+          if (tieneCorrecto) {
+            // Ya tiene el correcto, no hacer nada
+            return;
+          }
+        }
+      }
+      
+      // Asegurar término y asociarlo
+      const responseEnsure = await fetch('/admin/api/classifications/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'key', value: categoryKeyValue })
+      });
+      
+      if (!responseEnsure.ok) {
+        console.warn('No se pudo asegurar category key automático:', await responseEnsure.text());
+        return;
+      }
+      
+      const dataEnsure = await responseEnsure.json();
+      if (!dataEnsure.success || !dataEnsure.term) {
+        console.warn('No se pudo asegurar category key automático:', dataEnsure.error);
+        return;
+      }
+      
+      // Asociar término a la lista
+      const responseAssoc = await fetch('/admin/api/classifications/lista/' + encodeURIComponent(listaId) + '/associate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ term_id: dataEnsure.term.id })
+      });
+      
+      if (!responseAssoc.ok) {
+        console.warn('No se pudo asociar category key automático:', await responseAssoc.text());
+        return;
+      }
+      
+      const dataAssoc = await responseAssoc.json();
+      if (dataAssoc.success) {
+        // Recargar lista activa si es la misma
+        if (listaActiva && listaActiva.id == listaId) {
+          const responseLista = await fetch('/admin/pde/transmutaciones-energeticas/' + encodeURIComponent(listaId));
+          if (responseLista.ok) {
+            const dataLista = await responseLista.json();
+            if (dataLista.success && dataLista.lista) {
+              listaActiva = dataLista.lista;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error asegurando category key automático:', error);
+      // No mostrar error al usuario, es una operación silenciosa
+    }
+  }
+
+  async function cargarItems(listaId) {
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/listas/' + encodeURIComponent(listaId) + '/items');
+      if (!response.ok) throw new Error('Error cargando items');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      renderizarItems(data.items || []);
+      
+      // Restaurar último nivel usado
+      if (ultimoNivelUsado) {
+        const nivelInput = document.getElementById('crear-item-nivel');
+        if (nivelInput) nivelInput.value = ultimoNivelUsado;
+      }
+      
+      // Ajustar campo según tipo
+      const tipo = listaActiva?.tipo || tipoActivo;
+      const fieldLabel = document.getElementById('crear-item-campo-label');
+      const fieldInput = document.getElementById('crear-item-campo');
+      
+      if (tipo === 'recurrente') {
+        if (fieldLabel) fieldLabel.textContent = 'Días';
+        if (fieldInput) fieldInput.placeholder = 'Ej: 7';
+      } else {
+        if (fieldLabel) fieldLabel.textContent = 'Veces';
+        if (fieldInput) fieldInput.placeholder = 'Ej: 3';
+      }
+      
+      document.getElementById('crear-item-lista-id').value = listaId;
+    } catch (error) {
+      console.error('Error cargando items:', error);
+      const container = document.getElementById('items-container');
+      container.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'text-red-400';
+      p.textContent = 'Error cargando items';
+      container.appendChild(p);
+    }
+  }
+
+  // RENDERIZAR ITEMS - DOM API (sin concatenación de strings)
+  function renderizarItems(items) {
+    const container = document.getElementById('items-container');
+    const tipo = listaActiva?.tipo || tipoActivo;
+    
+    // Limpiar container
+    container.textContent = '';
+    
+    // Actualizar header según tipo
+    const headerCampo = document.getElementById('items-header-campo');
+    if (headerCampo) {
+      headerCampo.textContent = tipo === 'recurrente' ? 'Días' : 'Veces';
+    }
+    
+    if (items.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      td.className = 'py-8 text-center text-slate-400';
+      td.textContent = 'No hay items. Crea el primero arriba.';
+      tr.appendChild(td);
+      container.appendChild(tr);
+      return;
+    }
+    
+    // Crear cada fila usando DOM API
+    items.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-slate-700 hover:bg-slate-700 item-row';
+      tr.setAttribute('data-item-id', String(item.id || ''));
+      
+      // Nivel
+      const tdNivel = document.createElement('td');
+      tdNivel.className = 'py-1 px-3';
+      const inputNivel = document.createElement('input');
+      inputNivel.type = 'number';
+      inputNivel.className = 'editable-item-nivel w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
+      inputNivel.setAttribute('data-item-id', String(item.id || ''));
+      inputNivel.value = (item.nivel !== null && item.nivel !== undefined) ? String(item.nivel) : '';
+      inputNivel.min = '1';
+      tdNivel.appendChild(inputNivel);
+      tr.appendChild(tdNivel);
+      
+      // Nombre
+      const tdNombre = document.createElement('td');
+      tdNombre.className = 'py-1 px-3';
+      const inputNombre = document.createElement('input');
+      inputNombre.type = 'text';
+      inputNombre.className = 'editable-item-nombre w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
+      inputNombre.setAttribute('data-item-id', String(item.id || ''));
+      inputNombre.value = item.nombre || '';
+      tdNombre.appendChild(inputNombre);
+      tr.appendChild(tdNombre);
+      
+      // Descripción
+      const tdDesc = document.createElement('td');
+      tdDesc.className = 'py-1 px-3';
+      const inputDesc = document.createElement('input');
+      inputDesc.type = 'text';
+      inputDesc.className = 'editable-item-descripcion w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
+      inputDesc.setAttribute('data-item-id', String(item.id || ''));
+      inputDesc.value = item.descripcion || '';
+      // Sin placeholder para items ya creados
+      tdDesc.appendChild(inputDesc);
+      tr.appendChild(tdDesc);
+      
+      // Campo específico (días/veces)
+      const tdCampo = document.createElement('td');
+      tdCampo.className = 'py-1 px-3';
+      const inputCampo = document.createElement('input');
+      inputCampo.type = 'number';
+      inputCampo.className = 'editable-item-campo w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
+      inputCampo.setAttribute('data-item-id', String(item.id || ''));
+      const campoField = tipo === 'recurrente' ? 'frecuencia_dias' : 'veces_limpiar';
+      inputCampo.setAttribute('data-field', campoField);
+      const campoValue = tipo === 'recurrente' 
+        ? (item.frecuencia_dias !== null && item.frecuencia_dias !== undefined ? String(item.frecuencia_dias) : '')
+        : (item.veces_limpiar !== null && item.veces_limpiar !== undefined ? String(item.veces_limpiar) : '');
+      inputCampo.value = campoValue;
+      inputCampo.min = '1';
+      tdCampo.appendChild(inputCampo);
+      tr.appendChild(tdCampo);
+      
+      // Acciones
+      const tdAcciones = document.createElement('td');
+      tdAcciones.className = 'py-1 px-3';
+      const divAcciones = document.createElement('div');
+      divAcciones.className = 'flex gap-1';
+      
+      // Botón Ver
+      const btnVer = document.createElement('button');
+      btnVer.className = 'btn-ver-alumnos px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded';
+      btnVer.setAttribute('data-item-id', String(item.id || ''));
+      btnVer.title = 'Ver alumnos';
+      btnVer.textContent = 'Ver';
+      btnVer.addEventListener('click', function() {
+        const itemId = this.getAttribute('data-item-id');
+        verAlumnos(itemId, tipo);
+      });
+      divAcciones.appendChild(btnVer);
+      
+      // Botón Limpiar
+      const btnLimpiar = document.createElement('button');
+      btnLimpiar.className = 'btn-limpieza-todos px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded';
+      btnLimpiar.setAttribute('data-item-id', String(item.id || ''));
+      btnLimpiar.title = 'Limpiar todos';
+      btnLimpiar.textContent = 'Limpiar';
+      btnLimpiar.addEventListener('click', function() {
+        const itemId = this.getAttribute('data-item-id');
+        limpiezaTodos(itemId, tipo);
+      });
+      divAcciones.appendChild(btnLimpiar);
+      
+      // Botón Eliminar
+      const btnEliminar = document.createElement('button');
+      btnEliminar.className = 'btn-eliminar-item px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded';
+      btnEliminar.setAttribute('data-item-id', String(item.id || ''));
+      btnEliminar.title = 'Eliminar';
+      btnEliminar.textContent = '❌';
+      btnEliminar.addEventListener('click', function() {
+        const itemId = this.getAttribute('data-item-id');
+        eliminarItem(itemId);
+      });
+      divAcciones.appendChild(btnEliminar);
+      
+      tdAcciones.appendChild(divAcciones);
+      tr.appendChild(tdAcciones);
+      
+      container.appendChild(tr);
+    });
+    
+    // Event listeners para edición inline
+    inicializarEdicionInline();
+  }
+
+  // EDICIÓN INLINE (guardado con debounce)
+  let debounceTimers = {};
+  
+  function inicializarEdicionInline() {
+    const container = document.getElementById('items-container');
+    
+    // Nivel
+    container.querySelectorAll('.editable-item-nivel').forEach(input => {
+      input.addEventListener('blur', function() {
+        const itemId = this.getAttribute('data-item-id');
+        guardarItemDebounce(itemId, { nivel: parseInt(this.value) || null });
+      });
+    });
+    
+    // Nombre
+    container.querySelectorAll('.editable-item-nombre').forEach(input => {
+      input.addEventListener('blur', function() {
+        const itemId = this.getAttribute('data-item-id');
+        guardarItemDebounce(itemId, { nombre: this.value.trim() });
+      });
+    });
+    
+    // Descripción
+    container.querySelectorAll('.editable-item-descripcion').forEach(input => {
+      input.addEventListener('blur', function() {
+        const itemId = this.getAttribute('data-item-id');
+        guardarItemDebounce(itemId, { descripcion: this.value.trim() || null });
+      });
+    });
+    
+    // Campo específico (días/veces)
+    container.querySelectorAll('.editable-item-campo').forEach(input => {
+      input.addEventListener('blur', function() {
+        const itemId = this.getAttribute('data-item-id');
+        const field = this.getAttribute('data-field');
+        const value = parseInt(this.value) || null;
+        guardarItemDebounce(itemId, { [field]: value });
+      });
+    });
+  }
+
+  function guardarItemDebounce(itemId, patch) {
+    // Limpiar timer anterior
+    if (debounceTimers[itemId]) {
+      clearTimeout(debounceTimers[itemId]);
+    }
+    
+    // Nuevo timer (500ms)
+    debounceTimers[itemId] = setTimeout(() => {
+      actualizarItem(itemId, patch);
+      delete debounceTimers[itemId];
+    }, 500);
+  }
+
+  async function actualizarItem(itemId, patch) {
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+      
+      if (!response.ok) throw new Error('Error actualizando item');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Indicador visual sutil (opcional)
+      const row = document.querySelector('tr[data-item-id="' + String(itemId) + '"]');
+      if (row) {
+        row.classList.add('bg-green-900');
+        setTimeout(() => row.classList.remove('bg-green-900'), 1000);
+      }
+    } catch (error) {
+      console.error('Error actualizando item:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // MOSTRAR CONTENIDO DE LISTA
+  async function mostrarContenidoLista(lista) {
+    document.getElementById('lista-nombre-display').textContent = lista.nombre || 'Sin nombre';
+    document.getElementById('lista-descripcion-display').textContent = lista.descripcion || 'Sin descripción';
+    
+    // Limpiar inputs de clasificaciones
+    document.getElementById('lista-category-key').value = '';
+    document.getElementById('lista-subtype-key').value = '';
+    document.getElementById('lista-tag-nuevo').value = '';
+    
+    // Cargar clasificaciones asociadas desde el nuevo sistema canónico
+    await cargarClasificacionesLista(lista.id);
+    
+    // Mostrar contenido
+    document.getElementById('lista-content').classList.remove('hidden');
+    document.getElementById('empty-state').classList.add('hidden');
+  }
+
+  // CARGAR CLASIFICACIONES ASOCIADAS
+  async function cargarClasificacionesLista(listaId) {
+    try {
+      const response = await fetch('/admin/api/classifications/lista/' + encodeURIComponent(listaId));
+      if (!response.ok) throw new Error('Error cargando clasificaciones');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      renderizarClasificacionesAsociadas(data.classifications || {});
+    } catch (error) {
+      console.error('Error cargando clasificaciones:', error);
+      renderizarClasificacionesAsociadas({});
+    }
+  }
+
+  // RENDERIZAR CLASIFICACIONES ASOCIADAS (DOM API)
+  function renderizarClasificacionesAsociadas(classifications) {
+    const container = document.getElementById('clasificaciones-tags');
+    container.textContent = '';
+    
+    const grouped = classifications;
+    
+    // Key
+    if (grouped.key && grouped.key.length > 0) {
+      grouped.key.forEach(term => {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center gap-1 px-2 py-1 bg-indigo-700 text-white text-xs rounded';
+        tag.textContent = '🔑 ' + term.value;
+        
+        const btnRemove = document.createElement('button');
+        btnRemove.className = 'hover:text-red-300';
+        btnRemove.textContent = '×';
+        btnRemove.title = 'Eliminar';
+        btnRemove.addEventListener('click', async () => {
+          await eliminarClasificacion(term.id, 'key');
+        });
+        tag.appendChild(btnRemove);
+        
+        container.appendChild(tag);
+      });
+    }
+    
+    // Subkey
+    if (grouped.subkey && grouped.subkey.length > 0) {
+      grouped.subkey.forEach(term => {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center gap-1 px-2 py-1 bg-purple-700 text-white text-xs rounded';
+        tag.textContent = '🔖 ' + term.value;
+        
+        const btnRemove = document.createElement('button');
+        btnRemove.className = 'hover:text-red-300';
+        btnRemove.textContent = '×';
+        btnRemove.title = 'Eliminar';
+        btnRemove.addEventListener('click', async () => {
+          await eliminarClasificacion(term.id, 'subkey');
+        });
+        tag.appendChild(btnRemove);
+        
+        container.appendChild(tag);
+      });
+    }
+    
+    // Tags
+    if (grouped.tag && grouped.tag.length > 0) {
+      grouped.tag.forEach(term => {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center gap-1 px-2 py-1 bg-slate-600 text-white text-xs rounded';
+        tag.textContent = '🏷️ ' + term.value;
+        
+        const btnRemove = document.createElement('button');
+        btnRemove.className = 'hover:text-red-300';
+        btnRemove.textContent = '×';
+        btnRemove.title = 'Eliminar';
+        btnRemove.addEventListener('click', async () => {
+          await eliminarClasificacion(term.id, 'tag');
+        });
+        tag.appendChild(btnRemove);
+        
+        container.appendChild(tag);
+      });
+    }
+    
+    if (container.children.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'text-slate-500 text-xs italic';
+      empty.textContent = 'Ninguna clasificación asociada';
+      container.appendChild(empty);
+    }
+  }
+
+  // ELIMINAR CLASIFICACIÓN
+  async function eliminarClasificacion(termId, type) {
+    if (!listaActiva) return;
+    if (!confirm('¿Eliminar esta clasificación de la lista?')) return;
+    
+    try {
+      const response = await fetch('/admin/api/classifications/lista/' + encodeURIComponent(listaActiva.id) + '/dissociate/' + encodeURIComponent(termId), {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Error eliminando clasificación');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Recargar clasificaciones
+      await cargarClasificacionesLista(listaActiva.id);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // CREAR ITEM RÁPIDO (Enter sin modal)
+  async function crearItemRapido(event) {
+    event.preventDefault();
+    
+    const listaId = document.getElementById('crear-item-lista-id').value;
+    const nivel = parseInt(document.getElementById('crear-item-nivel').value) || null;
+    const nombre = document.getElementById('crear-item-nombre').value.trim();
+    const descripcion = document.getElementById('crear-item-descripcion').value.trim() || null;
+    const tipo = listaActiva?.tipo || tipoActivo;
+    
+    if (!nombre) {
+      alert('El nombre es requerido');
+      return;
+    }
+    
+    if (!listaId) {
+      alert('No hay lista seleccionada');
+      return;
+    }
+    
+    const itemData = {
+      lista_id: parseInt(listaId),
+      nombre: nombre,
+      nivel: nivel,
+      descripcion: descripcion
+    };
+    
+    // Campo específico según tipo
+    if (tipo === 'recurrente') {
+      const frecuencia = parseInt(document.getElementById('crear-item-campo').value);
+      if (frecuencia) itemData.frecuencia_dias = frecuencia;
+    } else {
+      const veces = parseInt(document.getElementById('crear-item-campo').value);
+      if (veces) itemData.veces_limpiar = veces;
+    }
+    
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemData)
+      });
+      
+      if (!response.ok) throw new Error('Error creando item');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Mantener nivel (sticky)
+      if (nivel) {
+        ultimoNivelUsado = nivel;
+      }
+      
+      // Limpiar formulario (mantener nivel)
+      document.getElementById('crear-item-nombre').value = '';
+      document.getElementById('crear-item-descripcion').value = '';
+      document.getElementById('crear-item-campo').value = '';
+      
+      // Recargar items
+      await cargarItems(listaId);
+      
+      // Focus en nombre
+      document.getElementById('crear-item-nombre').focus();
+    } catch (error) {
+      console.error('Error creando item:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // ELIMINAR ITEM (DELETE físico)
+  async function eliminarItem(itemId) {
+    if (!confirm('¿Eliminar este ítem? (DELETE físico)')) return;
+    
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId), {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Error eliminando item');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Recargar items
+      if (listaActiva) {
+        await cargarItems(listaActiva.id);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // ELIMINAR LISTA (soft delete)
+  async function eliminarLista(listaId) {
+    if (!confirm('¿Archivar esta lista? (soft delete)')) return;
+    
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/' + encodeURIComponent(listaId), {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) throw new Error('Error archivando lista');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Recargar listas
+      await cargarListasPorTipo();
+      
+      // Si era la lista activa, cerrar
+      if (listaActiva && listaActiva.id == listaId) {
+        listaActiva = null;
+        document.getElementById('lista-content').classList.add('hidden');
+        document.getElementById('empty-state').classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // OPERACIONES MASTER (stub/implementación básica)
+  async function verAlumnos(itemId, tipo) {
+    try {
+      const endpoint = tipo === 'recurrente'
+        ? '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/students-recurrent'
+        : '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/students-one-time';
+      
+      const response = await fetch(endpoint);
+      if (!response.ok) throw new Error('Error cargando alumnos');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      mostrarModalAlumnos(itemId, tipo, data);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // MOSTRAR MODAL ALUMNOS - DOM API (sin concatenación de strings)
+  function mostrarModalAlumnos(itemId, tipo, data) {
+    const modal = document.getElementById('modal-alumnos');
+    const titulo = document.getElementById('modal-alumnos-titulo');
+    const content = document.getElementById('modal-alumnos-content');
+    
+    const item = data.item || {};
+    titulo.textContent = 'Alumnos: ' + (item.nombre || 'Item');
+    
+    // Limpiar content
+    content.textContent = '';
+    
+    if (tipo === 'recurrente') {
+      const { limpio, pendiente, critico } = data.states || {};
+      const container = document.createElement('div');
+      container.className = 'space-y-4';
+      
+      // Sección Limpio
+      const divLimpio = document.createElement('div');
+      const h3Limpio = document.createElement('h3');
+      h3Limpio.className = 'text-green-400 font-semibold mb-2';
+      h3Limpio.textContent = '✅ Limpio (' + (limpio?.length || 0) + ')';
+      divLimpio.appendChild(h3Limpio);
+      
+      const divLimpioItems = document.createElement('div');
+      divLimpioItems.className = 'space-y-1';
+      if (limpio && limpio.length > 0) {
+        limpio.forEach(s => {
+          const divItem = document.createElement('div');
+          divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
+          
+          const spanEmail = document.createElement('span');
+          spanEmail.className = 'text-white text-sm';
+          spanEmail.textContent = s.student_email || '';
+          divItem.appendChild(spanEmail);
+          
+          const spanDias = document.createElement('span');
+          spanDias.className = 'text-slate-400 text-xs';
+          spanDias.textContent = (s.days_since_last_clean || 0) + ' días';
+          divItem.appendChild(spanDias);
+          
+          divLimpioItems.appendChild(divItem);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.className = 'text-slate-500 text-sm';
+        p.textContent = 'Ninguno';
+        divLimpioItems.appendChild(p);
+      }
+      divLimpio.appendChild(divLimpioItems);
+      container.appendChild(divLimpio);
+      
+      // Sección Pendiente
+      const divPendiente = document.createElement('div');
+      const h3Pendiente = document.createElement('h3');
+      h3Pendiente.className = 'text-yellow-400 font-semibold mb-2';
+      h3Pendiente.textContent = '⏳ Pendiente (' + (pendiente?.length || 0) + ')';
+      divPendiente.appendChild(h3Pendiente);
+      
+      const divPendienteItems = document.createElement('div');
+      divPendienteItems.className = 'space-y-1';
+      if (pendiente && pendiente.length > 0) {
+        pendiente.forEach(s => {
+          const divItem = document.createElement('div');
+          divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
+          
+          const spanEmail = document.createElement('span');
+          spanEmail.className = 'text-white text-sm';
+          spanEmail.textContent = s.student_email || '';
+          divItem.appendChild(spanEmail);
+          
+          const btn = document.createElement('button');
+          btn.className = 'btn-marcar-limpio-individual px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded';
+          btn.setAttribute('data-item-id', String(itemId));
+          btn.setAttribute('data-student', s.student_email || '');
+          btn.textContent = 'Marcar Limpio';
+          btn.addEventListener('click', function() {
+            const itemId = this.getAttribute('data-item-id');
+            const studentEmail = this.getAttribute('data-student');
+            marcarLimpioIndividual(itemId, studentEmail);
+          });
+          divItem.appendChild(btn);
+          
+          divPendienteItems.appendChild(divItem);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.className = 'text-slate-500 text-sm';
+        p.textContent = 'Ninguno';
+        divPendienteItems.appendChild(p);
+      }
+      divPendiente.appendChild(divPendienteItems);
+      container.appendChild(divPendiente);
+      
+      // Sección Crítico
+      const divCritico = document.createElement('div');
+      const h3Critico = document.createElement('h3');
+      h3Critico.className = 'text-red-400 font-semibold mb-2';
+      h3Critico.textContent = '🚨 Crítico (' + (critico?.length || 0) + ')';
+      divCritico.appendChild(h3Critico);
+      
+      const divCriticoItems = document.createElement('div');
+      divCriticoItems.className = 'space-y-1';
+      if (critico && critico.length > 0) {
+        critico.forEach(s => {
+          const divItem = document.createElement('div');
+          divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
+          
+          const spanEmail = document.createElement('span');
+          spanEmail.className = 'text-white text-sm';
+          spanEmail.textContent = s.student_email || '';
+          divItem.appendChild(spanEmail);
+          
+          const btn = document.createElement('button');
+          btn.className = 'btn-marcar-limpio-individual px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded';
+          btn.setAttribute('data-item-id', String(itemId));
+          btn.setAttribute('data-student', s.student_email || '');
+          btn.textContent = 'Marcar Limpio';
+          btn.addEventListener('click', function() {
+            const itemId = this.getAttribute('data-item-id');
+            const studentEmail = this.getAttribute('data-student');
+            marcarLimpioIndividual(itemId, studentEmail);
+          });
+          divItem.appendChild(btn);
+          
+          divCriticoItems.appendChild(divItem);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.className = 'text-slate-500 text-sm';
+        p.textContent = 'Ninguno';
+        divCriticoItems.appendChild(p);
+      }
+      divCritico.appendChild(divCriticoItems);
+      container.appendChild(divCritico);
+      
+      content.appendChild(container);
+    } else {
+      // Una vez
+      const states = data.states || [];
+      const container = document.createElement('div');
+      container.className = 'space-y-2';
+      
+      if (states && states.length > 0) {
+        states.forEach(s => {
+          const divItem = document.createElement('div');
+          divItem.className = 'bg-slate-700 p-3 rounded flex justify-between items-center';
+          
+          const divInfo = document.createElement('div');
+          const divNombre = document.createElement('div');
+          divNombre.className = 'text-white font-medium';
+          divNombre.textContent = s.student_email || '';
+          divInfo.appendChild(divNombre);
+          
+          const divStats = document.createElement('div');
+          divStats.className = 'text-slate-400 text-sm';
+          const spanRemaining = document.createElement('span');
+          spanRemaining.id = 'remaining-' + String(s.student_email || '').replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
+          spanRemaining.textContent = String(s.remaining || 0);
+          divStats.textContent = 'Restantes: ';
+          divStats.appendChild(spanRemaining);
+          divStats.appendChild(document.createTextNode(' | Completadas: ' + (s.completed || 0)));
+          divInfo.appendChild(divStats);
+          divItem.appendChild(divInfo);
+          
+          const divActions = document.createElement('div');
+          divActions.className = 'flex gap-2 items-center';
+          
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.id = 'input-remaining-' + String(s.student_email || '').replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
+          input.value = String(s.remaining || 0);
+          input.min = '0';
+          input.className = 'w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
+          divActions.appendChild(input);
+          
+          const btn = document.createElement('button');
+          btn.className = 'btn-ajustar-remaining px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded';
+          btn.setAttribute('data-item-id', String(itemId));
+          btn.setAttribute('data-student', s.student_email || '');
+          btn.textContent = 'Ajustar';
+          btn.addEventListener('click', function() {
+            const itemId = this.getAttribute('data-item-id');
+            const studentEmail = this.getAttribute('data-student');
+            const inputId = 'input-remaining-' + String(studentEmail).replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
+            const inputEl = document.getElementById(inputId);
+            const newRemaining = parseInt(inputEl ? inputEl.value : '0') || 0;
+            ajustarRemaining(itemId, studentEmail, newRemaining);
+          });
+          divActions.appendChild(btn);
+          
+          divItem.appendChild(divActions);
+          container.appendChild(divItem);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.className = 'text-slate-500 text-center py-4';
+        p.textContent = 'No hay alumnos con estado registrado';
+        container.appendChild(p);
+      }
+      
+      content.appendChild(container);
+    }
+    
+    modal.classList.remove('hidden');
+  }
+
+  function cerrarModalAlumnos() {
+    document.getElementById('modal-alumnos').classList.add('hidden');
+  }
+
+  async function marcarLimpioIndividual(itemId, studentEmail) {
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/mark-clean-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_email: studentEmail })
+      });
+      
+      if (!response.ok) throw new Error('Error marcando limpio');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Recargar modal
+      const tipo = listaActiva?.tipo || tipoActivo;
+      await verAlumnos(itemId, tipo);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  async function ajustarRemaining(itemId, studentEmail, newRemaining) {
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/adjust-remaining', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_email: studentEmail, remaining: newRemaining })
+      });
+      
+      if (!response.ok) throw new Error('Error ajustando remaining');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Actualizar UI
+      const remainingId = 'remaining-' + String(studentEmail).replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
+      const remainingEl = document.getElementById(remainingId);
+      if (remainingEl) {
+        remainingEl.textContent = String(data.state.remaining || 0);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  async function limpiezaTodos(itemId, tipo) {
+    if (!confirm('¿Aplicar limpieza para TODOS los alumnos?')) return;
+    
+    try {
+      const endpoint = tipo === 'recurrente'
+        ? '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/mark-clean-all'
+        : '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/increment-all';
+      
+      const response = await fetch(endpoint, { method: 'POST' });
+      if (!response.ok) throw new Error('Error en limpieza');
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      alert('Limpieza aplicada para ' + (data.updated || 0) + ' alumnos');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // CREAR NUEVA LISTA
+  async function crearLista() {
+    const nombre = prompt('Nombre de la nueva lista:');
+    if (!nombre || !nombre.trim()) return;
+    
+    const listaData = {
+      nombre: nombre.trim(),
+      tipo: tipoActivo,
+      descripcion: null,
+      status: 'active'
+    };
+    
+    try {
+      const response = await fetch('/admin/pde/transmutaciones-energeticas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(listaData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error('Error creando lista: ' + errorText);
+      }
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      // Asegurar category key automático para la nueva lista
+      await asegurarCategoryKeyAutomatico(data.lista.id, tipoActivo);
+      
+      // Recargar listas
+      await cargarListasPorTipo();
+      
+      // Seleccionar la nueva lista
+      await seleccionarLista(data.lista.id);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+
+  // INICIALIZAR FORMULARIOS Y EDITORES
+  function inicializarFormularios() {
+    // Botón crear lista
+    const btnCrearLista = document.getElementById('btn-crear-lista');
+    if (btnCrearLista) {
+      btnCrearLista.addEventListener('click', crearLista);
+    }
+    // Formulario crear item
+    const formCrearItem = document.getElementById('form-crear-item');
+    if (formCrearItem) {
+      formCrearItem.addEventListener('submit', crearItemRapido);
+      
+      // Enter en cualquier campo
+      formCrearItem.querySelectorAll('input').forEach(input => {
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            formCrearItem.dispatchEvent(new Event('submit'));
+          }
+        });
+      });
+    }
+    
+    // Editor de lista header
+    const btnEditarLista = document.getElementById('btn-editar-lista-header');
+    if (btnEditarLista) {
+      btnEditarLista.addEventListener('click', function() {
+        document.getElementById('editor-lista-header').classList.toggle('hidden');
+        if (!document.getElementById('editor-lista-header').classList.contains('hidden')) {
+          document.getElementById('editor-lista-nombre').value = listaActiva?.nombre || '';
+          document.getElementById('editor-lista-descripcion').value = listaActiva?.descripcion || '';
+        }
+      });
+    }
+    
+    const btnCancelarEditarLista = document.getElementById('btn-cancelar-editar-lista');
+    if (btnCancelarEditarLista) {
+      btnCancelarEditarLista.addEventListener('click', function() {
+        document.getElementById('editor-lista-header').classList.add('hidden');
+      });
+    }
+    
+    const btnEliminarListaHeader = document.getElementById('btn-eliminar-lista-header');
+    if (btnEliminarListaHeader) {
+      btnEliminarListaHeader.addEventListener('click', function() {
+        if (listaActiva) {
+          eliminarLista(listaActiva.id);
+        }
+      });
+    }
+    
+    const btnGuardarLista = document.getElementById('btn-guardar-lista-header');
+    if (btnGuardarLista) {
+      btnGuardarLista.addEventListener('click', async function() {
+        if (!listaActiva) return;
+        
+        const patch = {
+          nombre: document.getElementById('editor-lista-nombre').value.trim(),
+          descripcion: document.getElementById('editor-lista-descripcion').value.trim() || null
+        };
+        
+        try {
+          const response = await fetch('/admin/pde/transmutaciones-energeticas/' + encodeURIComponent(listaActiva.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch)
+          });
+          
+          if (!response.ok) throw new Error('Error actualizando lista');
+          
+          const data = await response.json();
+          if (!data.success) throw new Error(data.error || 'Error desconocido');
+          
+          listaActiva = data.lista;
+          mostrarContenidoLista(data.lista);
+          document.getElementById('editor-lista-header').classList.add('hidden');
+          
+          // Recargar tabs
+          await cargarListasPorTipo();
+        } catch (error) {
+          console.error('Error:', error);
+          alert('Error: ' + error.message);
+        }
+      });
+    }
+    
+    // Clasificaciones
+    const btnToggleClasificaciones = document.getElementById('btn-toggle-clasificaciones');
+    if (btnToggleClasificaciones) {
+      btnToggleClasificaciones.addEventListener('click', function() {
+        const panel = document.getElementById('clasificaciones-panel');
+        panel.classList.toggle('hidden');
+        const icon = this.querySelector('span');
+        icon.textContent = panel.classList.contains('hidden') ? '▼' : '▲';
+      });
+    }
+    
+    // Autocomplete para category-key
+    const inputCategoryKey = document.getElementById('lista-category-key');
+    if (inputCategoryKey) {
+      inputCategoryKey.addEventListener('input', debounce(function() {
+        buscarAutocomplete('key', this.value, 'autocomplete-category-key', inputCategoryKey);
+      }, 300));
+      
+      inputCategoryKey.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          agregarClasificacion('key', this.value.trim());
+        }
+      });
+    }
+    
+    // Autocomplete para subtype-key
+    const inputSubtypeKey = document.getElementById('lista-subtype-key');
+    if (inputSubtypeKey) {
+      inputSubtypeKey.addEventListener('input', debounce(function() {
+        buscarAutocomplete('subkey', this.value, 'autocomplete-subtype-key', inputSubtypeKey);
+      }, 300));
+      
+      inputSubtypeKey.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          agregarClasificacion('subkey', this.value.trim());
+        }
+      });
+    }
+    
+    // Autocomplete para tag
+    const inputTag = document.getElementById('lista-tag-nuevo');
+    if (inputTag) {
+      inputTag.addEventListener('input', debounce(function() {
+        buscarAutocomplete('tag', this.value, 'autocomplete-tag', inputTag);
+      }, 300));
+      
+      inputTag.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          agregarClasificacion('tag', this.value.trim());
+        }
+      });
+    }
+    
+    // Botón agregar tag
+    const btnAgregarTag = document.getElementById('btn-agregar-tag');
+    if (btnAgregarTag) {
+      btnAgregarTag.addEventListener('click', function() {
+        const valor = inputTag.value.trim();
+        if (valor) {
+          agregarClasificacion('tag', valor);
+        }
+      });
+    }
+    
+    // Cerrar autocomplete al hacer clic fuera
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.relative')) {
+        document.querySelectorAll('[id^="autocomplete-"]').forEach(el => {
+          el.classList.add('hidden');
+        });
+      }
+    });
+  }
+
+  // DEBOUNCE HELPER
+  function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  // BUSCAR AUTOCOMPLETE
+  async function buscarAutocomplete(type, search, containerId, input) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    if (!search || search.trim().length < 2) {
+      container.classList.add('hidden');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/admin/api/classifications/search?type=' + encodeURIComponent(type) + '&search=' + encodeURIComponent(search));
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      if (!data.success || !data.terms) return;
+      
+      // Renderizar resultados (DOM API)
+      container.textContent = '';
+      
+      if (data.terms.length === 0) {
+        const p = document.createElement('div');
+        p.className = 'px-3 py-2 text-xs text-slate-400';
+        p.textContent = 'Sin resultados (se creará nuevo término)';
+        container.appendChild(p);
+      } else {
+        data.terms.forEach(term => {
+          const div = document.createElement('div');
+          div.className = 'px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-white';
+          div.textContent = term.value;
+          div.addEventListener('click', function() {
+            input.value = term.value;
+            container.classList.add('hidden');
+            agregarClasificacion(type, term.value);
+          });
+          container.appendChild(div);
+        });
+      }
+      
+      container.classList.remove('hidden');
+    } catch (error) {
+      console.error('Error buscando autocomplete:', error);
+    }
+  }
+
+  // AGREGAR CLASIFICACIÓN
+  async function agregarClasificacion(type, value) {
+    if (!listaActiva || !value) return;
+    
+    try {
+      // Asegurar término (crear o obtener existente)
+      const responseEnsure = await fetch('/admin/api/classifications/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, value: value.trim() })
+      });
+      
+      // Verificar que la respuesta es JSON
+      const contentType = responseEnsure.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const errorText = await responseEnsure.text();
+        console.error('[Clasificaciones] Respuesta no es JSON:', errorText.substring(0, 200));
+        throw new Error('El servidor devolvió una respuesta no válida (no es JSON). Por favor, verifica que estés autenticado.');
+      }
+      
+      if (!responseEnsure.ok) {
+        const errorText = await responseEnsure.text();
+        let errorMessage = 'Error creando término';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch (e) {
+          errorMessage += ': ' + (errorText.length > 100 ? errorText.substring(0, 100) + '...' : errorText);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const dataEnsure = await responseEnsure.json();
+      if (!dataEnsure.success || !dataEnsure.term) {
+        throw new Error(dataEnsure.error || 'Error desconocido al crear término');
+      }
+      
+      // Asociar término a la lista
+      const responseAssoc = await fetch('/admin/api/classifications/lista/' + encodeURIComponent(listaActiva.id) + '/associate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ term_id: dataEnsure.term.id })
+      });
+      
+      if (!responseAssoc.ok) {
+        const errorText = await responseAssoc.text();
+        let errorMessage = 'Error asociando término';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch (e) {
+          errorMessage += ': ' + errorText;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const dataAssoc = await responseAssoc.json();
+      if (!dataAssoc.success) {
+        // Si ya existe la asociación, no es un error crítico
+        if (dataAssoc.error && dataAssoc.error.includes('ya existe') || dataAssoc.error.includes('duplicate')) {
+          console.log('Término ya asociado a la lista');
+        } else {
+          throw new Error(dataAssoc.error || 'Error desconocido al asociar término');
+        }
+      }
+      
+      // Limpiar input y recargar
+      if (type === 'key') {
+        document.getElementById('lista-category-key').value = '';
+      } else if (type === 'subkey') {
+        document.getElementById('lista-subtype-key').value = '';
+      } else if (type === 'tag') {
+        document.getElementById('lista-tag-nuevo').value = '';
+      }
+      
+      // Ocultar autocomplete
+      document.querySelectorAll('[id^="autocomplete-"]').forEach(el => {
+        el.classList.add('hidden');
+      });
+      
+      // Recargar clasificaciones
+      await cargarClasificacionesLista(listaActiva.id);
+    } catch (error) {
+      console.error('Error agregando clasificación:', error);
+      alert('Error: ' + error.message);
+    }
+    
+    // Modal alumnos
+    const btnCerrarModal = document.getElementById('btn-cerrar-modal-alumnos');
+    if (btnCerrarModal) {
+      btnCerrarModal.addEventListener('click', cerrarModalAlumnos);
+    }
+  }
+
+  // HELPERS
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function escapeAttr(text) {
+    return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+  }
+})();
+</script>

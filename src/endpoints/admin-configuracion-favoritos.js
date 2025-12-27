@@ -4,7 +4,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 import { 
   listarFavoritos,
   crearFavorito,
@@ -33,17 +33,6 @@ function getAbsoluteUrl(request, path) {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 export async function renderConfiguracionFavoritos(request, env) {
   const favoritos = await listarFavoritos();
@@ -209,8 +198,14 @@ export async function renderConfiguracionFavoritos(request, env) {
     </script>
   `;
 
-  return new Response(replace(baseTemplate, { TITLE: 'Configuración de Favoritos', CONTENT: content }), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'Configuración de Favoritos',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

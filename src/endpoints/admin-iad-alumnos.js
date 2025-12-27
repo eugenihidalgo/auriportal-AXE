@@ -5,21 +5,10 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 // ============================================
 // I+D DE LOS ALUMNOS - ASPECTOS PERSONALIZADOS
@@ -106,13 +95,14 @@ export async function renderIadAlumnos(request, env) {
     </div>
   `;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'I+D de los alumnos',
-    CONTENT: content
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  return renderAdminPage({
+    title: 'I+D de los alumnos',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

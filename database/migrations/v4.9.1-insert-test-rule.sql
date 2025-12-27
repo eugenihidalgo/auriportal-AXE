@@ -62,3 +62,10 @@ COMMENT ON TABLE automation_rules IS 'Reglas de automatización declarativas (AU
 
 
 
+
+
+
+
+
+
+

@@ -308,3 +308,10 @@ COMMENT ON COLUMN pde_widget_versions.prompt_context_json IS 'Widget Prompt Cont
 COMMENT ON TABLE pde_widget_audit_log IS 'Log de auditoría append-only para cambios en widgets';
 
 
+
+
+
+
+
+
+

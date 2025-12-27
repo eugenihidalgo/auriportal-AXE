@@ -107,6 +107,11 @@
       </button>
     </div>
 
+    <!-- Diagnóstico de Proyección (solo admin) -->
+    <div id="projection-diagnostic" class="mb-3 p-2 bg-slate-700/50 border border-slate-600 rounded text-xs text-slate-400">
+      <span id="projection-diagnostic-text">Cargando...</span>
+    </div>
+
     <!-- Tabs: Visual / Avanzado -->
     <div class="mb-4 border-b border-slate-600">
       <button onclick="mostrarTab('visual')" id="tabVisual" class="px-4 py-2 border-b-2 border-indigo-500 text-white font-medium">📝 Visual</button>
@@ -326,6 +331,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Recargar contextos desde el servidor (siempre fresh, sin cache)
 async function recargarContextosDesdeServidor() {
   try {
+    // FASE 2 RUNTIME TODO: Este fetch corresponde a la acción 'contexts.list'
+    // En FASE 3 será: executeAction('contexts.list', {}, context)
     const response = await fetch('/admin/api/contexts', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -372,6 +379,176 @@ async function recargarContextosDesdeServidor() {
       console.error('Error en fallback de contextos:', e);
       contexts = [];
     }
+  }
+}
+
+// ============================================================================
+// VALIDADORES DE PROYECCIÓN (Cliente)
+// ============================================================================
+
+/**
+ * Valida que un contexto cumple el contrato EDIT
+ * Espejo del validador servidor en context.projection.contract.js
+ */
+function validateContextEditProjection(ctx) {
+  // Campos requeridos
+  const requiredFields = ['context_key', 'name', 'label', 'type', 'scope', 'kind'];
+  const missingRequired = requiredFields.filter(field => !(field in ctx));
+  
+  if (missingRequired.length > 0) {
+    return {
+      ok: false,
+      error: `Campos requeridos faltando: ${missingRequired.join(', ')}`,
+      missingFields: missingRequired
+    };
+  }
+
+  // Validar valores específicos
+  const validTypes = ['string', 'number', 'boolean', 'enum', 'json'];
+  const validScopes = ['package', 'system', 'structural', 'personal'];
+  const validKinds = ['normal', 'restricted'];
+
+  if (!validTypes.includes(ctx.type)) {
+    return {
+      ok: false,
+      error: `Type inválido: "${ctx.type}". Válidos: ${validTypes.join(', ')}`,
+      missingFields: []
+    };
+  }
+
+  if (!validScopes.includes(ctx.scope)) {
+    return {
+      ok: false,
+      error: `Scope inválido: "${ctx.scope}". Válidos: ${validScopes.join(', ')}`,
+      missingFields: []
+    };
+  }
+
+  if (!validKinds.includes(ctx.kind)) {
+    return {
+      ok: false,
+      error: `Kind inválido: "${ctx.kind}". Válidos: ${validKinds.join(', ')}`,
+      missingFields: []
+    };
+  }
+
+  // Validar allowed_values si type es enum
+  if (ctx.type === 'enum' && ctx.allowed_values !== null && ctx.allowed_values !== undefined) {
+    if (!Array.isArray(ctx.allowed_values)) {
+      return {
+        ok: false,
+        error: 'allowed_values debe ser Array o null para type=enum',
+        missingFields: []
+      };
+    }
+    if (ctx.allowed_values.length === 0) {
+      return {
+        ok: false,
+        error: 'allowed_values no puede estar vacío para type=enum',
+        missingFields: []
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Muestra un error de validación de forma visible en el formulario
+ */
+function mostrarErrorValidacionProyeccion(error, missingFields) {
+  const modalContent = document.getElementById('contextModal');
+  if (!modalContent) return;
+
+  // Crear o actualizar div de error
+  let errorDiv = document.getElementById('projection-validation-error');
+  if (!errorDiv) {
+    errorDiv = document.createElement('div');
+    errorDiv.id = 'projection-validation-error';
+    // Insertar al principio del modal
+    const modalBody = modalContent.querySelector('.bg-slate-800');
+    if (modalBody) {
+      modalBody.insertBefore(errorDiv, modalBody.firstChild);
+    }
+  }
+
+  errorDiv.className = 'mb-4 p-4 bg-red-900/30 border border-red-700 rounded text-red-200 text-sm';
+  errorDiv.innerHTML = `
+    <div class="font-semibold mb-1">⚠️ Error de Validación de Datos</div>
+    <div>${error}</div>
+    ${missingFields && missingFields.length > 0 ? 
+      `<div class="mt-2 text-xs">Campos faltando: <code>${missingFields.join(', ')}</code></div>` 
+      : ''}
+    <div class="mt-2 text-xs opacity-75">El servidor rechazó estos datos. Contacta a administración si el problema persiste.</div>
+  `;
+
+  // Bloquear formulario
+  const submitBtn = document.getElementById('saveContextBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.className = submitBtn.className.replace('bg-indigo-600', 'bg-slate-600');
+    submitBtn.title = 'Formulario bloqueado: datos de contexto inválidos';
+  }
+
+  // Marcar formulario como read-only
+  const inputs = modalContent.querySelectorAll('input, select, textarea');
+  inputs.forEach(inp => {
+    inp.disabled = true;
+    inp.className = (inp.className || '') + ' opacity-60 cursor-not-allowed';
+  });
+}
+
+/**
+ * Limpia los errores de validación mostrados
+ */
+function limpiarErroresValidacion() {
+  const errorDiv = document.getElementById('projection-validation-error');
+  if (errorDiv) {
+    errorDiv.remove();
+  }
+
+  // Re-habilitar formulario
+  const modalContent = document.getElementById('contextModal');
+  if (modalContent) {
+    const submitBtn = document.getElementById('saveContextBtn');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.className = submitBtn.className.replace('bg-slate-600', 'bg-indigo-600');
+      submitBtn.title = 'Guardar Contexto';
+    }
+
+    const inputs = modalContent.querySelectorAll('input, select, textarea');
+    inputs.forEach(inp => {
+      inp.disabled = false;
+      inp.className = inp.className.replace(' opacity-60 cursor-not-allowed', '');
+    });
+  }
+}
+
+/**
+ * Actualiza el diagnóstico visible de proyección
+ */
+function actualizarDiagnosticoProyeccion(ctx, validationResult) {
+  const diagDiv = document.getElementById('projection-diagnostic');
+  const diagText = document.getElementById('projection-diagnostic-text');
+  
+  if (!diagDiv || !diagText) return;
+
+  if (validationResult.ok) {
+    diagDiv.className = 'mb-3 p-2 bg-emerald-900/20 border border-emerald-700 rounded text-xs text-emerald-300';
+    diagText.innerHTML = `
+      <span class="font-semibold">✅ Proyección EDIT válida</span> | 
+      type=<code>${ctx.type}</code> | 
+      scope=<code>${ctx.scope}</code> | 
+      ${ctx.type === 'enum' ? `enum_values=${Array.isArray(ctx.allowed_values) ? ctx.allowed_values.length : 0} | ` : ''}
+      key=<code>${ctx.context_key}</code>
+    `;
+  } else {
+    diagDiv.className = 'mb-3 p-2 bg-red-900/20 border border-red-700 rounded text-xs text-red-300';
+    diagText.innerHTML = `
+      <span class="font-semibold">⚠️ Proyección EDIT INVÁLIDA</span> | 
+      ${validationResult.error}
+    `;
   }
 }
 
@@ -840,8 +1017,34 @@ function cerrarModalContexto() {
 
 // Editar contexto
 function editarContexto(contextKey) {
+  // Limpiar errores previos
+  limpiarErroresValidacion();
+
   const ctx = contexts.find(c => c.context_key === contextKey);
-  if (!ctx) return;
+  if (!ctx) {
+    alert('Contexto no encontrado');
+    return;
+  }
+
+  // FASE 1: VALIDAR CONTRATO EDIT ANTES DE HACER NADA
+  console.log('[PROJECTION][EDIT] Validando contexto:', ctx);
+  const validation = validateContextEditProjection(ctx);
+  
+  if (!validation.ok) {
+    console.error('[PROJECTION][EDIT] Validación fallida:', validation);
+    mostrarErrorValidacionProyeccion(validation.error, validation.missingFields);
+    actualizarDiagnosticoProyeccion(ctx, validation);
+    
+    // Mostrar modal pero bloqueado
+    editingContextKey = contextKey;
+    document.getElementById('modalTitle').textContent = '⚠️ Error - Contexto Inválido';
+    document.getElementById('contextModal').classList.remove('hidden');
+    return;
+  }
+
+  // Si llegamos aquí, los datos son válidos
+  console.log('[PROJECTION][EDIT] ✅ Validación OK');
+  actualizarDiagnosticoProyeccion(ctx, validation);
 
   editingContextKey = contextKey;
   const isSystem = ctx.is_system || false;
@@ -850,19 +1053,35 @@ function editarContexto(contextKey) {
   document.getElementById('contextKey').disabled = isSystem; // No editable si es sistema
   document.getElementById('contextLabel').value = ctx.label;
   
-  const def = ctx.definition || {};
-  document.getElementById('contextType').value = ctx.type || def.type || 'string';
-  document.getElementById('contextScope').value = ctx.scope || def.scope || 'package';
-  document.getElementById('contextKind').value = ctx.kind || def.kind || 'normal';
-  document.getElementById('contextInjected').checked = ctx.injected !== undefined ? ctx.injected : (def.injected !== undefined ? def.injected : false);
-  document.getElementById('contextOrigin').value = def.origin || 'user_choice';
-  document.getElementById('contextDescription').value = ctx.description || def.description || '';
+  // FASE 2: Usar columnas dedicadas como fuente de verdad (con fallback a definition)
+  const ctxType = ctx.type || ctx.definition?.type || 'string';
+  const ctxScope = ctx.scope || ctx.definition?.scope || 'package';
+  const ctxKind = ctx.kind || ctx.definition?.kind || 'normal';
+  const ctxInjected = ctx.injected !== undefined ? ctx.injected : (ctx.definition?.injected !== undefined ? ctx.definition.injected : false);
+  const ctxAllowedValues = ctx.allowed_values !== undefined ? ctx.allowed_values : (ctx.definition?.allowed_values !== undefined ? ctx.definition.allowed_values : null);
+  const ctxDefaultValue = ctx.default_value !== undefined ? ctx.default_value : (ctx.definition?.default_value !== undefined ? ctx.definition.default_value : null);
+  const ctxDescription = ctx.description || ctx.definition?.description || '';
+  
+  console.log('[PDE][CONTEXTS][EDIT] Cargando contexto:', {
+    context_key: ctx.context_key,
+    type: ctxType,
+    allowed_values: ctxAllowedValues,
+    allowed_values_type: typeof ctxAllowedValues,
+    allowed_values_is_array: Array.isArray(ctxAllowedValues)
+  });
+  
+  document.getElementById('contextType').value = ctxType;
+  document.getElementById('contextScope').value = ctxScope;
+  document.getElementById('contextKind').value = ctxKind;
+  document.getElementById('contextInjected').checked = ctxInjected;
+  document.getElementById('contextOrigin').value = ctx.definition?.origin || 'user_choice';
+  document.getElementById('contextDescription').value = ctxDescription;
   
   // Actualizar validaciones
   actualizarScopeEnFormulario();
   
-  if (def.ui_config) {
-    document.getElementById('uiConfig').value = JSON.stringify(def.ui_config, null, 2);
+  if (ctx.definition?.ui_config) {
+    document.getElementById('uiConfig').value = JSON.stringify(ctx.definition.ui_config, null, 2);
   } else {
     document.getElementById('uiConfig').value = '';
   }
@@ -872,56 +1091,77 @@ function editarContexto(contextKey) {
   // Establecer default value
   setTimeout(() => {
     const defaultValueEl = document.getElementById('defaultValue');
-    if (defaultValueEl && def.default_value !== undefined && def.default_value !== null) {
-      if (def.type === 'json') {
-        defaultValueEl.value = JSON.stringify(def.default_value, null, 2);
+    if (defaultValueEl && ctxDefaultValue !== undefined && ctxDefaultValue !== null) {
+      if (ctxType === 'json') {
+        defaultValueEl.value = JSON.stringify(ctxDefaultValue, null, 2);
       } else {
-        defaultValueEl.value = def.default_value;
+        defaultValueEl.value = ctxDefaultValue;
       }
     }
   }, 100);
 
-    // Establecer allowed values
-    if (def.type === 'enum' && def.allowed_values) {
-      document.getElementById('allowedValues').value = def.allowed_values.join('\n');
-      // Actualizar select de default con allowed values
-      setTimeout(() => {
-        const defaultValueEl = document.getElementById('defaultValue');
-        if (defaultValueEl && defaultValueEl.tagName === 'SELECT') {
-          defaultValueEl.textContent = '';
-          const defaultOption = document.createElement('option');
-          defaultOption.value = '';
-          defaultOption.textContent = '-- Seleccionar --';
-          defaultValueEl.appendChild(defaultOption);
-          def.allowed_values.forEach(v => {
-            const option = document.createElement('option');
-            option.value = v;
-            option.textContent = v;
-            if (v === def.default_value) {
-              option.selected = true;
-            }
-            defaultValueEl.appendChild(option);
-          });
-        }
-      }, 150);
-    }
+  // FASE 2: Establecer allowed values desde columnas dedicadas
+  // ✅ FIX: Usar !== null/undefined en lugar de || para evitar que arrays vacíos se ignoren
+  if (ctxType === 'enum' && ctxAllowedValues !== null && ctxAllowedValues !== undefined) {
+    const allowedValuesArray = Array.isArray(ctxAllowedValues) ? ctxAllowedValues : [];
+    
+    console.log('[PDE][CONTEXTS][EDIT] Seteando allowed_values:', {
+      ctxAllowedValues,
+      allowedValuesArray,
+      joined: allowedValuesArray.join('\n')
+    });
+    
+    document.getElementById('allowedValues').value = allowedValuesArray.join('\n');
+    
+    // Actualizar select de default con allowed values
+    setTimeout(() => {
+      const defaultValueEl = document.getElementById('defaultValue');
+      if (defaultValueEl && defaultValueEl.tagName === 'SELECT') {
+        defaultValueEl.textContent = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- Seleccionar --';
+        defaultValueEl.appendChild(defaultOption);
+        allowedValuesArray.forEach(v => {
+          const option = document.createElement('option');
+          option.value = v;
+          option.textContent = v;
+          if (v === ctxDefaultValue) {
+            option.selected = true;
+          }
+          defaultValueEl.appendChild(option);
+        });
+      }
+    }, 150);
+  } else if (ctxType === 'enum') {
+    console.warn('[PDE][CONTEXTS][EDIT] Enum sin allowed_values válidos:', {
+      ctxAllowedValues,
+      type: typeof ctxAllowedValues
+    });
+    document.getElementById('allowedValues').value = '';
+  }
 
-  document.getElementById('contextDefinition').value = JSON.stringify(def, null, 2);
+  // Mantener definition en el tab avanzado (solo para visualización)
+  document.getElementById('contextDefinition').value = JSON.stringify(ctx.definition || {}, null, 2);
   mostrarTab('visual');
   document.getElementById('contextModal').classList.remove('hidden');
 }
 
 // Guardar contexto
 async function guardarContexto() {
-  // Sincronizar desde formulario visual hacia JSON antes de guardar
-  sincronizarHaciaJSON();
+  // #region agent log
+  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:915',message:'guardarContexto ENTRY',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'ALL'})}).catch(()=>{});
+  // #endregion
+
+  // FASE 2: Ya no sincronizamos hacia JSON porque definition no se envía
+  // sincronizarHaciaJSON(); // COMENTADO: definition no se envía como fuente de verdad
 
   const contextKey = document.getElementById('contextKey').value;
   const label = document.getElementById('contextLabel').value;
-  const definitionText = document.getElementById('contextDefinition').value;
 
-  if (!contextKey || !label || !definitionText) {
-    alert('Context Key, Label y Definition son obligatorios');
+  // FASE 2: Validaciones básicas (sin definition)
+  if (!contextKey || !label) {
+    alert('Context Key y Label son obligatorios');
     return;
   }
 
@@ -929,15 +1169,6 @@ async function guardarContexto() {
   const contextKeyRegex = /^[a-z0-9_-]+$/;
   if (!contextKeyRegex.test(contextKey)) {
     alert('Context Key inválido: Solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)');
-    return;
-  }
-
-  // Validar JSON
-  let definition;
-  try {
-    definition = JSON.parse(definitionText);
-  } catch (error) {
-    alert('JSON inválido: ' + error.message);
     return;
   }
 
@@ -962,14 +1193,25 @@ async function guardarContexto() {
     let allowedValues = undefined;
     let defaultValue = undefined;
     
+    // FASE 2: allowed_values es obligatorio para enum
     if (type === 'enum') {
       const allowedText = document.getElementById('allowedValues').value;
-      allowedValues = allowedText.split('\n').map(v => v.trim()).filter(v => v);
+      allowedValues = allowedText ? allowedText.split('\n').map(v => v.trim()).filter(v => v) : [];
+      
+      // Validar que enum tenga al menos un valor
+      if (!allowedValues || allowedValues.length === 0) {
+        alert('❌ Error: Los contextos tipo "enum" requieren al menos un valor permitido');
+        document.getElementById('allowedValues').focus();
+        return;
+      }
     }
     
     // BLINDAR parseo de default_value para evitar excepciones JS
     const defaultValueEl = document.getElementById('defaultValue');
     if (defaultValueEl) {
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:973',message:'Before defaultValue parsing',data:{type,defaultValueElValue:defaultValueEl.value?.substring(0,100),defaultValueElType:typeof defaultValueEl.value},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       if (type === 'number') {
         const val = defaultValueEl.value;
         defaultValue = val === '' ? undefined : parseFloat(val);
@@ -985,7 +1227,13 @@ async function guardarContexto() {
           defaultValue = defaultValueEl.value
             ? JSON.parse(defaultValueEl.value)
             : undefined;
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:990',message:'defaultValue JSON parse success',data:{defaultValueType:typeof defaultValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
         } catch (e) {
+          // #region agent log
+          fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:993',message:'defaultValue JSON parse ERROR',data:{error:e.message,value:defaultValueEl.value?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
           console.warn('[PDE][CONTEXTS] Error parseando default_value JSON:', e.message);
           defaultValue = undefined;
         }
@@ -994,51 +1242,113 @@ async function guardarContexto() {
       } else {
         defaultValue = defaultValueEl.value || undefined;
       }
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1000',message:'After defaultValue parsing',data:{defaultValue,defaultValueType:typeof defaultValue,isUndefined:defaultValue===undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
     }
 
-    // Construir payload canónico (SOLO campos permitidos)
+    // FASE 2: Construir payload canónico (SOLO campos permitidos, SIN undefined)
+    // definition NO se envía como fuente de verdad, se construye desde columnas
     const payload = {
       context_key: contextKey,
       label,
-      definition,
       scope,
       kind,
       type,
       injected
     };
 
-    // Añadir description solo si está definido
-    if (description) {
+    // Añadir description solo si está definido (no undefined, no null)
+    if (description !== undefined && description !== null && description !== '') {
       payload.description = description;
     }
 
-    // Añadir allowed_values solo si está definido (para tipo enum)
-    if (allowedValues !== undefined && allowedValues.length > 0) {
-      payload.allowed_values = allowedValues;
+    // FASE 2: allowed_values - OBLIGATORIO para enum
+    // Ya validamos arriba que tiene valores, así que siempre lo enviamos
+    if (type === 'enum') {
+      if (allowedValues && Array.isArray(allowedValues) && allowedValues.length > 0) {
+        payload.allowed_values = allowedValues;
+        console.log('[PDE][CONTEXTS] allowed_values para enum:', allowedValues);
+      } else {
+        // Doble verificación: si llegamos aquí sin valores, hay un problema
+        console.error('[PDE][CONTEXTS] ERROR: enum sin allowed_values válidos después de validación');
+        console.error('[PDE][CONTEXTS] allowedValues:', allowedValues, 'type:', typeof allowedValues, 'isArray:', Array.isArray(allowedValues));
+        alert('❌ Error: Los contextos tipo "enum" requieren valores permitidos. Por favor, añade al menos un valor.');
+        document.getElementById('allowedValues').focus();
+        return;
+      }
     }
 
-    // Añadir default_value solo si está definido
+    // Añadir default_value solo si está definido (no undefined, null es válido)
     if (defaultValue !== undefined) {
       payload.default_value = defaultValue;
     }
+    
+    // FASE 2: Limpiar payload - eliminar cualquier campo undefined que haya quedado
+    const cleanPayload = {};
+    for (const [key, value] of Object.entries(payload)) {
+      if (value !== undefined) {
+        cleanPayload[key] = value;
+      }
+    }
 
     // Log defensivo antes del fetch
-    console.debug('[PDE][CONTEXTS] Saving context', { url, method, payload });
+    console.log('[PDE][CONTEXTS] Saving context', { 
+      url, 
+      method, 
+      payload: cleanPayload,
+      payload_keys: Object.keys(cleanPayload),
+      has_allowed_values: 'allowed_values' in cleanPayload,
+      allowed_values_in_payload: cleanPayload.allowed_values,
+      allowed_values_type: typeof cleanPayload.allowed_values,
+      allowed_values_is_array: Array.isArray(cleanPayload.allowed_values)
+    });
+
+    let payloadString;
+    try {
+      payloadString = JSON.stringify(cleanPayload);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1035',message:'JSON.stringify success',data:{payloadStringLength:payloadString?.length,payloadStringPreview:payloadString?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    } catch (stringifyError) {
+      console.error('[PDE][CONTEXTS] Error serializando payload:', stringifyError);
+      alert('Error serializando datos: ' + stringifyError.message);
+      return;
+    }
 
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payloadString
     });
+
+    // FASE 2 RUNTIME: Este fetch invoca una acción registrada en el runtime
+    // - POST /admin/api/contexts → acción 'contexts.create' (via executeAction)
+    // - PUT /admin/api/contexts/:key → acción 'contexts.update' (via executeAction)
+    // En FASE 3: llamada directa a executeAction('contexts.create'|'contexts.update', cleanPayload, context)
+
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1047',message:'Fetch response received',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
 
     // Leer primero como texto para validar
     const responseText = await response.text();
+    
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1052',message:'Response text received',data:{status:response.status,responseTextLength:responseText?.length,responseTextPreview:responseText?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     
     // Verificar si es JSON válido
     let data;
     try {
       data = JSON.parse(responseText);
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1058',message:'Response JSON parse success',data:{ok:data?.ok,error:data?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
     } catch (parseError) {
+      // #region agent log
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1061',message:'Response JSON parse ERROR',data:{error:parseError.message,status:response.status,responseTextPreview:responseText?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       console.error('Error: Respuesta del servidor no es JSON válido');
       console.error('Status:', response.status);
       console.error('Content-Type:', response.headers.get('content-type'));
@@ -1048,7 +1358,10 @@ async function guardarContexto() {
     }
 
     if (!data.ok) {
-      alert('Error: ' + (data.error || 'Error desconocido'));
+      // FASE 2: Mostrar errores claros del backend
+      const errorMessage = data.error || data.message || 'Error desconocido';
+      alert('❌ Error: ' + errorMessage);
+      console.error('[PDE][CONTEXTS] Error del servidor:', data);
       return;
     }
 
@@ -1058,7 +1371,13 @@ async function guardarContexto() {
 
     cerrarModalContexto();
     alert('Contexto guardado exitosamente');
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1073',message:'guardarContexto SUCCESS',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'ALL'})}).catch(()=>{});
+    // #endregion
   } catch (error) {
+    // #region agent log
+    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contexts-manager.html:1076',message:'guardarContexto CATCH ERROR',data:{error:error.message,stack:error.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'ALL'})}).catch(()=>{});
+    // #endregion
     console.error('Error guardando contexto:', error);
     alert('Error al guardar contexto: ' + (error.message || 'Error desconocido'));
   }
@@ -1083,6 +1402,9 @@ async function eliminarContexto(contextKey, buttonElement) {
       buttonElement.classList.add('opacity-50');
     }
     
+    
+    // FASE 2 RUNTIME: Este fetch invoca la acción 'contexts.delete' (via executeAction)
+    // En FASE 3: executeAction('contexts.delete', { context_key: contextKey }, context)
     const response = await fetch(`/admin/api/contexts/${encodeURIComponent(contextKey)}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }

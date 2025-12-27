@@ -109,3 +109,10 @@ ssh-add ~/.ssh/id_ed25519_auriportal 2>/dev/null
 
 
 
+
+
+
+
+
+
+

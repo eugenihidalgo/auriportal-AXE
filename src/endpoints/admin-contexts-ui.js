@@ -8,11 +8,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { listContexts } from '../services/pde-contexts-service.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Helper local para reemplazar placeholders en templates de contenido
@@ -38,6 +37,9 @@ export async function renderContextsManager(request, env) {
     return authCtx;
   }
 
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
   // Cargar datos necesarios
   let contexts = [];
 
@@ -55,18 +57,15 @@ export async function renderContextsManager(request, env) {
   const contextsJson = Buffer.from(JSON.stringify(contexts), 'utf8').toString('base64');
 
   const contentTemplate = readFileSync(join(__dirname, '../core/html/admin/contexts/contexts-manager.html'), 'utf-8');
-  const content = replace(contentTemplate, {
+  const contentHtml = replace(contentTemplate, {
     CONTEXTS_JSON: contextsJson
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Gestor de Contextos',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/contexts'
-  });
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Gestor de Contextos',
+    contentHtml,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

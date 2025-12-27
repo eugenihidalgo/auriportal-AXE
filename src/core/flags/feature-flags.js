@@ -138,6 +138,16 @@ const FEATURE_FLAGS = {
   // Afecta: ejecución de reglas de automatización con status 'beta'
   automations_beta: 'off',
   
+  // Feature flag para Automation Engine Canónico v2 (Fase D.4)
+  // Propósito: Controlar ejecución del motor de automatizaciones canónico
+  //   - off: engine no ejecuta nada (comportamiento por defecto)
+  //   - beta: engine ejecuta solo en dev/beta
+  //   - on: engine ejecuta en todos los entornos
+  // Estado inicial: 'off' (comportamiento actual intacto)
+  // Cuando se active: permitirá ejecutar automatizaciones canónicas
+  // Afecta: ejecución de automatizaciones definidas en automation_definitions
+  AUTOMATIONS_ENGINE_ENABLED: 'off',
+  
   // Feature flag para Capability Registry v1 (Recorridos)
   // Propósito: Sistema de registry para descubrir ScreenTemplates, StepTypes, Conditions, Events y PDE Resources
   //   - off: registry no disponible

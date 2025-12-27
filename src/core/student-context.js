@@ -134,20 +134,20 @@ export async function buildStudentContext(request, env, opts = {}) {
       const alumnoId = student.id || student.raw?.id;
       
       if (!alumnoId) {
-        console.warn('[StudentContext] No se pudo obtener alumno_id, usando fallback');
-        // Fallback: usar checkDailyStreak si no hay alumno_id
-        if (!streakCheck) {
-          streakCheck = await checkDailyStreak(student, env, {
-            forcePractice: false
-          });
-        }
+        console.warn('[StudentContext] No se pudo obtener alumno_id, usando valores por defecto');
+        // FASE 2.1: Sin alumno_id no podemos calcular racha canónica desde PostgreSQL
+        // Usar valores del student object (que viene de PostgreSQL vía student-v4.js)
         streakResult = {
-          actual: streakCheck?.streak || student.streak || 0,
-          ultimo_dia_con_practica: null,
-          hoy_practicado: streakCheck?.todayPracticed || false,
+          actual: student.streak || 0,
+          ultimo_dia_con_practica: student.lastPractice || null,
+          hoy_practicado: false, // No podemos determinar sin consultar practicas
           congelada_por_pausa: false,
           dias_congelados: 0
         };
+        console.warn('[StudentContext] Racha calculada desde student object (sin alumno_id):', {
+          actual: streakResult.actual,
+          lastPractice: streakResult.ultimo_dia_con_practica
+        });
       } else {
         // Usar motor canónico
         streakResult = await computeStreakFromPracticas(alumnoId);

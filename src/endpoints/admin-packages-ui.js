@@ -10,11 +10,10 @@ import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultPdePackagesRepo } from '../infra/repos/pde-packages-repo-pg.js';
 import { listAvailableSources } from '../services/pde-source-of-truth-registry.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 /**
  * Helper local para reemplazar placeholders
@@ -34,66 +33,48 @@ function replace(html, placeholders) {
  * Renderiza el creador de paquetes (SISTEMA NUEVO)
  */
 export async function renderPackagesCreator(request, env) {
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:36',message:'renderPackagesCreator: inicio',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+  
+  // Capa 1: requireAdminContext
   const authCtx = await requireAdminContext(request, env);
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:39',message:'renderPackagesCreator: después de requireAdminContext',data:{isResponse:authCtx instanceof Response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   if (authCtx instanceof Response) {
     return authCtx;
   }
-
-  // Cargar datos necesarios
+  
+  // Capa 2: Llamadas a repos/servicios
   let availableSources = [];
   let packages = [];
 
   try {
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:49',message:'renderPackagesCreator: antes de listAvailableSources',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    availableSources = await listAvailableSources();
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:52',message:'renderPackagesCreator: después de listAvailableSources',data:{sourcesCount:availableSources.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    const packagesRepo = getDefaultPdePackagesRepo();
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:55',message:'renderPackagesCreator: antes de listPackages',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    packages = await packagesRepo.listPackages({ onlyActive: false, includeDeleted: false });
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:58',message:'renderPackagesCreator: después de listPackages',data:{packagesCount:packages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
-    // Enriquecer con drafts y versiones
-    for (const pkg of packages) {
-      try {
-        pkg.draft = await packagesRepo.getCurrentDraft(pkg.id);
-        pkg.latestVersion = await packagesRepo.getLatestPublishedVersion(pkg.id);
-      } catch (err) {
-        console.error(`Error cargando draft/versión para paquete ${pkg.id}:`, err);
+      availableSources = await listAvailableSources();
+      const packagesRepo = getDefaultPdePackagesRepo();
+      packages = await packagesRepo.listPackages({ onlyActive: false, includeDeleted: false });
+      
+      // Enriquecer con drafts y versiones
+      for (const pkg of packages) {
+        try {
+          pkg.draft = await packagesRepo.getCurrentDraft(pkg.id);
+          pkg.latestVersion = await packagesRepo.getLatestPublishedVersion(pkg.id);
+        } catch (err) {
+          console.error(`Error cargando draft/versión para paquete ${pkg.id}:`, err);
+        }
       }
-    }
-  } catch (error) {
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:71',message:'renderPackagesCreator: ERROR cargando datos',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
+    } catch (error) {
     console.error('Error cargando datos para creador de paquetes:', error);
+    // Continuar con arrays vacíos
   }
-
-  // Preparar datos para el frontend - MÉTODO ULTRA-SEGURO
-  // El problema: Insertar JSON en un template literal puede romper la sintaxis si contiene backticks, ${}, etc.
-  // Solución: Codificar el JSON en Base64 y decodificarlo en el cliente
+  
+  // Capa 3: Preparación de datos para el frontend
   const sourcesJsonRaw = JSON.stringify(availableSources);
   const packagesJsonRaw = JSON.stringify(packages);
   
   // Codificar en Base64 para evitar cualquier problema con caracteres especiales
   const sourcesJsonB64 = Buffer.from(sourcesJsonRaw, 'utf8').toString('base64');
   const packagesJsonB64 = Buffer.from(packagesJsonRaw, 'utf8').toString('base64');
-
+  
+  // Capa 4: Render completo con UI SPA
   // Template HTML completo
-  // NOTA: NO interpolar JSON directamente aquí - usar escapeForScriptTag
   const content = `
     <div class="p-8">
       <div class="mb-6">
@@ -235,14 +216,35 @@ export async function renderPackagesCreator(request, env) {
       // Esperar a que el DOM esté listo
       document.addEventListener('DOMContentLoaded', function() {
         try {
+          // Verificar que los elementos existan antes de acceder
+          const packagesDataEl = document.getElementById('packages-data-b64');
+          const sourcesDataEl = document.getElementById('sources-data-b64');
+          
+          if (!packagesDataEl || !sourcesDataEl) {
+            console.error('Error: No se encontraron los elementos de datos iniciales');
+            return;
+          }
+          
           // Decodificar Base64 y parsear JSON
-          const packagesData = JSON.parse(atob(document.getElementById('packages-data-b64').textContent));
-          const sourcesData = JSON.parse(atob(document.getElementById('sources-data-b64').textContent));
+          const packagesDataRaw = packagesDataEl.textContent || '';
+          const sourcesDataRaw = sourcesDataEl.textContent || '';
+          
+          if (!packagesDataRaw || !sourcesDataRaw) {
+            console.error('Error: Los datos iniciales están vacíos');
+            return;
+          }
+          
+          const packagesData = JSON.parse(atob(packagesDataRaw));
+          const sourcesData = JSON.parse(atob(sourcesDataRaw));
           let currentPackageId = null;
 
       // Renderizar lista de paquetes
       function renderPackagesList() {
         const container = document.getElementById('packages-list');
+        if (!container) {
+          console.error('Error: No se encontró el contenedor packages-list');
+          return;
+        }
         if (packagesData.length === 0) {
           container.innerHTML = '<p class="text-gray-400">No hay paquetes creados todavía</p>';
           return;
@@ -279,19 +281,32 @@ export async function renderPackagesCreator(request, env) {
       }
 
       // Crear nuevo paquete
-      document.getElementById('create-package-btn').addEventListener('click', () => {
-        currentPackageId = null;
-        document.getElementById('package-editor').classList.remove('hidden');
-        document.getElementById('package-name').value = '';
-        document.getElementById('package-key').value = '';
-        document.getElementById('package-description').value = '';
-        document.getElementById('prompt-context-json').value = '';
-        document.getElementById('assembled-json').value = '';
-        document.getElementById('validation-status').classList.add('hidden');
-      });
+      const createBtn = document.getElementById('create-package-btn');
+      if (createBtn) {
+        createBtn.addEventListener('click', () => {
+          currentPackageId = null;
+          const editor = document.getElementById('package-editor');
+          const nameEl = document.getElementById('package-name');
+          const keyEl = document.getElementById('package-key');
+          const descEl = document.getElementById('package-description');
+          const promptEl = document.getElementById('prompt-context-json');
+          const assembledEl = document.getElementById('assembled-json');
+          const statusEl = document.getElementById('validation-status');
+          
+          if (editor) editor.classList.remove('hidden');
+          if (nameEl) nameEl.value = '';
+          if (keyEl) keyEl.value = '';
+          if (descEl) descEl.value = '';
+          if (promptEl) promptEl.value = '';
+          if (assembledEl) assembledEl.value = '';
+          if (statusEl) statusEl.classList.add('hidden');
+        });
+      }
 
       // Guardar draft
-      document.getElementById('save-draft-btn').addEventListener('click', async () => {
+      const saveDraftBtn = document.getElementById('save-draft-btn');
+      if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', async () => {
         const name = document.getElementById('package-name').value;
         const packageKey = document.getElementById('package-key').value;
         const description = document.getElementById('package-description').value;
@@ -385,9 +400,12 @@ export async function renderPackagesCreator(request, env) {
           alert('Error: ' + error.message);
         }
       });
+      }
 
       // Publicar versión
-      document.getElementById('publish-btn').addEventListener('click', async () => {
+      const publishBtn = document.getElementById('publish-btn');
+      if (publishBtn) {
+        publishBtn.addEventListener('click', async () => {
         if (!currentPackageId) {
           alert('Primero debes guardar el draft');
           return;
@@ -412,12 +430,17 @@ export async function renderPackagesCreator(request, env) {
           alert('Error: ' + error.message);
         }
       });
+      }
 
       // Cancelar edición
-      document.getElementById('cancel-edit-btn').addEventListener('click', () => {
-        document.getElementById('package-editor').classList.add('hidden');
-        currentPackageId = null;
-      });
+      const cancelBtn = document.getElementById('cancel-edit-btn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          const editor = document.getElementById('package-editor');
+          if (editor) editor.classList.add('hidden');
+          currentPackageId = null;
+        });
+      }
 
       // Función helper para mostrar toast no bloqueante
       function showToast(message, duration = 2000) {
@@ -425,22 +448,7 @@ export async function renderPackagesCreator(request, env) {
         if (!toast) {
           toast = document.createElement('div');
           toast.id = 'packages-toast';
-          toast.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #10b981;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 10000;
-            font-size: 0.875rem;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
-            pointer-events: none;
-          `;
+          toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #10b981; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); z-index: 10000; font-size: 0.875rem; opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none;';
           document.body.appendChild(toast);
         }
         toast.textContent = message;
@@ -453,7 +461,9 @@ export async function renderPackagesCreator(request, env) {
       }
 
       // Copiar prompt context para GPT
-      document.getElementById('copy-prompt-context-btn').addEventListener('click', () => {
+      const copyBtn = document.getElementById('copy-prompt-context-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
         const promptContext = document.getElementById('prompt-context-json').value;
         if (!promptContext) {
           showToast('⚠️ Primero debes crear el Package Prompt Context', 2000);
@@ -468,9 +478,12 @@ export async function renderPackagesCreator(request, env) {
           showToast('❌ Error al copiar', 2000);
         });
       });
+      }
 
       // Validar prompt context
-      document.getElementById('validate-prompt-context-btn').addEventListener('click', () => {
+      const validateBtn = document.getElementById('validate-prompt-context-btn');
+      if (validateBtn) {
+        validateBtn.addEventListener('click', () => {
         const promptContext = document.getElementById('prompt-context-json').value;
         if (!promptContext) {
           alert('No hay prompt context para validar');
@@ -480,14 +493,19 @@ export async function renderPackagesCreator(request, env) {
         try {
           const parsed = JSON.parse(promptContext);
           const statusDiv = document.getElementById('validation-status');
-          statusDiv.classList.remove('hidden');
-          statusDiv.innerHTML = '<div class="bg-green-900 text-green-200 p-3 rounded">✅ JSON válido</div>';
+          if (statusDiv) {
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = '<div class="bg-green-900 text-green-200 p-3 rounded">✅ JSON válido</div>';
+          }
         } catch (error) {
           const statusDiv = document.getElementById('validation-status');
-          statusDiv.classList.remove('hidden');
-          statusDiv.innerHTML = '<div class="bg-red-900 text-red-200 p-3 rounded">❌ Error de JSON: ' + error.message + '</div>';
+          if (statusDiv) {
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = '<div class="bg-red-900 text-red-200 p-3 rounded">❌ Error de JSON: ' + error.message + '</div>';
+          }
         }
       });
+      }
 
       // Funciones globales
       window.editPackage = async (packageId) => {
@@ -495,19 +513,26 @@ export async function renderPackagesCreator(request, env) {
         if (!pkg) return;
 
         currentPackageId = packageId;
-        document.getElementById('package-name').value = pkg.name;
-        document.getElementById('package-key').value = pkg.package_key;
-        document.getElementById('package-description').value = pkg.description || '';
+        const nameEl = document.getElementById('package-name');
+        const keyEl = document.getElementById('package-key');
+        const descEl = document.getElementById('package-description');
+        const promptEl = document.getElementById('prompt-context-json');
+        const assembledEl = document.getElementById('assembled-json');
+        const editor = document.getElementById('package-editor');
+        
+        if (nameEl) nameEl.value = pkg.name || '';
+        if (keyEl) keyEl.value = pkg.package_key || '';
+        if (descEl) descEl.value = pkg.description || '';
 
         // Cargar draft si existe
-        if (pkg.draft) {
-          document.getElementById('prompt-context-json').value = JSON.stringify(pkg.draft.prompt_context_json, null, 2);
-          if (pkg.draft.assembled_json) {
-            document.getElementById('assembled-json').value = JSON.stringify(pkg.draft.assembled_json, null, 2);
+        if (pkg.draft && promptEl) {
+          promptEl.value = JSON.stringify(pkg.draft.prompt_context_json, null, 2);
+          if (pkg.draft.assembled_json && assembledEl) {
+            assembledEl.value = JSON.stringify(pkg.draft.assembled_json, null, 2);
           }
         }
 
-        document.getElementById('package-editor').classList.remove('hidden');
+        if (editor) editor.classList.remove('hidden');
       };
 
       window.viewVersions = (packageId) => {
@@ -524,14 +549,11 @@ export async function renderPackagesCreator(request, env) {
     </script>
   `;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Creador de Paquetes',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/packages'
-  });
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Creador de Paquetes',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -539,38 +561,21 @@ export async function renderPackagesCreator(request, env) {
  * Handler principal del endpoint
  */
 export default async function adminPackagesUiHandler(request, env, ctx) {
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:488',message:'adminPackagesUiHandler: inicio',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  const url = new URL(request.url);
-  const path = url.pathname;
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:492',message:'adminPackagesUiHandler: path y method',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+  try {
+    const url = new URL(request.url);
+    const path = url.pathname;
 
-  // GET /admin/packages - UI principal
-  if (path === '/admin/packages' && request.method === 'GET') {
-    // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:497',message:'adminPackagesUiHandler: antes de renderPackagesCreator',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    try {
+    // GET /admin/packages - UI principal
+    if (path === '/admin/packages' && request.method === 'GET') {
       const result = await renderPackagesCreator(request, env);
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:501',message:'adminPackagesUiHandler: después de renderPackagesCreator',data:{isResponse:result instanceof Response,status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return result;
-    } catch (error) {
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:505',message:'adminPackagesUiHandler: ERROR en renderPackagesCreator',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      console.error('[admin-packages-ui] Error:', error);
-      throw error;
     }
-  }
 
-  // Ruta no encontrada
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-packages-ui.js:513',message:'adminPackagesUiHandler: ruta no encontrada',data:{path,method:request.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-  // #endregion
-  return new Response('Ruta no encontrada', { status: 404 });
+    // Ruta no encontrada
+    return new Response('Ruta no encontrada', { status: 404 });
+  } catch (err) {
+    console.error('[ADMIN][PACKAGES] Handler error:', err);
+    console.error('[ADMIN][PACKAGES] Stack:', err.stack);
+    throw err;
+  }
 }

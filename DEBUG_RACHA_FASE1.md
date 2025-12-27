@@ -252,3 +252,10 @@ El sistema tiene una **desincronización confirmada** debido a:
 
 
 
+
+
+
+
+
+
+

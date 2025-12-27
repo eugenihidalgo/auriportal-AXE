@@ -10,17 +10,18 @@
 import { getDefaultPdeCatalogRegistryRepo } from '../infra/repos/pde-catalog-registry-repo-pg.js';
 
 /**
- * Lista todos los catálogos activos
+ * Lista catálogos según filtros
  * 
  * @param {Object} options - Opciones de filtrado
+ * @param {boolean} [options.onlyActive=true] - Si filtrar solo activos (default: true)
  * @param {boolean} [options.usableForMotors] - Si filtrar solo usable_for_motors
  * @returns {Promise<Array>} Array de catálogos
  */
 export async function listCatalogs(options = {}) {
   const repo = getDefaultPdeCatalogRegistryRepo();
   return await repo.listCatalogs({
-    onlyActive: true,
-    ...options
+    onlyActive: options.onlyActive !== undefined ? options.onlyActive : true,
+    usableForMotors: options.usableForMotors
   });
 }
 

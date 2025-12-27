@@ -7,11 +7,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminAuth } from '../modules/admin-auth.js';
 import { logInfo, logWarn } from '../core/observability/logger.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 async function replace(html, placeholders) {
   let output = html;
@@ -52,14 +51,14 @@ export async function renderListadoThemes(request, env) {
   const listadoTemplate = readFileSync(join(__dirname, '../core/html/admin/themes/themes-listado.html'), 'utf-8');
   const content = listadoTemplate;
 
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Temas',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/themes'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Temas',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -77,14 +76,14 @@ export async function renderEditorTheme(request, env, themeId) {
   const editorTemplate = readFileSync(join(__dirname, '../core/html/admin/themes/themes-editor.html'), 'utf-8');
   const content = editorTemplate.replace(/{{THEME_ID}}/g, themeId || '');
 
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: `Editor de Tema${themeId ? `: ${themeId}` : ''}`,
-    CONTENT: content,
-    CURRENT_PATH: `/admin/themes/${themeId || 'new'}/edit`
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: `Editor de Tema${themeId ? `: ${themeId}` : ''}`,
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

@@ -6,11 +6,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { listCatalogs, getCatalogById, updateCatalogMeta, createCatalog } from '../services/pde-catalog-registry-service.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 
 function replace(html, placeholders) {
   let output = html;
@@ -61,8 +60,11 @@ export async function renderCatalogList(request, env) {
       ? '<span class="px-2 py-1 bg-green-600 text-white text-xs rounded">Sí</span>'
       : '<span class="px-2 py-1 bg-red-600 text-white text-xs rounded">No</span>';
     
+    // Escapar ID para uso seguro en data attribute
+    const idEscapado = String(catalog.id || '').replace(/"/g, '&quot;');
+    
     return `
-    <tr class="border-b border-slate-700 hover:bg-slate-700" data-catalog-id="${catalog.id}">
+    <tr class="border-b border-slate-700 hover:bg-slate-700" data-catalog-id="${idEscapado}">
       <td class="py-3 px-4 text-white font-medium">${labelEscapado}</td>
       <td class="py-3 px-4 text-slate-300 text-sm font-mono">${keyEscapado}</td>
       <td class="py-3 px-4 text-slate-300 text-sm font-mono">${(catalog.source_table || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
@@ -70,7 +72,10 @@ export async function renderCatalogList(request, env) {
       <td class="py-3 px-4">${capabilitiesHtml}</td>
       <td class="py-3 px-4">${statusBadge}</td>
       <td class="py-3 px-4">
-        <button onclick="editarCatalog('${catalog.id}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors inline-block">Editar</button>
+        <button 
+          class="btn-editar-catalog px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors inline-block" 
+          data-catalog-id="${idEscapado}"
+        >Editar</button>
       </td>
     </tr>
     `;
@@ -80,19 +85,19 @@ export async function renderCatalogList(request, env) {
     </tr>
   `;
 
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
   const listTemplate = readFileSync(join(__dirname, '../core/html/admin/catalog-registry/catalog-list.html'), 'utf-8');
-  const content = replace(listTemplate, {
+  const contentHtml = replace(listTemplate, {
     CATALOG_ROWS: catalogRows
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Registro de Catálogos PDE',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/pde/catalog-registry'
-  });
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  return renderAdminPage({
+    title: 'Registro de Catálogos PDE',
+    contentHtml,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

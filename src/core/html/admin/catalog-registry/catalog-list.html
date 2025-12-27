@@ -5,7 +5,7 @@
       <p class="text-slate-400">Source of Truth para metadata de catálogos PDE. Configura qué catálogos están disponibles para el Diseñador de Motores y sus capacidades.</p>
     </div>
     <button 
-      onclick="abrirModalCrear()" 
+      id="btn-abrir-modal-crear"
       class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors flex items-center gap-2"
     >
       ➕ Añadir catálogo
@@ -38,7 +38,7 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-2xl font-bold text-white">Añadir Nuevo Catálogo</h2>
       <button 
-        onclick="cerrarModalCrear()" 
+        id="btn-cerrar-modal-crear"
         class="text-slate-400 hover:text-white text-2xl"
       >
         ×
@@ -154,7 +154,7 @@
       <div class="flex justify-end gap-3 mt-6">
         <button 
           type="button"
-          onclick="cerrarModalCrear()" 
+          id="btn-cancelar-crear"
           class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors"
         >
           Cancelar
@@ -176,7 +176,7 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-2xl font-bold text-white">Editar Catálogo</h2>
       <button 
-        onclick="cerrarModal()" 
+        id="btn-cerrar-modal-editar"
         class="text-slate-400 hover:text-white text-2xl"
       >
         ×
@@ -278,7 +278,7 @@
       <div class="flex justify-end gap-3 mt-6">
         <button 
           type="button"
-          onclick="cerrarModal()" 
+          id="btn-cancelar-editar"
           class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors"
         >
           Cancelar
@@ -295,33 +295,132 @@
 </div>
 
 <script>
+// ============================================================================
+// CÓDIGO SEGURO: Sin template strings en atributos HTML
+// ============================================================================
+// - Usa data attributes en lugar de onclick inline
+// - Usa JSON.parse/JSON.stringify de forma segura
+// - Usa DOM API preferida (addEventListener, querySelector, etc.)
+// ============================================================================
+
+// Inicialización cuando el DOM está listo
+(function() {
+  'use strict';
+  
+  // Delegación de eventos para botones de editar (evita onclick inline)
+  document.addEventListener('click', function(event) {
+    const editBtn = event.target.closest('.btn-editar-catalog');
+    if (editBtn) {
+      event.preventDefault();
+      const catalogId = editBtn.getAttribute('data-catalog-id');
+      if (catalogId) {
+        editarCatalog(catalogId);
+      }
+    }
+  });
+  
+  // Event listeners para botones de modales
+  const btnAbrirModalCrear = document.getElementById('btn-abrir-modal-crear');
+  if (btnAbrirModalCrear) {
+    btnAbrirModalCrear.addEventListener('click', abrirModalCrear);
+  }
+  
+  const btnCerrarModalCrear = document.getElementById('btn-cerrar-modal-crear');
+  if (btnCerrarModalCrear) {
+    btnCerrarModalCrear.addEventListener('click', cerrarModalCrear);
+  }
+  
+  const btnCancelarCrear = document.getElementById('btn-cancelar-crear');
+  if (btnCancelarCrear) {
+    btnCancelarCrear.addEventListener('click', cerrarModalCrear);
+  }
+  
+  const btnCerrarModalEditar = document.getElementById('btn-cerrar-modal-editar');
+  if (btnCerrarModalEditar) {
+    btnCerrarModalEditar.addEventListener('click', cerrarModal);
+  }
+  
+  const btnCancelarEditar = document.getElementById('btn-cancelar-editar');
+  if (btnCancelarEditar) {
+    btnCancelarEditar.addEventListener('click', cerrarModal);
+  }
+  
+  // Cerrar modales al hacer clic fuera de ellos
+  const createModal = document.getElementById('createModal');
+  if (createModal) {
+    createModal.addEventListener('click', function(event) {
+      if (event.target === createModal) {
+        cerrarModalCrear();
+      }
+    });
+  }
+  
+  const editModal = document.getElementById('editModal');
+  if (editModal) {
+    editModal.addEventListener('click', function(event) {
+      if (event.target === editModal) {
+        cerrarModal();
+      }
+    });
+  }
+})();
+
 function abrirModalCrear() {
   // Limpiar formulario
-  document.getElementById('createForm').reset();
-  document.getElementById('createUsableForMotors').checked = true;
+  const form = document.getElementById('createForm');
+  if (form) {
+    form.reset();
+    const usableForMotors = document.getElementById('createUsableForMotors');
+    if (usableForMotors) {
+      usableForMotors.checked = true;
+    }
+  }
   
   // Mostrar modal
-  document.getElementById('createModal').classList.remove('hidden');
+  const modal = document.getElementById('createModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
 }
 
 function cerrarModalCrear() {
-  document.getElementById('createModal').classList.add('hidden');
+  const modal = document.getElementById('createModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
 }
 
 async function crearCatalog(event) {
   event.preventDefault();
   
+  // Leer valores de forma segura
+  const createCatalogKey = document.getElementById('createCatalogKey');
+  const createLabel = document.getElementById('createLabel');
+  const createDescription = document.getElementById('createDescription');
+  const createSourceTable = document.getElementById('createSourceTable');
+  const createEndpoint = document.getElementById('createEndpoint');
+  const createUsableForMotors = document.getElementById('createUsableForMotors');
+  const createSupportsLevel = document.getElementById('createSupportsLevel');
+  const createSupportsPriority = document.getElementById('createSupportsPriority');
+  const createSupportsObligatory = document.getElementById('createSupportsObligatory');
+  const createSupportsDuration = document.getElementById('createSupportsDuration');
+  
+  if (!createCatalogKey || !createLabel || !createSourceTable) {
+    alert('Error: Faltan campos requeridos');
+    return;
+  }
+  
   const catalogData = {
-    catalog_key: document.getElementById('createCatalogKey').value.trim(),
-    label: document.getElementById('createLabel').value.trim(),
-    description: document.getElementById('createDescription').value.trim() || null,
-    source_table: document.getElementById('createSourceTable').value.trim(),
-    source_endpoint: document.getElementById('createEndpoint').value.trim() || null,
-    usable_for_motors: document.getElementById('createUsableForMotors').checked,
-    supports_level: document.getElementById('createSupportsLevel').checked,
-    supports_priority: document.getElementById('createSupportsPriority').checked,
-    supports_obligatory: document.getElementById('createSupportsObligatory').checked,
-    supports_duration: document.getElementById('createSupportsDuration').checked,
+    catalog_key: createCatalogKey.value.trim(),
+    label: createLabel.value.trim(),
+    description: createDescription ? createDescription.value.trim() || null : null,
+    source_table: createSourceTable.value.trim(),
+    source_endpoint: createEndpoint ? createEndpoint.value.trim() || null : null,
+    usable_for_motors: createUsableForMotors ? createUsableForMotors.checked : true,
+    supports_level: createSupportsLevel ? createSupportsLevel.checked : false,
+    supports_priority: createSupportsPriority ? createSupportsPriority.checked : false,
+    supports_obligatory: createSupportsObligatory ? createSupportsObligatory.checked : false,
+    supports_duration: createSupportsDuration ? createSupportsDuration.checked : false,
     status: 'active'
   };
   
@@ -333,6 +432,10 @@ async function crearCatalog(event) {
       },
       body: JSON.stringify(catalogData)
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
     const data = await response.json();
     if (data.success) {
@@ -349,8 +452,20 @@ async function crearCatalog(event) {
 }
 
 async function editarCatalog(id) {
+  if (!id) {
+    alert('Error: ID de catálogo no válido');
+    return;
+  }
+  
   try {
-    const response = await fetch(`/admin/pde/catalog-registry/${id}`);
+    // Escapar ID en URL de forma segura
+    const encodedId = encodeURIComponent(String(id));
+    const response = await fetch(`/admin/pde/catalog-registry/${encodedId}`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const data = await response.json();
     
     if (!data.success || !data.catalog) {
@@ -360,20 +475,34 @@ async function editarCatalog(id) {
     
     const catalog = data.catalog;
     
-    // Llenar formulario
-    document.getElementById('catalogId').value = catalog.id;
-    document.getElementById('catalogLabel').value = catalog.label || '';
-    document.getElementById('catalogDescription').value = catalog.description || '';
-    document.getElementById('catalogEndpoint').value = catalog.source_endpoint || '';
-    document.getElementById('catalogUsableForMotors').checked = catalog.usable_for_motors === true;
-    document.getElementById('catalogSupportsLevel').checked = catalog.supports_level === true;
-    document.getElementById('catalogSupportsPriority').checked = catalog.supports_priority === true;
-    document.getElementById('catalogSupportsObligatory').checked = catalog.supports_obligatory === true;
-    document.getElementById('catalogSupportsDuration').checked = catalog.supports_duration === true;
-    document.getElementById('catalogStatus').value = catalog.status || 'active';
+    // Llenar formulario usando DOM API
+    const catalogId = document.getElementById('catalogId');
+    const catalogLabel = document.getElementById('catalogLabel');
+    const catalogDescription = document.getElementById('catalogDescription');
+    const catalogEndpoint = document.getElementById('catalogEndpoint');
+    const catalogUsableForMotors = document.getElementById('catalogUsableForMotors');
+    const catalogSupportsLevel = document.getElementById('catalogSupportsLevel');
+    const catalogSupportsPriority = document.getElementById('catalogSupportsPriority');
+    const catalogSupportsObligatory = document.getElementById('catalogSupportsObligatory');
+    const catalogSupportsDuration = document.getElementById('catalogSupportsDuration');
+    const catalogStatus = document.getElementById('catalogStatus');
+    
+    if (catalogId) catalogId.value = catalog.id || '';
+    if (catalogLabel) catalogLabel.value = catalog.label || '';
+    if (catalogDescription) catalogDescription.value = catalog.description || '';
+    if (catalogEndpoint) catalogEndpoint.value = catalog.source_endpoint || '';
+    if (catalogUsableForMotors) catalogUsableForMotors.checked = catalog.usable_for_motors === true;
+    if (catalogSupportsLevel) catalogSupportsLevel.checked = catalog.supports_level === true;
+    if (catalogSupportsPriority) catalogSupportsPriority.checked = catalog.supports_priority === true;
+    if (catalogSupportsObligatory) catalogSupportsObligatory.checked = catalog.supports_obligatory === true;
+    if (catalogSupportsDuration) catalogSupportsDuration.checked = catalog.supports_duration === true;
+    if (catalogStatus) catalogStatus.value = catalog.status || 'active';
     
     // Mostrar modal
-    document.getElementById('editModal').classList.remove('hidden');
+    const modal = document.getElementById('editModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
   } catch (error) {
     console.error('Error al cargar catálogo:', error);
     alert('Error al cargar el catálogo: ' + error.message);
@@ -381,33 +510,58 @@ async function editarCatalog(id) {
 }
 
 function cerrarModal() {
-  document.getElementById('editModal').classList.add('hidden');
+  const modal = document.getElementById('editModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
 }
 
 async function guardarCatalog(event) {
   event.preventDefault();
   
-  const id = document.getElementById('catalogId').value;
+  const catalogId = document.getElementById('catalogId');
+  const catalogLabel = document.getElementById('catalogLabel');
+  const catalogDescription = document.getElementById('catalogDescription');
+  const catalogEndpoint = document.getElementById('catalogEndpoint');
+  const catalogUsableForMotors = document.getElementById('catalogUsableForMotors');
+  const catalogSupportsLevel = document.getElementById('catalogSupportsLevel');
+  const catalogSupportsPriority = document.getElementById('catalogSupportsPriority');
+  const catalogSupportsObligatory = document.getElementById('catalogSupportsObligatory');
+  const catalogSupportsDuration = document.getElementById('catalogSupportsDuration');
+  const catalogStatus = document.getElementById('catalogStatus');
+  
+  if (!catalogId || !catalogId.value) {
+    alert('Error: ID de catálogo no válido');
+    return;
+  }
+  
+  const id = catalogId.value;
   const patch = {
-    label: document.getElementById('catalogLabel').value,
-    description: document.getElementById('catalogDescription').value,
-    source_endpoint: document.getElementById('catalogEndpoint').value,
-    usable_for_motors: document.getElementById('catalogUsableForMotors').checked,
-    supports_level: document.getElementById('catalogSupportsLevel').checked,
-    supports_priority: document.getElementById('catalogSupportsPriority').checked,
-    supports_obligatory: document.getElementById('catalogSupportsObligatory').checked,
-    supports_duration: document.getElementById('catalogSupportsDuration').checked,
-    status: document.getElementById('catalogStatus').value
+    label: catalogLabel ? catalogLabel.value : '',
+    description: catalogDescription ? catalogDescription.value : '',
+    source_endpoint: catalogEndpoint ? catalogEndpoint.value : '',
+    usable_for_motors: catalogUsableForMotors ? catalogUsableForMotors.checked : false,
+    supports_level: catalogSupportsLevel ? catalogSupportsLevel.checked : false,
+    supports_priority: catalogSupportsPriority ? catalogSupportsPriority.checked : false,
+    supports_obligatory: catalogSupportsObligatory ? catalogSupportsObligatory.checked : false,
+    supports_duration: catalogSupportsDuration ? catalogSupportsDuration.checked : false,
+    status: catalogStatus ? catalogStatus.value : 'active'
   };
   
   try {
-    const response = await fetch(`/admin/pde/catalog-registry/${id}`, {
+    // Escapar ID en URL de forma segura
+    const encodedId = encodeURIComponent(String(id));
+    const response = await fetch(`/admin/pde/catalog-registry/${encodedId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(patch)
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
     const data = await response.json();
     if (data.success) {

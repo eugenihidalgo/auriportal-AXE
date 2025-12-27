@@ -6,39 +6,10 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
-import { renderHtml } from '../core/html-response.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
-
-/**
- * Reemplaza placeholders en templates
- */
-async function replace(html, placeholders) {
-  let output = html;
-  
-  // VALIDACIÓN CRÍTICA: Detectar Promises antes de reemplazar
-  for (const key in placeholders) {
-    let value = placeholders[key] ?? "";
-    
-    // DETECCIÓN DE PROMISE: Si value es una Promise, lanzar error visible
-    if (value && typeof value === 'object' && typeof value.then === 'function') {
-      const errorMsg = `DEBUG: PLACEHOLDER ${key} IS A PROMISE (MISSING AWAIT)`;
-      console.error(`[REPLACE] ${errorMsg}`);
-      value = `<div style="padding:8px;color:#fca5a5;background:#1e293b;border:2px solid #fca5a5;border-radius:4px;margin:8px;font-weight:bold;">${errorMsg}</div>`;
-    }
-    
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  
-  return output;
-}
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Cargar templates
-const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
-const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
 
 const capabilitiesExplorerTemplate = readFileSync(
   join(__dirname, '../core/html/admin/capabilities-explorer.html'),
@@ -53,27 +24,31 @@ const capabilityDetailTemplate = readFileSync(
 /**
  * Renderiza la vista principal del Capability Explorer
  */
-async function renderCapabilitiesExplorer(env) {
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: 'System Capabilities',
-    CONTENT: capabilitiesExplorerTemplate
-  });
+async function renderCapabilitiesExplorer(request, env) {
+  const url = new URL(request.url);
+  const activePath = url.pathname;
   
-  return html;
+  return renderAdminPage({
+    title: 'System Capabilities',
+    contentHtml: capabilitiesExplorerTemplate,
+    activePath,
+    userContext: { isAdmin: true }
+  });
 }
 
 /**
  * Renderiza la vista de detalle de una capability
  */
-async function renderCapabilityDetail(env, type, id) {
-  // El template de detalle no necesita placeholders adicionales,
-  // ya que obtiene type e id de la URL en el JavaScript
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: `Capability: ${id}`,
-    CONTENT: capabilityDetailTemplate
-  });
+async function renderCapabilityDetail(request, env, type, id) {
+  const url = new URL(request.url);
+  const activePath = url.pathname;
   
-  return html;
+  return renderAdminPage({
+    title: `Capability: ${id}`,
+    contentHtml: capabilityDetailTemplate,
+    activePath,
+    userContext: { isAdmin: true }
+  });
 }
 
 /**
@@ -94,14 +69,12 @@ export default async function adminCapabilitiesHandler(request, env, ctx) {
   const detailMatch = path.match(/^\/admin\/system\/capabilities\/([^\/]+)\/([^\/]+)$/);
   if (detailMatch) {
     const [, type, id] = detailMatch;
-    const html = await renderCapabilityDetail(env, type, id);
-    return renderHtml(html);
+    return await renderCapabilityDetail(request, env, type, id);
   }
   
   // Ruta: /admin/system/capabilities (vista principal)
   if (path === '/admin/system/capabilities' || path === '/admin/system/capabilities/') {
-    const html = await renderCapabilitiesExplorer(env);
-    return renderHtml(html);
+    return await renderCapabilitiesExplorer(request, env);
   }
   
   // Ruta no encontrada

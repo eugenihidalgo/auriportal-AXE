@@ -13,19 +13,28 @@
       background-color: #0f172a; /* slate-900 */
     }
     
-    /* Ocultar scrollbar del sidebar pero mantener funcionalidad */
+    /* Scrollbar del sidebar - más ancho y visible */
+    .sidebar-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1e293b;
+    }
     .sidebar-scroll::-webkit-scrollbar {
-      width: 6px;
+      width: 12px; /* Más ancho para mejor accesibilidad */
     }
     .sidebar-scroll::-webkit-scrollbar-track {
       background: #1e293b; /* slate-800 */
+      border-left: 1px solid #334155; /* Separación visual */
     }
     .sidebar-scroll::-webkit-scrollbar-thumb {
       background: #475569; /* slate-600 */
-      border-radius: 3px;
+      border-radius: 6px;
+      border: 2px solid #1e293b; /* Espacio para evitar solapamiento */
     }
     .sidebar-scroll::-webkit-scrollbar-thumb:hover {
       background: #64748b; /* slate-500 */
+    }
+    .sidebar-scroll::-webkit-scrollbar-thumb:active {
+      background: #94a3b8; /* slate-400 */
     }
     
     /* Active menu item */
@@ -135,6 +144,32 @@
     }
     .sidebar-icon {
       display: none;
+    }
+    
+    /* Secciones colapsables del sidebar */
+    .sidebar-section-header {
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+    .sidebar-section-header:hover {
+      background-color: rgba(51, 65, 85, 0.4);
+    }
+    .sidebar-section-header[aria-expanded="true"] .sidebar-section-toggle {
+      transform: rotate(180deg);
+    }
+    .sidebar-section-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+      opacity: 0;
+    }
+    .sidebar-section-content.open {
+      max-height: 2000px; /* Valor suficientemente alto */
+      opacity: 1;
+    }
+    .sidebar-section-toggle {
+      transition: transform 0.2s ease;
+      font-size: 0.75rem;
     }
     
     /* Responsive para móvil */
@@ -310,195 +345,36 @@
   </div>
   
   <script>
-    // VALIDACIÓN ANTI-REGRESIÓN CLIENTE: Detectar sidebar incompleto
-    document.addEventListener('DOMContentLoaded', function() {
-      // Verificar que el sidebar tenga contenido válido
-      const sidebarNav = document.getElementById('sidebar-nav');
-      if (sidebarNav) {
-        const sidebarLinks = sidebarNav.querySelectorAll('a');
-        const sidebarText = sidebarNav.textContent || '';
-        
-        // Detectar problemas comunes
-        if (sidebarText.includes('{{SIDEBAR_MENU}}')) {
-          console.error('[SIDEBAR_FIX] ❌ Placeholder {{SIDEBAR_MENU}} sin reemplazar detectado en cliente');
-        } else if (sidebarLinks.length < 2) {
-          console.warn('[SIDEBAR_FIX] ⚠️ Sidebar tiene menos de 2 items visibles', {
-            linkCount: sidebarLinks.length,
-            textPreview: sidebarText.substring(0, 200)
-          });
-        } else if (sidebarLinks.length === 1 && sidebarText.includes('Dashboard')) {
+      // VALIDACIÓN ANTI-REGRESIÓN CLIENTE: Detectar sidebar incompleto
+      document.addEventListener('DOMContentLoaded', function() {
+        // Verificar que el sidebar tenga contenido válido
+        // NOTA: sidebarNav ahora es manejado por sidebar-client.js
+        // Este código legacy se mantiene solo para validación
+        const sidebarScroll = document.getElementById('admin-sidebar-scroll');
+        if (sidebarScroll) {
+          const sidebarLinks = sidebarScroll.querySelectorAll('a');
+          const sidebarText = sidebarScroll.textContent || '';
+          
+          // Detectar problemas comunes
+          if (sidebarText.includes('{{SIDEBAR_MENU}}')) {
+            console.error('[SIDEBAR_FIX] ❌ Placeholder {{SIDEBAR_MENU}} sin reemplazar detectado en cliente');
+          } else if (sidebarLinks.length < 2) {
+            console.warn('[SIDEBAR_FIX] ⚠️ Sidebar tiene menos de 2 items visibles', {
+              linkCount: sidebarLinks.length,
+              textPreview: sidebarText.substring(0, 200)
+            });
+          } else if (sidebarLinks.length === 1 && sidebarText.includes('Dashboard')) {
           console.warn('[SIDEBAR_FIX] ⚠️ Sidebar solo muestra Dashboard (posible error)', {
             linkCount: sidebarLinks.length
           });
         }
       }
       
-      // Resaltar menú activo y restaurar scroll
-      const currentPath = window.location.pathname;
-      const menuItems = document.querySelectorAll('aside nav a');
-      const sidebarNav = document.getElementById('sidebar-nav');
-      
-      // #region agent log - Verificar que el enlace Progreso V4 está presente
-      const progresoV4Link = Array.from(menuItems).find(item => item.getAttribute('href') === '/admin/progreso-v4');
-      console.log('[DEBUG] Enlace Progreso V4 encontrado:', progresoV4Link ? 'SÍ' : 'NO');
-      if (progresoV4Link) {
-        console.log('[DEBUG] Enlace Progreso V4 visible:', window.getComputedStyle(progresoV4Link).display !== 'none');
-        console.log('[DEBUG] Enlace Progreso V4 parent visible:', window.getComputedStyle(progresoV4Link.parentElement).display !== 'none');
-      }
-      // #endregion
-      
-      // Restaurar posición de scroll del sidebar
-      const savedScroll = localStorage.getItem('adminSidebarScroll');
-      if (savedScroll && sidebarNav) {
-        sidebarNav.scrollTop = parseInt(savedScroll, 10);
-      }
-      
-      // Guardar posición de scroll antes de navegar
-      menuItems.forEach(item => {
-        if (item.getAttribute('href') === currentPath) {
-          item.classList.add('menu-item-active');
-        }
-        
-        item.addEventListener('click', function() {
-          if (sidebarNav) {
-            localStorage.setItem('adminSidebarScroll', sidebarNav.scrollTop.toString());
-          }
-        });
-      });
-      
-      // Guardar scroll también al hacer scroll manualmente
-      if (sidebarNav) {
-        let scrollTimeout;
-        sidebarNav.addEventListener('scroll', function() {
-          clearTimeout(scrollTimeout);
-          scrollTimeout = setTimeout(() => {
-            localStorage.setItem('adminSidebarScroll', sidebarNav.scrollTop.toString());
-          }, 100);
-        });
-      }
-      
-      // Inicializar ancho del sidebar
-      const sidebar = document.getElementById('sidebar');
-      const sidebarToggle = document.getElementById('sidebar-toggle');
-      const sidebarResizer = document.getElementById('sidebar-resizer');
-      const savedWidth = localStorage.getItem('adminSidebarWidth');
-      const isCollapsed = localStorage.getItem('adminSidebarCollapsed') === 'true';
-      
-      // Restaurar ancho guardado o usar el predeterminado
-      if (!isCollapsed && sidebar) {
-        if (savedWidth) {
-          sidebar.style.width = savedWidth + 'px';
-        } else {
-          sidebar.style.width = '16rem'; // w-64 = 16rem = 256px
-        }
-      }
-      
-      if (isCollapsed && sidebar) {
-        sidebar.classList.add('collapsed');
-        updateToggleIcon(true);
-      } else {
-        updateToggleIcon(false);
-      }
-      
-      // Funcionalidad de redimensionamiento del sidebar
-      if (sidebarResizer && sidebar && window.innerWidth > 768) {
-        let isResizing = false;
-        let startX = 0;
-        let startWidth = 0;
-        
-        // Verificar que el resizer esté visible
-        sidebarResizer.style.display = 'block';
-        
-        sidebarResizer.addEventListener('mousedown', function(e) {
-          if (sidebar.classList.contains('collapsed')) return;
-          
-          isResizing = true;
-          startX = e.clientX;
-          startWidth = sidebar.offsetWidth;
-          sidebarResizer.classList.add('resizing');
-          sidebar.style.transition = 'none'; // Desactivar transición durante resize
-          document.body.style.cursor = 'col-resize';
-          document.body.style.userSelect = 'none';
-          
-          e.preventDefault();
-          e.stopPropagation();
-        });
-        
-        document.addEventListener('mousemove', function(e) {
-          if (!isResizing) return;
-          
-          const diff = e.clientX - startX;
-          let newWidth = startWidth + diff;
-          
-          // Limitar el ancho mínimo y máximo
-          const minWidth = 64; // 4rem
-          const maxWidth = 500;
-          
-          if (newWidth < minWidth) newWidth = minWidth;
-          if (newWidth > maxWidth) newWidth = maxWidth;
-          
-          sidebar.style.width = newWidth + 'px';
-          e.preventDefault();
-        });
-        
-        document.addEventListener('mouseup', function(e) {
-          if (isResizing) {
-            isResizing = false;
-            sidebarResizer.classList.remove('resizing');
-            sidebar.style.transition = 'width 0.3s ease'; // Reactivar transición
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            
-            // Guardar el nuevo ancho
-            if (!sidebar.classList.contains('collapsed')) {
-              localStorage.setItem('adminSidebarWidth', sidebar.offsetWidth.toString());
-            }
-          }
-        });
-        
-        // Prevenir selección de texto mientras se arrastra
-        sidebarResizer.addEventListener('selectstart', function(e) {
-          e.preventDefault();
-        });
-      }
-      
-      function updateToggleIcon(collapsed) {
-        const toggleContent = sidebarToggle?.querySelector('.sidebar-content');
-        const toggleIcon = sidebarToggle?.querySelector('.sidebar-icon');
-        if (collapsed) {
-          if (toggleContent) toggleContent.textContent = '▶';
-          if (toggleIcon) toggleIcon.textContent = '▶';
-        } else {
-          if (toggleContent) toggleContent.textContent = '◀';
-          if (toggleIcon) toggleIcon.textContent = '◀';
-        }
-      }
-      
-      if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', function() {
-          if (sidebar) {
-            const wasCollapsed = sidebar.classList.contains('collapsed');
-            sidebar.classList.toggle('collapsed');
-            const isNowCollapsed = sidebar.classList.contains('collapsed');
-            
-            if (isNowCollapsed) {
-              // Guardar el ancho actual antes de colapsar
-              localStorage.setItem('adminSidebarWidth', sidebar.offsetWidth.toString());
-            } else {
-              // Restaurar el ancho guardado al expandir
-              const savedWidth = localStorage.getItem('adminSidebarWidth');
-              if (savedWidth) {
-                sidebar.style.width = savedWidth + 'px';
-              } else {
-                sidebar.style.width = '16rem';
-              }
-            }
-            
-            localStorage.setItem('adminSidebarCollapsed', isNowCollapsed.toString());
-            updateToggleIcon(isNowCollapsed);
-          }
-        });
-      }
+      // NOTA: El resaltado de menú activo, scroll, toggle y resize ahora se manejan completamente
+      // en sidebar-client.js. Este código legacy ha sido eliminado para evitar:
+      // - Redeclaraciones de variables (sidebarNav)
+      // - Conflictos de listeners
+      // - Duplicación de lógica
       
       // Cargar favoritos
       loadFavoritos();
@@ -707,6 +583,9 @@
   </style>
   
   <!-- Error Handler - Debe cargarse ANTES de otros scripts para capturar errores de extensiones -->
-  <script src="/js/error-handler.js"></script>
+  <script src="/js/error-handler.js">  </script>
+  
+  <!-- Sidebar Runtime State Management -->
+  <script src="/js/admin/sidebar-client.js"></script>
 </body>
 </html>

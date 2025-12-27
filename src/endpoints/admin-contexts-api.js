@@ -16,11 +16,61 @@ import {
   createContext,
   updateContext,
   archiveContext,
-  deleteContext
+  deleteContext,
+  restoreContext
 } from '../services/pde-contexts-service.js';
 import { isValidContextKey, normalizeContextDefinition, validateContextDefinition } from '../core/contexts/context-registry.js';
 import { logError } from '../core/observability/logger.js';
 import { resolveContextVisibility, filterVisibleContexts } from '../core/context/resolve-context-visibility.js';
+import { assertSystemWritable } from '../core/system/system-modes.js';
+import { getOrCreateTraceId } from '../core/observability/with-trace.js';
+import { toErrorResponse } from '../core/observability/error-contract.js';
+import {
+  validateContextListProjection,
+  validateContextEditProjection,
+  projectToList,
+  projectToEdit
+} from '../core/contracts/projections/context.projection.contract.js';
+import { executeAction } from '../core/actions/action-engine.js';
+// Asegurar que las acciones de contexto estén registradas
+import '../core/actions/context.actions.js';
+
+/**
+ * Helper para garantizar que los handlers SIEMPRE devuelvan JSON válido
+ * Envuelve un handler y atrapa cualquier error inesperado, devolviéndolo como JSON
+ * 
+ * @param {Function} handlerFn - La función handler async a ejecutar
+ * @param {string} handlerName - Nombre del handler (para logging)
+ * @returns {Function} Función wrapper que ejecuta handlerFn con garantía de JSON
+ */
+function safeJsonEndpoint(handlerFn, handlerName) {
+  return async (...args) => {
+    try {
+      return await handlerFn(...args);
+    } catch (error) {
+      console.error(`[SAFE_JSON_ENDPOINT][${handlerName}] Error inesperado:`, error?.stack || error);
+      logError(error, { context: `admin-contexts-api/${handlerName}` });
+      
+      try {
+        return new Response(JSON.stringify({ 
+          ok: false,
+          error: 'Error interno del servidor',
+          message: error?.message || 'Error desconocido'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (jsonError) {
+        // Si algo falla al hacer JSON.stringify, devolver respuesta de fallback
+        console.error(`[SAFE_JSON_ENDPOINT][${handlerName}] Error creando respuesta JSON:`, jsonError);
+        return new Response('{"ok":false,"error":"Error interno del servidor"}', {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+  };
+}
 
 /**
  * Handler principal de la API de contextos
@@ -46,43 +96,50 @@ export default async function adminContextsApiHandler(request, env, ctx) {
   try {
     // GET /admin/api/context-definitions - Lista todas las definiciones completas de contextos
     if (path === '/admin/api/context-definitions' && method === 'GET') {
-      return await handleListContextDefinitions(request, env);
+      return await safeJsonEndpoint(handleListContextDefinitions, 'handleListContextDefinitions')(request, env);
     }
 
     // GET /admin/api/contexts - Lista todos los contextos
     if (path === '/admin/api/contexts' && method === 'GET') {
-      return await handleListContexts(request, env);
+      return await safeJsonEndpoint(handleListContexts, 'handleListContexts')(request, env);
     }
 
     // GET /admin/api/contexts/:key - Obtiene un contexto
     const matchGet = path.match(/^\/admin\/api\/contexts\/([^\/]+)$/);
     if (matchGet && method === 'GET') {
       const contextKey = matchGet[1];
-      return await handleGetContext(contextKey, request, env);
+      return await safeJsonEndpoint(handleGetContext, 'handleGetContext')(contextKey, request, env);
     }
 
     // POST /admin/api/contexts - Crea un contexto
     if (path === '/admin/api/contexts' && method === 'POST') {
-      return await handleCreateContext(request, env);
+      return await safeJsonEndpoint(handleCreateContext, 'handleCreateContext')(request, env);
     }
 
     // PUT /admin/api/contexts/:key - Actualiza un contexto
     if (matchGet && method === 'PUT') {
       const contextKey = matchGet[1];
-      return await handleUpdateContext(contextKey, request, env);
+      return await safeJsonEndpoint(handleUpdateContext, 'handleUpdateContext')(contextKey, request, env);
     }
 
     // POST /admin/api/contexts/:key/archive - Archiva un contexto
     const matchArchive = path.match(/^\/admin\/api\/contexts\/([^\/]+)\/archive$/);
     if (matchArchive && method === 'POST') {
       const contextKey = matchArchive[1];
-      return await handleArchiveContext(contextKey, request, env);
+      return await safeJsonEndpoint(handleArchiveContext, 'handleArchiveContext')(contextKey, request, env);
     }
 
     // DELETE /admin/api/contexts/:key - Elimina un contexto
     if (matchGet && method === 'DELETE') {
       const contextKey = matchGet[1];
-      return await handleDeleteContext(contextKey, request, env);
+      return await safeJsonEndpoint(handleDeleteContext, 'handleDeleteContext')(contextKey, request, env);
+    }
+
+    // POST /admin/api/contexts/:key/restore - Restaura un contexto eliminado
+    const matchRestore = path.match(/^\/admin\/api\/contexts\/([^\/]+)\/restore$/);
+    if (matchRestore && method === 'POST') {
+      const contextKey = matchRestore[1];
+      return await safeJsonEndpoint(handleRestoreContext, 'handleRestoreContext')(contextKey, request, env);
     }
 
     // Ruta no encontrada
@@ -167,19 +224,47 @@ async function handleListContexts(request, env) {
     // El servicio ya aplica resolveContextVisibility, pero aplicamos una vez más por defensa en profundidad
     const visibleContexts = filterVisibleContexts(contextsRaw);
 
-    // Para Package Prompt Context Builder: devolver solo keys y names (NO IDs)
-    const contexts = visibleContexts.map(ctx => ({
-      key: ctx.context_key || ctx.key,
-      context_key: ctx.context_key || ctx.key, // Compatibilidad
-      name: ctx.label || ctx.name || ctx.context_key || ctx.key, // name para el UI
-      label: ctx.label || ctx.name || ctx.context_key || ctx.key, // label también disponible
-      description: ctx.description || ctx.definition?.description || '' // Descripción opcional
-    }));
+    // Proyectar a LIST y validar contrato
+    const contexts = [];
+    let validationWarnings = [];
 
-    return new Response(JSON.stringify({ 
+    for (const ctx of visibleContexts) {
+      // Crear proyección LIST
+      const listProjection = {
+        context_key: ctx.context_key || ctx.key,
+        key: ctx.context_key || ctx.key,
+        name: ctx.label || ctx.name || ctx.context_key || ctx.key,
+        label: ctx.label || ctx.name || ctx.context_key || ctx.key,
+        description: ctx.description || ctx.definition?.description || ''
+      };
+
+      // Validar contrato LIST
+      const validation = validateContextListProjection(listProjection);
+      if (!validation.ok) {
+        console.warn(`[PROJECTION][LIST] ${validation.error} - Contexto omitido: ${ctx.context_key || ctx.key}`);
+        validationWarnings.push({
+          context_key: ctx.context_key || ctx.key,
+          error: validation.error,
+          missingFields: validation.missingFields
+        });
+        continue; // Saltar este contexto, no devolverlo
+      }
+
+      contexts.push(listProjection);
+    }
+
+    const response = {
       ok: true,
-      contexts 
-    }), {
+      contexts
+    };
+
+    // Incluir warnings de validación si los hay (solo en desarrollo/debug)
+    if (validationWarnings.length > 0) {
+      response.validation_warnings = validationWarnings;
+      console.warn(`[PROJECTION][LIST] ${validationWarnings.length} contexto(s) omitido(s) por fallar validación`);
+    }
+
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -196,7 +281,7 @@ async function handleListContexts(request, env) {
 }
 
 /**
- * Obtiene un contexto por key
+ * Obtiene un contexto por key para EDICIÓN
  */
 async function handleGetContext(contextKey, request, env) {
   try {
@@ -224,9 +309,29 @@ async function handleGetContext(contextKey, request, env) {
       });
     }
 
+    // Proyectar a EDIT y validar contrato
+    const editProjection = projectToEdit(context);
+    const validation = validateContextEditProjection(editProjection);
+
+    if (!validation.ok) {
+      console.error(`[PROJECTION][EDIT] Error validando contexto '${contextKey}': ${validation.error}`);
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'Datos del contexto incompletos o inválidos',
+        validation_error: validation.error,
+        missingFields: validation.missingFields,
+        projection_type: 'EDIT'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({ 
       ok: true,
-      context 
+      context: editProjection,
+      projection_type: 'EDIT',
+      validation: { ok: true }
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -244,156 +349,74 @@ async function handleGetContext(contextKey, request, env) {
 }
 
 /**
- * Crea un nuevo contexto
+ * Normaliza un payload eliminando campos undefined
+ * FASE 2: Asegurar que no se envíen campos undefined
  */
-async function handleCreateContext(request, env) {
+function normalizePayload(data) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}
+
+/**
+ * Crea un nuevo contexto
+ * 
+ * FASE 2 (v5.30.0): Columnas dedicadas son la única fuente de verdad
+ * - definition NO se envía, se construye desde columnas
+ * - Payload normalizado (sin undefined)
+ */
+async function handleCreateContext(request, env, authCtx) {
   try {
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
+      });
+    }
+    
     const body = await request.json();
     
-    const { 
-      context_key, 
-      label, 
-      description,
-      definition, 
-      scope,
-      kind,
-      injected,
-      type,
-      allowed_values,
-      default_value,
-      status 
-    } = body;
+    // Normalizar payload (eliminar undefined)
+    const normalized = normalizePayload(body);
+    
+    // FASE 2 RUNTIME: Usar Action Registry
+    // Action key: 'contexts.create'
+    const actionResult = await executeAction('contexts.create', normalized, { user: { role: 'admin', permissions: ['admin'] } });
 
-    // Logs de campos recibidos para debugging
-    console.log('[AXE][CONTEXTS][CREATE] Campos recibidos:', {
-      context_key: context_key ? String(context_key).substring(0, 50) : null,
-      scope: scope ? String(scope).substring(0, 50) : null,
-      type: type ? String(type).substring(0, 50) : null,
-      kind: kind ? String(kind).substring(0, 50) : null,
-      has_label: !!label,
-      has_description: !!description,
-      has_definition: !!definition
-    });
-
-    // Validaciones básicas
-    if (!context_key || !label) {
-      console.error('[AXE][CONTEXTS][CREATE] Error: context_key o label faltantes', {
-        context_key: context_key ? String(context_key).substring(0, 50) : null,
-        has_label: !!label
-      });
+    if (!actionResult.ok) {
+      const statusCode = actionResult.missingFields ? 400 : 500;
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'context_key y label son obligatorios' 
+        error: actionResult.error,
+        missingFields: actionResult.missingFields
       }), {
-        status: 400,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Validar context_key (slug)
-    if (!isValidContextKey(context_key)) {
-      console.error('[AXE][CONTEXTS][CREATE] Error: context_key inválido', {
-        context_key: String(context_key).substring(0, 100)
-      });
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: 'context_key inválido: solo se permiten letras minúsculas, números, guiones bajos (_) y guiones (-)' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Construir definición (combinar campos directos con definition legacy)
-    let finalDefinition = definition || {};
-    
-    // Si se proporcionan campos directos, usarlos (prioridad sobre definition)
-    if (type) finalDefinition.type = type;
-    if (allowed_values !== undefined) finalDefinition.allowed_values = allowed_values;
-    if (default_value !== undefined) finalDefinition.default_value = default_value;
-    if (scope) finalDefinition.scope = scope;
-    if (kind) finalDefinition.kind = kind;
-    if (injected !== undefined) finalDefinition.injected = injected;
-    if (description && !finalDefinition.description) finalDefinition.description = description;
-
-    // Normalizar y validar definition
-    const normalizedDef = normalizeContextDefinition(finalDefinition);
-    const validation = validateContextDefinition(normalizedDef, { strict: true });
-    
-    if (!validation.valid) {
-      console.error('[AXE][CONTEXTS][CREATE] Error: Definición inválida', {
-        context_key: String(context_key).substring(0, 50),
-        scope: normalizedDef.scope,
-        type: normalizedDef.type,
-        kind: normalizedDef.kind,
-        errors: validation.errors,
-        warnings: validation.warnings
-      });
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: 'Definición de contexto inválida',
-        details: validation.errors,
-        warnings: validation.warnings 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Extraer campos canónicos de la definición normalizada
-    const finalScope = scope || normalizedDef.scope || 'package';
-    const finalKind = kind || normalizedDef.kind || 'normal';
-    const finalInjected = injected !== undefined ? injected : (normalizedDef.injected || false);
-    const finalType = type || normalizedDef.type || 'string';
-    const finalAllowedValues = allowed_values !== undefined ? allowed_values : normalizedDef.allowed_values;
-    const finalDefaultValue = default_value !== undefined ? default_value : normalizedDef.default_value;
-
-    // Usar repositorio directamente para incluir campos canónicos
-    const { getDefaultPdeContextsRepo } = await import('../infra/repos/pde-contexts-repo-pg.js');
-    const repo = getDefaultPdeContextsRepo();
-    
-    const context = await repo.create({
-      context_key,
-      label,
-      description: description || null,
-      definition: normalizedDef,
-      scope: finalScope,
-      kind: finalKind,
-      injected: finalInjected,
-      type: finalType,
-      allowed_values: finalAllowedValues,
-      default_value: finalDefaultValue,
-      status: status || 'active'
-    });
-
-    console.log(`[AXE][CONTEXTS] Contexto creado: ${context_key}`);
+    console.log(`[AXE][CONTEXTS] Contexto creado: ${normalized.context_key || 'auto'}`);
 
     return new Response(JSON.stringify({ 
       ok: true,
-      context,
-      warnings: validation.warnings 
+      context: actionResult.data
     }), {
       status: 201,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('[AXE][CONTEXTS][CREATE] Error creando contexto:', {
-      error: error.message,
-      stack: error.stack?.substring(0, 500),
-      body_received: error.body ? JSON.stringify(error.body).substring(0, 200) : null
-    });
+    console.error('[CONTEXTS][API][CREATE] Error:', error.message);
     
-    if (error.message && error.message.includes('ya existe')) {
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: error.message 
-      }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // Asegurar que siempre devolvemos JSON, incluso en errores
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error creando contexto',
@@ -407,96 +430,41 @@ async function handleCreateContext(request, env) {
 
 /**
  * Actualiza un contexto existente
+ * 
+ * FASE 2 (v5.30.0): Columnas dedicadas son la única fuente de verdad
+ * - definition NO se actualiza directamente, se reconstruye desde columnas
+ * - Payload normalizado (sin undefined)
  */
 async function handleUpdateContext(contextKey, request, env) {
   try {
-    const body = await request.json();
-    
-    const patch = {};
-
-    if (body.label !== undefined) {
-      patch.label = body.label;
-    }
-
-    if (body.description !== undefined) {
-      patch.description = body.description;
-    }
-
-    // Campos canónicos directos
-    if (body.scope !== undefined) {
-      patch.scope = body.scope;
-    }
-
-    if (body.kind !== undefined) {
-      patch.kind = body.kind;
-    }
-
-    if (body.injected !== undefined) {
-      patch.injected = body.injected;
-    }
-
-    if (body.type !== undefined) {
-      patch.type = body.type;
-    }
-
-    if (body.allowed_values !== undefined) {
-      patch.allowed_values = body.allowed_values;
-    }
-
-    if (body.default_value !== undefined) {
-      patch.default_value = body.default_value;
-    }
-
-    if (body.definition !== undefined) {
-      // Normalizar y validar definition (legacy)
-      const normalizedDef = normalizeContextDefinition(body.definition);
-      const validation = validateContextDefinition(normalizedDef, { strict: true });
-      
-      if (!validation.valid) {
-        return new Response(JSON.stringify({ 
-          ok: false,
-          error: 'Definición de contexto inválida',
-          details: validation.errors,
-          warnings: validation.warnings 
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      patch.definition = normalizedDef;
-      
-      // Si no se proporcionaron campos directos, extraer de definition
-      if (patch.scope === undefined && normalizedDef.scope) patch.scope = normalizedDef.scope;
-      if (patch.kind === undefined && normalizedDef.kind) patch.kind = normalizedDef.kind;
-      if (patch.injected === undefined && normalizedDef.injected !== undefined) patch.injected = normalizedDef.injected;
-      if (patch.type === undefined && normalizedDef.type) patch.type = normalizedDef.type;
-      if (patch.allowed_values === undefined && normalizedDef.allowed_values) patch.allowed_values = normalizedDef.allowed_values;
-      if (patch.default_value === undefined && normalizedDef.default_value !== undefined) patch.default_value = normalizedDef.default_value;
-    }
-
-    if (body.status !== undefined) {
-      patch.status = body.status;
-    }
-
-    if (Object.keys(patch).length === 0) {
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: 'No hay campos para actualizar' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
       });
     }
-
-    const context = await updateContext(contextKey, patch);
     
-    if (!context) {
+    const body = await request.json();
+    const normalized = normalizePayload(body);
+    const { definition, ...patch } = normalized;
+
+    // FASE 2 RUNTIME: Usar Action Registry (contexts.update)
+    const input = { context_key: contextKey, ...patch };
+    const actionResult = await executeAction('contexts.update', input, { user: { role: 'admin', permissions: ['admin'] } });
+
+    if (!actionResult.ok) {
+      const statusCode = actionResult.error.includes('no encontrado') ? 404 : 500;
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'Contexto no encontrado' 
+        error: actionResult.error
       }), {
-        status: 404,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -505,17 +473,12 @@ async function handleUpdateContext(contextKey, request, env) {
 
     return new Response(JSON.stringify({ 
       ok: true,
-      context 
+      context: actionResult.data
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error(`[AXE][CONTEXTS][UPDATE] Error actualizando contexto '${contextKey}':`, {
-      context_key: contextKey,
-      error: error.message,
-      stack: error.stack?.substring(0, 500)
-    });
-    // Asegurar que siempre devolvemos JSON, incluso en errores
+    console.error(`[CONTEXTS][API][UPDATE] Error:`, error.message);
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error actualizando contexto',
@@ -532,14 +495,29 @@ async function handleUpdateContext(contextKey, request, env) {
  */
 async function handleArchiveContext(contextKey, request, env) {
   try {
-    const context = await archiveContext(contextKey);
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
+      });
+    }
     
-    if (!context) {
+    // FASE 2 RUNTIME: Usar Action Registry (contexts.archive)
+    const actionResult = await executeAction('contexts.archive', { context_key: contextKey }, { user: { role: 'admin', permissions: ['admin'] } });
+
+    if (!actionResult.ok) {
+      const statusCode = actionResult.error.includes('no encontrado') ? 404 : 400;
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'Contexto no encontrado' 
+        error: actionResult.error
       }), {
-        status: 404,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -548,23 +526,13 @@ async function handleArchiveContext(contextKey, request, env) {
 
     return new Response(JSON.stringify({ 
       ok: true,
-      context 
+      context: actionResult.data
     }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
     console.error(`[AXE][CONTEXTS] Error archivando contexto '${contextKey}':`, error);
-    
-    if (error.message && error.message.includes('sistema')) {
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: error.message 
-      }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error archivando contexto',
@@ -581,14 +549,29 @@ async function handleArchiveContext(contextKey, request, env) {
  */
 async function handleDeleteContext(contextKey, request, env) {
   try {
-    const deleted = await deleteContext(contextKey);
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
+      });
+    }
     
-    if (!deleted) {
+    // FASE 2 RUNTIME: Usar Action Registry (contexts.delete)
+    const actionResult = await executeAction('contexts.delete', { context_key: contextKey }, { user: { role: 'admin', permissions: ['admin'] } });
+
+    if (!actionResult.ok) {
+      const statusCode = actionResult.error.includes('no encontrado') ? 404 : 400;
       return new Response(JSON.stringify({ 
         ok: false,
-        error: 'Contexto no encontrado' 
+        error: actionResult.error
       }), {
-        status: 404,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -599,24 +582,71 @@ async function handleDeleteContext(contextKey, request, env) {
       ok: true,
       success: true 
     }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
     console.error(`[AXE][CONTEXTS] Error eliminando contexto '${contextKey}':`, error);
-    
-    if (error.message && error.message.includes('sistema')) {
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: error.message 
-      }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    
     return new Response(JSON.stringify({ 
       ok: false,
       error: 'Error eliminando contexto',
+      message: error.message 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+/**
+ * Restaura un contexto eliminado (soft delete)
+ * 
+ * FASE 2 (v5.30.0): Método explícito para restaurar contextos eliminados
+ */
+async function handleRestoreContext(contextKey, request, env) {
+  try {
+    // ENFORCEMENT: System Modes - Bloquear writes si BROKEN
+    const traceId = getOrCreateTraceId(request);
+    try {
+      assertSystemWritable({}, traceId);
+    } catch (modeError) {
+      return toErrorResponse({
+        code: modeError.code || 'SYSTEM_BROKEN_WRITE_BLOCKED',
+        message: modeError.message || 'Sistema en modo BROKEN: operaciones de escritura bloqueadas',
+        trace_id: traceId,
+        status: modeError.status || 503
+      });
+    }
+    
+    // FASE 2 RUNTIME: Usar Action Registry (contexts.restore)
+    const actionResult = await executeAction('contexts.restore', { context_key: contextKey }, { user: { role: 'admin', permissions: ['admin'] } });
+
+    if (!actionResult.ok) {
+      const statusCode = actionResult.error.includes('no encontrado') ? 404 : 400;
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: actionResult.error
+      }), {
+        status: statusCode,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`[AXE][CONTEXTS] Contexto restaurado: ${contextKey}`);
+
+    return new Response(JSON.stringify({ 
+      ok: true,
+      context: actionResult.data
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error(`[AXE][CONTEXTS] Error restaurando contexto '${contextKey}':`, error);
+    
+    return new Response(JSON.stringify({ 
+      ok: false,
+      error: 'Error restaurando contexto',
       message: error.message 
     }), {
       status: 500,

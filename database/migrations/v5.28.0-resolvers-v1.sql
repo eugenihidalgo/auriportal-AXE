@@ -100,3 +100,10 @@ BEGIN
     RAISE NOTICE '✅ Migración v5.28.0-resolvers-v1 completada correctamente';
 END $$;
 
+
+
+
+
+
+
+

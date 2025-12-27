@@ -6,21 +6,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { query } from '../../database/pg.js';
 import { requireAdminAuth } from '../modules/admin-auth.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
-  }
-  return output;
-}
 
 function escapeHtml(text) {
   if (!text) return '';
@@ -798,13 +787,15 @@ export async function renderLimpiezasMaster(request, env) {
       </script>
     `;
 
-    const html = replaceAdminTemplate(baseTemplate, {
-      TITLE: 'Limpiezas del Master',
-      CONTENT: content
-    });
+    const url = new URL(request.url);
+    const activePath = url.pathname;
 
-    return new Response(html, {
-      status: 200,
+    return renderAdminPage({
+      title: 'Limpiezas del Master',
+      contentHtml: content,
+      activePath,
+      userContext: { isAdmin: true }
+    });
       headers: { 'Content-Type': 'text/html; charset=UTF-8' }
     });
   } catch (error) {

@@ -13,11 +13,10 @@ import { requireAdminAuth } from '../modules/admin-auth.js';
 import { isFeatureEnabled } from '../core/flags/feature-flags.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 import { renderHtml } from '../core/html-response.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
 // #region agent log
 fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-navigation-pages.js:20',message:'baseTemplate loaded',data:{templateLength:baseTemplate.length,hasSidebarMenu:baseTemplate.includes('{{SIDEBAR_MENU}}'),sidebarMenuIndex:baseTemplate.indexOf('{{SIDEBAR_MENU}}')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
 // #endregion
@@ -66,31 +65,30 @@ export async function renderListadoNavegaciones(request, env) {
       </div>
     `;
     
-    const html = replaceAdminTemplate(baseTemplate, {
-      TITLE: 'Navegaciones',
-      CONTENT: content,
-      CURRENT_PATH: '/admin/navigation'
-    });
+    const url = new URL(request.url);
+    const activePath = url.pathname;
     
-    // Usar renderHtml() para pipeline legacy completo
-    return renderHtml(html);
+    return renderAdminPage({
+      title: 'Navegaciones',
+      contentHtml: content,
+      activePath,
+      userContext: { isAdmin: true }
+    });
   }
 
   // Cargar template de listado
   const listadoTemplate = readFileSync(join(__dirname, '../core/html/admin/navigation/navigation-list.html'), 'utf-8');
   const content = listadoTemplate;
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: 'Navegaciones',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/navigation'
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-navigation-pages.js:205',message:'Before renderHtml (listado)',data:{htmlLength:html.length,hasSidebarMenu:html.includes('{{SIDEBAR_MENU}}'),htmlPreview:html.substring(0,1000)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
-  // Usar renderHtml() para pipeline legacy completo
-  return renderHtml(html);
+  return renderAdminPage({
+    title: 'Navegaciones',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
+  });
 }
 
 /**
@@ -122,14 +120,15 @@ export async function renderEditorNavegacion(request, env, navId) {
       </div>
     `;
     
-    const html = replaceAdminTemplate(baseTemplate, {
-      TITLE: 'Editor de Navegación',
-      CONTENT: content,
-      CURRENT_PATH: `/admin/navigation/${navId}/edit`
-    });
+    const url = new URL(request.url);
+    const activePath = url.pathname;
     
-    // Usar renderHtml() para pipeline legacy completo
-    return renderHtml(html);
+    return renderAdminPage({
+      title: 'Editor de Navegación',
+      contentHtml: content,
+      activePath,
+      userContext: { isAdmin: true }
+    });
   }
 
   // Cargar template del editor
@@ -138,17 +137,15 @@ export async function renderEditorNavegacion(request, env, navId) {
     NAVIGATION_ID: navId || 'new'
   });
 
-  const html = replaceAdminTemplate(baseTemplate, {
-    TITLE: navId === 'new' ? 'Nueva Navegación' : `Editor de Navegación: ${navId}`,
-    CONTENT: content,
-    CURRENT_PATH: `/admin/navigation/${navId}/edit`
-  });
+  const url = new URL(request.url);
+  const activePath = url.pathname;
 
-  // #region agent log
-  fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-navigation-pages.js:256',message:'Before renderHtml (editor)',data:{htmlLength:html.length,hasSidebarMenu:html.includes('{{SIDEBAR_MENU}}'),htmlPreview:html.substring(0,1000)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
-  // Usar renderHtml() para pipeline legacy completo
-  return renderHtml(html);
+  return renderAdminPage({
+    title: navId === 'new' ? 'Nueva Navegación' : `Editor de Navegación: ${navId}`,
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
+  });
 }
 
 /**

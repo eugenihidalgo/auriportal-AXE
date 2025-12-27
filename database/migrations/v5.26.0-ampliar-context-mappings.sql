@@ -58,3 +58,10 @@ COMMENT ON COLUMN context_mappings.label IS 'Etiqueta humana editable del mappin
 COMMENT ON COLUMN context_mappings.description IS 'Descripción opcional del mapping (UX)';
 COMMENT ON COLUMN context_mappings.mapping_data IS 'JSON con parámetros derivados (SOLO semántica, NO lógica)';
 
+
+
+
+
+
+
+

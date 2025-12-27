@@ -123,6 +123,7 @@ import { initPostgreSQL } from './database/pg.js';
 import { validateEnvironmentVariables } from './src/config/validate.js';
 import { iniciarScheduler } from './src/services/scheduler.js';
 import { initRequestContext } from './src/core/observability/request-context.js';
+import { withRuntimeGuard } from './src/core/runtime-guard.js';
 
 // Validar variables de entorno requeridas al inicio (falla temprano si faltan)
 console.log('🔍 Validando variables de entorno requeridas...');
@@ -271,13 +272,20 @@ const server = http.createServer(async (req, res) => {
       // Validar que req.url esté disponible (crítico para construir request)
       if (!req.url) {
         console.error('❌ [Server] req.url no está disponible');
+        const { getRequestId } = await import('./src/core/observability/request-context.js');
+        const traceId = getRequestId() || `bad-request-${Date.now()}`;
         res.statusCode = 400;
-        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Type', 'application/json');
         // Headers defensivos para evitar caché de errores 400
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.end('Bad Request: URL no disponible');
+        res.end(JSON.stringify({
+          ok: false,
+          error: 'Bad Request: URL no disponible',
+          code: 'MISSING_URL',
+          trace_id: traceId
+        }));
         return;
       }
 
@@ -432,13 +440,20 @@ const server = http.createServer(async (req, res) => {
           hasHeaders: !!request.headers,
           method: request.method
         });
+        const { getRequestId } = await import('./src/core/observability/request-context.js');
+        const traceId = getRequestId() || `incomplete-request-${Date.now()}`;
         res.statusCode = 500;
-        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Type', 'application/json');
         // Headers defensivos para evitar caché de errores 500
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.end('Error interno: objeto request incompleto');
+        res.end(JSON.stringify({
+          ok: false,
+          error: 'Error interno: objeto request incompleto',
+          code: 'INCOMPLETE_REQUEST',
+          trace_id: traceId
+        }));
         return;
       }
 
@@ -452,9 +467,11 @@ const server = http.createServer(async (req, res) => {
       
       // Procesar request con el router
       // El request_id se propaga automáticamente a todos los logs gracias a AsyncLocalStorage
+      // RUNTIME GUARD: Envuelve el router para garantizar respuestas JSON válidas
+      const guardedRouter = withRuntimeGuard(router.fetch.bind(router));
       let response;
       try {
-        response = await router.fetch(request, env, ctx);
+        response = await guardedRouter(request, env, ctx);
         
         // TRACE D: router.fetch devuelve response
         if (DEBUG_FORENSIC) {
@@ -465,32 +482,51 @@ const server = http.createServer(async (req, res) => {
           });
         }
       } catch (routerError) {
-        // CRÍTICO: Si el router lanza una excepción no capturada, nunca propagarla
-        console.error(`${traceMarker} ❌ Error en router.fetch:`, routerError);
+        // CRÍTICO: Si el router lanza una excepción no capturada, el Runtime Guard debería haberla capturado
+        // Este catch es una capa adicional de seguridad
+        console.error(`${traceMarker} ❌ Error en router.fetch (después de Runtime Guard):`, routerError);
         console.error(`${traceMarker} ❌ Stack:`, routerError.stack);
         console.error(`${traceMarker} ❌ Request:`, { method: request.method, url: request.url });
+        
+        // El Runtime Guard debería haber devuelto una respuesta JSON, pero si llegamos aquí,
+        // crear una respuesta JSON de emergencia
+        const { getRequestId } = await import('./src/core/observability/request-context.js');
+        const traceId = getRequestId() || `emergency-${Date.now()}`;
         res.statusCode = 500;
-        res.setHeader('Content-Type', 'text/plain');
-        // Headers defensivos para evitar caché de errores 500
+        res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.end('Error interno del servidor');
+        res.end(JSON.stringify({
+          ok: false,
+          error: 'Error interno del servidor',
+          code: 'ROUTER_EXCEPTION',
+          trace_id: traceId
+        }));
         return;
       }
 
       // Verificar que response sea válido
+      // El Runtime Guard debería garantizar que siempre sea Response válido
       if (!response || !(response instanceof Response)) {
-        console.error(`${traceMarker} ❌ Router devolvió respuesta inválida:`, response);
+        console.error(`${traceMarker} ❌ Router devolvió respuesta inválida (después de Runtime Guard):`, response);
         console.error(`${traceMarker} ❌ Tipo de response:`, typeof response);
         console.error(`${traceMarker} ❌ Es Response?:`, response instanceof Response);
+        
+        // Crear respuesta JSON de emergencia
+        const { getRequestId } = await import('./src/core/observability/request-context.js');
+        const traceId = getRequestId() || `emergency-${Date.now()}`;
         res.statusCode = 500;
-        res.setHeader('Content-Type', 'text/plain');
-        // Headers defensivos para evitar caché de errores 500
+        res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.end('Error interno del servidor: respuesta inválida');
+        res.end(JSON.stringify({
+          ok: false,
+          error: 'Error interno del servidor: respuesta inválida',
+          code: 'INVALID_RESPONSE',
+          trace_id: traceId
+        }));
         return;
       }
 
@@ -563,25 +599,32 @@ const server = http.createServer(async (req, res) => {
 
     } catch (error) {
       // CRÍTICO: Capturar TODOS los errores no manejados en el servidor
+      // El Runtime Guard debería haber capturado la mayoría, pero este es un catch de emergencia
       const requestId = getRequestId() || 'no-id';
       const traceMarker = DEBUG_FORENSIC ? `[TRACE-${requestId}]` : '';
       
-      console.error(`${traceMarker} ❌ [Server] Error procesando request:`, error);
+      console.error(`${traceMarker} ❌ [Server] Error procesando request (catch de emergencia):`, error);
       console.error(`${traceMarker} ❌ [Server] Stack:`, error.stack);
       console.error(`${traceMarker} ❌ [Server] URL:`, req.url);
       console.error(`${traceMarker} ❌ [Server] Method:`, req.method);
       console.error(`${traceMarker} ❌ [Server] Host:`, req.headers.host);
       console.error(`${traceMarker} ❌ [Server] Headers:`, JSON.stringify(req.headers, null, 2));
       
-      // Intentar enviar respuesta de error
+      // Intentar enviar respuesta JSON de error (formato canónico)
       try {
+        const traceId = requestId !== 'no-id' ? requestId : `emergency-${Date.now()}`;
         res.statusCode = 500;
-        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Type', 'application/json');
         // CRÍTICO: Headers para evitar que Cloudflare cachee errores
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.end('Error interno del servidor');
+        res.end(JSON.stringify({
+          ok: false,
+          error: 'Error interno del servidor',
+          code: 'SERVER_EXCEPTION',
+          trace_id: traceId
+        }));
       } catch (resError) {
         // Si incluso res.end falla, loggear pero no propagar
         console.error(`${traceMarker} ❌ [Server] Error enviando respuesta de error:`, resError.message);

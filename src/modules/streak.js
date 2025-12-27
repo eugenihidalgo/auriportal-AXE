@@ -41,16 +41,39 @@ async function updateClickUpField(student, env, fieldId, value) {
 /**
  * checkDailyStreak(student, env, opts)
  *
- * - Comprueba si hoy ya ha practicado
- * - Si opts.forcePractice === true → suma la racha sí o sí
- * - Actualiza racha y fecha en ClickUp
- * - Devuelve:
- *     todayPracticed
- *     streak
- *     motivationalPhrase
- *     levelPhrase (se rellena más adelante)
+ * ⚠️ LEGACY DESHABILITADO - FASE 2.1
+ * 
+ * Esta función viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md:
+ * - Lee streak y lastPractice desde ClickUp (prohibido)
+ * - Escribe en ClickUp como autoridad (prohibido)
+ * - Escribe en SQLite (prohibido)
+ * 
+ * USAR EN SU LUGAR:
+ * - Lectura: src/core/streak-engine.js → computeStreakFromPracticas()
+ * - Mutación: src/modules/student-v4.js → createStudentPractice() + updateStudentStreak()
+ * 
+ * @param {Object} student - Objeto estudiante
+ * @param {Object} env - Variables de entorno
+ * @param {Object} opts - Opciones
+ * @returns {Promise<Object>} Resultado con todayPracticed, streak, etc.
+ * @throws {Error} Siempre lanza error - función deshabilitada
  */
 export async function checkDailyStreak(student, env, opts = {}) {
+  const error = new Error(
+    `LEGACY DESHABILITADO: checkDailyStreak() viola CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md. ` +
+    `PostgreSQL es el ÚNICO Source of Truth del Alumno. ` +
+    `Usar en su lugar: ` +
+    `- Lectura: src/core/streak-engine.js → computeStreakFromPracticas() ` +
+    `- Mutación: src/modules/student-v4.js → createStudentPractice() + updateStudentStreak()`
+  );
+  error.code = 'LEGACY_DISABLED';
+  error.module = 'streak.js';
+  error.alternative = 'streak-engine.js + student-v4.js';
+  console.error('[LEGACY] ❌ Intento de usar checkDailyStreak() deshabilitado:', {
+    email: student?.email,
+    error: error.message
+  });
+  throw error;
   const today = hoyES();
 
   // ✅ Leemos de las propiedades normalizadas en student.js

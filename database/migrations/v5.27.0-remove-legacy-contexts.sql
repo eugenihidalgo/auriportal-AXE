@@ -96,3 +96,10 @@ WHERE deleted_at IS NULL
 
 COMMENT ON TABLE pde_contexts IS 'Contextos canónicos únicos (v5.27.0+). Todos los contextos deben cumplir contrato: scope, type, kind NOT NULL; si type=enum, allowed_values NOT NULL';
 
+
+
+
+
+
+
+

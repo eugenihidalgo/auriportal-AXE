@@ -2,10 +2,6 @@
 // Módulo MASTER INSIGHT - Panel de administración energética
 
 import { query } from '../../database/pg.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
 // Función helper para reemplazar placeholders
 async function replace(html, placeholders) {
   let output = html;
@@ -28,10 +24,6 @@ async function replace(html, placeholders) {
   return output;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const baseTemplatePath = join(__dirname, '../core/html/admin/base.html');
-const baseTemplate = readFileSync(baseTemplatePath, 'utf-8');
 
 /**
  * Obtiene estadísticas para la Visión General
@@ -365,14 +357,14 @@ export async function renderMasterInsightOverview(request, env) {
     </div>
   `;
   
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: 'MASTER INSIGHT - Visión General',
-    CONTENT: content,
-    CURRENT_PATH: '/admin/master-insight/overview'
-  });
-  
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: 'MASTER INSIGHT - Visión General',
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 
@@ -397,14 +389,14 @@ export async function renderMasterInsightPlaceholder(sectionName, sectionTitle) 
     </div>
   `;
   
-  const html = await replaceAdminTemplate(baseTemplate, {
-    TITLE: `MASTER INSIGHT - ${sectionTitle}`,
-    CONTENT: content,
-    CURRENT_PATH: `/admin/master-insight/${sectionName}`
-  });
-  
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+  const url = new URL(request.url);
+  const activePath = url.pathname;
+
+  return renderAdminPage({
+    title: `MASTER INSIGHT - ${sectionTitle}`,
+    contentHtml: content,
+    activePath,
+    userContext: { isAdmin: true }
   });
 }
 

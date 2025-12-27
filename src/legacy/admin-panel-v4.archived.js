@@ -1,3 +1,8 @@
+// ⚠️ ARCHIVED LEGACY ADMIN — DO NOT IMPORT — DO NOT EXECUTE
+// ⚠️ Este archivo está archivado y NO debe ser importado ni ejecutado
+// ⚠️ Todas las rutas legacy están deshabilitadas en admin-route-registry.js
+// ⚠️ Este archivo existe solo como referencia histórica hasta su migración completa
+
 // src/endpoints/admin-panel-v4.js
 // Admin Panel AuriPortal v4 - Solo PostgreSQL
 //
@@ -20,7 +25,7 @@
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 
 import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
+import { fileURLToPath as fileURLToPathHelper } from 'url';
 import { dirname, join } from 'path';
 import { requireAdminContext } from '../core/auth-context.js';
 import { renderHtml } from '../core/html-response.js';
@@ -132,7 +137,7 @@ import {
   renderSellosAscension
 } from './admin-panel-v61-modulos.js';
 import { renderEditorPantallas } from './admin-editor-pantallas.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
 
 // Importar módulos V7
 import {
@@ -158,7 +163,7 @@ import {
   renderCreacionProblemas
 } from './admin-panel-v8-modulos.js';
 
-const __filename = fileURLToPath(import.meta.url);
+const __filename = fileURLToPathHelper(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Cargar templates (ruta desde endpoints/ hacia core/)
@@ -382,7 +387,6 @@ export default async function adminPanelHandler(request, env, ctx) {
 
   // API de Músicas de Meditación
   if (path.startsWith('/api/musicas-meditacion')) {
-    const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
     
     if (pathParts[pathParts.length - 1] === 'upload' && request.method === 'POST') {
@@ -409,7 +413,6 @@ export default async function adminPanelHandler(request, env, ctx) {
 
   // API de Tonos de Meditación
   if (path.startsWith('/api/tonos-meditacion')) {
-    const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
     
     if (pathParts[pathParts.length - 1] === 'upload' && request.method === 'POST') {
@@ -482,7 +485,10 @@ export default async function adminPanelHandler(request, env, ctx) {
     if (request.method === 'POST') {
       return handleLogout(request);
     }
-    return Response.redirect(getAbsoluteUrl(request, '/admin/login'), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, '/admin/login') }
+    });
   }
 
   // Redirección raíz (manejar tanto /admin como / cuando viene del subdominio)
@@ -494,14 +500,23 @@ export default async function adminPanelHandler(request, env, ctx) {
       if (authCtx instanceof Response) {
         // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
         // Redirigir al login para mantener consistencia
-        return Response.redirect(getAbsoluteUrl(request, '/admin/login'), 302);
+        return new Response(null, {
+          status: 302,
+          headers: { 'Location': getAbsoluteUrl(request, '/admin/login') }
+        });
       }
       // Si está autenticado, redirigir al dashboard
-      return Response.redirect(getAbsoluteUrl(request, '/admin/dashboard'), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, '/admin/dashboard') }
+      });
     } catch (error) {
       console.error('Error en redirección raíz admin:', error);
       // Si hay error, redirigir al login
-      return Response.redirect(getAbsoluteUrl(request, '/admin/login'), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, '/admin/login') }
+      });
     }
   }
 
@@ -511,17 +526,19 @@ export default async function adminPanelHandler(request, env, ctx) {
   if (authCtx instanceof Response) {
     // Si no está autenticado, requireAdminContext ya devolvió la respuesta HTML (login)
     // Redirigir al login para mantener consistencia
-    return Response.redirect(getAbsoluteUrl(request, '/admin/login'), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, '/admin/login') }
+    });
   }
 
   // Rutas protegidas
   if (path === '/admin/dashboard') {
-    return await renderDashboard(env);
+    return await renderDashboard(request, env);
   }
 
   // Ruta para crear alumno o recálculo masivo (POST)
   if (path === '/admin/alumnos' && request.method === 'POST') {
-    const url = new URL(request.url);
     // Verificar si es recálculo de niveles
     if (url.searchParams.get('action') === 'recalcular-niveles') {
       return await handleRecalcularTodosNiveles(request, env);
@@ -604,7 +621,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
 
   if (path === '/admin/configuracion-aspectos') {
-    const url = new URL(request.url);
     // Manejar eliminación desde GET
     if (url.searchParams.get('delete') && request.method === 'GET') {
       return await handleUpdateAspecto(request, env);
@@ -616,7 +632,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
 
   if (path === '/admin/configuracion-racha') {
-    const url = new URL(request.url);
     if (request.method === 'POST' || url.searchParams.get('delete')) {
       return await handleUpdateRachaFase(request, env);
     }
@@ -624,7 +639,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
 
   if (path === '/admin/configuracion-caminos') {
-    const url = new URL(request.url);
     if (request.method === 'POST' || url.searchParams.get('delete')) {
       return await handleUpdateCamino(request, env);
     }
@@ -632,7 +646,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
 
   if (path === '/admin/configuracion-workflow') {
-    const url = new URL(request.url);
     if (request.method === 'POST' || url.searchParams.get('delete_conexion')) {
       return await handleUpdateWorkflow(request, env);
     }
@@ -640,7 +653,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
 
   if (path === '/admin/analytics') {
-    const url = new URL(request.url);
     if (request.method === 'POST' && url.searchParams.get('action')) {
       return await handleAnalytics(request, env);
     }
@@ -1104,7 +1116,6 @@ export default async function adminPanelHandler(request, env, ctx) {
   // Gestión de Módulos V6
   if (path === '/admin/modulos') {
     if (request.method === 'POST') {
-      const url = new URL(request.url);
       // Si viene el parámetro activarTodos, activar todos los módulos
       if (url.searchParams.get('activarTodos') === 'true') {
         const { listarModulos } = await import('../services/modulos.js');
@@ -1309,7 +1320,10 @@ export default async function adminPanelHandler(request, env, ctx) {
 
   // Redirección de ruta antigua a nueva
   if (path === '/admin/aspectos-energeticos') {
-    return Response.redirect(new URL('/admin/anatomia-energetica' + (new URL(request.url).search || ''), request.url), 301);
+    return new Response(null, {
+      status: 301,
+      headers: { 'Location': new URL('/admin/anatomia-energetica' + (new URL(request.url).search || ''), request.url).toString() }
+    });
   }
   
   // Anatomía Energética (PRIORITARIO)
@@ -1721,7 +1735,7 @@ function handleLogout(request) {
 /**
  * Renderiza dashboard
  */
-async function renderDashboard(env) {
+async function renderDashboard(request, env) {
   try {
     // Obtener stats primero (esto es rápido)
     const stats = await getDashboardStats();
@@ -1867,21 +1881,11 @@ async function renderDashboard(env) {
       </div>
     `;
 
-    const html = replaceAdminTemplate(baseTemplate, {
-      TITLE: 'Dashboard',
-      CONTENT: content
-    });
-    // #region agent log
-    const progresoV4LinkIndex = html.indexOf('/admin/progreso-v4');
-    const linkContext = progresoV4LinkIndex > -1 ? html.substring(Math.max(0, progresoV4LinkIndex - 100), Math.min(html.length, progresoV4LinkIndex + 200)) : 'NOT_FOUND';
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-panel-v4.js:1416',message:'Dashboard renderizado con baseTemplate',data:{hasProgresoV4Link:html.includes('/admin/progreso-v4'),linkIndex:progresoV4LinkIndex,linkContext:linkContext,htmlLength:html.length,hasNivelesEnergeticos:html.includes('/admin/niveles-energeticos')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
-
-    return new Response(html, {
-      headers: { 
-        'Content-Type': 'text/html; charset=UTF-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate'
-      }
+    return renderAdminPage({
+      title: 'Dashboard',
+      contentHtml: content,
+      activePath: '/admin/dashboard',
+      userContext: { isAdmin: true }
     });
   } catch (error) {
     console.error('Error renderizando dashboard:', error);
@@ -3770,8 +3774,8 @@ async function handleRecalcularNivel(request, env, alumnoId) {
  * SOLO GET, SOLO ADMIN, SIN escrituras en DB
  */
 async function renderSimulacionNivel(request, env) {
-  const url = new URL(request.url);
-  const email = url.searchParams.get('email');
+  const requestUrl = new URL(request.url);
+  const email = requestUrl.searchParams.get('email');
   
   // Si no hay email, mostrar formulario de búsqueda
   if (!email) {
@@ -4048,10 +4052,10 @@ async function renderSimulacionNivel(request, env) {
  * SOLO GET, SOLO ADMIN, SIN escrituras en DB
  */
 async function renderSimulacionStreak(request, env) {
-  const url = new URL(request.url);
-  const email = url.searchParams.get('email');
-  const date = url.searchParams.get('date');
-  const force = url.searchParams.get('force') === '1';
+  const requestUrl = new URL(request.url);
+  const email = requestUrl.searchParams.get('email');
+  const date = requestUrl.searchParams.get('date');
+  const force = requestUrl.searchParams.get('force') === '1';
   
   // Si no hay email, mostrar formulario de búsqueda
   if (!email) {
@@ -4336,9 +4340,9 @@ async function renderSimulacionStreak(request, env) {
  * SOLO GET, SOLO ADMIN, SIN escrituras en DB
  */
 async function renderSimulacionDiasActivos(request, env) {
-  const url = new URL(request.url);
-  const email = url.searchParams.get('email');
-  const until = url.searchParams.get('until');
+  const requestUrl = new URL(request.url);
+  const email = requestUrl.searchParams.get('email');
+  const until = requestUrl.searchParams.get('until');
   
   // Si no hay email, mostrar formulario de búsqueda
   if (!email) {
@@ -4657,9 +4661,9 @@ async function handleUpdateConfig(request, env) {
  * Renderiza formulario de envío de email
  */
 function renderEmailForm(request) {
-  const url = new URL(request.url);
-  const success = url.searchParams.get('success');
-  const messageId = url.searchParams.get('messageId');
+  const requestUrl = new URL(request.url);
+  const success = requestUrl.searchParams.get('success');
+  const messageId = requestUrl.searchParams.get('messageId');
   
   const successMessage = success ? `
     <div class="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
@@ -4778,9 +4782,9 @@ async function renderAuditoria(request, env) {
   const authCtx = await requireAdminContext(request, env);
   if (authCtx instanceof Response) return authCtx;
   
-  const url = new URL(request.url);
-  const eventType = url.searchParams.get('event_type') || '';
-  const actorId = url.searchParams.get('actor_id') || '';
+  const requestUrl = new URL(request.url);
+  const eventType = requestUrl.searchParams.get('event_type') || '';
+  const actorId = requestUrl.searchParams.get('actor_id') || '';
   
   const auditRepo = getDefaultAuditRepo();
   
@@ -4892,8 +4896,8 @@ async function renderSuscripciones(request, env) {
   const authCtx = await requireAdminContext(request, env);
   if (authCtx instanceof Response) return authCtx;
   
-  const url = new URL(request.url);
-  const email = url.searchParams.get('email');
+  const requestUrl = new URL(request.url);
+  const email = requestUrl.searchParams.get('email');
   const subscriptionRepo = getDefaultSubscriptionRepo();
   
   let content = '';
@@ -5035,7 +5039,6 @@ async function handleAPI(request, env, path) {
   // Se puede expandir según necesidad
   
   if (path === '/admin/api/alumnos') {
-    const url = new URL(request.url);
     const filters = {
       estado: url.searchParams.get('estado') || null,
       fase: url.searchParams.get('fase') || null,
@@ -5067,7 +5070,6 @@ async function handleAPI(request, env, path) {
   }
 
   if (path === '/admin/api/practicas') {
-    const url = new URL(request.url);
     const filters = {
       fechaDesde: url.searchParams.get('fechaDesde') || null,
       fechaHasta: url.searchParams.get('fechaHasta') || null,
@@ -5083,7 +5085,6 @@ async function handleAPI(request, env, path) {
   }
 
   if (path === '/admin/api/frases') {
-    const url = new URL(request.url);
     const filters = {
       nivel: url.searchParams.get('nivel') || null,
       search: url.searchParams.get('search') || null
@@ -5109,7 +5110,6 @@ async function handleAPI(request, env, path) {
   
   // GET /admin/api/energy/overview?subject_type=...
   if (path === '/admin/api/energy/overview') {
-    const url = new URL(request.url);
     const subjectType = url.searchParams.get('subject_type') || null;
     
     const data = await getEnergyOverview(subjectType);
@@ -5940,21 +5940,33 @@ async function handleCreateOverride(request, env, alumnoId) {
 
     // Validar inputs manualmente
     if (!type || !['ADD', 'SET', 'MIN'].includes(type)) {
-      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=tipo_invalido`), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=tipo_invalido`) }
+      });
     }
 
     if (!value || isNaN(value) || value < 1 || value > 15) {
-      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=valor_invalido`), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=valor_invalido`) }
+      });
     }
 
     if (!reason || reason.trim().length === 0) {
-      return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=razon_obligatoria`), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=razon_obligatoria`) }
+      });
     }
 
     // Obtener alumno para verificar que existe
     const student = await findStudentById(parseInt(alumnoId));
     if (!student) {
-      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado') }
+      });
     }
 
     // Crear override usando el repositorio
@@ -5989,11 +6001,17 @@ async function handleCreateOverride(request, env, alumnoId) {
     console.log(`[Admin Progreso V4] Override creado exitosamente para alumno ${alumnoId}`);
 
     // Redirect seguro
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_creado`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_creado`) }
+    });
   } catch (error) {
     console.error(`[Admin Progreso V4] Error creando override para alumno ${alumnoId}:`, error);
     // Fail-open: redirect con error pero no romper vista
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`) }
+    });
   }
 }
 
@@ -6010,7 +6028,10 @@ async function handleRevokeOverride(request, env, alumnoId, overrideId) {
     // Obtener alumno para verificar que existe
     const student = await findStudentById(parseInt(alumnoId));
     if (!student) {
-      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado') }
+      });
     }
 
     // Revocar override usando el repositorio (soft delete)
@@ -6036,11 +6057,17 @@ async function handleRevokeOverride(request, env, alumnoId, overrideId) {
     console.log(`[Admin Progreso V4] Override ${overrideId} revocado exitosamente`);
 
     // Redirect seguro
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_revocado`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=override_revocado`) }
+    });
   } catch (error) {
     console.error(`[Admin Progreso V4] Error revocando override ${overrideId}:`, error);
     // Fail-open: redirect con error pero no romper vista
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`) }
+    });
   }
 }
 
@@ -6057,7 +6084,10 @@ async function handleGenerateSnapshot(request, env, alumnoId) {
     // Obtener alumno
     const student = await findStudentById(parseInt(alumnoId));
     if (!student) {
-      return Response.redirect(getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado'), 302);
+      return new Response(null, {
+        status: 302,
+        headers: { 'Location': getAbsoluteUrl(request, '/admin/progreso-v4?error=alumno_no_encontrado') }
+      });
     }
 
     // Generar snapshot usando generateProgressSnapshot
@@ -6083,11 +6113,17 @@ async function handleGenerateSnapshot(request, env, alumnoId) {
     console.log(`[Progress Snapshot] Snapshot generado exitosamente: ${snapshot.id}`);
 
     // Redirect seguro
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=snapshot_generado`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?success=snapshot_generado`) }
+    });
   } catch (error) {
     console.error(`[Progress Snapshot] Error generando snapshot para alumno ${alumnoId}:`, error);
     // Fail-open: redirect con error pero no romper vista
-    return Response.redirect(getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`), 302);
+    return new Response(null, {
+      status: 302,
+      headers: { 'Location': getAbsoluteUrl(request, `/admin/progreso-v4/alumno/${alumnoId}?error=${encodeURIComponent(error.message)}`) }
+    });
   }
 }
 
