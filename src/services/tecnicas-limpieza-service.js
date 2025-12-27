@@ -45,6 +45,11 @@ export const FILTER_CONTRACT = {
     operators: ['eq'],
     description: 'Si aplica para limpiezas recurrentes'
   },
+  estimated_duration: {
+    type: 'number',
+    operators: ['eq', 'lte', 'gte'],
+    description: 'Duración estimada en minutos'
+  },
   status: {
     type: 'string',
     operators: ['eq'],
@@ -353,7 +358,11 @@ export async function createTecnica(tecnicaData) {
     aplica_limpiezas_recurrentes: tecnicaData.aplica_limpiezas_recurrentes || false,
     prioridad: tecnicaData.prioridad || 'media',
     is_obligatoria: tecnicaData.is_obligatoria || false,
-    status: tecnicaData.status || 'active'
+    status: tecnicaData.status || 'active',
+    video_resource_id: tecnicaData.video_resource_id || null,
+    audio_resource_id: tecnicaData.audio_resource_id || null,
+    image_resource_id: tecnicaData.image_resource_id || null,
+    metadata: tecnicaData.metadata || {}
   };
 
   try {
@@ -415,6 +424,21 @@ export async function updateTecnica(id, patch) {
   }
   if (patch.is_obligatoria !== undefined) {
     normalizedPatch.is_obligatoria = Boolean(patch.is_obligatoria);
+  }
+  if (patch.estimated_duration !== undefined) {
+    normalizedPatch.estimated_duration = patch.estimated_duration ? parseInt(patch.estimated_duration, 10) : null;
+  }
+  if (patch.video_resource_id !== undefined) {
+    normalizedPatch.video_resource_id = patch.video_resource_id || null;
+  }
+  if (patch.audio_resource_id !== undefined) {
+    normalizedPatch.audio_resource_id = patch.audio_resource_id || null;
+  }
+  if (patch.image_resource_id !== undefined) {
+    normalizedPatch.image_resource_id = patch.image_resource_id || null;
+  }
+  if (patch.metadata !== undefined) {
+    normalizedPatch.metadata = patch.metadata || {};
   }
 
   try {

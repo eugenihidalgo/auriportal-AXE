@@ -104,8 +104,9 @@ export class TecnicasLimpiezaRepoPg extends TecnicasLimpiezaRepo {
       `INSERT INTO tecnicas_limpieza (
         nombre, nivel, descripcion, estimated_duration,
         aplica_energias_indeseables, aplica_limpiezas_recurrentes,
-        prioridad, is_obligatoria, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        prioridad, is_obligatoria, status,
+        video_resource_id, audio_resource_id, image_resource_id, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         tecnicaData.nombre,
@@ -116,7 +117,11 @@ export class TecnicasLimpiezaRepoPg extends TecnicasLimpiezaRepo {
         tecnicaData.aplica_limpiezas_recurrentes || false,
         tecnicaData.prioridad || 'media',
         tecnicaData.is_obligatoria || false,
-        tecnicaData.status || 'active'
+        tecnicaData.status || 'active',
+        tecnicaData.video_resource_id || null,
+        tecnicaData.audio_resource_id || null,
+        tecnicaData.image_resource_id || null,
+        tecnicaData.metadata ? JSON.stringify(tecnicaData.metadata) : '{}'
       ]
     );
 
@@ -173,6 +178,22 @@ export class TecnicasLimpiezaRepoPg extends TecnicasLimpiezaRepo {
     if (patch.is_obligatoria !== undefined) {
       updates.push(`is_obligatoria = $${paramIndex++}`);
       params.push(patch.is_obligatoria);
+    }
+    if (patch.video_resource_id !== undefined) {
+      updates.push(`video_resource_id = $${paramIndex++}`);
+      params.push(patch.video_resource_id || null);
+    }
+    if (patch.audio_resource_id !== undefined) {
+      updates.push(`audio_resource_id = $${paramIndex++}`);
+      params.push(patch.audio_resource_id || null);
+    }
+    if (patch.image_resource_id !== undefined) {
+      updates.push(`image_resource_id = $${paramIndex++}`);
+      params.push(patch.image_resource_id || null);
+    }
+    if (patch.metadata !== undefined) {
+      updates.push(`metadata = $${paramIndex++}::jsonb`);
+      params.push(patch.metadata ? JSON.stringify(patch.metadata) : '{}');
     }
 
     if (updates.length === 0) {
