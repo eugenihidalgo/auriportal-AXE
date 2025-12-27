@@ -13,6 +13,8 @@ import { validateThemeDefinition, validateThemeDefinitionDraft } from '../core/t
 import { getDefaultThemeRepo } from '../infra/repos/theme-repo-pg.js';
 import { getDefaultThemeDraftRepo } from '../infra/repos/theme-draft-repo-pg.js';
 import { getDefaultThemeVersionRepo } from '../infra/repos/theme-version-repo-pg.js';
+import { getDefaultThemeBindingRepo } from '../infra/repos/theme-binding-repo-pg.js';
+import { resolveTheme, getThemeDefinition, listThemes, saveDraft, publish, setBinding } from '../core/theme-system/theme-system-v1.js';
 import { getPool } from '../../database/pg.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 
@@ -581,7 +583,7 @@ async function handlePreview(request, env, ctx, themeId) {
 
     // SPRINT AXE v0.4: Renderizar HTML REAL usando el sistema existente
     // Usar renderPantalla1 como ejemplo (pantalla principal del alumno)
-    const { renderPantalla1 } = await import('../core/responses.js');
+    const { renderPantalla1, applyTheme } = await import('../core/responses.js');
 
     // Construir student mock desde PreviewContext
     // SPRINT AXE v0.4: tema_preferido = themeId para compatibilidad legacy
@@ -625,7 +627,6 @@ async function handlePreview(request, env, ctx, themeId) {
     // v5.10.0: Usar renderHtml directamente con theme_id para que applyTheme() inyecte tokens dinámicos
     // renderPantalla1() internamente llama a renderHtml(), pero necesitamos pasar theme_id
     // Solución: renderizar HTML base y luego aplicar tema con theme_id explícito
-    const { renderPantalla1 } = await import('../core/responses.js');
     
     // renderPantalla1 devuelve un Response, obtenemos el HTML
     const htmlResponse = renderPantalla1(mockStudent, mockCtx);
@@ -633,7 +634,6 @@ async function handlePreview(request, env, ctx, themeId) {
     
     // Aplicar tema con theme_id explícito
     // applyTheme() ahora inyecta automáticamente <style id="ap-theme-tokens"> con todos los tokens
-    const { applyTheme } = await import('../core/responses.js');
     html = applyTheme(html, mockStudent, themeId);
 
     // Validar PreviewContext (warnings ya obtenidos de normalizePreviewContext)

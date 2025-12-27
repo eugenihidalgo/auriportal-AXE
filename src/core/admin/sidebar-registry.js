@@ -63,6 +63,7 @@ export const SECTION_ORDER = {
   '💡 I+D de los alumnos': 9,
   '🧭 Navegaciones': 10,
   '🗺️ Recorridos': 11,
+  '✨ El brillo de AuriPortal': 11.5,
   '🎨 Apariencia': 12,
   '🎵 Recursos técnicos': 13,
   '🏷️ Clasificaciones': 14,
@@ -523,7 +524,45 @@ export const sidebarRegistry = [
     order: 2
   },
 
-  // 11. 🎨 Apariencia
+  // 11.5. ✨ El brillo de AuriPortal
+  {
+    id: 'theme-studio-v1',
+    label: 'Theme Studio',
+    icon: '🎨',
+    route: '/admin/theme-studio',
+    section: '✨ El brillo de AuriPortal',
+    visible: true,
+    order: 1
+  },
+  {
+    id: 'theme-bindings-ui',
+    label: 'Bindings de Tema',
+    icon: '🧩',
+    route: '/admin/theme-bindings',
+    section: '✨ El brillo de AuriPortal',
+    visible: true,
+    order: 2
+  },
+  {
+    id: 'theme-diagnostics-ui',
+    label: 'Diagnóstico de Tema',
+    icon: '🧪',
+    route: '/admin/theme-diagnostics',
+    section: '✨ El brillo de AuriPortal',
+    visible: true,
+    order: 3
+  },
+  {
+    id: 'theme-docs',
+    label: 'Documentación de Temas',
+    icon: '📚',
+    route: '/admin/theme-docs',
+    section: '✨ El brillo de AuriPortal',
+    visible: true,
+    order: 4
+  },
+
+  // 12. 🎨 Apariencia
   {
     id: 'recorrido-pedagogico',
     label: 'Pantallas',
@@ -1309,6 +1348,7 @@ function generateSidebarHTMLLegacy(currentPath = '', userContext = {}) {
       '💡 I+D de los alumnos',
       '🧭 Navegaciones',
       '🗺️ Recorridos',
+      '✨ El brillo de AuriPortal',
       '🎨 Apariencia',
       '🎵 Recursos técnicos',
       '🏷️ Clasificaciones',

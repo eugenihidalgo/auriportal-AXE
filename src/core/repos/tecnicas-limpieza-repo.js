@@ -88,5 +88,38 @@ export class TecnicasLimpiezaRepo {
   async delete(id, client = null) {
     throw new Error('delete debe ser implementado');
   }
+
+  /**
+   * Obtiene las clasificaciones de una técnica
+   * 
+   * @param {number|string} tecnicaId - ID de la técnica
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Array>} Array de clasificaciones {id, type, value, normalized}
+   */
+  async getClasificaciones(tecnicaId, client = null) {
+    throw new Error('getClasificaciones debe ser implementado');
+  }
+
+  /**
+   * Establece las clasificaciones de una técnica (reemplaza todas)
+   * 
+   * @param {number|string} tecnicaId - ID de la técnica
+   * @param {Array<string>} clasificaciones - Array de nombres de clasificaciones
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Array>} Array de clasificaciones asociadas {id, type, value, normalized}
+   */
+  async setClasificaciones(tecnicaId, clasificaciones, client = null) {
+    throw new Error('setClasificaciones debe ser implementado');
+  }
+
+  /**
+   * Lista todas las clasificaciones disponibles
+   * 
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Array>} Array de clasificaciones disponibles {id, value, normalized, usage_count}
+   */
+  async listClasificacionesDisponibles(client = null) {
+    throw new Error('listClasificacionesDisponibles debe ser implementado');
+  }
 }
 

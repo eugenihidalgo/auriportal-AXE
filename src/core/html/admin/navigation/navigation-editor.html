@@ -27,6 +27,7 @@
         <span id="published-status-badge" class="nav-badge nav-badge-published" style="display: none;">📦 Published: v-</span>
       </div>
       <div class="nav-editor-header-right">
+        <div id="theme-selector-container" style="margin-right: 12px;"></div>
         <button onclick="guardarNavegacion()" class="nav-btn nav-btn-primary" title="Guardar draft">
           💾 Guardar
         </button>
@@ -3477,11 +3478,34 @@
   }
 
   // ========================================================================
+  // CARGAR SELECTOR DE TEMA
+  // ========================================================================
+  async function loadThemeSelector() {
+    try {
+      const { createThemeSelector } = await import('/js/admin/themes/theme-selector-v1.js');
+      const container = document.getElementById('theme-selector-container');
+      if (container) {
+        createThemeSelector({
+          scope_type: 'editor',
+          scope_key: 'nav-editor',
+          containerEl: container
+        });
+      }
+    } catch (error) {
+      console.warn('[NavEditor] Error cargando selector de tema:', error);
+    }
+  }
+
+  // ========================================================================
   // INICIALIZAR AL CARGAR
   // ========================================================================
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initNavigationEditor);
+    document.addEventListener('DOMContentLoaded', () => {
+      initNavigationEditor();
+      loadThemeSelector();
+    });
   } else {
     initNavigationEditor();
+    loadThemeSelector();
   }
 </script>

@@ -10,6 +10,7 @@
 import { CONTRACT_DEFAULT, SYSTEM_DEFAULT, LEGACY_THEME_MAP } from './theme-defaults.js';
 import { validateThemeValues, fillMissingVariables } from './theme-contract.js';
 import { getThemeDefinition, getThemeDefinitionAsync } from './theme-registry.js';
+import { resolveTheme as resolveThemeV1 } from '../theme-system/theme-system-v1.js';
 
 /**
  * @typedef {import('./theme-types.js').ThemeEffective} ThemeEffective
@@ -74,6 +75,29 @@ export function resolveTheme({ student = null, session = null, systemState = nul
       // Prioridad 3: system_default
       resolvedKey = 'dark-classic';
       resolvedFrom = 'system-default';
+      
+      // Intentar resolver con Theme System v1 de forma async (no bloquea)
+      // Por ahora, solo intentamos si hay contexto suficiente
+      try {
+        const ctx = {
+          student: student,
+          environment: 'admin', // Por defecto admin, se puede mejorar detectando desde request
+          screen: null, // Se puede obtener del contexto si está disponible
+          editor: null // Se puede obtener del contexto si está disponible
+        };
+        
+        // Llamar async pero no esperar (para mantener compatibilidad síncrona)
+        resolveThemeV1(ctx).then(resolved => {
+          if (resolved && resolved.theme_key && resolved.theme_key !== 'admin-classic') {
+            // Cachear para próxima vez (si hay sistema de cache)
+            console.log(`[ThemeResolver] Theme System v1 resolvió: ${resolved.theme_key}`);
+          }
+        }).catch(() => {
+          // Silenciar errores, usar fallback
+        });
+      } catch (error) {
+        // Silenciar errores, continuar con lógica legacy
+      }
     }
     
     // PASO 2: Intentar obtener tema del Theme Registry v1 (preferido)

@@ -251,6 +251,95 @@ export class TecnicasLimpiezaRepoPg extends TecnicasLimpiezaRepo {
 
     return result.rows.length > 0;
   }
+
+  /**
+   * Obtiene las clasificaciones de una técnica
+   */
+  async getClasificaciones(tecnicaId, client = null) {
+    if (!tecnicaId) {
+      return [];
+    }
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      'SELECT * FROM get_tecnicas_limpieza_classifications($1)',
+      [tecnicaId]
+    );
+
+    return result.rows || [];
+  }
+
+  /**
+   * Establece las clasificaciones de una técnica (reemplaza todas)
+   */
+  async setClasificaciones(tecnicaId, clasificaciones, client = null) {
+    if (!tecnicaId) {
+      throw new Error('tecnicaId es requerido');
+    }
+
+    const queryFn = client ? client.query.bind(client) : query;
+
+    // Iniciar transacción si no se proporciona client
+    const useTransaction = !client;
+    if (useTransaction) {
+      client = await query('BEGIN');
+    }
+
+    try {
+      // 1. Eliminar todas las clasificaciones existentes
+      await queryFn(
+        'DELETE FROM tecnicas_limpieza_classifications WHERE tecnica_id = $1',
+        [tecnicaId]
+      );
+
+      // 2. Para cada clasificación, asegurar que existe y asociarla
+      for (const nombreClasificacion of clasificaciones) {
+        if (!nombreClasificacion || !nombreClasificacion.trim()) {
+          continue;
+        }
+
+        // Usar ensure_classification_term para crear/obtener el término (tipo 'tag')
+        const termResult = await queryFn(
+          'SELECT ensure_classification_term($1, $2) as term_id',
+          ['tag', nombreClasificacion.trim()]
+        );
+
+        const termId = termResult.rows[0].term_id;
+
+        // Asociar término a la técnica
+        await queryFn(
+          `INSERT INTO tecnicas_limpieza_classifications (tecnica_id, classification_term_id)
+           VALUES ($1, $2)
+           ON CONFLICT (tecnica_id, classification_term_id) DO NOTHING`,
+          [tecnicaId, termId]
+        );
+      }
+
+      if (useTransaction) {
+        await queryFn('COMMIT');
+      }
+
+      // Retornar las clasificaciones actualizadas
+      return await this.getClasificaciones(tecnicaId, client);
+    } catch (error) {
+      if (useTransaction) {
+        await queryFn('ROLLBACK');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Lista todas las clasificaciones disponibles
+   */
+  async listClasificacionesDisponibles(client = null) {
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      'SELECT * FROM list_tecnicas_limpieza_classifications_available()'
+    );
+
+    return result.rows || [];
+  }
 }
 
 /**

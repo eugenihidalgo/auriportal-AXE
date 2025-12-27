@@ -1,0 +1,81 @@
+/* theme-vars-v1.css
+ * Variables CSS canónicas para Theme System v1
+ * Define nombres canónicos de variables (NO valores)
+ * Las pantallas usan estas variables, no colores hardcode
+ */
+
+:root {
+  /* ========================================================================
+   * FONDOS
+   * ======================================================================== */
+  --ap-bg-base: var(--bg-main, #1a1a1a);
+  --ap-bg-surface: var(--bg-primary, #2d2d2d);
+  --ap-bg-panel: var(--bg-panel, #3a3a3a);
+  --ap-bg-elevated: var(--bg-elevated, #4a4a4a);
+  
+  /* ========================================================================
+   * TEXTOS
+   * ======================================================================== */
+  --ap-text-primary: var(--text-primary, #ffffff);
+  --ap-text-muted: var(--text-muted, #aaaaaa);
+  --ap-text-inverse: var(--text-inverse, #000000);
+  
+  /* ========================================================================
+   * BORDES
+   * ======================================================================== */
+  --ap-border-subtle: var(--border-subtle, #404040);
+  --ap-border-strong: var(--border-strong, #555555);
+  
+  /* ========================================================================
+   * ACENTOS
+   * ======================================================================== */
+  --ap-accent-primary: var(--accent-primary, #007bff);
+  --ap-accent-secondary: var(--accent-secondary, #6c757d);
+  
+  /* ========================================================================
+   * ESTADOS INTERACTIVOS
+   * ======================================================================== */
+  --ap-state-hover: var(--state-hover, rgba(255, 255, 255, 0.1));
+  --ap-state-active: var(--state-active, rgba(255, 255, 255, 0.2));
+  --ap-state-focus: var(--state-focus, #007bff);
+  
+  /* ========================================================================
+   * ESTADOS SEMÁNTICOS
+   * ======================================================================== */
+  --ap-danger-base: var(--danger-base, #dc3545);
+  --ap-warning-base: var(--warning-base, #ffc107);
+  --ap-success-base: var(--success-base, #28a745);
+  
+  /* ========================================================================
+   * SOMBRAS
+   * ======================================================================== */
+  --ap-shadow-soft: var(--shadow-soft, 0 1px 3px rgba(0, 0, 0, 0.3));
+  --ap-shadow-medium: var(--shadow-medium, 0 4px 6px rgba(0, 0, 0, 0.3));
+  
+  /* ========================================================================
+   * RADIOS
+   * ======================================================================== */
+  --ap-radius-sm: var(--radius-sm, 4px);
+  --ap-radius-md: var(--radius-md, 8px);
+  --ap-radius-lg: var(--radius-lg, 12px);
+  
+  /* ========================================================================
+   * ESPACIADOS
+   * ======================================================================== */
+  --ap-spacing-xs: var(--spacing-xs, 4px);
+  --ap-spacing-sm: var(--spacing-sm, 8px);
+  --ap-spacing-md: var(--spacing-md, 16px);
+  --ap-spacing-lg: var(--spacing-lg, 24px);
+  
+  /* ========================================================================
+   * TIPOGRAFÍAS
+   * ======================================================================== */
+  --ap-font-base: var(--font-base, system-ui, -apple-system, sans-serif);
+  --ap-font-mono: var(--font-mono, monospace);
+}
+
+/* Aplicar variables dinámicas desde Theme System v1 */
+[data-ap-theme] {
+  /* Las variables se inyectan dinámicamente por applyTheme() */
+}
+

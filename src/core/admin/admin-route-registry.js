@@ -67,6 +67,17 @@ export const ADMIN_ROUTES = [
     type: 'api'
   },
   {
+    key: 'api-themes-diag',
+    path: '/admin/api/themes/__diag',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-theme-bindings',
+    path: '/admin/api/theme-bindings',
+    type: 'api'
+  },
+  {
     key: 'api-themes-catalog',
     path: '/admin/api/themes/catalog',
     type: 'api',
@@ -297,6 +308,26 @@ export const ADMIN_ROUTES = [
   {
     key: 'theme-studio-v2',
     path: '/admin/themes/studio',
+    type: 'island'
+  },
+  {
+    key: 'theme-studio-v1',
+    path: '/admin/theme-studio',
+    type: 'island'
+  },
+  {
+    key: 'theme-bindings-ui',
+    path: '/admin/theme-bindings',
+    type: 'island'
+  },
+  {
+    key: 'theme-diagnostics-ui',
+    path: '/admin/theme-diagnostics',
+    type: 'island'
+  },
+  {
+    key: 'theme-docs',
+    path: '/admin/theme-docs',
     type: 'island'
   },
   {

@@ -56,8 +56,27 @@ export class ThemeRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
       SELECT * FROM themes
-      WHERE id = $1
+      WHERE id = $1 AND deleted_at IS NULL
     `, [id]);
+
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Busca un tema por theme_key
+   * 
+   * @param {string} theme_key - Clave del tema
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object|null>} Objeto tema o null si no existe
+   */
+  async getThemeByKey(theme_key, client = null) {
+    if (!theme_key) return null;
+    
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(`
+      SELECT * FROM themes
+      WHERE theme_key = $1 AND deleted_at IS NULL
+    `, [theme_key]);
 
     return result.rows[0] || null;
   }
@@ -71,7 +90,7 @@ export class ThemeRepoPg {
    * @returns {Promise<Array>} Array de temas ordenados por updated_at DESC
    */
   async listThemes(filters = {}, client = null) {
-    const { status } = filters;
+    const { status, include_deleted = false } = filters;
     const conditions = [];
     const params = [];
     let paramIndex = 1;
@@ -80,6 +99,10 @@ export class ThemeRepoPg {
       conditions.push(`status = $${paramIndex}`);
       params.push(status);
       paramIndex++;
+    }
+
+    if (!include_deleted) {
+      conditions.push(`deleted_at IS NULL`);
     }
 
     const whereClause = conditions.length > 0 
@@ -132,6 +155,30 @@ export class ThemeRepoPg {
     if (patch.current_published_version !== undefined) {
       updates.push(`current_published_version = $${paramIndex}`);
       params.push(patch.current_published_version);
+      paramIndex++;
+    }
+
+    if (patch.theme_key !== undefined) {
+      updates.push(`theme_key = $${paramIndex}`);
+      params.push(patch.theme_key);
+      paramIndex++;
+    }
+
+    if (patch.definition !== undefined) {
+      updates.push(`definition = $${paramIndex}`);
+      params.push(JSON.stringify(patch.definition));
+      paramIndex++;
+    }
+
+    if (patch.version !== undefined) {
+      updates.push(`version = $${paramIndex}`);
+      params.push(patch.version);
+      paramIndex++;
+    }
+
+    if (patch.description !== undefined) {
+      updates.push(`description = $${paramIndex}`);
+      params.push(patch.description);
       paramIndex++;
     }
 

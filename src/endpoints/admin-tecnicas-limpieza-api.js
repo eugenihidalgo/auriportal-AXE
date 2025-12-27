@@ -10,6 +10,8 @@
 
 import { requireAdminContext } from '../core/auth-context.js';
 import * as tecnicasLimpiezaService from '../services/tecnicas-limpieza-service.js';
+import { parseTecnicasLimpiezaFilters } from '../services/tecnicas-limpieza-filter-parser.js';
+import { logError } from '../core/observability/logger.js';
 
 export default async function adminTecnicasLimpiezaApiHandler(request, env, ctx) {
   const url = new URL(request.url);
@@ -37,36 +39,220 @@ export default async function adminTecnicasLimpiezaApiHandler(request, env, ctx)
   // Normalizar path
   const normalizedPath = path.replace('/admin/api/tecnicas-limpieza', '').replace(/\/$/, '') || '/';
 
+  // ═══════════════════════════════════════════════════════════════
+  // RUTAS DE CLASIFICACIONES (ANTES que rutas genéricas /:id)
+  // ═══════════════════════════════════════════════════════════════
+  // CRÍTICO: Estas rutas deben evaluarse ANTES que las rutas genéricas
+  // para evitar ambigüedad en el parsing del path
+
   try {
-    // GET /admin/api/tecnicas-limpieza - Listar técnicas
-    if (method === 'GET' && normalizedPath === '/') {
-      const onlyActive = url.searchParams.get('onlyActive') !== 'false';
-      const nivel = url.searchParams.get('nivel') ? parseInt(url.searchParams.get('nivel'), 10) : undefined;
-      const nivelMax = url.searchParams.get('nivelMax') ? parseInt(url.searchParams.get('nivelMax'), 10) : undefined;
-      const aplica_energias_indeseables = url.searchParams.get('aplica_energias_indeseables') === 'true' ? true : (url.searchParams.get('aplica_energias_indeseables') === 'false' ? false : undefined);
-      const aplica_limpiezas_recurrentes = url.searchParams.get('aplica_limpiezas_recurrentes') === 'true' ? true : (url.searchParams.get('aplica_limpiezas_recurrentes') === 'false' ? false : undefined);
-
-      const tecnicas = await tecnicasLimpiezaService.listTecnicas({
-        onlyActive,
-        nivel,
-        nivelMax,
-        aplica_energias_indeseables,
-        aplica_limpiezas_recurrentes
-      });
-
+    // GET /admin/api/tecnicas-limpieza/clasificaciones/disponibles - Listar clasificaciones disponibles
+    if (method === 'GET' && normalizedPath === '/clasificaciones/disponibles') {
+      const { listDisponibles } = await import('../services/tecnicas-limpieza-clasificaciones-service.js');
+      const clasificaciones = await listDisponibles();
+      
       return new Response(JSON.stringify({
         ok: true,
-        data: { tecnicas }
+        data: { clasificaciones }
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
+    // GET /admin/api/tecnicas-limpieza/:id/clasificaciones - Obtener clasificaciones de una técnica
+    if (method === 'GET' && normalizedPath.startsWith('/') && normalizedPath.includes('/clasificaciones')) {
+      const pathParts = normalizedPath.split('/').filter(p => p); // Filtrar strings vacíos
+      if (pathParts.length === 2 && pathParts[1] === 'clasificaciones') {
+        const idStr = pathParts[0];
+        const id = parseInt(idStr, 10);
+        
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        const { getForTecnica } = await import('../services/tecnicas-limpieza-clasificaciones-service.js');
+        const clasificaciones = await getForTecnica(id);
+        
+        return new Response(JSON.stringify({
+          ok: true,
+          data: { clasificaciones }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // PUT /admin/api/tecnicas-limpieza/:id/clasificaciones - Establecer clasificaciones de una técnica
+    if (method === 'PUT' && normalizedPath.startsWith('/') && normalizedPath.includes('/clasificaciones')) {
+      const pathParts = normalizedPath.split('/').filter(p => p);
+      if (pathParts.length === 2 && pathParts[1] === 'clasificaciones') {
+        const idStr = pathParts[0];
+        const id = parseInt(idStr, 10);
+        
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        const body = await request.json();
+        const clasificaciones = body.clasificaciones || [];
+        
+        const { setForTecnica } = await import('../services/tecnicas-limpieza-clasificaciones-service.js');
+        const result = await setForTecnica(id, clasificaciones);
+        
+        return new Response(JSON.stringify({
+          ok: true,
+          data: { clasificaciones: result }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // DELETE /admin/api/tecnicas-limpieza/:id/clasificaciones/:clasificacionId - Eliminar una clasificación específica
+    // (Por ahora, usamos PUT con array sin esa clasificación, pero dejamos el endpoint preparado)
+    if (method === 'DELETE' && normalizedPath.startsWith('/') && normalizedPath.includes('/clasificaciones/')) {
+      const pathParts = normalizedPath.split('/').filter(p => p);
+      if (pathParts.length === 3 && pathParts[1] === 'clasificaciones') {
+        const idStr = pathParts[0];
+        const clasificacionId = pathParts[2];
+        
+        const id = parseInt(idStr, 10);
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Obtener clasificaciones actuales y filtrar la que se quiere eliminar
+        const { getForTecnica, setForTecnica } = await import('../services/tecnicas-limpieza-clasificaciones-service.js');
+        const actuales = await getForTecnica(id);
+        const clasificacionesFiltradas = actuales
+          .filter(c => c.id !== clasificacionId && c.value !== clasificacionId)
+          .map(c => c.value);
+        
+        const result = await setForTecnica(id, clasificacionesFiltradas);
+        
+        return new Response(JSON.stringify({
+          ok: true,
+          data: { clasificaciones: result }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    // GET /admin/api/tecnicas-limpieza - Listar técnicas con filtros canónicos
+    if (method === 'GET' && normalizedPath === '/') {
+      try {
+        // Parsear filtros usando parser canónico
+        const parseResult = parseTecnicasLimpiezaFilters(url.searchParams);
+        const { filters, errors } = parseResult;
+        
+        // Si hay errores de validación, retornar 400
+        if (errors.length > 0) {
+          logError('TECNICAS_LIMPIEZA_FILTERS', 'Errores de validación en filtros', { errors });
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'Errores de validación en filtros',
+            details: errors,
+            code: 'FILTER_VALIDATION_ERROR'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Opciones
+        const options = {};
+        
+        // onlyActive (por defecto true)
+        options.onlyActive = url.searchParams.get('onlyActive') !== 'false';
+        
+        // Opciones de paginación/ordenamiento
+        const limitParam = url.searchParams.get('limit');
+        if (limitParam) {
+          const limit = parseInt(limitParam, 10);
+          if (!isNaN(limit) && limit > 0) options.limit = limit;
+        }
+        
+        const offsetParam = url.searchParams.get('offset');
+        if (offsetParam) {
+          const offset = parseInt(offsetParam, 10);
+          if (!isNaN(offset) && offset >= 0) options.offset = offset;
+        }
+        
+        // Usar listForConsumption() para filtros canónicos
+        const tecnicas = await tecnicasLimpiezaService.listForConsumption(filters, options);
+
+        return new Response(JSON.stringify({
+          ok: true,
+          data: { tecnicas }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        logError('TECNICAS_LIMPIEZA_QUERY', 'Error ejecutando query de técnicas', {
+          error: error.message,
+          stack: error.stack,
+          filters: Object.keys(filters || {}),
+          url: url.pathname + url.search
+        });
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Error interno al listar técnicas',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          code: 'INTERNAL_ERROR'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // GET /admin/api/tecnicas-limpieza/:id - Obtener técnica
-    if (method === 'GET' && normalizedPath.startsWith('/')) {
-      const id = normalizedPath.slice(1);
-      if (id) {
+    // IMPORTANTE: Esta ruta debe evaluarse DESPUÉS de las rutas de clasificaciones
+    if (method === 'GET' && normalizedPath.startsWith('/') && !normalizedPath.includes('/clasificaciones')) {
+      const pathParts = normalizedPath.split('/').filter(p => p);
+      
+      // Solo procesar si es un path simple (solo el ID, sin subrutas)
+      if (pathParts.length === 1) {
+        const idStr = pathParts[0];
+        const id = parseInt(idStr, 10);
+        
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
         const tecnica = await tecnicasLimpiezaService.getTecnicaById(id);
         
         if (!tecnica) {
@@ -106,9 +292,25 @@ export default async function adminTecnicasLimpiezaApiHandler(request, env, ctx)
     }
 
     // PUT /admin/api/tecnicas-limpieza/:id - Actualizar técnica
-    if (method === 'PUT' && normalizedPath.startsWith('/')) {
-      const id = normalizedPath.slice(1);
-      if (id) {
+    // IMPORTANTE: Esta ruta debe evaluarse DESPUÉS de las rutas de clasificaciones
+    if (method === 'PUT' && normalizedPath.startsWith('/') && !normalizedPath.includes('/clasificaciones')) {
+      const idStr = normalizedPath.slice(1);
+      const pathParts = normalizedPath.split('/').filter(p => p);
+      
+      // Solo procesar si es un path simple (solo el ID, sin subrutas)
+      if (pathParts.length === 1) {
+        const id = parseInt(idStr, 10);
+        
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
         const body = await request.json();
         
         const tecnica = await tecnicasLimpiezaService.updateTecnica(id, body);
@@ -135,10 +337,27 @@ export default async function adminTecnicasLimpiezaApiHandler(request, env, ctx)
     }
 
     // DELETE /admin/api/tecnicas-limpieza/:id - Eliminar técnica
+    // IMPORTANTE: Esta ruta debe evaluarse DESPUÉS de las rutas de clasificaciones
     // Si query param archive=true, hace soft delete, si no, delete físico
-    if (method === 'DELETE' && normalizedPath.startsWith('/')) {
-      const id = normalizedPath.slice(1);
-      if (id) {
+    if (method === 'DELETE' && normalizedPath.startsWith('/') && !normalizedPath.includes('/clasificaciones')) {
+      const pathParts = normalizedPath.split('/').filter(p => p);
+      
+      // Solo procesar si es un path simple (solo el ID, sin subrutas)
+      if (pathParts.length === 1) {
+        const idStr = pathParts[0];
+        const id = parseInt(idStr, 10);
+        
+        if (isNaN(id) || id <= 0) {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'ID inválido: debe ser un integer positivo',
+            code: 'INVALID_ID'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
         const archive = url.searchParams.get('archive') === 'true';
         
         let tecnica;
@@ -179,6 +398,8 @@ export default async function adminTecnicasLimpiezaApiHandler(request, env, ctx)
         });
       }
     }
+
+    // Las rutas de clasificaciones ya fueron manejadas arriba (ANTES de las rutas genéricas)
 
     // Método no soportado
     return new Response(JSON.stringify({
