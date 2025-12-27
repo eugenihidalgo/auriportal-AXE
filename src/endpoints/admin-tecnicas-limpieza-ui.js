@@ -51,8 +51,8 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
             <th class="pb-3 text-slate-300 font-semibold">Nivel</th>
             <th class="pb-3 text-slate-300 font-semibold">Nombre</th>
             <th class="pb-3 text-slate-300 font-semibold">Descripción</th>
-            <th class="pb-3 text-slate-300 font-semibold">Energías Ind.</th>
-            <th class="pb-3 text-slate-300 font-semibold">Limp. Recurrentes</th>
+            <th class="pb-3 text-slate-300 font-semibold">Duración (min)</th>
+            <th class="pb-3 text-slate-300 font-semibold">Media</th>
             <th class="pb-3 text-slate-300 font-semibold">Recursos</th>
             <th class="pb-3 text-slate-300 font-semibold">Acciones</th>
           </tr>
@@ -70,11 +70,9 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
               <input type="text" id="new-tecnica-descripcion" placeholder="Descripción" class="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
             </td>
             <td class="py-2">
-              <input type="checkbox" id="new-tecnica-energias" class="w-5 h-5 cursor-pointer" title="Aplica a energías indeseables">
+              <input type="number" id="new-tecnica-duracion" placeholder="Min" min="0" class="w-20 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
             </td>
-            <td class="py-2">
-              <input type="checkbox" id="new-tecnica-recurrentes" class="w-5 h-5 cursor-pointer" title="Aplica a limpiezas recurrentes">
-            </td>
+            <td class="py-2"></td>
             <td class="py-2"></td>
             <td class="py-2">
               <button id="btn-crear-tecnica" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors">➕ Crear</button>
@@ -147,10 +145,25 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
       });
     }
     
-    // Modal recursos
+    // Modal recursos (con actualización de iconos después de cerrar)
     const btnCerrarModal = document.getElementById('btn-cerrar-modal-recursos');
     if (btnCerrarModal) {
-      btnCerrarModal.addEventListener('click', cerrarModalRecursos);
+      btnCerrarModal.addEventListener('click', function() {
+        const tecnicaId = tecnicaActualRecursos?.id;
+        cerrarModalRecursos();
+        // Actualizar iconos después de cerrar
+        if (tecnicaId) {
+          setTimeout(function() {
+            const row = document.querySelector('tr[data-tecnica-id="' + tecnicaId + '"]');
+            if (row) {
+              const mediaCell = row.querySelector('td:nth-child(5) div[data-tecnica-id="' + tecnicaId + '"]');
+              if (mediaCell) {
+                cargarMediaIconos(tecnicaId, mediaCell);
+              }
+            }
+          }, 100);
+        }
+      });
     }
     
     // Cerrar modal al hacer clic fuera
@@ -232,33 +245,69 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
       tdDescripcion.appendChild(inputDescripcion);
       tr.appendChild(tdDescripcion);
       
-      // Energías Indeseables
-      const tdEnergias = document.createElement('td');
-      tdEnergias.className = 'py-3';
-      const inputEnergias = document.createElement('input');
-      inputEnergias.type = 'checkbox';
-      inputEnergias.checked = tecnica.aplica_energias_indeseables || false;
-      inputEnergias.className = 'w-5 h-5 cursor-pointer';
-      inputEnergias.title = 'Aplica a energías indeseables';
-      inputEnergias.addEventListener('change', function() {
-        guardarCampo(tecnica.id, 'aplica_energias_indeseables', this.checked);
+      // Duración estimada
+      const tdDuracion = document.createElement('td');
+      tdDuracion.className = 'py-3';
+      const inputDuracion = document.createElement('input');
+      inputDuracion.type = 'number';
+      inputDuracion.value = tecnica.estimated_duration || '';
+      inputDuracion.min = 0;
+      inputDuracion.className = 'w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500';
+      inputDuracion.placeholder = 'Min';
+      inputDuracion.addEventListener('blur', function() {
+        const value = this.value ? parseInt(this.value, 10) : null;
+        guardarCampo(tecnica.id, 'estimated_duration', value);
       });
-      tdEnergias.appendChild(inputEnergias);
-      tr.appendChild(tdEnergias);
+      tdDuracion.appendChild(inputDuracion);
+      tr.appendChild(tdDuracion);
       
-      // Limpiezas Recurrentes
-      const tdRecurrentes = document.createElement('td');
-      tdRecurrentes.className = 'py-3';
-      const inputRecurrentes = document.createElement('input');
-      inputRecurrentes.type = 'checkbox';
-      inputRecurrentes.checked = tecnica.aplica_limpiezas_recurrentes || false;
-      inputRecurrentes.className = 'w-5 h-5 cursor-pointer';
-      inputRecurrentes.title = 'Aplica a limpiezas recurrentes';
-      inputRecurrentes.addEventListener('change', function() {
-        guardarCampo(tecnica.id, 'aplica_limpiezas_recurrentes', this.checked);
-      });
-      tdRecurrentes.appendChild(inputRecurrentes);
-      tr.appendChild(tdRecurrentes);
+      // Media (iconos de recursos asociados)
+      const tdMedia = document.createElement('td');
+      tdMedia.className = 'py-3';
+      const mediaContainer = document.createElement('div');
+      mediaContainer.className = 'flex gap-2 items-center';
+      mediaContainer.dataset.tecnicaId = tecnica.id; // Para poder actualizar después
+      
+      // Verificar si tiene recursos asociados (inicialmente desde datos directos)
+      // Se actualizará después cargando desde interactive_resources
+      const hasVideo = tecnica.video_resource_id ? true : false;
+      const hasAudio = tecnica.audio_resource_id ? true : false;
+      const hasImage = tecnica.image_resource_id ? true : false;
+      
+      if (hasVideo) {
+        const videoIcon = document.createElement('span');
+        videoIcon.textContent = '🎥';
+        videoIcon.className = 'text-lg';
+        videoIcon.title = 'Tiene video asociado';
+        mediaContainer.appendChild(videoIcon);
+      }
+      if (hasAudio) {
+        const audioIcon = document.createElement('span');
+        audioIcon.textContent = '🎵';
+        audioIcon.className = 'text-lg';
+        audioIcon.title = 'Tiene audio asociado';
+        mediaContainer.appendChild(audioIcon);
+      }
+      if (hasImage) {
+        const imageIcon = document.createElement('span');
+        imageIcon.textContent = '🖼';
+        imageIcon.className = 'text-lg';
+        imageIcon.title = 'Tiene imagen asociada';
+        mediaContainer.appendChild(imageIcon);
+      }
+      
+      if (!hasVideo && !hasAudio && !hasImage) {
+        const emptySpan = document.createElement('span');
+        emptySpan.textContent = '-';
+        emptySpan.className = 'text-slate-500 text-sm';
+        mediaContainer.appendChild(emptySpan);
+      }
+      
+      tdMedia.appendChild(mediaContainer);
+      tr.appendChild(tdMedia);
+      
+      // Cargar recursos interactivos para actualizar iconos (async, no bloqueante)
+      cargarMediaIconos(tecnica.id, mediaContainer);
       
       // Recursos
       const tdRecursos = document.createElement('td');
@@ -295,16 +344,14 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
     const nombreInput = document.getElementById('new-tecnica-nombre');
     const descripcionInput = document.getElementById('new-tecnica-descripcion');
     const nivelInput = document.getElementById('new-tecnica-nivel');
-    const energiasInput = document.getElementById('new-tecnica-energias');
-    const recurrentesInput = document.getElementById('new-tecnica-recurrentes');
+    const duracionInput = document.getElementById('new-tecnica-duracion');
     
     if (!nombreInput || !nivelInput) return;
     
     const nombre = nombreInput.value.trim();
     const descripcion = (descripcionInput?.value || '').trim();
     const nivel = parseInt(nivelInput.value, 10) || 1;
-    const aplica_energias_indeseables = energiasInput?.checked || false;
-    const aplica_limpiezas_recurrentes = recurrentesInput?.checked || false;
+    const estimated_duration = duracionInput?.value ? parseInt(duracionInput.value, 10) : null;
     
     if (!nombre) {
       alert('El nombre es requerido');
@@ -313,7 +360,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
     }
     
     // Deshabilitar inputs
-    [nombreInput, descripcionInput, nivelInput, energiasInput, recurrentesInput].forEach(input => {
+    [nombreInput, descripcionInput, nivelInput, duracionInput].forEach(input => {
       if (input) input.disabled = true;
     });
     
@@ -326,8 +373,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
           nombre,
           descripcion,
           nivel,
-          aplica_energias_indeseables,
-          aplica_limpiezas_recurrentes
+          estimated_duration
         })
       });
       
@@ -341,8 +387,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
         // Limpiar inputs
         nombreInput.value = '';
         if (descripcionInput) descripcionInput.value = '';
-        if (energiasInput) energiasInput.checked = false;
-        if (recurrentesInput) recurrentesInput.checked = false;
+        if (duracionInput) duracionInput.value = '';
         
         // Mantener nivel
         if (typeof getDefaultLevel === 'function') {
@@ -366,7 +411,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
       alert('Error: ' + error.message);
     } finally {
       // Rehabilitar inputs
-      [nombreInput, descripcionInput, nivelInput, energiasInput, recurrentesInput].forEach(input => {
+      [nombreInput, descripcionInput, nivelInput, duracionInput].forEach(input => {
         if (input) input.disabled = false;
       });
     }
@@ -502,6 +547,60 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
       modal.classList.add('hidden');
     }
     tecnicaActualRecursos = null;
+  }
+  
+  // Cargar iconos de media desde interactive_resources (async, no bloqueante)
+  async function cargarMediaIconos(tecnicaId, mediaContainer) {
+    try {
+      const response = await fetch(API_RESOURCES + '/origin?sot=tecnicas-limpieza&entity_id=' + encodeURIComponent(tecnicaId), {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.data?.resources) {
+          const recursos = data.data.resources;
+          const hasVideo = recursos.some(r => r.resource_type === 'video');
+          const hasAudio = recursos.some(r => r.resource_type === 'audio');
+          const hasImage = recursos.some(r => r.resource_type === 'image');
+          
+          // Actualizar iconos
+          mediaContainer.textContent = ''; // Limpiar
+          
+          if (hasVideo) {
+            const icon = document.createElement('span');
+            icon.textContent = '🎥';
+            icon.className = 'text-lg';
+            icon.title = 'Tiene video asociado';
+            mediaContainer.appendChild(icon);
+          }
+          if (hasAudio) {
+            const icon = document.createElement('span');
+            icon.textContent = '🎵';
+            icon.className = 'text-lg';
+            icon.title = 'Tiene audio asociado';
+            mediaContainer.appendChild(icon);
+          }
+          if (hasImage) {
+            const icon = document.createElement('span');
+            icon.textContent = '🖼';
+            icon.className = 'text-lg';
+            icon.title = 'Tiene imagen asociada';
+            mediaContainer.appendChild(icon);
+          }
+          
+          if (!hasVideo && !hasAudio && !hasImage) {
+            const emptySpan = document.createElement('span');
+            emptySpan.textContent = '-';
+            emptySpan.className = 'text-slate-500 text-sm';
+            mediaContainer.appendChild(emptySpan);
+          }
+        }
+      }
+    } catch (error) {
+      // No fallar silenciosamente, pero no bloquear la UI
+      console.error('Error cargando media iconos:', error);
+    }
   }
 })();
 </script>
