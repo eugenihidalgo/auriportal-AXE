@@ -37,6 +37,7 @@ export class ThemeBindingRepoPg {
       SELECT * FROM theme_bindings
       WHERE scope_type = $1
         AND scope_key = $2
+        AND active = true
         AND deleted_at IS NULL
     `, [scope_type, scope_key]);
 
