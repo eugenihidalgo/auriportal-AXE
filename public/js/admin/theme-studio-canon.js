@@ -10,6 +10,28 @@ let currentThemeDraft = null;
 let isDirty = false;
 let previewResult = null;
 
+// Helper para verificar Content-Type y manejar errores de HTML
+async function safeJsonResponse(res, errorContext) {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    const htmlText = await res.text();
+    showError('La API devolvió HTML. Revisa autenticación o backend.');
+    console.error(`[ThemeStudioCanon] ${errorContext}: API devolvió HTML en lugar de JSON:`, htmlText.substring(0, 500));
+    return null;
+  }
+  
+  try {
+    return await res.json();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      showError('La API devolvió HTML. Revisa autenticación o backend.');
+      console.error(`[ThemeStudioCanon] ${errorContext}: Error parseando JSON (probablemente recibió HTML):`, error);
+      return null;
+    }
+    throw error;
+  }
+}
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
   loadThemes();
@@ -22,10 +44,14 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadThemes() {
   try {
     const res = await fetch(`${API_BASE}/themes`);
+    
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
-    const data = await res.json();
+    
+    const data = await safeJsonResponse(res, 'loadThemes');
+    if (!data) return; // Error ya manejado por safeJsonResponse
+    
     if (data.ok) {
       themes = data.themes || [];
       renderThemeList();
@@ -41,10 +67,14 @@ async function loadThemes() {
 async function loadTheme(themeId) {
   try {
     const res = await fetch(`${API_BASE}/theme/${themeId}`);
+    
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
-    const data = await res.json();
+    
+    const data = await safeJsonResponse(res, 'loadTheme');
+    if (!data) return; // Error ya manejado por safeJsonResponse
+    
     if (data.ok && data.theme) {
       currentTheme = { id: themeId, ...data.theme, source: data.source };
       currentThemeDraft = JSON.parse(JSON.stringify(data.theme)); // Deep clone
@@ -81,6 +111,7 @@ function renderThemeList() {
     listEl.appendChild(li);
     return;
   }
+
   themes.forEach(theme => {
     const li = document.createElement('li');
     li.className = 'theme-item';
@@ -200,7 +231,7 @@ function switchTab(tabName) {
   });
 
   // Mostrar tab seleccionado
-  const tabEl = document.getElementById(`tab-${tabName}`);
+  const tabEl = document.getElementById('tab-' + tabName);
   if (tabEl) tabEl.style.display = 'block';
 
   const btnEl = Array.from(document.querySelectorAll('.tab-btn')).find(btn => 
@@ -300,7 +331,9 @@ async function handleValidate() {
       body: JSON.stringify({ theme: currentThemeDraft })
     });
 
-    const data = await res.json();
+    const data = await safeJsonResponse(res, 'handleValidate');
+    if (!data) return; // Error ya manejado
+    
     if (data.ok) {
       // Mostrar warnings/errors en tab Debug
       switchTab('debug');
@@ -335,7 +368,9 @@ async function handleSaveDraft() {
       body: JSON.stringify({ theme: currentThemeDraft })
     });
 
-    const data = await res.json();
+    const data = await safeJsonResponse(res, 'handleSaveDraft');
+    if (!data) return; // Error ya manejado
+    
     if (data.ok) {
       isDirty = false;
       updateDirtyIndicator();
@@ -365,7 +400,9 @@ async function handlePublish() {
       body: JSON.stringify({ theme_id: currentTheme.id })
     });
 
-    const data = await res.json();
+    const data = await safeJsonResponse(res, 'handlePublish');
+    if (!data) return; // Error ya manejado
+    
     if (data.ok) {
       isDirty = false;
       updateDirtyIndicator();
@@ -398,7 +435,9 @@ async function handlePreview() {
       })
     });
 
-    const data = await res.json();
+    const data = await safeJsonResponse(res, 'handlePreview');
+    if (!data) return; // Error ya manejado
+    
     if (data.ok) {
       previewResult = data;
       renderPreviewResult(data);
@@ -500,7 +539,7 @@ function renderPreviewResult(data) {
     }
   }
 
-  // Tokens clave
+  // Tokens clave (mantener para debug)
   const tokensEl = document.getElementById('previewTokens');
   if (tokensEl) {
     tokensEl.innerHTML = '';

@@ -531,14 +531,18 @@ async function handlePreviewTheme(request, env, authCtx) {
  * Handler principal del API
  */
 export default async function adminThemeStudioCanonAPIHandler(request, env, ctx) {
-  const authCtx = await requireAdminContext(request, env);
-  if (authCtx instanceof Response) {
-    return authCtx;
-  }
-  
-  const url = new URL(request.url);
-  const path = url.pathname;
-  const method = request.method;
+  try {
+    const authCtx = await requireAdminContext(request, env);
+    
+    // CRÍTICO: Endpoints API NUNCA devuelven HTML
+    // Si requireAdminContext devuelve Response (HTML de login), devolver JSON 401
+    if (authCtx instanceof Response) {
+      return errorResponse('No autenticado. Requiere sesión admin.', 401);
+    }
+    
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
   
   // Routing
   if (path === '/admin/api/theme-studio-canon/themes' && method === 'GET') {
@@ -566,9 +570,17 @@ export default async function adminThemeStudioCanonAPIHandler(request, env, ctx)
     }
   }
   
-  if (path === '/admin/api/theme-studio-canon/preview' && method === 'POST') {
-    return handlePreviewTheme(request, env, authCtx);
+    if (path === '/admin/api/theme-studio-canon/preview' && method === 'POST') {
+      return handlePreviewTheme(request, env, authCtx);
+    }
+    
+    return errorResponse('Ruta no encontrada', 404);
+  } catch (error) {
+    // CRÍTICO: Capturar cualquier error no manejado y devolver JSON
+    logError('ThemeStudioCanon', 'Error no manejado en API handler', { 
+      error: error.message, 
+      stack: error.stack 
+    });
+    return errorResponse('Error interno del servidor', 500);
   }
-  
-  return errorResponse('Ruta no encontrada', 404);
 }
