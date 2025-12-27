@@ -183,11 +183,22 @@ export async function saveDraft(theme_key, definition, meta = {}) {
       theme = newTheme;
     } else {
       // Actualizar draft existente
-      theme = await themeRepo.updateThemeMeta(theme.id, {
-        definition: definition,
+      // ⚠️ PROTECCIÓN: Si el tema está published, no modificar themes.definition
+      // (el runtime usa theme_versions, pero mantener coherencia de datos)
+      const updatePatch = {
         description: definition.description || meta.description,
         name: definition.name || theme.name
-      });
+      };
+      
+      // Solo actualizar definition si el tema NO está published
+      // (si está published, el draft se guarda en theme_drafts, no en themes.definition)
+      if (theme.status !== 'published') {
+        updatePatch.definition = definition;
+      } else {
+        console.warn(`[THEME][V1] Tema '${theme_key}' está published, no se modifica themes.definition (usa theme_versions)`);
+      }
+      
+      theme = await themeRepo.updateThemeMeta(theme.id, updatePatch);
     }
     
     console.log(`[THEME][V1] Draft '${theme_key}' guardado`);
