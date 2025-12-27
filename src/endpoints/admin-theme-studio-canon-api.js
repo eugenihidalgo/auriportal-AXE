@@ -58,11 +58,20 @@ function errorResponse(message, status = 400, details = null) {
  * Devuelve lista combinada de system themes + db themes
  */
 async function handleGetThemes(request, env, authCtx) {
+  console.log('[THEME_CANON] handleGetThemes ENTRY');
+  
   try {
+    // TEMPORAL: Simplificar para aislar el problema
+    console.log('[THEME_CANON] Returning hardcoded empty themes array');
+    return jsonResponse({ ok: true, themes: [] });
+    
+    /* COMENTADO TEMPORALMENTE PARA DEBUG
     const themes = [];
     
     // System themes
+    console.log('[THEME_CANON] Getting system themes');
     const systemThemeKeys = Object.keys(SYSTEM_DEFAULT);
+    console.log('[THEME_CANON] systemThemeKeys:', systemThemeKeys.length);
     for (const key of systemThemeKeys) {
       const themeDef = getThemeDefinition(key);
       if (themeDef) {
@@ -79,12 +88,15 @@ async function handleGetThemes(request, env, authCtx) {
     
     // DB themes (drafts + published)
     try {
+      console.log('[THEME_CANON] Getting DB themes');
       const themeRepo = getDefaultThemeRepo();
       const draftRepo = getDefaultThemeDraftRepo();
       const versionRepo = getDefaultThemeVersionRepo();
       
       // Obtener todos los themes de la BD
+      console.log('[THEME_CANON] Calling themeRepo.listThemes');
       const dbThemes = await themeRepo.listThemes({ include_deleted: false });
+      console.log('[THEME_CANON] dbThemes count:', dbThemes.length);
       
       for (const theme of dbThemes) {
         // Obtener draft más reciente
@@ -101,12 +113,17 @@ async function handleGetThemes(request, env, authCtx) {
         });
       }
     } catch (dbError) {
+      console.log('[THEME_CANON] DB error (continuing):', dbError.message);
       logWarn('ThemeStudioCanon', 'Error obteniendo themes de BD', { error: dbError.message });
       // Continue con system themes solo
     }
     
+    console.log('[THEME_CANON] Returning themes, count:', themes.length);
     return jsonResponse({ ok: true, themes });
+    */
   } catch (error) {
+    console.error('[THEME_CANON] handleGetThemes ERROR:', error.message);
+    console.error('[THEME_CANON] Stack:', error.stack);
     logError('ThemeStudioCanon', 'Error en GET /themes', { error: error.message, stack: error.stack });
     return errorResponse('Error obteniendo temas', 500);
   }
@@ -531,23 +548,33 @@ async function handlePreviewTheme(request, env, authCtx) {
  * Handler principal del API
  */
 export default async function adminThemeStudioCanonAPIHandler(request, env, ctx) {
+  console.log('[THEME_CANON] ===== ENTRY =====');
+  console.log('[THEME_CANON] URL:', request.url);
+  console.log('[THEME_CANON] Method:', request.method);
+  
   try {
+    console.log('[THEME_CANON] Before requireAdminContext');
     const authCtx = await requireAdminContext(request, env);
+    console.log('[THEME_CANON] After requireAdminContext, type:', typeof authCtx, 'isResponse:', authCtx instanceof Response);
     
     // CRÍTICO: Endpoints API NUNCA devuelven HTML
     // Si requireAdminContext devuelve Response (HTML de login), devolver JSON 401
     if (authCtx instanceof Response) {
+      console.log('[THEME_CANON] authCtx is Response, returning 401 JSON');
       return errorResponse('No autenticado. Requiere sesión admin.', 401);
     }
     
+    console.log('[THEME_CANON] authCtx OK, continuing');
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    console.log('[THEME_CANON] Path:', path, 'Method:', method);
   
-  // Routing
-  if (path === '/admin/api/theme-studio-canon/themes' && method === 'GET') {
-    return handleGetThemes(request, env, authCtx);
-  }
+    // Routing
+    if (path === '/admin/api/theme-studio-canon/themes' && method === 'GET') {
+      console.log('[THEME_CANON] Routing to handleGetThemes');
+      return handleGetThemes(request, env, authCtx);
+    }
   
   if (path.startsWith('/admin/api/theme-studio-canon/theme/')) {
     const parts = path.split('/');
