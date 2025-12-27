@@ -121,3 +121,4 @@ CREATE TRIGGER trigger_update_interactive_resources_updated_at
 --    en payload pero no se implementa storage aún.
 -- ============================================================================
 
+

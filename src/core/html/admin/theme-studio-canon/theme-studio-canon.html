@@ -1,0 +1,507 @@
+<!-- Theme Studio Canon v1 - HTML Template -->
+<div class="theme-studio-canon">
+  <!-- Banner de error (si hay) -->
+  <div id="errorBanner" class="error-banner" style="display: none;">
+    <span id="errorMessage"></span>
+    <button onclick="document.getElementById('errorBanner').style.display='none'">✕</button>
+  </div>
+
+  <!-- Layout 2 columnas -->
+  <div class="theme-studio-layout">
+    <!-- Panel izquierdo: Lista de temas -->
+    <div class="theme-list-panel">
+      <div class="panel-header">
+        <h2>Temas</h2>
+        <button class="btn btn-primary" onclick="handleNewTheme()">Nuevo</button>
+      </div>
+      
+      <div class="search-box">
+        <input type="text" id="themeSearch" placeholder="Buscar tema..." oninput="handleSearchThemes(this.value)" />
+      </div>
+      
+      <ul class="theme-list" id="themeList">
+        <li>Cargando...</li>
+      </ul>
+    </div>
+
+    <!-- Panel central/derecha: Editor -->
+    <div class="theme-editor-panel">
+      <div class="panel-header">
+        <h2 id="editorTitle">Selecciona un tema</h2>
+        <span id="dirtyIndicator" class="dirty-indicator" style="display: none;">● Sin guardar</span>
+      </div>
+
+      <div id="editorContainer" class="editor-container">
+        <p class="placeholder-text">Selecciona un tema de la lista para editar</p>
+      </div>
+
+      <!-- Pestañas -->
+      <div class="tabs" id="tabs" style="display: none;">
+        <button class="tab-btn active" onclick="switchTab('tokens')">Tokens</button>
+        <button class="tab-btn" onclick="switchTab('meta')">Meta</button>
+        <button class="tab-btn" onclick="switchTab('preview')">Preview</button>
+        <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
+      </div>
+
+      <!-- Tab: Tokens -->
+      <div id="tab-tokens" class="tab-content" style="display: none;">
+        <div class="tokens-editor">
+          <div class="tokens-header">
+            <button class="btn btn-secondary" onclick="handleResetDefaults()">Reset a defaults</button>
+          </div>
+          <div class="tokens-grid" id="tokensGrid"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Meta -->
+      <div id="tab-meta" class="tab-content" style="display: none;">
+        <div class="meta-editor">
+          <div class="form-group">
+            <label for="themeName">Nombre</label>
+            <input type="text" id="themeName" class="form-input" onchange="markDirty()" />
+          </div>
+          <div class="form-group">
+            <label for="themeDescription">Descripción</label>
+            <textarea id="themeDescription" class="form-textarea" rows="4" onchange="markDirty()"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="themeTags">Tags (separados por comas)</label>
+            <input type="text" id="themeTags" class="form-input" placeholder="dark, classic, system" onchange="markDirty()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Preview -->
+      <div id="tab-preview" class="tab-content" style="display: none;">
+        <div class="preview-editor">
+          <div class="scenario-selector">
+            <button class="scenario-chip" onclick="selectScenario('admin')">Admin</button>
+            <button class="scenario-chip" onclick="selectScenario('student-3')">Student Nivel 3</button>
+            <button class="scenario-chip" onclick="selectScenario('student-10')">Student Nivel 10</button>
+            <button class="scenario-chip" onclick="selectScenario('anonymous')">Anonymous</button>
+            <button class="scenario-chip" onclick="selectScenario('custom')">Custom</button>
+          </div>
+
+          <div class="snapshot-form" id="snapshotForm">
+            <div class="form-group">
+              <label for="previewActorType">Actor Type</label>
+              <select id="previewActorType" class="form-select">
+                <option value="admin">admin</option>
+                <option value="student">student</option>
+                <option value="anonymous">anonymous</option>
+                <option value="system">system</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="previewNivelEfectivo">Nivel Efectivo</label>
+              <input type="number" id="previewNivelEfectivo" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label for="previewScreen">Screen</label>
+              <input type="text" id="previewScreen" class="form-input" value="/enter" />
+            </div>
+            <div class="form-group">
+              <label for="previewSidebarContext">Sidebar Context</label>
+              <input type="text" id="previewSidebarContext" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label for="previewFlags">Flags (JSON opcional)</label>
+              <textarea id="previewFlags" class="form-textarea" rows="3" placeholder='{"feature": true}'></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="handlePreview()">Preview</button>
+          </div>
+
+          <div id="previewResult" class="preview-result" style="display: none;">
+            <h3>Preview</h3>
+            <div class="mini-preview-box" id="miniPreviewBox"></div>
+            <div class="preview-tokens" id="previewTokens"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Debug -->
+      <div id="tab-debug" class="tab-content" style="display: none;">
+        <div class="debug-panel">
+          <h3>Resolved Contexts</h3>
+          <pre id="debugResolvedContexts" class="debug-json"></pre>
+          <h3>Applied Variants</h3>
+          <pre id="debugAppliedVariants" class="debug-json"></pre>
+          <h3>Warnings</h3>
+          <div id="debugWarnings" class="debug-warnings"></div>
+        </div>
+      </div>
+
+      <!-- Footer acciones -->
+      <div class="editor-footer" id="editorFooter" style="display: none;">
+        <button class="btn btn-secondary" onclick="handleValidate()">Validar</button>
+        <button class="btn btn-secondary" onclick="handleSaveDraft()">Guardar Draft</button>
+        <button class="btn btn-primary" id="publishBtn" onclick="handlePublish()" disabled>Publicar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .theme-studio-canon {
+    padding: 20px;
+  }
+
+  .error-banner {
+    background: var(--ap-danger-base, #dc3545);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .error-banner button {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+  }
+
+  .theme-studio-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px;
+    min-height: 600px;
+  }
+
+  .theme-list-panel, .theme-editor-panel {
+    background: var(--ap-bg-panel, #2d2d2d);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ap-border-subtle, #404040);
+  }
+
+  .panel-header h2 {
+    font-size: 18px;
+    margin: 0;
+  }
+
+  .dirty-indicator {
+    color: var(--ap-warning-base, #ffc107);
+    font-size: 12px;
+  }
+
+  .search-box {
+    margin-bottom: 16px;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    color: var(--ap-text-primary, #ffffff);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .theme-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  .theme-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .theme-item:hover {
+    background: var(--ap-state-hover, rgba(255, 255, 255, 0.1));
+  }
+
+  .theme-item.active {
+    border-color: var(--ap-accent-primary, #007bff);
+    background: var(--ap-state-active, rgba(0, 123, 255, 0.2));
+  }
+
+  .theme-item-name {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .theme-item-id {
+    font-size: 12px;
+    color: var(--ap-text-muted, #888);
+  }
+
+  .theme-badges {
+    display: flex;
+    gap: 4px;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge.system {
+    background: var(--ap-info-base, #17a2b8);
+    color: white;
+  }
+
+  .badge.db {
+    background: var(--ap-success-base, #28a745);
+    color: white;
+  }
+
+  .badge.draft {
+    background: var(--ap-warning-base, #ffc107);
+    color: #000;
+  }
+
+  .badge.published {
+    background: var(--ap-success-base, #28a745);
+    color: white;
+  }
+
+  .placeholder-text {
+    color: var(--ap-text-muted, #888);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--ap-border-subtle, #404040);
+  }
+
+  .tab-btn {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--ap-text-secondary, #aaa);
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .tab-btn:hover {
+    color: var(--ap-text-primary, #fff);
+  }
+
+  .tab-btn.active {
+    color: var(--ap-accent-primary, #007bff);
+    border-bottom-color: var(--ap-accent-primary, #007bff);
+  }
+
+  .tab-content {
+    min-height: 400px;
+  }
+
+  .tokens-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 16px;
+  }
+
+  .tokens-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .token-row {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .token-key {
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--ap-text-primary, #fff);
+  }
+
+  .token-input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    color: var(--ap-text-primary, #fff);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: var(--ap-text-secondary, #aaa);
+  }
+
+  .form-input, .form-select, .form-textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    color: var(--ap-text-primary, #fff);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .form-textarea {
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .scenario-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .scenario-chip {
+    padding: 6px 12px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    color: var(--ap-text-primary, #fff);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .scenario-chip:hover {
+    background: var(--ap-state-hover, rgba(255, 255, 255, 0.1));
+  }
+
+  .scenario-chip.active {
+    background: var(--ap-accent-primary, #007bff);
+    border-color: var(--ap-accent-primary, #007bff);
+  }
+
+  .mini-preview-box {
+    padding: 24px;
+    background: var(--preview-bg-main, #faf7f2);
+    color: var(--preview-text-primary, #333);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .preview-tokens {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .preview-token {
+    padding: 8px;
+    background: var(--ap-bg-surface, #1a1a1a);
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 4px;
+  }
+
+  .preview-token-label {
+    font-size: 11px;
+    color: var(--ap-text-muted, #888);
+    margin-bottom: 4px;
+  }
+
+  .preview-token-value {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--ap-text-primary, #fff);
+  }
+
+  .debug-json {
+    background: var(--ap-bg-surface, #1a1a1a);
+    padding: 12px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--ap-text-primary, #fff);
+    overflow-x: auto;
+    margin-bottom: 20px;
+  }
+
+  .debug-warnings {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .warning-item {
+    padding: 8px 12px;
+    background: var(--ap-warning-base, #ffc107);
+    color: #000;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .editor-footer {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--ap-border-subtle, #404040);
+  }
+
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .btn-primary {
+    background: var(--ap-accent-primary, #007bff);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--ap-state-hover, rgba(0, 123, 255, 0.8));
+  }
+
+  .btn-primary:disabled {
+    background: var(--ap-text-muted, #666);
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--ap-accent-secondary, #6c757d);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: var(--ap-state-hover, rgba(108, 117, 125, 0.8));
+  }
+</style>

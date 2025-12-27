@@ -242,3 +242,4 @@ COMMENT ON COLUMN assembly_check_results.details IS 'Detalles adicionales del re
 -- No insertamos datos hardcodeados aquí para mantener flexibilidad
 
 
+

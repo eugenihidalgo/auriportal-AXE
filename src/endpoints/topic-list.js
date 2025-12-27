@@ -17,5 +17,5 @@ export default async function topicListHandler(request, env, ctx) {
   // Generar tarjetas HTML con contadores reales
   const temasHTML = await generarTemasHTML(student, env);
 
-  return renderPantalla4(student, temasHTML);
+  return await renderPantalla4(student, temasHTML);
 }

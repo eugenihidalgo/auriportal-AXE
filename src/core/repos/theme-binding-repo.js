@@ -88,3 +88,4 @@ export function deleteBinding(scope_type, scope_key, client = null) {
   throw new Error('deleteBinding debe ser implementado');
 }
 
+

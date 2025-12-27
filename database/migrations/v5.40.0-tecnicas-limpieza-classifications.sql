@@ -111,3 +111,4 @@ COMMENT ON FUNCTION list_tecnicas_limpieza_classifications_available IS
 --
 -- ============================================================================
 
+

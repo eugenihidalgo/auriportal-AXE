@@ -78,6 +78,7 @@ const HANDLER_MAP = {
   'packages-creator': () => import('../../endpoints/admin-packages-ui.js'),
   'system-diagnostics-page': () => import('../../endpoints/admin-system-diagnostics-page.js'),
   'assembly-check-page': () => import('../../endpoints/admin-assembly-check-ui.js'),
+  'theme-studio-canon': () => import('../../endpoints/admin-theme-studio-canon-ui.js'),
   'theme-studio-v3': () => import('../../endpoints/admin-themes-v3-ui.js'),
   'theme-studio-v2': () => import('../../endpoints/admin-themes-studio-ui.js'),
   'theme-studio-v1': () => import('../../endpoints/admin-theme-studio-v1-ui.js'),

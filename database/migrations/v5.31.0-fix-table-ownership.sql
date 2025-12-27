@@ -144,3 +144,4 @@ COMMENT ON TABLE audit_events IS 'SOT - Ownership corregido a aurelinportal (v5.
 
 
 
+

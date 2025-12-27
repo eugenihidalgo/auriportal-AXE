@@ -61,6 +61,17 @@ export default async function adminThemesV3UIHandler(request, env, ctx) {
     const htmlPath = join(__dirname, '../admin/theme-studio-v3/index.html');
     let html = readFileSync(htmlPath, 'utf-8');
 
+    // Banner de deprecación
+    const deprecationBanner = `
+      <div style="background: #ffc107; color: #000; padding: 12px 16px; margin: 0; border-radius: 0; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
+        <span><strong>DEPRECATED</strong> — Usar <a href="/admin/theme-studio-canon" style="color: #000; text-decoration: underline; font-weight: bold;">Theme Studio · Canon (v1)</a></span>
+        <button onclick="this.parentElement.style.display='none'" style="background: transparent; border: none; color: #000; cursor: pointer; font-size: 18px;">✕</button>
+      </div>
+    `;
+    
+    // Insertar banner después del <body>
+    html = html.replace(/<body[^>]*>/, (match) => match + deprecationBanner);
+
     // Servir HTML limpio (sin reemplazos, sin templates)
     return new Response(html, {
       status: 200,

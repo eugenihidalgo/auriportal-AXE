@@ -86,3 +86,4 @@ END $$;
 -- 4. metadata permite extensibilidad sin alterar el esquema principal
 -- ============================================================================
 
+

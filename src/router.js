@@ -808,6 +808,12 @@ async function routerFunction(request, env, ctx) {
         }
       }
       
+      // Endpoints API de Theme Studio Canon v1 - ANTES del catch-all de themes
+      if (path.startsWith("/admin/api/theme-studio-canon")) {
+        const adminThemeStudioCanonAPIHandler = (await import("./endpoints/admin-theme-studio-canon-api.js")).default;
+        return adminThemeStudioCanonAPIHandler(request, env, ctx);
+      }
+      
       // Endpoints API de temas (catch-all para /admin/themes/* que no sean studio-v3 o studio)
       // IMPORTANTE: Debe ir DESPUÉS de las rutas específicas de Theme Studio
       if (path.startsWith("/admin/themes")) {

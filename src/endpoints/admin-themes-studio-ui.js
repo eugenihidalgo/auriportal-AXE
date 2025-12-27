@@ -56,6 +56,14 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
     fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin-themes-studio-ui.js:47',message:'Starting HTML template string',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
     // #endregion
 
+    // Banner de deprecación
+    const deprecationBanner = `
+      <div style="background: #ffc107; color: #000; padding: 12px 16px; margin-bottom: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000;">
+        <span><strong>DEPRECATED</strong> — Usar <a href="/admin/theme-studio-canon" style="color: #000; text-decoration: underline; font-weight: bold;">Theme Studio · Canon (v1)</a></span>
+        <button onclick="this.parentElement.style.display='none'" style="background: transparent; border: none; color: #000; cursor: pointer; font-size: 18px;">✕</button>
+      </div>
+    `;
+
     const html = `
 <!DOCTYPE html>
 <html lang="es">
@@ -79,6 +87,28 @@ export default async function adminThemesStudioUIHandler(request, env, ctx) {
       overflow: hidden;
       display: flex;
       flex-direction: column;
+    }
+    
+    /* Banner de deprecación */
+    .deprecation-banner {
+      background: #ffc107;
+      color: #000;
+      padding: 12px 16px;
+      margin: 0;
+      border-radius: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .deprecation-banner button {
+      background: transparent;
+      border: none;
+      color: #000;
+      cursor: pointer;
+      font-size: 18px;
     }
     
     /* Barra superior fija */

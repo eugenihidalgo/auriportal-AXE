@@ -83,6 +83,43 @@ export const ADMIN_ROUTES = [
     type: 'api',
     method: 'GET'
   },
+  // Theme Studio Canon v1
+  {
+    key: 'api-theme-studio-canon-themes',
+    path: '/admin/api/theme-studio-canon/themes',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-theme-studio-canon-theme',
+    path: '/admin/api/theme-studio-canon/theme/:id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-theme-studio-canon-validate',
+    path: '/admin/api/theme-studio-canon/theme/validate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-theme-studio-canon-save-draft',
+    path: '/admin/api/theme-studio-canon/theme/save-draft',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-theme-studio-canon-publish',
+    path: '/admin/api/theme-studio-canon/theme/publish',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-theme-studio-canon-preview',
+    path: '/admin/api/theme-studio-canon/preview',
+    type: 'api',
+    method: 'POST'
+  },
   {
     key: 'api-screen-templates',
     path: '/api/admin/screen-templates',
@@ -313,6 +350,11 @@ export const ADMIN_ROUTES = [
   {
     key: 'theme-studio-v1',
     path: '/admin/theme-studio',
+    type: 'island'
+  },
+  {
+    key: 'theme-studio-canon',
+    path: '/admin/theme-studio-canon',
     type: 'island'
   },
   {

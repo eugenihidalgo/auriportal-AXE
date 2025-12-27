@@ -6,7 +6,7 @@ import { dirname, join } from 'path';
 import { buildTypeformUrl } from './typeform-utils.js';
 import { versionAsset } from './asset-version.js';
 import { renderHtml } from './html-response.js';
-import { resolveTheme, getThemeId } from './theme/theme-resolver.js';
+import { resolveTheme, resolveThemeWithContext, getThemeId } from './theme/theme-resolver.js';
 import { buildThemeStyleTag, injectOrReplaceThemeStyleTag } from './theme/theme-css-materializer.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -58,15 +58,32 @@ export function getHtmlCacheHeaders() {
  * INTERNAMENTE usa Theme Resolver v1 para garantizar resolución determinista
  * MANTIENE compatibilidad total con código existente
  * 
+ * CONTEXT RESOLVER v1: Si se proporciona snapshot, usa Context Resolver v1 para resolver contextos del tema.
+ * 
  * @param {string} html - HTML a procesar
  * @param {object|null} student - Objeto estudiante con tema_preferido (opcional)
- * @returns {string} HTML con tema aplicado
+ * @param {string|null} theme_id - ID del tema (opcional, para preview)
+ * @param {Object|null} snapshot - Context Snapshot v1 (opcional, si se proporciona usa Context Resolver v1)
+ * @returns {Promise<string>} HTML con tema aplicado (async para soportar Context Resolver v1)
  */
-export function applyTheme(html, student = null, theme_id = null) {
+export async function applyTheme(html, student = null, theme_id = null, snapshot = null) {
   // Usar Theme Resolver v1 para obtener el tema efectivo
   // El resolver garantiza resolución determinista y fail-open absoluto
   // SPRINT AXE v0.4: Acepta theme_id opcional para preview
-  const themeEffective = resolveTheme({ student, theme_id });
+  // CONTEXT RESOLVER v1: Si hay snapshot, usar resolveThemeWithContext (async)
+  let themeEffective;
+  if (snapshot) {
+    try {
+      themeEffective = await resolveThemeWithContext({ student, theme_id, snapshot });
+    } catch (error) {
+      console.warn('[applyTheme] Error usando Context Resolver v1, fallback a resolveTheme:', error.message);
+      // Fail-open: usar resolver síncrono legacy
+      themeEffective = resolveTheme({ student, theme_id });
+    }
+  } else {
+    // Sin snapshot: usar resolver síncrono legacy (compatibilidad)
+    themeEffective = resolveTheme({ student, theme_id });
+  }
   
   // Obtener ID del tema (legacy: 'dark' o 'light') para compatibilidad
   const tema = getThemeId(themeEffective);
@@ -271,14 +288,14 @@ export function applyTheme(html, student = null, theme_id = null) {
 /*                              PANTALLA 0                                */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla0(student = null) {
+export async function renderPantalla0(student = null) {
   const temaPreferido = student?.tema_preferido || 'dark';
   let html = replace(pantalla0, {
     TEMA_PREFERIDO: temaPreferido
   });
   
   // Usar renderHtml centralizado (aplica tema y headers automáticamente)
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
@@ -440,7 +457,7 @@ export function renderSidebar(sidebarItems, context = 'home') {
   return sidebarHtml;
 }
 
-export function renderPantalla1(student, ctx) {
+export async function renderPantalla1(student, ctx) {
   // REGLA: La UI NO calcula estado. Solo lee valores de ctx.
   // Todos los valores vienen de buildStudentContext (single source of truth)
   
@@ -584,14 +601,14 @@ export function renderPantalla1(student, ctx) {
     }
   }
 
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
 /*                              PANTALLA 2                                */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla2(student, ctx) {
+export async function renderPantalla2(student, ctx) {
   // REGLA: La UI NO calcula estado. Solo lee valores de ctx.
   // Todos los valores vienen de buildStudentContext (single source of truth)
   
@@ -666,14 +683,14 @@ export function renderPantalla2(student, ctx) {
     }
   }
   
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
 /*                              PANTALLA 3                                */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla3(student, data) {
+export async function renderPantalla3(student, data) {
   const temaPreferido = student?.tema_preferido || 'dark';
   let html = replace(pantalla3, {
     TEMA_PREFERIDO: temaPreferido,
@@ -685,14 +702,14 @@ export function renderPantalla3(student, data) {
   });
   
   // Usar renderHtml centralizado (aplica tema y headers automáticamente)
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
 /*                              PANTALLA 4                                */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla4(student, temasHTML = "") {
+export async function renderPantalla4(student, temasHTML = "") {
   const temaPreferido = student?.tema_preferido || 'dark';
   let html = replace(pantalla4, {
     TEMA_PREFERIDO: temaPreferido,
@@ -701,14 +718,14 @@ export function renderPantalla4(student, temasHTML = "") {
   });
   
   // Usar renderHtml centralizado (aplica tema y headers automáticamente)
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
 /*                        PANTALLA 2 - PRACTICAR                          */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla2Practicar(student, streakInfo) {
+export async function renderPantalla2Practicar(student, streakInfo) {
   const nivelInfo = streakInfo?.nivelInfo || { nivel: 1, nombre: "Aprendiz", categoria: "Sanación" };
   
   // Normalizar categoría a fase para la URL (sanación/canalización en minúsculas)
@@ -729,14 +746,14 @@ export function renderPantalla2Practicar(student, streakInfo) {
   });
   
   // Usar renderHtml centralizado (aplica tema y headers automáticamente)
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */
 /*                        PANTALLA 2.1 - LIMPIEZA                         */
 /* ---------------------------------------------------------------------- */
 
-export function renderPantalla21(student = null) {
+export async function renderPantalla21(student = null) {
   let html = replace(pantalla21, {
     IMAGEN_AURI: "https://images.typeform.com/images/tXs4JibWTbvb",
     URL_LIMPIEZA_RAPIDA: "/limpieza/rapida",
@@ -746,7 +763,7 @@ export function renderPantalla21(student = null) {
   });
   
   // Usar renderHtml centralizado (aplica tema y headers automáticamente)
-  return renderHtml(html, { student });
+  return await renderHtml(html, { student });
 }
 
 /* ---------------------------------------------------------------------- */

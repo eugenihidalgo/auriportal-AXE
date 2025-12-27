@@ -255,3 +255,4 @@ export default async function adminThemeBindingsApiHandler(request, env, ctx) {
   return errorResponse('Ruta no encontrada', 404);
 }
 
+

@@ -154,3 +154,4 @@ WHERE status IS NULL;
 -- 5. Ordenamiento canónico: level ASC, created_at ASC
 -- ============================================================================
 
+

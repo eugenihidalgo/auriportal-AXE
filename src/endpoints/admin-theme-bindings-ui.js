@@ -140,3 +140,4 @@ export default async function adminThemeBindingsUIHandler(request, env, ctx) {
   return renderAdminPage(html, { currentPath: '/admin/theme-bindings' });
 }
 
+

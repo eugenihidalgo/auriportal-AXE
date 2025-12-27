@@ -11,6 +11,14 @@ export default async function adminThemeStudioV1UIHandler(request, env, ctx) {
     return authCtx;
   }
 
+  // Banner de deprecación
+  const deprecationBanner = `
+    <div style="background: #ffc107; color: #000; padding: 12px 16px; margin-bottom: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+      <span><strong>DEPRECATED</strong> — Usar <a href="/admin/theme-studio-canon" style="color: #000; text-decoration: underline; font-weight: bold;">Theme Studio · Canon (v1)</a></span>
+      <button onclick="this.parentElement.style.display='none'" style="background: transparent; border: none; color: #000; cursor: pointer; font-size: 18px;">✕</button>
+    </div>
+  `;
+
   const html = `
 <!DOCTYPE html>
 <html lang="es" data-ap-theme="admin-classic">
@@ -165,6 +173,7 @@ export default async function adminThemeStudioV1UIHandler(request, env, ctx) {
 </head>
 <body>
   <div class="container">
+    ${deprecationBanner}
     <div class="header">
       <h1>Theme Studio v1</h1>
       <button class="btn" onclick="createNewTheme()">Crear Tema</button>
@@ -414,4 +423,5 @@ export default async function adminThemeStudioV1UIHandler(request, env, ctx) {
 
   return renderHtml(html, {});
 }
+
 

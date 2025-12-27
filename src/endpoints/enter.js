@@ -52,7 +52,7 @@ export default async function enterHandler(request, env, ctx) {
         console.error('[enter] Error parseando formData:', formDataError.message);
         console.error('[enter] formData stack:', formDataError.stack);
         // Si falla formData, mostrar pantalla0
-        return renderPantalla0();
+        return await renderPantalla0();
       }
       
       // Verificar si request.body existe (para diagnóstico)
@@ -68,7 +68,7 @@ export default async function enterHandler(request, env, ctx) {
       // Validar email
       if (!email || typeof email !== 'string' || email.trim().length === 0) {
         console.warn('[enter] Email no válido o vacío, mostrando pantalla0');
-        return renderPantalla0();
+        return await renderPantalla0();
       }
 
       // Normalizar email a minúsculas y trim
@@ -85,7 +85,7 @@ export default async function enterHandler(request, env, ctx) {
         console.error('[enter] Error en findStudentByEmail:', findError.message);
         console.error('[enter] findStudentByEmail stack:', findError.stack);
         // Si falla la búsqueda, mostrar pantalla0
-        return renderPantalla0();
+        return await renderPantalla0();
       }
       
       if (student) {
@@ -134,14 +134,14 @@ export default async function enterHandler(request, env, ctx) {
         console.error('[enter] Error en buildTypeformUrl:', typeformError.message);
         console.error('[enter] buildTypeformUrl stack:', typeformError.stack);
         // Si falla Typeform, mostrar pantalla0
-        return renderPantalla0();
+        return await renderPantalla0();
       }
     } catch (postError) {
       // CRÍTICO: Capturar CUALQUIER error en POST /enter
       console.error('[enter] Error en bloque POST /enter:', postError.message);
       console.error('[enter] POST /enter stack:', postError.stack);
       // NUNCA devolver 500, siempre pantalla0
-      return renderPantalla0();
+      return await renderPantalla0();
     }
   }
 
@@ -165,10 +165,10 @@ export default async function enterHandler(request, env, ctx) {
       if (ctx.estadoSuscripcion && ctx.estadoSuscripcion.pausada) {
         console.log('[enter] Suscripción pausada, mostrando pantalla1');
         try {
-          return renderPantalla1(student, ctx);
+          return await renderPantalla1(student, ctx);
         } catch (renderError) {
           console.error('[enter] Error en renderPantalla1 (practico pausada):', renderError.message);
-          return renderPantalla0();
+          return await renderPantalla0();
         }
       }
       
@@ -179,15 +179,15 @@ export default async function enterHandler(request, env, ctx) {
       // Mostrar pantalla2 (ya practicó)
       console.log('[enter] Decision pantalla: pantalla2 (ya practicó)');
       try {
-        return renderPantalla2(student, ctx);
+        return await renderPantalla2(student, ctx);
       } catch (renderError) {
         console.error('[enter] Error en renderPantalla2 (practico):', renderError.message);
-        return renderPantalla0();
+        return await renderPantalla0();
       }
     } catch (practicoError) {
       console.error('[enter] Error en bloque practico:', practicoError.message);
       console.error('[enter] practico stack:', practicoError.stack);
-      return renderPantalla0();
+      return await renderPantalla0();
     }
   }
 
@@ -488,7 +488,7 @@ export default async function enterHandler(request, env, ctx) {
       return renderPantalla1(student, ctxWithNav);
     } catch (renderError) {
       console.error('[enter] Error en renderPantalla1:', renderError.message);
-      return renderPantalla0();
+      return await renderPantalla0();
     }
   }
 
@@ -514,10 +514,10 @@ export default async function enterHandler(request, env, ctx) {
     // Añadir sidebarItems al contexto para renderPantalla2
     const ctxWithSidebar = { ...ctx, sidebarItems, sidebarContext };
     
-    return renderPantalla2(student, ctxWithSidebar);
+    return await renderPantalla2(student, ctxWithSidebar);
   } catch (renderError) {
     console.error('[enter] Error en renderPantalla2:', renderError.message);
-    return renderPantalla0();
+    return await renderPantalla0();
   }
   } catch (error) {
     // CRÍTICO: Capturar TODOS los errores en enterHandler
@@ -530,7 +530,7 @@ export default async function enterHandler(request, env, ctx) {
     // En caso de error, mostrar pantalla0 (login) en lugar de error 500
     // Esto asegura que el cliente siempre pueda cargar
     try {
-      return renderPantalla0();
+      return await renderPantalla0();
     } catch (renderError) {
       // Si incluso renderPantalla0 falla, devolver respuesta HTML básica con status 200
       // NUNCA devolver 500 - el cliente debe poder ver algo

@@ -174,3 +174,4 @@ SELECT scope_type, scope_key, theme_key FROM theme_bindings WHERE deleted_at IS 
 **Implementación completada el 2025-12-27**
 **Versión: v5.41.0-theme-system-v1**
 
+

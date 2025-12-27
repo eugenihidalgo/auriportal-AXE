@@ -526,13 +526,22 @@ export const sidebarRegistry = [
 
   // 11.5. ✨ El brillo de AuriPortal
   {
+    id: 'theme-studio-canon',
+    label: 'Theme Studio · Canon (v1)',
+    icon: '🎨',
+    route: '/admin/theme-studio-canon',
+    section: '✨ El brillo de AuriPortal',
+    visible: true,
+    order: 1
+  },
+  {
     id: 'theme-studio-v1',
     label: 'Theme Studio',
     icon: '🎨',
     route: '/admin/theme-studio',
     section: '✨ El brillo de AuriPortal',
-    visible: true,
-    order: 1
+    visible: false,
+    order: 2
   },
   {
     id: 'theme-bindings-ui',

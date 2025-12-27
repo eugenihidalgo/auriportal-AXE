@@ -44,11 +44,15 @@ export function getStudentLevel(context = {}, defaultNivel = null) {
  * - Si algo falla → fallback seguro (no crash)
  * - Nunca bloquea por falta de contexto
  * 
+ * CONTEXT RESOLVER v1: Si se proporciona context.snapshot, usa el nuevo Context Resolver v1.
+ * Si no, usa el comportamiento legacy (resolveContextWithDefaults).
+ * 
  * @param {Object} packageDefinition - Definición JSON del paquete
  * @param {Object} context - Contexto de ejecución (nivel, valores de contexto, etc.)
  * @param {number|null} [context.nivel_efectivo] - Nivel efectivo del estudiante (canónico, tiene prioridad)
  * @param {number|null} [context.nivel] - Nivel del estudiante (legacy fallback, solo si nivel_efectivo no existe)
  * @param {Object} [context.values={}] - Valores de contexto (ej: { tipo_practica: 'diaria' })
+ * @param {Object} [context.snapshot] - Context Snapshot v1 (opcional, si se proporciona usa Context Resolver v1)
  * @returns {Promise<Object>} Paquete resuelto con:
  *   - sources: Array de sources con ítems resueltos
  *   - context_used: Contexto usado (con defaults aplicados)
@@ -76,14 +80,72 @@ export async function resolvePackage(packageDefinition, context = {}) {
   const {
     nivel_efectivo = null,
     nivel = null, // Legacy fallback
-    values = {}
+    values = {},
+    snapshot = null // Context Snapshot v1 (opcional)
   } = context;
 
   // Obtener nivel del alumno de forma canónica (nivel_efectivo primero, luego nivel legacy)
-  const nivelAlumno = getStudentLevel({ nivel_efectivo, nivel });
+  let nivelAlumno = getStudentLevel({ nivel_efectivo, nivel });
 
-  // Resolver contexto con defaults (fail-open, usando Context Registry)
-  const context_used = await resolveContextWithDefaults(context_contract, values, warnings);
+  // CONTEXT RESOLVER v1: Si hay snapshot, usar el nuevo resolver
+  let context_used = {};
+  if (snapshot) {
+    try {
+      const {
+        resolveContexts,
+        buildExecutionContextForPackage,
+        buildContextRequestFromPackage
+      } = await import('../context/index.js');
+
+      // Construir ExecutionContext
+      const executionContext = buildExecutionContextForPackage({
+        packageDefinition,
+        inputs: values,
+        snapshot,
+        requestId: snapshot.identity?.requestId
+      });
+
+      // Construir ContextRequest
+      const contextRequest = buildContextRequestFromPackage({
+        packageDefinition,
+        requestId: snapshot.identity?.requestId
+      });
+
+      // Resolver contextos usando Context Resolver v1
+      const resolvedContext = await resolveContexts({
+        contextRequest,
+        executionContext
+      });
+
+      // Extraer valores resueltos
+      context_used = resolvedContext.resolved || {};
+
+      // Acumular warnings del resolver
+      if (resolvedContext.warnings) {
+        warnings.push(...resolvedContext.warnings);
+      }
+
+      // Asegurar que nivel_efectivo esté disponible (para compatibilidad)
+      if (context_used.nivel_efectivo !== null && context_used.nivel_efectivo !== undefined) {
+        nivelAlumno = context_used.nivel_efectivo;
+      } else if (nivelAlumno !== null && nivelAlumno !== undefined) {
+        context_used.nivel_efectivo = nivelAlumno;
+      }
+    } catch (error) {
+      console.warn('[AXE][PACKAGES] Error usando Context Resolver v1, fallback a legacy:', error.message);
+      // Fallback a comportamiento legacy
+      context_used = await resolveContextWithDefaults(context_contract, values, warnings);
+      if (nivelAlumno !== null && nivelAlumno !== undefined) {
+        context_used.nivel_efectivo = nivelAlumno;
+      }
+    }
+  } else {
+    // Comportamiento legacy: usar resolveContextWithDefaults
+    context_used = await resolveContextWithDefaults(context_contract, values, warnings);
+    if (nivelAlumno !== null && nivelAlumno !== undefined) {
+      context_used.nivel_efectivo = nivelAlumno;
+    }
+  }
   
   // Aplicar reglas de contexto
   const activeRules = applyContextRules(context_rules, context_used, warnings);

@@ -166,3 +166,4 @@ Si algo falla:
 - Resolver existente sigue funcionando
 - `applyTheme()` mantiene compatibilidad total
 
+

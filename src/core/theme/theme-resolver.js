@@ -8,9 +8,10 @@
 // 5. Usa Theme Registry v1 para obtener definiciones canónicas
 
 import { CONTRACT_DEFAULT, SYSTEM_DEFAULT, LEGACY_THEME_MAP } from './theme-defaults.js';
-import { validateThemeValues, fillMissingVariables } from './theme-contract.js';
+import { validateThemeValues, fillMissingVariables, getAllContractVariables } from './theme-contract.js';
 import { getThemeDefinition, getThemeDefinitionAsync } from './theme-registry.js';
 import { resolveTheme as resolveThemeV1 } from '../theme-system/theme-system-v1.js';
+import { applyThemeVariants } from './theme-variants-engine.js';
 
 /**
  * @typedef {import('./theme-types.js').ThemeEffective} ThemeEffective
@@ -274,6 +275,220 @@ async function loadThemeFromDb(theme_id) {
     }
   } catch (error) {
     // Silenciar errores, no afecta el resolver síncrono
+  }
+}
+
+/**
+ * Resuelve tema con Context Resolver v1 integrado
+ * 
+ * NUEVO: Integración con Context Resolver v1 para permitir que temas usen contextos.
+ * Si se proporciona snapshot, resuelve contextos antes de aplicar tokens.
+ * 
+ * @param {Object} input - Contexto de resolución
+ * @param {Object|null} input.student - Objeto estudiante (opcional)
+ * @param {Object|null} input.session - Datos de sesión (opcional)
+ * @param {Object|null} input.systemState - Estado del sistema (opcional)
+ * @param {string|null} input.theme_id - ID del tema (opcional)
+ * @param {Object|null} input.snapshot - Context Snapshot v1 (opcional, si se proporciona usa Context Resolver v1)
+ * @returns {Promise<ThemeEffective>} Objeto completo con todas las variables del contrato + metadata
+ */
+export async function resolveThemeWithContext({ student = null, session = null, systemState = null, theme_id = null, snapshot = null } = {}) {
+  try {
+    // Si hay snapshot, usar Context Resolver v1
+    if (snapshot) {
+      return await resolveThemeWithContextResolver({ student, session, systemState, theme_id, snapshot });
+    }
+
+    // Si no hay snapshot, usar resolveThemeAsync (comportamiento legacy mejorado)
+    return await resolveThemeAsync({ student, session, systemState, theme_id });
+  } catch (error) {
+    console.error('[ThemeResolver] Error en resolveThemeWithContext, fallback a resolveTheme:', error);
+    // Fail-open: usar resolver síncrono legacy
+    return resolveTheme({ student, theme_id });
+  }
+}
+
+/**
+ * Resuelve tema usando Context Resolver v1
+ * 
+ * @param {Object} input - Contexto de resolución con snapshot
+ * @returns {Promise<ThemeEffective>} Tema efectivo con contextos resueltos
+ */
+async function resolveThemeWithContextResolver({ student, session, systemState, theme_id, snapshot }) {
+  try {
+    // Importar Context Resolver v1
+    const {
+      resolveContexts,
+      buildExecutionContextForTheme,
+      buildContextRequestFromTheme
+    } = await import('../context/index.js');
+
+    // 1. Determinar theme_id/key (misma lógica que resolveTheme)
+    let resolvedKey = null;
+    let resolvedFrom = 'contract-default';
+
+    if (theme_id && typeof theme_id === 'string' && theme_id.trim() !== '') {
+      resolvedKey = theme_id.trim();
+      resolvedFrom = 'theme-id';
+    } else if (student?.tema_preferido) {
+      const preferido = String(student.tema_preferido).trim().toLowerCase();
+      if (LEGACY_THEME_MAP[preferido]) {
+        resolvedKey = LEGACY_THEME_MAP[preferido];
+        resolvedFrom = 'legacy-map';
+      } else {
+        resolvedKey = preferido;
+        resolvedFrom = 'student-preference';
+      }
+    } else {
+      resolvedKey = 'dark-classic';
+      resolvedFrom = 'system-default';
+    }
+
+    // 2. Obtener definición del tema (async para BD si es necesario)
+    let themeDefinition = getThemeDefinition(resolvedKey);
+    
+    if ((!themeDefinition || !themeDefinition.values) && resolvedFrom === 'theme-id') {
+      try {
+        const { getDefaultThemeVersionRepo } = await import('../../infra/repos/theme-version-repo-pg.js');
+        const versionRepo = getDefaultThemeVersionRepo();
+        const version = await versionRepo.getLatestVersion(resolvedKey);
+        
+        if (version && version.definition_json && version.definition_json.tokens) {
+          themeDefinition = {
+            key: version.definition_json.id,
+            name: version.definition_json.name,
+            contractVersion: 'v1',
+            values: version.definition_json.tokens,
+            definition_json: version.definition_json,
+            meta: version.definition_json.meta || {}
+          };
+          resolvedFrom = 'theme-db';
+        }
+      } catch (error) {
+        console.warn(`[ThemeResolver] Error cargando tema '${resolvedKey}' desde BD:`, error.message);
+      }
+    }
+
+    if (!themeDefinition || !themeDefinition.values) {
+      themeDefinition = await getThemeDefinitionAsync(resolvedKey);
+      if (themeDefinition && themeDefinition.values) {
+        resolvedFrom = 'registry-async';
+      }
+    }
+
+    // Si no hay definición, usar fallback legacy
+    if (!themeDefinition || !themeDefinition.values) {
+      return await resolveThemeAsync({ student, session, systemState, theme_id });
+    }
+
+    // 3. Resolver contextos usando Context Resolver v1 (si el tema declara context_request)
+    let resolvedContexts = {};
+    const definitionJson = themeDefinition.definition_json || themeDefinition;
+    
+    if (definitionJson.context_request) {
+      try {
+        // Construir ExecutionContext
+        const executionContext = buildExecutionContextForTheme({
+          themeDefinition,
+          snapshot,
+          requestId: snapshot.identity?.requestId
+        });
+
+        // Construir ContextRequest desde definición del tema
+        const contextRequest = buildContextRequestFromTheme({
+          themeDefinition,
+          requestId: snapshot.identity?.requestId
+        });
+
+        // Resolver contextos
+        const resolvedContextResult = await resolveContexts({
+          contextRequest,
+          executionContext
+        });
+
+        resolvedContexts = resolvedContextResult.resolved || {};
+
+        // Log warnings si hay
+        if (resolvedContextResult.warnings && resolvedContextResult.warnings.length > 0) {
+          console.warn(`[ThemeResolver] Warnings resolviendo contextos para tema '${resolvedKey}':`, resolvedContextResult.warnings);
+        }
+      } catch (error) {
+        console.warn(`[ThemeResolver] Error resolviendo contextos para tema '${resolvedKey}', continuando sin contextos:`, error.message);
+        // Fail-open: continuar sin contextos resueltos
+      }
+    }
+
+    // 4. Aplicar tokens del tema base
+    let themeValues = { ...themeDefinition.values };
+    
+    // 4.1. Aplicar variantes condicionales si existen (THEME VARIANTS V1)
+    let variantsDebug = null;
+    // Usar definitionJson ya declarado arriba (línea 385)
+    if (definitionJson.variants && Array.isArray(definitionJson.variants) && definitionJson.variants.length > 0 && Object.keys(resolvedContexts).length > 0) {
+      try {
+        const contractVars = getAllContractVariables();
+        const variantsResult = applyThemeVariants({
+          baseTokens: themeValues,
+          variants: definitionJson.variants,
+          ctx: resolvedContexts,
+          contract: contractVars
+        });
+        
+        // Usar tokens con variantes aplicadas
+        themeValues = variantsResult.tokens;
+        variantsDebug = {
+          appliedVariants: variantsResult.appliedVariants || [],
+          warnings: variantsResult.warnings || [],
+          evaluatedCount: variantsResult.evaluatedCount || 0
+        };
+        
+        // Log warnings si hay
+        if (variantsResult.warnings && variantsResult.warnings.length > 0) {
+          console.warn(`[ThemeResolver] Warnings aplicando variantes para tema '${resolvedKey}':`, variantsResult.warnings);
+        }
+      } catch (error) {
+        console.warn(`[ThemeResolver] Error aplicando variantes para tema '${resolvedKey}', usando tokens base:`, error.message);
+        // Fail-open: continuar con tokens base sin variantes
+        variantsDebug = {
+          appliedVariants: [],
+          warnings: [`Error applying variants: ${error.message}`],
+          evaluatedCount: 0
+        };
+      }
+    }
+
+    // 5. Validar y rellenar faltantes
+    const validation = validateThemeValues(themeValues);
+    if (!validation.valid) {
+      themeValues = fillMissingVariables(themeValues);
+    }
+
+    const finalValidation = validateThemeValues(themeValues);
+    if (!finalValidation.valid) {
+      console.warn('[ThemeResolver] Tema incompleto después de rellenar, usando contract_default');
+      themeValues = { ...CONTRACT_DEFAULT };
+      resolvedFrom = 'contract-default';
+      resolvedKey = null;
+    }
+
+    // 6. Construir ThemeEffective con metadata
+    const effective = { ...themeValues };
+    Object.defineProperty(effective, '_resolvedKey', { value: resolvedKey, enumerable: false });
+    Object.defineProperty(effective, '_resolvedFrom', { value: resolvedFrom, enumerable: false });
+    Object.defineProperty(effective, '_contractVersion', { value: 'v1', enumerable: false });
+    Object.defineProperty(effective, '_resolvedContexts', { value: resolvedContexts, enumerable: false }); // Contextos resueltos
+    
+    // Metadata de debug de variantes (no-enumerable)
+    if (variantsDebug) {
+      Object.defineProperty(effective, '_variantsDebug', { value: variantsDebug, enumerable: false });
+    }
+
+    return effective;
+
+  } catch (error) {
+    console.error('[ThemeResolver] Error en resolveThemeWithContextResolver, fallback a resolveThemeAsync:', error);
+    // Fail-open: usar resolver async legacy
+    return await resolveThemeAsync({ student, session, systemState, theme_id });
   }
 }
 
