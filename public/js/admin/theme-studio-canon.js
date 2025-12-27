@@ -1,6 +1,8 @@
 // theme-studio-canon.js
 // Theme Studio Canon v1 - Client-side JavaScript
 
+import { renderThemePreviewPlayground } from './theme-preview-playground.js';
+
 const API_BASE = '/admin/api/theme-studio-canon';
 
 let themes = [];

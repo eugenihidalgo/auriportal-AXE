@@ -38,6 +38,9 @@ export default async function adminThemeStudioCanonUIHandler(request, env, ctx) 
     title: 'Theme Studio · Canon (v1)',
     contentHtml,
     activePath: '/admin/theme-studio-canon',
-    extraScripts: ['/js/admin/theme-studio-canon.js']
+    extraScripts: [
+      '/js/admin/theme-preview-playground.js',
+      '/js/admin/theme-studio-canon.js'
+    ]
   });
 }
