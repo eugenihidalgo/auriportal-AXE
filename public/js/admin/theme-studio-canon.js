@@ -1,7 +1,6 @@
 // theme-studio-canon.js
 // Theme Studio Canon v1 - Client-side JavaScript
-
-import { renderThemePreviewPlayground } from './theme-preview-playground.js';
+// NOTA: Este archivo NO usa ES modules para mantener compatibilidad con carga tradicional de scripts
 
 const API_BASE = '/admin/api/theme-studio-canon';
 
