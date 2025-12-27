@@ -70,13 +70,16 @@ function renderThemeList() {
   const listEl = document.getElementById('themeList');
   if (!listEl) return;
 
-  if (themes.length === 0) {
-    listEl.innerHTML = '<li class="placeholder-text">No hay temas</li>';
-    return;
-  }
-
   // Usar DOM API, no innerHTML
   listEl.innerHTML = '';
+  
+  if (themes.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'placeholder-text';
+    li.textContent = 'No hay temas';
+    listEl.appendChild(li);
+    return;
+  }
   themes.forEach(theme => {
     const li = document.createElement('li');
     li.className = 'theme-item';
@@ -99,11 +102,11 @@ function renderThemeList() {
     badgesDiv.className = 'theme-badges';
     
     const sourceBadge = document.createElement('span');
-    sourceBadge.className = `badge ${theme.source}`;
+    sourceBadge.className = 'badge ' + theme.source;
     sourceBadge.textContent = theme.source;
     
     const statusBadge = document.createElement('span');
-    statusBadge.className = `badge ${theme.status}`;
+    statusBadge.className = 'badge ' + theme.status;
     statusBadge.textContent = theme.status;
     
     badgesDiv.appendChild(sourceBadge);
@@ -490,11 +493,29 @@ function renderPreviewResult(data) {
   if (previewBox && tokens['--bg-main']) {
     previewBox.style.setProperty('--preview-bg-main', tokens['--bg-main']);
     previewBox.style.setProperty('--preview-text-primary', tokens['--text-primary'] || '#333');
-    previewBox.innerHTML = `
-      <h3 style="margin-bottom: 12px;">Preview Card</h3>
-      <p style="margin-bottom: 16px;">Este es un ejemplo usando los tokens del tema.</p>
-      <button style="padding: 8px 16px; background: ${tokens['--accent-primary'] || '#007bff'}; color: white; border: none; border-radius: 4px;">Botón</button>
-    `;
+    
+    // Usar DOM API, no innerHTML con interpolación dinámica
+    previewBox.innerHTML = '';
+    
+    const h3 = document.createElement('h3');
+    h3.style.marginBottom = '12px';
+    h3.textContent = 'Preview Card';
+    
+    const p = document.createElement('p');
+    p.style.marginBottom = '16px';
+    p.textContent = 'Este es un ejemplo usando los tokens del tema.';
+    
+    const button = document.createElement('button');
+    button.style.padding = '8px 16px';
+    button.style.background = tokens['--accent-primary'] || '#007bff';
+    button.style.color = 'white';
+    button.style.border = 'none';
+    button.style.borderRadius = '4px';
+    button.textContent = 'Botón';
+    
+    previewBox.appendChild(h3);
+    previewBox.appendChild(p);
+    previewBox.appendChild(button);
   }
 
   // Tokens clave
@@ -542,7 +563,9 @@ function renderDebugTab(data) {
     warningsEl.innerHTML = '';
     const warnings = data.debug?.warnings || data.warnings || [];
     if (warnings.length === 0) {
-      warningsEl.innerHTML = '<p>No hay warnings</p>';
+      const p = document.createElement('p');
+      p.textContent = 'No hay warnings';
+      warningsEl.appendChild(p);
     } else {
       warnings.forEach(warning => {
         const div = document.createElement('div');
