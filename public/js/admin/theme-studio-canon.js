@@ -490,34 +490,15 @@ function renderPreviewResult(data) {
   const tokens = data.themeEffectiveTokens || {};
   const debug = data.debug || {};
 
-  // Mini preview box
-  const previewBox = document.getElementById('miniPreviewBox');
-  if (previewBox && tokens['--bg-main']) {
-    previewBox.style.setProperty('--preview-bg-main', tokens['--bg-main']);
-    previewBox.style.setProperty('--preview-text-primary', tokens['--text-primary'] || '#333');
-    
-    // Usar DOM API, no innerHTML con interpolación dinámica
-    previewBox.innerHTML = '';
-    
-    const h3 = document.createElement('h3');
-    h3.style.marginBottom = '12px';
-    h3.textContent = 'Preview Card';
-    
-    const p = document.createElement('p');
-    p.style.marginBottom = '16px';
-    p.textContent = 'Este es un ejemplo usando los tokens del tema.';
-    
-    const button = document.createElement('button');
-    button.style.padding = '8px 16px';
-    button.style.background = tokens['--accent-primary'] || '#007bff';
-    button.style.color = 'white';
-    button.style.border = 'none';
-    button.style.borderRadius = '4px';
-    button.textContent = 'Botón';
-    
-    previewBox.appendChild(h3);
-    previewBox.appendChild(p);
-    previewBox.appendChild(button);
+  // Theme Preview Playground v1
+  const playgroundContainer = document.getElementById('themePreviewPlayground');
+  if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+    try {
+      window.renderThemePreviewPlayground(playgroundContainer, tokens);
+    } catch (error) {
+      console.error('[ThemeStudioCanon] Error renderizando playground:', error);
+      // Fail-open: continuar sin playground
+    }
   }
 
   // Tokens clave
