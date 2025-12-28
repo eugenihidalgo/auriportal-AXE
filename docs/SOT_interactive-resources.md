@@ -429,3 +429,4 @@ DELETE /admin/api/interactive-resources/:id
 **Este SOT es parte de la constitución de AuriPortal y debe respetarse sin excepciones.**
 
 
+

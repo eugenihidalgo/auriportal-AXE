@@ -239,3 +239,4 @@ El sistema está **preparado conceptualmente** para la Fase 3 (Action Registry).
 
 
 
+

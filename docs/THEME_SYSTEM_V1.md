@@ -167,3 +167,4 @@ Si algo falla:
 - `applyTheme()` mantiene compatibilidad total
 
 
+

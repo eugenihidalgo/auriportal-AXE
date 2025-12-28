@@ -265,3 +265,4 @@ Esta UI es el "contrato visual del sistema". Si aqu√≠ todo es claro, la ejecuci√
 
 
 
+

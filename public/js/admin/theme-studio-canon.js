@@ -84,6 +84,11 @@ async function loadTheme(themeId) {
       showTabs();
       showEditorFooter();
       hideError();
+      
+      // Si estamos en preview, re-renderizar
+      if (getActiveTab() === 'preview') {
+        renderPreviewAlways();
+      }
     } else {
       showError('Error cargando tema: ' + (data.error || 'Unknown'));
     }
@@ -193,6 +198,11 @@ function renderTokensTab() {
     input.onchange = () => {
       currentThemeDraft.tokens[tokenKey] = input.value;
       markDirty();
+      // PRINCIPIO: Cambios en tokens re-renderizan preview en vivo
+      if (getActiveTab() === 'preview') {
+        renderPreviewAlways();
+        updatePreviewStateMessage(currentThemeDraft.tokens);
+      }
     };
 
     row.appendChild(keyDiv);
@@ -244,6 +254,9 @@ function switchTab(tabName) {
     renderTokensTab();
   } else if (tabName === 'meta') {
     renderMetaTab();
+  } else if (tabName === 'preview') {
+    // PRINCIPIO: Preview siempre muestra algo
+    renderPreviewAlways();
   }
 }
 
@@ -277,18 +290,21 @@ function selectTheme(themeId) {
   loadTheme(themeId);
 }
 
-function handleNewTheme() {
-  const newId = prompt('ID del nuevo tema:');
-  if (!newId || !newId.trim()) return;
+async function handleNewTheme() {
+  // Usar modal interno en lugar de prompt
+  const result = await showNewThemeModal();
+  if (!result) return; // Usuario canceló
 
   const newTheme = {
-    id: newId.trim(),
-    name: newId.trim(),
+    id: result.id,
+    name: result.name,
     tokens: {},
-    meta: {}
+    meta: {
+      description: result.description
+    }
   };
 
-  currentTheme = { id: newId.trim(), source: 'db' };
+  currentTheme = { id: result.id, source: 'db' };
   currentThemeDraft = newTheme;
   isDirty = true;
   updateDirtyIndicator();
@@ -296,12 +312,21 @@ function handleNewTheme() {
   showTabs();
   showEditorFooter();
   renderThemeList();
+  
+  // Auto-seleccionar el tema y mostrar preview inicial
+  switchTab('preview');
+  renderPreviewAlways(); // Renderizar preview mínimo
 }
 
-function handleResetDefaults() {
+async function handleResetDefaults() {
   if (!currentThemeDraft) return;
   
-  if (confirm('¿Resetear tokens a defaults? Los cambios no guardados se perderán.')) {
+  const confirmed = await showModalConfirm(
+    '¿Resetear tokens a defaults? Los cambios no guardados se perderán.',
+    { title: 'Resetear tokens' }
+  );
+  
+  if (confirmed) {
     // Reset desde tema original o usar defaults del contrato
     if (currentTheme) {
       loadTheme(currentTheme.id);
@@ -345,7 +370,9 @@ async function handleValidate() {
         publishBtn.disabled = data.errors && data.errors.length > 0;
       }
 
-      alert('Validación completada. Revisa la pestaña Debug.');
+      showModalAlert('Validación completada. Revisa la pestaña Debug.', {
+        title: 'Validación completada'
+      });
     } else {
       showError('Error validando: ' + (data.error || 'Unknown'));
     }
@@ -375,7 +402,9 @@ async function handleSaveDraft() {
       isDirty = false;
       updateDirtyIndicator();
       loadThemes(); // Refrescar lista
-      alert('Draft guardado correctamente');
+      showModalAlert('Draft guardado correctamente', {
+        title: 'Guardado exitoso'
+      });
       hideError();
     } else {
       showError('Error guardando: ' + (data.error || 'Unknown'));
@@ -389,7 +418,12 @@ async function handleSaveDraft() {
 async function handlePublish() {
   if (!currentThemeDraft || !currentTheme) return;
 
-  if (!confirm('¿Publicar este tema? Esta acción crea una versión inmutable.')) {
+  const confirmed = await showModalConfirm(
+    '¿Publicar este tema? Esta acción crea una versión inmutable.',
+    { title: 'Publicar tema' }
+  );
+  
+  if (!confirmed) {
     return;
   }
 
@@ -407,7 +441,9 @@ async function handlePublish() {
       isDirty = false;
       updateDirtyIndicator();
       loadThemes(); // Refrescar lista
-      alert('Tema publicado correctamente');
+      showModalAlert('Tema publicado correctamente', {
+        title: 'Publicación exitosa'
+      });
       hideError();
     } else {
       showError('Error publicando: ' + (data.error || 'Unknown'));
@@ -489,6 +525,9 @@ function selectScenario(scenario) {
     if (sidebarEl) sidebarEl.value = '';
   }
   // custom: no cambiar valores
+  
+  // PRINCIPIO: Cambio de contexto re-renderiza el preview
+  handleContextChange();
 }
 
 function buildSnapshotFromForm() {
@@ -519,6 +558,106 @@ function buildSnapshotFromForm() {
   };
 }
 
+/**
+ * PRINCIPIO: Preview siempre visible
+ * Renderiza el preview incluso sin datos del servidor
+ */
+function renderPreviewAlways() {
+  const resultEl = document.getElementById('previewResult');
+  if (!resultEl) return;
+
+  resultEl.style.display = 'block';
+
+  // Obtener tokens actuales (del draft o fallback)
+  const tokens = currentThemeDraft?.tokens || {};
+  
+  // Renderizar playground siempre (usará fallbacks si no hay tokens)
+  const playgroundContainer = document.getElementById('themePreviewPlayground');
+  if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+    try {
+      window.renderThemePreviewPlayground(playgroundContainer, tokens);
+    } catch (error) {
+      console.error('[ThemeStudioCanon] Error renderizando playground:', error);
+      // Fail-open: continuar sin playground
+    }
+  }
+
+  // Actualizar mensaje de estado
+  updatePreviewStateMessage(tokens);
+
+  // Tokens clave (mantener para debug)
+  const tokensEl = document.getElementById('previewTokens');
+  if (tokensEl) {
+    tokensEl.innerHTML = '';
+    const keyTokens = ['--bg-main', '--text-primary', '--accent-primary', '--bg-panel', '--text-secondary'];
+    keyTokens.forEach(key => {
+      if (tokens[key]) {
+        const tokenDiv = document.createElement('div');
+        tokenDiv.className = 'preview-token';
+        
+        const label = document.createElement('div');
+        label.className = 'preview-token-label';
+        label.textContent = key;
+        
+        const value = document.createElement('div');
+        value.className = 'preview-token-value';
+        value.textContent = tokens[key];
+        
+        tokenDiv.appendChild(label);
+        tokenDiv.appendChild(value);
+        tokensEl.appendChild(tokenDiv);
+      }
+    });
+  }
+}
+
+/**
+ * Actualiza el mensaje de estado contextual del preview
+ */
+function updatePreviewStateMessage(tokens) {
+  const stateEl = document.getElementById('previewStateMessage');
+  const stateTextEl = document.getElementById('previewStateText');
+  if (!stateEl || !stateTextEl) return;
+
+  const hasTokens = tokens && Object.keys(tokens).length > 0;
+  const hasTheme = !!currentThemeDraft;
+  const isDirtyState = isDirty;
+  const isPublished = currentTheme?.source === 'db' && currentTheme?.status === 'published';
+
+  let message = '';
+  let className = 'info';
+
+  if (!hasTheme) {
+    message = 'Crea un tema nuevo o selecciona uno de la lista para ver el preview';
+    className = 'info';
+  } else if (!hasTokens) {
+    message = 'Este tema aún no tiene tokens definidos. Usando valores por defecto del sistema.';
+    className = 'warning';
+  } else if (isDirtyState) {
+    message = 'Estás previsualizando cambios no guardados. Guarda el draft para persistir estos cambios.';
+    className = 'warning';
+  } else if (!isPublished) {
+    message = 'Este tema está en estado draft. Aún no está publicado.';
+    className = 'info';
+  } else {
+    message = 'Preview del tema publicado con tokens actuales.';
+    className = 'success';
+  }
+
+  stateTextEl.textContent = message;
+  stateEl.className = 'preview-state-message ' + className;
+}
+
+/**
+ * Maneja cambio de contexto (re-renderiza preview)
+ */
+function handleContextChange() {
+  // Si estamos en preview y hay tema cargado, re-renderizar
+  if (getActiveTab() === 'preview' && currentThemeDraft) {
+    renderPreviewAlways();
+  }
+}
+
 function renderPreviewResult(data) {
   const resultEl = document.getElementById('previewResult');
   if (!resultEl) return;
@@ -538,6 +677,9 @@ function renderPreviewResult(data) {
       // Fail-open: continuar sin playground
     }
   }
+
+  // Actualizar mensaje de estado
+  updatePreviewStateMessage(tokens);
 
   // Tokens clave (mantener para debug)
   const tokensEl = document.getElementById('previewTokens');

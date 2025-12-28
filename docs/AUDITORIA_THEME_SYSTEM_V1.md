@@ -243,3 +243,4 @@ El Theme System v1 está **CERTIFICADO** y listo para producción.
 **Versión del sistema:** v5.41.0-theme-system-v1
 
 
+

@@ -377,3 +377,4 @@ El sistema de publicación y versionado del Theme System v1 está **FUNCIONALMEN
 **Fecha de certificación:** 2025-12-27
 
 
+

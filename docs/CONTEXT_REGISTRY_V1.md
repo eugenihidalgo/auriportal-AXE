@@ -1125,3 +1125,4 @@ Un **catálogo semántico canónico** que define qué contextos existen en AuriP
 **FIN DEL DISEÑO**
 
 Este documento define el Context Registry v1 canónico. La implementación debe seguir este diseño exactamente.
+

@@ -45,11 +45,9 @@ function renderThemePreviewPlayground(container, tokens) {
     return;
   }
 
-  // Fail-open: si no hay tokens, mostrar placeholder amable
-  if (!tokens || typeof tokens !== 'object' || Object.keys(tokens).length === 0) {
-    renderEmptyPlayground(container);
-    return;
-  }
+  // PRINCIPIO: SIEMPRE mostrar algo, incluso sin tokens
+  // Si no hay tokens, usar fallbacks explícitos del sistema
+  const fallbackTokens = tokens || {};
 
   try {
     // Limpiar contenedor usando DOM API
@@ -57,8 +55,9 @@ function renderThemePreviewPlayground(container, tokens) {
       container.removeChild(container.firstChild);
     }
 
-    // Aplicar tokens CSS al contenedor
-    applyTokensToElement(container, tokens);
+    // Aplicar tokens CSS al contenedor (usar merge con fallbacks)
+    const finalTokens = { ...getFallbackTokens(), ...fallbackTokens };
+    applyTokensToElement(container, finalTokens);
 
     // Crear wrapper principal
     const wrapper = document.createElement('div');
@@ -72,10 +71,10 @@ function renderThemePreviewPlayground(container, tokens) {
     wrapper.style.borderRadius = '8px';
     wrapper.style.minHeight = '400px';
 
-    // Renderizar cada componente del registry
+    // Renderizar cada componente del registry (usar tokens finales)
     PLAYGROUND_COMPONENTS.forEach(component => {
       try {
-        const componentElement = component.render(tokens);
+        const componentElement = component.render(finalTokens);
         if (componentElement) {
           wrapper.appendChild(componentElement);
         }
@@ -88,7 +87,13 @@ function renderThemePreviewPlayground(container, tokens) {
     container.appendChild(wrapper);
   } catch (error) {
     console.error('[ThemePreviewPlayground] Error renderizando playground:', error);
-    renderEmptyPlayground(container);
+    // Fail-open: intentar renderizar con tokens fallback mínimos
+    try {
+      const fallbackTokens = getFallbackTokens();
+      renderThemePreviewPlayground(container, fallbackTokens);
+    } catch (fallbackError) {
+      console.error('[ThemePreviewPlayground] Error crítico en fallback:', fallbackError);
+    }
   }
 }
 
@@ -107,24 +112,25 @@ function applyTokensToElement(element, tokens) {
 }
 
 /**
- * Renderiza placeholder cuando no hay tema cargado
+ * Genera tokens fallback cuando no hay tokens definidos
+ * PRINCIPIO: SIEMPRE hay tokens para renderizar
  */
-function renderEmptyPlayground(container) {
-  while (container.firstChild) {
-    container.removeChild(container.firstChild);
-  }
-
-  const emptyMsg = document.createElement('div');
-  emptyMsg.className = 'theme-preview-empty';
-  emptyMsg.style.padding = '40px';
-  emptyMsg.style.textAlign = 'center';
-  emptyMsg.style.color = 'var(--ap-text-muted, #888)';
-  
-  const text = document.createElement('p');
-  text.textContent = 'Selecciona un tema y haz Preview para ver el playground';
-  emptyMsg.appendChild(text);
-  
-  container.appendChild(emptyMsg);
+function getFallbackTokens() {
+  return {
+    '--ap-bg-main': '#faf7f2',
+    '--ap-text-primary': '#333333',
+    '--ap-text-secondary': '#666666',
+    '--ap-text-muted': '#888888',
+    '--ap-bg-panel': '#ffffff',
+    '--ap-bg-surface': '#f5f5f5',
+    '--ap-border-subtle': '#e0e0e0',
+    '--ap-accent-primary': '#007bff',
+    '--ap-accent-secondary': '#6c757d',
+    '--ap-radius-md': '8px',
+    '--ap-radius-sm': '4px',
+    '--ap-shadow-sm': '0 1px 2px rgba(0,0,0,0.1)',
+    '--ap-shadow-md': '0 4px 6px rgba(0,0,0,0.1)'
+  };
 }
 
 // ============================================

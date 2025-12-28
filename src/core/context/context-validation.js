@@ -198,3 +198,4 @@ export function getFailOpenValue(type, allowed_values = null) {
 
   return getDefaultValueForType(type);
 }
+

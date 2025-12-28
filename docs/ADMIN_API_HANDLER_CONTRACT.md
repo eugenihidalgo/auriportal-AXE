@@ -190,3 +190,4 @@ El guard de arranque se ejecuta automáticamente cuando el servidor arranca:
 **Última actualización:** 2024-12-28  
 **Versión del contrato:** 1.0.0
 
+

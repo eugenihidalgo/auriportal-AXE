@@ -136,3 +136,4 @@ export function createFailOpenProvenance(context_key, type, value_before = null,
     notes: ['Fail-open safe default applied']
   });
 }
+

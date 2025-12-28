@@ -76,3 +76,4 @@ describe('Theme Studio Canon Preview Endpoint', () => {
     expect(snapshotSim.unexpectedField).toBe('value');
   });
 });
+

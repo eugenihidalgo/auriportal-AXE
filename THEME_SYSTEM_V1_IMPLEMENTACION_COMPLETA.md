@@ -175,3 +175,4 @@ SELECT scope_type, scope_key, theme_key FROM theme_bindings WHERE deleted_at IS 
 **Versión: v5.41.0-theme-system-v1**
 
 
+
