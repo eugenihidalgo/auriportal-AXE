@@ -364,13 +364,15 @@ function renderPlaygroundIframe(iframe, tokens, capabilities = null) {
     try {
       const doc = iframe.contentDocument || iframe.contentWindow.document;
       doc.open();
+      const safeMessage = escapeHtmlForIframe(error.message || 'Error desconocido');
       doc.write(`
         <!DOCTYPE html>
         <html>
         <head><title>Error</title></head>
-        <body style="padding: 24px; font-family: sans-serif;">
+        <body style="padding: 24px; font-family: sans-serif; background: #faf7f2; color: #333;">
           <h2>Error cargando preview</h2>
-          <p>${escapeHtml(error.message)}</p>
+          <p>${safeMessage}</p>
+          <p style="font-size: 12px; color: #888;">El playground falló al renderizar. Esto no debería ocurrir.</p>
         </body>
         </html>
       `);
