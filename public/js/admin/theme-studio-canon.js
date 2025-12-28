@@ -12,6 +12,15 @@ let previewResult = null;
 let themeCapabilities = null; // Registry de capabilities
 let allThemeTokens = null; // Todos los tokens del registry
 
+// Exponer themeCapabilities globalmente para iframe playground
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'themeCapabilities', {
+    get: () => themeCapabilities,
+    enumerable: false,
+    configurable: true
+  });
+}
+
 // Helper para verificar Content-Type y manejar errores de HTML
 async function safeJsonResponse(res, errorContext) {
   const contentType = res.headers.get('content-type') || '';
@@ -59,6 +68,11 @@ async function loadCapabilities() {
       themeCapabilities = data.capabilities || [];
       allThemeTokens = data.allTokens || [];
       console.log('[ThemeStudioCanon] Capabilities cargadas:', themeCapabilities.length);
+      
+      // Actualizar referencia global (para iframe playground)
+      if (typeof window !== 'undefined') {
+        window.themeCapabilities = themeCapabilities;
+      }
       
       // Si hay tema cargado, re-renderizar tokens tab
       if (currentThemeDraft) {

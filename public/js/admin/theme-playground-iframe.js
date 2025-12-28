@@ -327,9 +327,17 @@ function escapeHtml(text) {
  * Renderiza el playground en el iframe
  * @param {HTMLIFrameElement} iframe - Elemento iframe
  * @param {Object} tokens - Tokens CSS del tema
- * @param {Array} capabilities - Capabilities del registry
+ * @param {Array} capabilities - Capabilities del registry (opcional)
  */
-function renderPlaygroundIframe(iframe, tokens, capabilities = []) {
+function renderPlaygroundIframe(iframe, tokens, capabilities = null) {
+  // Si no se pasan capabilities, intentar obtenerlas globalmente
+  if (!capabilities && typeof window !== 'undefined' && window.themeCapabilities) {
+    capabilities = window.themeCapabilities;
+  }
+  
+  if (!capabilities) {
+    capabilities = [];
+  }
   if (!iframe) {
     console.warn('[ThemePlaygroundIframe] Iframe no encontrado');
     return;
