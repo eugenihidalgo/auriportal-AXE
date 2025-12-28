@@ -421,10 +421,11 @@ export function registerThemeCapability(capability) {
 
 /**
  * Valida una ThemeDefinition contra el registry
+ * PRINCIPIO: Fail-open (warnings, no hard fail)
  * @param {Object} themeDefinition - ThemeDefinition a validar
  * @returns {Object} { valid: boolean, errors: Array, warnings: Array }
  */
-export function validateThemeDefinition(themeDefinition) {
+export function validateThemeDefinitionRegistry(themeDefinition) {
   const errors = [];
   const warnings = [];
   

@@ -332,8 +332,9 @@ function renderTokensTab() {
             textInput.value = colorInput.value;
             currentThemeDraft.tokens[tokenDef.key] = colorInput.value;
             markDirty();
+            // PRINCIPIO: Hot reload en tiempo real
             if (getActiveTab() === 'preview') {
-              renderPreviewAlways();
+              updatePlaygroundTokensHot(currentThemeDraft.tokens);
               updatePreviewStateMessage(currentThemeDraft.tokens);
             }
           };
@@ -344,8 +345,9 @@ function renderTokensTab() {
             }
             currentThemeDraft.tokens[tokenDef.key] = textInput.value;
             markDirty();
+            // PRINCIPIO: Hot reload en tiempo real
             if (getActiveTab() === 'preview') {
-              renderPreviewAlways();
+              updatePlaygroundTokensHot(currentThemeDraft.tokens);
               updatePreviewStateMessage(currentThemeDraft.tokens);
             }
           };
@@ -756,6 +758,7 @@ function buildSnapshotFromForm() {
 /**
  * PRINCIPIO: Preview siempre visible
  * Renderiza el preview incluso sin datos del servidor
+ * Usa iframe aislado para hot reload
  */
 function renderPreviewAlways() {
   const resultEl = document.getElementById('previewResult');
@@ -766,14 +769,24 @@ function renderPreviewAlways() {
   // Obtener tokens actuales (del draft o fallback)
   const tokens = currentThemeDraft?.tokens || {};
   
-  // Renderizar playground siempre (usará fallbacks si no hay tokens)
-  const playgroundContainer = document.getElementById('themePreviewPlayground');
-  if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+  // Renderizar playground en iframe
+  const iframe = document.getElementById('themePreviewIframe');
+  if (iframe && typeof window.renderPlaygroundIframe === 'function') {
     try {
-      window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      window.renderPlaygroundIframe(iframe, tokens, themeCapabilities || []);
     } catch (error) {
-      console.error('[ThemeStudioCanon] Error renderizando playground:', error);
+      console.error('[ThemeStudioCanon] Error renderizando playground iframe:', error);
       // Fail-open: continuar sin playground
+    }
+  } else {
+    // Fallback: usar playground antiguo si iframe no está disponible
+    const playgroundContainer = document.getElementById('themePreviewPlayground');
+    if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+      try {
+        window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      } catch (error) {
+        console.error('[ThemeStudioCanon] Error renderizando playground:', error);
+      }
     }
   }
 
@@ -784,9 +797,10 @@ function renderPreviewAlways() {
   const tokensEl = document.getElementById('previewTokens');
   if (tokensEl) {
     tokensEl.innerHTML = '';
-    const keyTokens = ['--bg-main', '--text-primary', '--accent-primary', '--bg-panel', '--text-secondary'];
+    const keyTokens = ['--ap-bg-main', '--ap-text-primary', '--ap-accent-primary', '--ap-bg-panel', '--ap-text-secondary'];
     keyTokens.forEach(key => {
-      if (tokens[key]) {
+      const value = tokens[key] || tokens[key.replace('--ap-', '--')];
+      if (value) {
         const tokenDiv = document.createElement('div');
         tokenDiv.className = 'preview-token';
         
@@ -794,15 +808,35 @@ function renderPreviewAlways() {
         label.className = 'preview-token-label';
         label.textContent = key;
         
-        const value = document.createElement('div');
-        value.className = 'preview-token-value';
-        value.textContent = tokens[key];
+        const valueDiv = document.createElement('div');
+        valueDiv.className = 'preview-token-value';
+        valueDiv.textContent = value;
         
         tokenDiv.appendChild(label);
-        tokenDiv.appendChild(value);
+        tokenDiv.appendChild(valueDiv);
         tokensEl.appendChild(tokenDiv);
       }
     });
+  }
+}
+
+/**
+ * Actualiza tokens en el playground (hot reload)
+ * PRINCIPIO: Cambios en tiempo real sin re-renderizar completo
+ */
+function updatePlaygroundTokensHot(tokens) {
+  const iframe = document.getElementById('themePreviewIframe');
+  if (iframe && typeof window.updatePlaygroundTokens === 'function') {
+    try {
+      window.updatePlaygroundTokens(iframe, tokens);
+    } catch (error) {
+      console.warn('[ThemeStudioCanon] Error en hot reload, re-renderizando:', error);
+      // Fail-open: re-renderizar completamente si hot reload falla
+      renderPreviewAlways();
+    }
+  } else {
+    // Fallback: re-renderizar completamente
+    renderPreviewAlways();
   }
 }
 
@@ -862,14 +896,28 @@ function renderPreviewResult(data) {
   const tokens = data.themeEffectiveTokens || {};
   const debug = data.debug || {};
 
-  // Theme Preview Playground v1
-  const playgroundContainer = document.getElementById('themePreviewPlayground');
-  if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+  // Usar iframe playground (nuevo)
+  const iframe = document.getElementById('themePreviewIframe');
+  if (iframe && typeof window.renderPlaygroundIframe === 'function') {
     try {
-      window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      window.renderPlaygroundIframe(iframe, tokens, themeCapabilities || []);
     } catch (error) {
-      console.error('[ThemeStudioCanon] Error renderizando playground:', error);
-      // Fail-open: continuar sin playground
+      console.error('[ThemeStudioCanon] Error renderizando playground iframe:', error);
+      // Fail-open: usar playground antiguo
+      const playgroundContainer = document.getElementById('themePreviewPlayground');
+      if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+        window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      }
+    }
+  } else {
+    // Fallback: playground antiguo
+    const playgroundContainer = document.getElementById('themePreviewPlayground');
+    if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+      try {
+        window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      } catch (error) {
+        console.error('[ThemeStudioCanon] Error renderizando playground:', error);
+      }
     }
   }
 
@@ -880,9 +928,10 @@ function renderPreviewResult(data) {
   const tokensEl = document.getElementById('previewTokens');
   if (tokensEl) {
     tokensEl.innerHTML = '';
-    const keyTokens = ['--bg-main', '--text-primary', '--accent-primary', '--bg-panel', '--text-secondary'];
+    const keyTokens = ['--ap-bg-main', '--ap-text-primary', '--ap-accent-primary', '--ap-bg-panel', '--ap-text-secondary'];
     keyTokens.forEach(key => {
-      if (tokens[key]) {
+      const value = tokens[key] || tokens[key.replace('--ap-', '--')];
+      if (value) {
         const tokenDiv = document.createElement('div');
         tokenDiv.className = 'preview-token';
         
@@ -890,12 +939,12 @@ function renderPreviewResult(data) {
         label.className = 'preview-token-label';
         label.textContent = key;
         
-        const value = document.createElement('div');
-        value.className = 'preview-token-value';
-        value.textContent = tokens[key];
+        const valueDiv = document.createElement('div');
+        valueDiv.className = 'preview-token-value';
+        valueDiv.textContent = value;
         
         tokenDiv.appendChild(label);
-        tokenDiv.appendChild(value);
+        tokenDiv.appendChild(valueDiv);
         tokensEl.appendChild(tokenDiv);
       }
     });

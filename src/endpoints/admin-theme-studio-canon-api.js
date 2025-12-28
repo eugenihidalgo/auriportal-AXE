@@ -24,7 +24,7 @@ import {
   getThemeCapabilities, 
   getAllThemeTokens, 
   getThemeDefinitionSchema,
-  validateThemeDefinition as validateThemeDefinitionRegistry 
+  validateThemeDefinitionRegistry 
 } from '../core/theme/theme-capability-registry.js';
 
 const LOG_PREFIX = '[THEME_STUDIO_CANON]';

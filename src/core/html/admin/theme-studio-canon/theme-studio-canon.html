@@ -130,7 +130,10 @@
 
           <!-- Playground siempre visible (incluso sin datos) -->
           <div id="previewResult" class="preview-result">
-            <div id="themePreviewPlayground" class="theme-preview-playground-container"></div>
+            <!-- Playground con iframe aislado -->
+            <div class="playground-iframe-container">
+              <iframe id="themePreviewIframe" class="playground-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
+            </div>
             <div class="preview-tokens" id="previewTokens"></div>
           </div>
         </div>
@@ -427,6 +430,24 @@
   .theme-preview-playground-container {
     width: 100%;
     margin-bottom: 24px;
+  }
+
+  /* Playground con iframe aislado */
+  .playground-iframe-container {
+    width: 100%;
+    margin-bottom: 24px;
+    border: 1px solid var(--ap-border-subtle, #404040);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--ap-bg-surface, #1a1a1a);
+  }
+
+  .playground-iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+    display: block;
+    background: var(--ap-bg-main, #faf7f2);
   }
 
   .preview-tokens {
