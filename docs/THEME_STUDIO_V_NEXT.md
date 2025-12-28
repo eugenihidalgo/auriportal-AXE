@@ -1,8 +1,8 @@
 # Theme Studio vNext - Registry-Driven Architecture
 
 **Fecha**: 2025-01-XX  
-**Versión**: 1.0.0  
-**Estado**: Implementado
+**Versión**: 2.0.0  
+**Estado**: Implementado (Auto-Registry + Mega Playground + PostMessage)
 
 ---
 
@@ -77,6 +77,35 @@ registerThemeCapability(newCapability)
 getThemeDefinitionSchema()
 ```
 
+### 1.1. Auto-Registry System
+
+**Carpeta de Capabilities**: `src/core/theme/capabilities/`
+
+Cada capability es un archivo `.capability.js`:
+
+```javascript
+// src/core/theme/capabilities/mi-capability.capability.js
+export default {
+  capability_key: 'mi-capability',
+  version: '1.0.0',
+  category: 'widgets',
+  name: 'Mi Capability',
+  description: 'Descripción',
+  tokens: [...],
+  preview: null
+};
+```
+
+**Index**: `src/core/theme/capabilities/index.js` re-exporta todas las capabilities.
+
+**Guard de Arranque**: El registry valida automáticamente:
+- ✅ No hay `capability_key` duplicadas
+- ✅ Tokens con keys únicas
+- ✅ Tipos válidos (`color`, `size`, `spacing`, `shadow`, `text`)
+- ✅ Defaults definidos
+
+**Modo Fail-Hard**: `THEME_CAPS_FAIL_HARD=1` detiene el servidor si hay errores.
+
 ### 2. Theme Studio UI Dinámica
 
 El Theme Studio genera la UI **completamente desde el registry**. No hay hardcoding.
@@ -119,18 +148,30 @@ El iframe contiene:
 - Componentes renderizados por capability
 - Estructura semántica y accesible
 
-### 4. Hot Reload
+### 3.1. Mega Playground (Storybook-style)
+
+**NUEVO en v2.0**: **Mega Playground** muestra **todos los componentes con todos los estados**:
+
+- **Buttons**: Primary, Secondary, Hover, Disabled
+- **Inputs**: Normal, Focus, Disabled, Error
+- **Cards**: Estándar, Elevada, Con Badge
+- **Base UI**: Tipografía completa (primary, secondary, muted)
+- **Accent Colors**: Todos los colores (primary, secondary, success, warning, danger, info)
+
+**Siempre visible**: El playground se muestra incluso sin tema seleccionado (usa defaults del registry).
+
+### 4. Hot Reload (PostMessage)
 
 **Principio**: Cambios en tokens actualizan el preview **en tiempo real** sin re-renderizar completo.
 
-#### Implementación
+**NUEVO en v2.0**: Hot reload usa **postMessage** en lugar de acceso directo al iframe:
 
 ```javascript
-// Actualización en tiempo real (hot reload)
-updatePlaygroundTokens(iframe, tokens);
+// Actualización en tiempo real (hot reload v2)
+updatePlaygroundTokensV2(iframe, tokens); // → postMessage
 
 // Re-renderizado completo (fallback)
-renderPlaygroundIframe(iframe, tokens, capabilities);
+renderPlaygroundIframeV2(iframe, tokens, capabilities); // → postMessage
 ```
 
 #### Flujo
@@ -305,25 +346,51 @@ Para añadir nuevas capabilities:
 
 ## PRÓXIMOS PASOS
 
-1. **Más Capabilities**: Añadir más capabilities (widgets, layouts, etc.)
-2. **Preview Personalizado**: Permitir preview functions por capability
-3. **Validación de Tipos**: Validación estricta de valores por tipo
-4. **Generación por IA**: Integrar con IA para generar temas
-5. **Export/Import**: Exportar/importar temas como JSON
+1. ✅ **Auto-Registry**: Implementado (v2.0)
+2. ✅ **PostMessage**: Implementado (v2.0)
+3. ✅ **Mega Playground**: Implementado (v2.0)
+4. **Preview Personalizado**: Permitir preview functions por capability
+5. **Validación de Tipos**: Validación estricta de valores por tipo
+6. **Generación por IA**: Integrar con IA para generar temas
+7. **Export/Import**: Exportar/importar temas como JSON
+
+## CAMBIOS EN v2.0
+
+### Seguridad
+- ✅ Iframe sin `allow-same-origin` (solo `allow-scripts`)
+- ✅ Comunicación via postMessage (no acceso directo)
+- ✅ HTML estático (sin interpolación de tokens)
+
+### Extensibilidad
+- ✅ Auto-registry desde carpeta (no tocar registry central)
+- ✅ Validación automática en arranque
+- ✅ Fail-hard opcional (`THEME_CAPS_FAIL_HARD=1`)
+
+### UX
+- ✅ Mega Playground (todos los estados visibles)
+- ✅ Playground siempre visible (incluso sin tema)
+- ✅ Context aplicado via postMessage
+
+### Robustez
+- ✅ Eliminado "Invalid or unexpected token"
+- ✅ Handshake READY antes de aplicar tokens
+- ✅ Fail-open por defecto (timeout 2s)
 
 ---
 
 ## REFERENCIAS
 
-- `src/core/theme/theme-capability-registry.js` - Registry canónico
+- `src/core/theme/theme-capability-registry-v2.js` - Registry canónico (auto-registry)
+- `src/core/theme/capabilities/` - Carpeta de capabilities
 - `src/endpoints/admin-theme-studio-canon-api.js` - API endpoints
 - `public/js/admin/theme-studio-canon.js` - UI del editor
-- `public/js/admin/theme-playground-iframe.js` - Playground con iframe
+- `public/js/admin/theme-playground-iframe-v2.js` - Playground con iframe (postMessage)
 - `docs/THEME_DEFINITION_V1.md` - Contrato de temas
 - `docs/THEME_STUDIO_CANON_V1.md` - Documentación del editor
+- `docs/THEME_CAPABILITY_RULE.md` - Regla constitucional
 
 ---
 
 **Última actualización**: 2025-01-XX  
-**Versión**: 1.0.0
+**Versión**: 2.0.0
 

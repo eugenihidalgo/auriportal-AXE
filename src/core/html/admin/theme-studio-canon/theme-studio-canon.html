@@ -130,9 +130,9 @@
 
           <!-- Playground siempre visible (incluso sin datos) -->
           <div id="previewResult" class="preview-result">
-            <!-- Playground con iframe aislado -->
+            <!-- Playground con iframe aislado (seguro, sin allow-same-origin) -->
             <div class="playground-iframe-container">
-              <iframe id="themePreviewIframe" class="playground-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
+              <iframe id="themePreviewIframe" class="playground-iframe" sandbox="allow-scripts"></iframe>
             </div>
             <div class="preview-tokens" id="previewTokens"></div>
           </div>

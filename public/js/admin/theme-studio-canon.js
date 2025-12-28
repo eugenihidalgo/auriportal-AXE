@@ -784,17 +784,21 @@ function renderPreviewAlways() {
   // Obtener tokens actuales (del draft o fallback)
   const tokens = currentThemeDraft?.tokens || {};
   
-  // Renderizar playground en iframe
+  // Renderizar playground en iframe v2 (postMessage seguro)
   const iframe = document.getElementById('themePreviewIframe');
-  if (iframe && typeof window.renderPlaygroundIframe === 'function') {
+  if (iframe && typeof window.renderPlaygroundIframeV2 === 'function') {
     try {
-      window.renderPlaygroundIframe(iframe, tokens, themeCapabilities || []);
+      window.renderPlaygroundIframeV2(iframe, tokens, themeCapabilities || []);
     } catch (error) {
-      console.error('[ThemeStudioCanon] Error renderizando playground iframe:', error);
-      // Fail-open: continuar sin playground
+      console.error('[ThemeStudioCanon] Error renderizando playground iframe v2:', error);
+      // Fail-open: usar playground antiguo si iframe falla
+      const playgroundContainer = document.getElementById('themePreviewPlayground');
+      if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
+        window.renderThemePreviewPlayground(playgroundContainer, tokens);
+      }
     }
   } else {
-    // Fallback: usar playground antiguo si iframe no está disponible
+    // Fallback: usar playground antiguo si iframe v2 no está disponible
     const playgroundContainer = document.getElementById('themePreviewPlayground');
     if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
       try {
@@ -911,13 +915,13 @@ function renderPreviewResult(data) {
   const tokens = data.themeEffectiveTokens || {};
   const debug = data.debug || {};
 
-  // Usar iframe playground (nuevo)
+  // Usar iframe playground v2 (postMessage seguro)
   const iframe = document.getElementById('themePreviewIframe');
-  if (iframe && typeof window.renderPlaygroundIframe === 'function') {
+  if (iframe && typeof window.renderPlaygroundIframeV2 === 'function') {
     try {
-      window.renderPlaygroundIframe(iframe, tokens, themeCapabilities || []);
+      window.renderPlaygroundIframeV2(iframe, tokens, themeCapabilities || []);
     } catch (error) {
-      console.error('[ThemeStudioCanon] Error renderizando playground iframe:', error);
+      console.error('[ThemeStudioCanon] Error renderizando playground iframe v2:', error);
       // Fail-open: usar playground antiguo
       const playgroundContainer = document.getElementById('themePreviewPlayground');
       if (playgroundContainer && typeof window.renderThemePreviewPlayground === 'function') {
