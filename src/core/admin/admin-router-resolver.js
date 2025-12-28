@@ -62,6 +62,13 @@ const HANDLER_MAP = {
   'api-interactive-resources': () => import('../../endpoints/admin-interactive-resources-api.js'),
   'api-tecnicas-limpieza': () => import('../../endpoints/admin-tecnicas-limpieza-api.js'),
   'api-resolvers': () => import('../../endpoints/admin-resolvers-api.js'),
+  // Theme Studio Canon v1 - Handler centralizado
+  'api-theme-studio-canon-themes': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-theme': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-validate': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-save-draft': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-publish': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-preview': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   // Assembly Check System (ACS)
   'api-assembly-status': () => import('../../endpoints/admin-assembly-check-api.js'),
   'api-assembly-run': () => import('../../endpoints/admin-assembly-check-api.js').then(m => ({ default: m.runAssemblyChecksHandler })),

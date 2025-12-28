@@ -50,6 +50,29 @@ try {
   // Por ahora, solo logueamos para no romper el arranque en desarrollo
   // throw error;
 }
+
+// Auditoría de handlers API (GUARD CONSTITUCIONAL)
+// Verifica que todas las rutas API tienen handlers válidos
+try {
+  const { auditAdminAPIHandlers } = await import('./core/admin/audit-admin-api-handlers.js');
+  const auditReport = await auditAdminAPIHandlers({ 
+    autoFix: false, 
+    mode: process.env.APP_ENV === 'production' ? 'warn' : 'warn' // Fail-open en todos los entornos por ahora
+  });
+  
+  if (auditReport.missing_handlers.length > 0) {
+    console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${auditReport.missing_handlers.length} API handlers missing`);
+    auditReport.missing_handlers.forEach(m => {
+      console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.inferredPath || m.expectedPath || 'N/A'} [${m.reason}]`);
+    });
+    console.warn(`[ADMIN_ROUTER_AUDIT] Run with --fix to auto-create stubs: node src/core/admin/audit-admin-api-handlers.js --fix`);
+  } else {
+    console.log(`[ADMIN_ROUTER_AUDIT] ✅ All ${auditReport.ok.length} API routes have valid handlers`);
+  }
+} catch (auditError) {
+  // Fail-open: no romper el arranque si la auditoría falla
+  console.error('[ADMIN_ROUTER_AUDIT] ❌ Error en auditoría de handlers:', auditError.message);
+}
 // Admin panels cargados dinámicamente para evitar errores de imports
 const adminPanelHandler = async (request, env, ctx) => {
   const handler = (await import("./endpoints/admin-panel.js")).default;
