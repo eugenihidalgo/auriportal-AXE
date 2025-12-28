@@ -188,8 +188,9 @@ ${componentsHTML}
  * Renderiza preview de una capability
  */
 function renderCapabilityPreview(capability, tokens) {
+  const safeName = escapeHtmlForIframe(capability.name || 'Unknown');
   let html = `<div class="capability-section">
-      <h2 class="capability-title">${escapeHtml(capability.name)}</h2>
+      <h2 class="capability-title">${safeName}</h2>
       <div class="component-grid">`;
   
   // Renderizar componentes según capability
