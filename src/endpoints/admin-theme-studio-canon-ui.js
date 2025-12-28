@@ -40,7 +40,7 @@ export default async function adminThemeStudioCanonUIHandler(request, env, ctx) 
     activePath: '/admin/theme-studio-canon',
     extraScripts: [
       '/js/admin/theme-preview-playground.js',
-      '/js/admin/theme-playground-iframe.js',
+      '/js/admin/theme-playground-iframe-v2.js',
       '/js/admin/theme-studio-canon-modals.js',
       '/js/admin/theme-studio-canon.js'
     ]

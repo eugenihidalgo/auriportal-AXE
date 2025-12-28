@@ -253,6 +253,96 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
       background: #1e293b; /* slate-800 */
     }
     
+    .item-card.selected {
+      background: #1e3a8a; /* blue-900 */
+      border-color: #3b82f6; /* blue-500 */
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+    
+    .item-checkbox {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #4f46e5; /* indigo-600 */
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    
+    .select-all-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #4f46e5;
+      margin-right: 8px;
+    }
+    
+    .bulk-actions-bar {
+      display: none;
+      background: #1e3a8a; /* blue-900 */
+      border: 1px solid #3b82f6; /* blue-500 */
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    
+    .bulk-actions-bar.active {
+      display: flex;
+    }
+    
+    .bulk-actions-bar .selected-count {
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 14px;
+      margin-right: auto;
+    }
+    
+    .bulk-action-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .bulk-action-group label {
+      color: #cbd5e1;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    
+    .bulk-action-input {
+      width: 80px;
+      padding: 4px 8px;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 12px;
+    }
+    
+    .bulk-action-input:focus {
+      outline: none;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+    
+    .bulk-action-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+      background: #4f46e5;
+      color: white;
+    }
+    
+    .bulk-action-btn:hover {
+      background: #4338ca;
+    }
+    
     .item-card-new {
       background: #1e293b !important;
       border: 2px dashed #475569 !important;
@@ -1045,7 +1135,29 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
       const lista = listasData.find(l => l.id === listaId);
       const tipoLista = lista?.tipo || 'recurrente';
       
-      let html = '<div class="items-header"><h3>Ítems (ordenados por nivel)</h3></div>';
+      // Barra de acciones masivas (oculta por defecto)
+      let html = \`
+        <div class="bulk-actions-bar" id="bulkActions-\${listaId}">
+          <span class="selected-count" id="selectedCount-\${listaId}">0 seleccionados</span>
+          <div class="bulk-action-group">
+            <label>Nivel:</label>
+            <input type="number" class="bulk-action-input" id="bulkNivel-\${listaId}" min="1" placeholder="Nivel">
+            <button class="bulk-action-btn" onclick="aplicarBulkNivel(\${listaId})">Aplicar</button>
+          </div>
+          <div class="bulk-action-group">
+            <label>\${tipoLista === 'recurrente' ? 'Días:' : 'Veces:'}</label>
+            <input type="number" class="bulk-action-input" id="bulkFrecuencia-\${listaId}" min="1" placeholder="Valor">
+            <button class="bulk-action-btn" onclick="aplicarBulkFrecuencia(\${listaId})">Aplicar</button>
+          </div>
+          <button class="bulk-action-btn" onclick="deseleccionarTodos(\${listaId})" style="background: #64748b;">Deseleccionar</button>
+        </div>
+      \`;
+      
+      let htmlHeader = '<div class="items-header" style="display: flex; align-items: center; gap: 12px;">';
+      htmlHeader += '<input type="checkbox" class="select-all-checkbox" id="selectAll-\${listaId}" onchange="toggleSelectAll(\${listaId}, this.checked)">';
+      htmlHeader += '<h3 style="margin: 0;">Ítems (ordenados por nivel)</h3>';
+      htmlHeader += '</div>';
+      html += htmlHeader;
       
       // Ordenar items por nivel (si hay items)
       let itemsOrdenados = [];
@@ -1121,7 +1233,8 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
       if (itemsOrdenados.length > 0) {
         for (const item of itemsOrdenados) {
         html += \`
-          <div class="item-card" data-item-id="\${item.id}">
+          <div class="item-card" data-item-id="\${item.id}" id="itemCard-\${item.id}">
+            <input type="checkbox" class="item-checkbox" data-item-id="\${item.id}" data-lista-id="\${listaId}" onchange="toggleItemSelection(\${listaId}, \${item.id}, this.checked)">
             <div class="item-info" style="flex: 1; display: grid; grid-template-columns: 70px 1fr 1fr 120px; gap: 10px; align-items: center;">
               <!-- Nivel -->
               <div>
