@@ -63,6 +63,7 @@ const HANDLER_MAP = {
   'api-tecnicas-limpieza': () => import('../../endpoints/admin-tecnicas-limpieza-api.js'),
   'api-resolvers': () => import('../../endpoints/admin-resolvers-api.js'),
   // Theme Studio Canon v1 - Handler centralizado
+  'api-theme-studio-canon-capabilities': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   'api-theme-studio-canon-themes': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   'api-theme-studio-canon-theme': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   'api-theme-studio-canon-validate': () => import('../../endpoints/admin-theme-studio-canon-api.js'),

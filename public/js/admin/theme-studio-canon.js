@@ -9,6 +9,8 @@ let currentTheme = null;
 let currentThemeDraft = null;
 let isDirty = false;
 let previewResult = null;
+let themeCapabilities = null; // Registry de capabilities
+let allThemeTokens = null; // Todos los tokens del registry
 
 // Helper para verificar Content-Type y manejar errores de HTML
 async function safeJsonResponse(res, errorContext) {
@@ -34,8 +36,42 @@ async function safeJsonResponse(res, errorContext) {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
+  loadCapabilities(); // Cargar registry primero
   loadThemes();
 });
+
+// ============================================
+// Carga del Theme Capability Registry
+// ============================================
+
+async function loadCapabilities() {
+  try {
+    const res = await fetch(`${API_BASE}/capabilities`);
+    
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    
+    const data = await safeJsonResponse(res, 'loadCapabilities');
+    if (!data) return;
+    
+    if (data.ok) {
+      themeCapabilities = data.capabilities || [];
+      allThemeTokens = data.allTokens || [];
+      console.log('[ThemeStudioCanon] Capabilities cargadas:', themeCapabilities.length);
+      
+      // Si hay tema cargado, re-renderizar tokens tab
+      if (currentThemeDraft) {
+        renderTokensTab();
+      }
+    } else {
+      console.warn('[ThemeStudioCanon] Error cargando capabilities:', data.error);
+    }
+  } catch (error) {
+    console.error('[ThemeStudioCanon] Error cargando capabilities:', error);
+    // Fail-open: continuar sin registry (compatibilidad)
+  }
+}
 
 // ============================================
 // Carga de datos
@@ -176,39 +212,198 @@ function renderEditor() {
   }
 }
 
+/**
+ * Renderiza la pestaña de tokens usando el Theme Capability Registry
+ * PRINCIPIO: UI dinámica desde registry, nada hardcodeado
+ */
 function renderTokensTab() {
   const gridEl = document.getElementById('tokensGrid');
-  if (!gridEl || !currentThemeDraft.tokens) return;
+  if (!gridEl || !currentThemeDraft) return;
 
   gridEl.innerHTML = '';
-  const tokens = currentThemeDraft.tokens || {};
   
-  Object.keys(tokens).sort().forEach(tokenKey => {
-    const row = document.createElement('div');
-    row.className = 'token-row';
+  // Inicializar tokens si no existen
+  if (!currentThemeDraft.tokens) {
+    currentThemeDraft.tokens = {};
+  }
+  
+  const tokens = currentThemeDraft.tokens;
+  
+  // Si hay capabilities, renderizar por capability
+  if (themeCapabilities && themeCapabilities.length > 0) {
+    themeCapabilities.forEach(capability => {
+      // Crear sección por capability
+      const section = document.createElement('div');
+      section.className = 'capability-section';
+      section.style.marginBottom = '32px';
+      
+      // Header de capability
+      const header = document.createElement('div');
+      header.className = 'capability-header';
+      header.style.marginBottom = '16px';
+      header.style.paddingBottom = '12px';
+      header.style.borderBottom = '2px solid var(--ap-border-subtle, #404040)';
+      
+      const title = document.createElement('h3');
+      title.textContent = capability.name;
+      title.style.margin = '0 0 4px 0';
+      title.style.fontSize = '16px';
+      title.style.color = 'var(--ap-text-primary, #fff)';
+      
+      const desc = document.createElement('p');
+      desc.textContent = capability.description || '';
+      desc.style.margin = '0';
+      desc.style.fontSize = '13px';
+      desc.style.color = 'var(--ap-text-secondary, #aaa)';
+      
+      header.appendChild(title);
+      header.appendChild(desc);
+      section.appendChild(header);
+      
+      // Renderizar tokens de esta capability
+      capability.tokens.forEach(tokenDef => {
+        const row = document.createElement('div');
+        row.className = 'token-row';
+        row.style.marginBottom = '12px';
 
-    const keyDiv = document.createElement('div');
-    keyDiv.className = 'token-key';
-    keyDiv.textContent = tokenKey;
+        const leftDiv = document.createElement('div');
+        leftDiv.style.display = 'flex';
+        leftDiv.style.flexDirection = 'column';
+        leftDiv.style.gap = '4px';
+        
+        const keyDiv = document.createElement('div');
+        keyDiv.className = 'token-key';
+        keyDiv.style.fontFamily = 'monospace';
+        keyDiv.style.fontSize = '13px';
+        keyDiv.style.color = 'var(--ap-text-primary, #fff)';
+        keyDiv.textContent = tokenDef.key;
+        
+        const descDiv = document.createElement('div');
+        descDiv.style.fontSize = '11px';
+        descDiv.style.color = 'var(--ap-text-muted, #888)';
+        descDiv.textContent = tokenDef.description || '';
+        
+        leftDiv.appendChild(keyDiv);
+        leftDiv.appendChild(descDiv);
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'token-input';
-    input.value = tokens[tokenKey] || '';
-    input.onchange = () => {
-      currentThemeDraft.tokens[tokenKey] = input.value;
-      markDirty();
-      // PRINCIPIO: Cambios en tokens re-renderizan preview en vivo
-      if (getActiveTab() === 'preview') {
-        renderPreviewAlways();
-        updatePreviewStateMessage(currentThemeDraft.tokens);
-      }
-    };
+        // Input según tipo
+        const input = document.createElement('input');
+        input.type = tokenDef.type === 'color' ? 'color' : 'text';
+        input.className = 'token-input';
+        input.value = tokens[tokenDef.key] || tokenDef.default || '';
+        input.style.width = '100%';
+        input.style.padding = '8px 12px';
+        input.style.background = 'var(--ap-bg-surface, #1a1a1a)';
+        input.style.color = 'var(--ap-text-primary, #fff)';
+        input.style.border = '1px solid var(--ap-border-subtle, #404040)';
+        input.style.borderRadius = '4px';
+        input.style.fontSize = '13px';
+        
+        // Si es color, mostrar también input de texto
+        if (tokenDef.type === 'color') {
+          const colorContainer = document.createElement('div');
+          colorContainer.style.display = 'flex';
+          colorContainer.style.gap = '8px';
+          colorContainer.style.alignItems = 'center';
+          
+          const colorInput = document.createElement('input');
+          colorInput.type = 'color';
+          colorInput.value = tokens[tokenDef.key] || tokenDef.default || '#000000';
+          colorInput.style.width = '60px';
+          colorInput.style.height = '40px';
+          colorInput.style.border = 'none';
+          colorInput.style.borderRadius = '4px';
+          colorInput.style.cursor = 'pointer';
+          
+          const textInput = document.createElement('input');
+          textInput.type = 'text';
+          textInput.value = tokens[tokenDef.key] || tokenDef.default || '';
+          textInput.style.flex = '1';
+          textInput.style.padding = '8px 12px';
+          textInput.style.background = 'var(--ap-bg-surface, #1a1a1a)';
+          textInput.style.color = 'var(--ap-text-primary, #fff)';
+          textInput.style.border = '1px solid var(--ap-border-subtle, #404040)';
+          textInput.style.borderRadius = '4px';
+          textInput.style.fontSize = '13px';
+          textInput.style.fontFamily = 'monospace';
+          
+          // Sincronizar color y texto
+          const updateFromColor = () => {
+            textInput.value = colorInput.value;
+            currentThemeDraft.tokens[tokenDef.key] = colorInput.value;
+            markDirty();
+            if (getActiveTab() === 'preview') {
+              renderPreviewAlways();
+              updatePreviewStateMessage(currentThemeDraft.tokens);
+            }
+          };
+          
+          const updateFromText = () => {
+            if (/^#[0-9A-F]{6}$/i.test(textInput.value)) {
+              colorInput.value = textInput.value;
+            }
+            currentThemeDraft.tokens[tokenDef.key] = textInput.value;
+            markDirty();
+            if (getActiveTab() === 'preview') {
+              renderPreviewAlways();
+              updatePreviewStateMessage(currentThemeDraft.tokens);
+            }
+          };
+          
+          colorInput.addEventListener('input', updateFromColor);
+          textInput.addEventListener('change', updateFromText);
+          
+          colorContainer.appendChild(colorInput);
+          colorContainer.appendChild(textInput);
+          row.appendChild(leftDiv);
+          row.appendChild(colorContainer);
+        } else {
+          input.onchange = () => {
+            currentThemeDraft.tokens[tokenDef.key] = input.value;
+            markDirty();
+            if (getActiveTab() === 'preview') {
+              renderPreviewAlways();
+              updatePreviewStateMessage(currentThemeDraft.tokens);
+            }
+          };
+          
+          row.appendChild(leftDiv);
+          row.appendChild(input);
+        }
+        
+        section.appendChild(row);
+      });
+      
+      gridEl.appendChild(section);
+    });
+  } else {
+    // Fallback: renderizar tokens existentes (compatibilidad)
+    Object.keys(tokens).sort().forEach(tokenKey => {
+      const row = document.createElement('div');
+      row.className = 'token-row';
 
-    row.appendChild(keyDiv);
-    row.appendChild(input);
-    gridEl.appendChild(row);
-  });
+      const keyDiv = document.createElement('div');
+      keyDiv.className = 'token-key';
+      keyDiv.textContent = tokenKey;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'token-input';
+      input.value = tokens[tokenKey] || '';
+      input.onchange = () => {
+        currentThemeDraft.tokens[tokenKey] = input.value;
+        markDirty();
+        if (getActiveTab() === 'preview') {
+          renderPreviewAlways();
+          updatePreviewStateMessage(currentThemeDraft.tokens);
+        }
+      };
+
+      row.appendChild(keyDiv);
+      row.appendChild(input);
+      gridEl.appendChild(row);
+    });
+  }
 }
 
 function renderMetaTab() {

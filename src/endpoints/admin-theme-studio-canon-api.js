@@ -20,6 +20,12 @@ import { applyThemeVariants } from '../core/theme/theme-variants-engine.js';
 import { SYSTEM_DEFAULT, CONTRACT_DEFAULT } from '../core/theme/theme-defaults.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 import { getRequestId } from '../core/observability/request-context.js';
+import { 
+  getThemeCapabilities, 
+  getAllThemeTokens, 
+  getThemeDefinitionSchema,
+  validateThemeDefinition as validateThemeDefinitionRegistry 
+} from '../core/theme/theme-capability-registry.js';
 
 const LOG_PREFIX = '[THEME_STUDIO_CANON]';
 
@@ -571,6 +577,9 @@ export default async function adminThemeStudioCanonAPIHandler(request, env, ctx)
     console.log('[THEME_CANON] Path:', path, 'Method:', method);
   
     // Routing
+    if (path === '/admin/api/theme-studio-canon/capabilities' && method === 'GET') {
+      return handleGetCapabilities(request, env, authCtx);
+    }
     if (path === '/admin/api/theme-studio-canon/themes' && method === 'GET') {
       console.log('[THEME_CANON] Routing to handleGetThemes');
       return handleGetThemes(request, env, authCtx);

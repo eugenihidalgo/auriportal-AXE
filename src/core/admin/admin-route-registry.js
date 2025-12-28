@@ -85,6 +85,12 @@ export const ADMIN_ROUTES = [
   },
   // Theme Studio Canon v1
   {
+    key: 'api-theme-studio-canon-capabilities',
+    path: '/admin/api/theme-studio-canon/capabilities',
+    type: 'api',
+    method: 'GET'
+  },
+  {
     key: 'api-theme-studio-canon-themes',
     path: '/admin/api/theme-studio-canon/themes',
     type: 'api',
