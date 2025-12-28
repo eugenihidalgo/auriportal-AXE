@@ -363,8 +363,9 @@ function renderTokensTab() {
           input.onchange = () => {
             currentThemeDraft.tokens[tokenDef.key] = input.value;
             markDirty();
+            // PRINCIPIO: Hot reload en tiempo real
             if (getActiveTab() === 'preview') {
-              renderPreviewAlways();
+              updatePlaygroundTokensHot(currentThemeDraft.tokens);
               updatePreviewStateMessage(currentThemeDraft.tokens);
             }
           };
