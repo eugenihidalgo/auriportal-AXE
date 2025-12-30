@@ -20,6 +20,7 @@ import { applyThemeVariants } from '../core/theme/theme-variants-engine.js';
 import { SYSTEM_DEFAULT, CONTRACT_DEFAULT } from '../core/theme/theme-defaults.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 import { getRequestId } from '../core/observability/request-context.js';
+import { jsonOk, jsonError } from '../core/http/json-response.js';
 import { 
   getThemeCapabilities, 
   getAllThemeTokens, 
@@ -36,48 +37,23 @@ function getAdminId(authCtx) {
   return authCtx?.adminId || authCtx?.email || null;
 }
 
-/**
- * Helper para crear respuesta JSON
- */
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), {
-    status,
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-}
-
-/**
- * Helper para crear respuesta de error
- */
-function errorResponse(message, status = 400, details = null) {
-  const response = { ok: false, error: message };
-  if (details) {
-    response.details = details;
-  }
-  return jsonResponse(response, status);
-}
+// Helpers jsonResponse/errorResponse eliminados - usar jsonOk/jsonError de Robustness Layer
 
 /**
  * GET /admin/api/theme-studio-canon/themes
  * Devuelve lista combinada de system themes + db themes
  */
 async function handleGetThemes(request, env, authCtx) {
-  console.log('[THEME_CANON] handleGetThemes ENTRY');
+  const DEBUG = process.env.AP_DEBUG === '1' || new URL(request.url).searchParams.get('debug') === '1';
   
   try {
-    // TEMPORAL: Simplificar para aislar el problema
-    console.log('[THEME_CANON] Returning hardcoded empty themes array');
-    return jsonResponse({ ok: true, themes: [] });
-    
-    /* COMENTADO TEMPORALMENTE PARA DEBUG
     const themes = [];
+    let countSystem = 0;
+    let countDb = 0;
     
-    // System themes
-    console.log('[THEME_CANON] Getting system themes');
+    // System themes (read-only)
+    if (DEBUG) console.log('[THEME_CANON][GET_THEMES] Getting system themes');
     const systemThemeKeys = Object.keys(SYSTEM_DEFAULT);
-    console.log('[THEME_CANON] systemThemeKeys:', systemThemeKeys.length);
     for (const key of systemThemeKeys) {
       const themeDef = getThemeDefinition(key);
       if (themeDef) {
@@ -89,20 +65,18 @@ async function handleGetThemes(request, env, authCtx) {
           updated_at: null,
           tags: themeDef.meta?.tags || []
         });
+        countSystem++;
       }
     }
     
     // DB themes (drafts + published)
     try {
-      console.log('[THEME_CANON] Getting DB themes');
+      if (DEBUG) console.log('[THEME_CANON][GET_THEMES] Getting DB themes');
       const themeRepo = getDefaultThemeRepo();
       const draftRepo = getDefaultThemeDraftRepo();
       const versionRepo = getDefaultThemeVersionRepo();
       
-      // Obtener todos los themes de la BD
-      console.log('[THEME_CANON] Calling themeRepo.listThemes');
       const dbThemes = await themeRepo.listThemes({ include_deleted: false });
-      console.log('[THEME_CANON] dbThemes count:', dbThemes.length);
       
       for (const theme of dbThemes) {
         // Obtener draft más reciente
@@ -117,21 +91,33 @@ async function handleGetThemes(request, env, authCtx) {
           updated_at: draft?.updated_at || latestVersion?.created_at || theme.created_at,
           tags: theme.meta?.tags || []
         });
+        countDb++;
       }
+      
+      // Ordenar: system primero, luego db por updated_at desc
+      themes.sort((a, b) => {
+        if (a.source === 'system' && b.source === 'db') return -1;
+        if (a.source === 'db' && b.source === 'system') return 1;
+        if (a.source === 'db' && b.source === 'db') {
+          const aTime = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const bTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          return bTime - aTime; // desc
+        }
+        return 0;
+      });
     } catch (dbError) {
-      console.log('[THEME_CANON] DB error (continuing):', dbError.message);
       logWarn('ThemeStudioCanon', 'Error obteniendo themes de BD', { error: dbError.message });
       // Continue con system themes solo
     }
     
-    console.log('[THEME_CANON] Returning themes, count:', themes.length);
-    return jsonResponse({ ok: true, themes });
-    */
+    if (DEBUG) {
+      console.log(`[THEME_CANON][GET_THEMES] count_system=${countSystem} count_db=${countDb} total=${themes.length}`);
+    }
+    
+    return jsonOk({ ok: true, themes });
   } catch (error) {
-    console.error('[THEME_CANON] handleGetThemes ERROR:', error.message);
-    console.error('[THEME_CANON] Stack:', error.stack);
     logError('ThemeStudioCanon', 'Error en GET /themes', { error: error.message, stack: error.stack });
-    return errorResponse('Error obteniendo temas', 500);
+    return jsonError('Error obteniendo temas', 500, { code: 'GET_THEMES_ERROR' });
   }
 }
 
@@ -142,7 +128,7 @@ async function handleGetThemes(request, env, authCtx) {
 async function handleGetTheme(request, env, authCtx, themeId) {
   try {
     if (!themeId) {
-      return errorResponse('theme_id requerido', 400);
+      return jsonError('theme_id requerido', 400, { code: 'THEME_ID_REQUIRED' });
     }
     
     // Intentar obtener de system themes primero
@@ -161,7 +147,7 @@ async function handleGetTheme(request, env, authCtx, themeId) {
       // Rellenar tokens faltantes
       const filledTokens = fillMissingVariables(definition.tokens);
       
-      return jsonResponse({
+      return jsonOk({
         ok: true,
         theme: {
           ...definition,
@@ -180,7 +166,7 @@ async function handleGetTheme(request, env, authCtx, themeId) {
       
       const theme = await themeRepo.getThemeById(themeId);
       if (!theme) {
-        return errorResponse('Tema no encontrado', 404);
+        return jsonError('Tema no encontrado', 404, { code: 'THEME_NOT_FOUND' });
       }
       
       // Obtener draft más reciente o versión publicada
@@ -204,7 +190,7 @@ async function handleGetTheme(request, env, authCtx, themeId) {
       }
       
       if (!definition) {
-        return errorResponse('Definición del tema no encontrada', 404);
+        return jsonError('Definición del tema no encontrada', 404, { code: 'THEME_DEFINITION_NOT_FOUND' });
       }
       
       // Normalizar: asegurar que tokens estén completos
@@ -212,7 +198,7 @@ async function handleGetTheme(request, env, authCtx, themeId) {
         definition.tokens = fillMissingVariables(definition.tokens);
       }
       
-      return jsonResponse({
+      return jsonOk({
         ok: true,
         theme: definition,
         source: 'db',
@@ -220,11 +206,11 @@ async function handleGetTheme(request, env, authCtx, themeId) {
       });
     } catch (dbError) {
       logError('ThemeStudioCanon', 'Error obteniendo tema de BD', { themeId, error: dbError.message });
-      return errorResponse('Error obteniendo tema', 500);
+      return jsonError('Error obteniendo tema', 500, { code: 'GET_THEME_ERROR' });
     }
   } catch (error) {
     logError('ThemeStudioCanon', 'Error en GET /theme/:id', { error: error.message, stack: error.stack });
-    return errorResponse('Error obteniendo tema', 500);
+    return jsonError('Error obteniendo tema', 500, { code: 'GET_THEME_ERROR' });
   }
 }
 
@@ -238,7 +224,7 @@ async function handleValidateTheme(request, env, authCtx) {
     const definition = body.theme;
     
     if (!definition) {
-      return errorResponse('theme requerido en body', 400);
+      return jsonError('theme requerido en body', 400, { code: 'THEME_REQUIRED' });
     }
     
     // Validar usando validateThemeDefinitionDraft (soft)
@@ -264,7 +250,7 @@ async function handleValidateTheme(request, env, authCtx) {
       normalizedTheme.tokens = fillMissingVariables(normalizedTheme.tokens);
     }
     
-    return jsonResponse({
+    return jsonOk({
       ok: validation.valid,
       errors: validation.errors || [],
       warnings: [...(validation.warnings || []), ...variantWarnings],
@@ -272,7 +258,7 @@ async function handleValidateTheme(request, env, authCtx) {
     });
   } catch (error) {
     logError('ThemeStudioCanon', 'Error en POST /validate', { error: error.message, stack: error.stack });
-    return errorResponse('Error validando tema', 500);
+    return jsonError('Error validando tema', 500, { code: 'VALIDATE_THEME_ERROR' });
   }
 }
 
@@ -281,12 +267,44 @@ async function handleValidateTheme(request, env, authCtx) {
  * Guarda un draft en BD
  */
 async function handleSaveDraft(request, env, authCtx) {
+  const DEBUG = process.env.AP_DEBUG === '1' || new URL(request.url).searchParams.get('debug') === '1';
+  
   try {
     const body = await request.json();
-    const definition = body.theme;
     
-    if (!definition || !definition.id) {
-      return errorResponse('theme.id requerido', 400);
+    // FASE 3: Aceptar body.theme O body.draft (compatibilidad)
+    let definition = body.theme || body.draft;
+    
+    if (!definition) {
+      const missing = [];
+      if (!body.theme) missing.push('theme');
+      if (!body.draft) missing.push('draft');
+      if (DEBUG) console.log(`[THEME_CANON][SAVE_DRAFT] missing=${missing.join('/')}`);
+      return jsonError('theme o draft requerido en body', 400, { 
+        code: 'THEME_DRAFT_INVALID',
+        missing 
+      });
+    }
+    
+    if (!definition.id) {
+      if (DEBUG) console.log('[THEME_CANON][SAVE_DRAFT] missing=id');
+      return jsonError('theme.id requerido', 400, { 
+        code: 'THEME_DRAFT_INVALID',
+        missing: ['id']
+      });
+    }
+    
+    if (!definition.name) {
+      if (DEBUG) console.log('[THEME_CANON][SAVE_DRAFT] missing=name');
+      return jsonError('theme.name requerido', 400, { 
+        code: 'THEME_DRAFT_INVALID',
+        missing: ['name']
+      });
+    }
+    
+    // Asegurar que tokens existe (puede ser objeto vacío)
+    if (!definition.tokens || typeof definition.tokens !== 'object') {
+      definition.tokens = {};
     }
     
     // Validar soft antes de guardar
@@ -300,7 +318,10 @@ async function handleSaveDraft(request, env, authCtx) {
         e.includes('tokens es requerido')
       );
       if (criticalErrors.length > 0) {
-        return errorResponse('Errores críticos en definición', 400, { errors: criticalErrors });
+        return jsonError('Errores críticos en definición', 400, { 
+          code: 'THEME_DRAFT_INVALID',
+          errors: criticalErrors 
+        });
       }
     }
     
@@ -335,7 +356,7 @@ async function handleSaveDraft(request, env, authCtx) {
     
     logInfo('ThemeStudioCanon', 'Draft guardado', { themeId: definition.id, draftId: draft.draft_id, adminId });
     
-    return jsonResponse({
+    return jsonOk({
       ok: true,
       draft: {
         draft_id: draft.draft_id,
@@ -346,7 +367,7 @@ async function handleSaveDraft(request, env, authCtx) {
     });
   } catch (error) {
     logError('ThemeStudioCanon', 'Error en POST /save-draft', { error: error.message, stack: error.stack });
-    return errorResponse('Error guardando draft', 500);
+    return jsonError('Error guardando draft', 500, { code: 'SAVE_DRAFT_ERROR' });
   }
 }
 
@@ -361,7 +382,7 @@ async function handlePublishTheme(request, env, authCtx) {
     const releaseNotes = body.release_notes || null;
     
     if (!themeId) {
-      return errorResponse('theme_id requerido', 400);
+      return jsonError('theme_id requerido', 400, { code: 'THEME_ID_REQUIRED' });
     }
     
     // Obtener draft más reciente
@@ -369,13 +390,13 @@ async function handlePublishTheme(request, env, authCtx) {
     const draft = await draftRepo.getCurrentDraft(themeId);
     
     if (!draft || !draft.definition_json) {
-      return errorResponse('No hay draft para publicar', 404);
+      return jsonError('No hay draft para publicar', 404, { code: 'NO_DRAFT_TO_PUBLISH' });
     }
     
     // Validar HARD antes de publicar
     const validation = validateThemeDefinition(draft.definition_json);
     if (!validation.valid) {
-      return errorResponse('Errores de validación', 400, { errors: validation.errors });
+      return jsonError('Errores de validación', 400, { code: 'VALIDATION_ERROR', errors: validation.errors });
     }
     
     // Obtener siguiente versión
@@ -396,7 +417,7 @@ async function handlePublishTheme(request, env, authCtx) {
     
     logInfo('ThemeStudioCanon', 'Tema publicado', { themeId, version: nextVersion, adminId });
     
-    return jsonResponse({
+    return jsonOk({
       ok: true,
       version: {
         theme_id: themeId,
@@ -406,7 +427,7 @@ async function handlePublishTheme(request, env, authCtx) {
     });
   } catch (error) {
     logError('ThemeStudioCanon', 'Error en POST /publish', { error: error.message, stack: error.stack });
-    return errorResponse('Error publicando tema', 500);
+    return jsonError('Error publicando tema', 500, { code: 'PUBLISH_THEME_ERROR' });
   }
 }
 
@@ -422,7 +443,7 @@ async function handlePreviewTheme(request, env, authCtx) {
     const snapshotSim = body.snapshot || {};
     
     if (!theme && !themeId) {
-      return errorResponse('theme o theme_id requerido', 400);
+      return jsonError('theme o theme_id requerido', 400, { code: 'THEME_OR_THEME_ID_REQUIRED' });
     }
     
     let themeDefinition = null;
@@ -474,7 +495,7 @@ async function handlePreviewTheme(request, env, authCtx) {
     }
     
     if (!themeDefinition) {
-      return errorResponse('Tema no encontrado', 404);
+      return jsonError('Tema no encontrado', 404, { code: 'THEME_NOT_FOUND' });
     }
     
     // Construir snapshot mínimo (con valores simulados)
@@ -543,10 +564,10 @@ async function handlePreviewTheme(request, env, authCtx) {
       logInfo('ThemeStudioCanon', 'Preview ejecutado', { themeId: themeDefinition.key, requestId });
     }
     
-    return jsonResponse(response);
+    return jsonOk(response);
   } catch (error) {
     logError('ThemeStudioCanon', 'Error en POST /preview', { error: error.message, stack: error.stack });
-    return errorResponse('Error en preview', 500);
+    return jsonError('Error en preview', 500, { code: 'PREVIEW_ERROR' });
   }
 }
 
@@ -567,7 +588,7 @@ export default async function adminThemeStudioCanonAPIHandler(request, env, ctx)
     // Si requireAdminContext devuelve Response (HTML de login), devolver JSON 401
     if (authCtx instanceof Response) {
       console.log('[THEME_CANON] authCtx is Response, returning 401 JSON');
-      return errorResponse('No autenticado. Requiere sesión admin.', 401);
+      return jsonError('No autenticado. Requiere sesión admin.', 401, { code: 'UNAUTHORIZED' });
     }
     
     console.log('[THEME_CANON] authCtx OK, continuing');
@@ -610,13 +631,13 @@ export default async function adminThemeStudioCanonAPIHandler(request, env, ctx)
       return handlePreviewTheme(request, env, authCtx);
     }
     
-    return errorResponse('Ruta no encontrada', 404);
+    return jsonError('Ruta no encontrada', 404, { code: 'ROUTE_NOT_FOUND' });
   } catch (error) {
     // CRÍTICO: Capturar cualquier error no manejado y devolver JSON
     logError('ThemeStudioCanon', 'Error no manejado en API handler', { 
       error: error.message, 
       stack: error.stack 
     });
-    return errorResponse('Error interno del servidor', 500);
+    return jsonError('Error interno del servidor', 500, { code: 'INTERNAL_SERVER_ERROR' });
   }
 }

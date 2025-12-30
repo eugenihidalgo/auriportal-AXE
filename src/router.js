@@ -51,13 +51,31 @@ try {
   // throw error;
 }
 
+// [FORENSIC][BOOT][STEP 3] Auditoría de handlers API
+console.log('[FORENSIC][BOOT][STEP 3] ════════════════════════════════════════');
+console.log('[FORENSIC][BOOT][STEP 3] ADMIN ROUTER AUDIT - INICIO');
 // Auditoría de handlers API (GUARD CONSTITUCIONAL)
 // Verifica que todas las rutas API tienen handlers válidos
 try {
+  console.log('[FORENSIC][BOOT][STEP 3.1] Importando audit-admin-api-handlers.js...');
   const { auditAdminAPIHandlers } = await import('./core/admin/audit-admin-api-handlers.js');
+  console.log('[FORENSIC][BOOT][STEP 3.1] ✅ Importado auditAdminAPIHandlers');
+  
+  // ROBUSTNESS LAYER v1: Modo fail-hard en producción si AP_ROUTER_AUDIT=fail
+  const auditMode = process.env.AP_ROUTER_AUDIT || 
+    (process.env.APP_ENV === 'production' ? 'warn' : 'warn');
+  console.log('[FORENSIC][BOOT][STEP 3.2] Modo audit:', auditMode);
+  console.log('[FORENSIC][BOOT][STEP 3.3] Ejecutando auditAdminAPIHandlers...');
+  
   const auditReport = await auditAdminAPIHandlers({ 
     autoFix: false, 
-    mode: process.env.APP_ENV === 'production' ? 'warn' : 'warn' // Fail-open en todos los entornos por ahora
+    mode: auditMode
+  });
+  
+  console.log('[FORENSIC][BOOT][STEP 3.3] Resultado audit:', {
+    okCount: auditReport.ok.length,
+    missingHandlersCount: auditReport.missing_handlers.length,
+    missingUiAssetsCount: (auditReport.missing_ui_assets || []).length
   });
   
   if (auditReport.missing_handlers.length > 0) {
@@ -69,10 +87,21 @@ try {
   } else {
     console.log(`[ADMIN_ROUTER_AUDIT] ✅ All ${auditReport.ok.length} API routes have valid handlers`);
   }
+  
+  if (auditReport.missing_ui_assets && auditReport.missing_ui_assets.length > 0) {
+    console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${auditReport.missing_ui_assets.length} UI assets missing`);
+    auditReport.missing_ui_assets.forEach(m => {
+      console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
+    });
+  }
+  
+  console.log('[FORENSIC][BOOT][STEP 3.4] ✅ Audit completado');
 } catch (auditError) {
   // Fail-open: no romper el arranque si la auditoría falla
-  console.error('[ADMIN_ROUTER_AUDIT] ❌ Error en auditoría de handlers:', auditError.message);
+  console.error('[FORENSIC][BOOT][STEP 3.ERROR] ❌ Error en auditoría de handlers:', auditError.message);
+  console.error('[FORENSIC][BOOT][STEP 3.ERROR] Stack:', auditError.stack);
 }
+console.log('[FORENSIC][BOOT][STEP 3] ════════════════════════════════════════');
 // Admin panels cargados dinámicamente para evitar errores de imports
 const adminPanelHandler = async (request, env, ctx) => {
   const handler = (await import("./endpoints/admin-panel.js")).default;
@@ -178,30 +207,29 @@ async function routerFunction(request, env, ctx) {
   
   
   // Servir archivos estáticos (CSS, JS, imágenes, etc.)
-  // ESTO DEBE IR ANTES DE CUALQUIER MANEJO DE HOST ESPECÍFICO
+  // FASE 2: ESTO DEBE IR ANTES DE CUALQUIER MANEJO DE HOST ESPECÍFICO
+  // Usar PUBLIC_ASSETS_ROOT como source of truth único
   if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/public/') || path.startsWith('/uploads/')) {
     const { readFileSync, existsSync } = await import('fs');
-    const { fileURLToPath } = await import('url');
-    const { dirname, join } = await import('path');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    // router.js está en src/, entonces .. va a la raíz del proyecto
-    const projectRoot = join(__dirname, '..');
+    const { PUBLIC_ASSETS_ROOT, resolvePublicAsset } = await import('./core/robustness/public-assets-root.js');
     
     try {
-      // Normalizar la ruta
+      // Normalizar la ruta usando source of truth único
       let fullPath;
       if (path.startsWith('/uploads/')) {
-        fullPath = join(projectRoot, 'public', 'uploads', path.slice(9));
+        // uploads/ es subdirectorio de public/
+        const uploadPath = path.slice(9); // quitar '/uploads/'
+        fullPath = resolvePublicAsset(`uploads/${uploadPath}`);
       } else if (path.startsWith('/public/')) {
-        fullPath = join(projectRoot, 'public', path.slice(8));
+        // /public/js/... -> js/...
+        fullPath = resolvePublicAsset(path.slice(8)); // quitar '/public/'
       } else {
-        fullPath = join(projectRoot, 'public', path.slice(1));
+        // /js/... o /css/... -> js/... o css/...
+        fullPath = resolvePublicAsset(path.slice(1)); // quitar leading '/'
       }
       
       // Verificar que el archivo esté dentro de public (seguridad)
-      const publicDir = join(projectRoot, 'public');
-      if (!fullPath.startsWith(publicDir)) {
+      if (!fullPath.startsWith(PUBLIC_ASSETS_ROOT)) {
         console.error(`[Router] Ruta fuera de public: ${fullPath}`);
         const { getRequestId } = await import('./core/observability/request-context.js');
         const traceId = getRequestId() || `router-${Date.now()}`;
@@ -238,12 +266,38 @@ async function routerFunction(request, env, ctx) {
         });
       }
       
-      const content = readFileSync(fullPath);
+      // FASE 3: Hardening - Verificar que el archivo NO sea HTML antes de servir como JS
       const ext = fullPath.split('.').pop().toLowerCase();
+      const isJsFile = ext === 'js';
+      
+      if (isJsFile) {
+        // Leer primeros bytes para verificar que NO es HTML
+        const firstBytes = readFileSync(fullPath, { encoding: 'utf-8', flag: 'r', start: 0, end: 300 });
+        if (firstBytes.trim().startsWith('<!DOCTYPE') || firstBytes.trim().startsWith('<html') || firstBytes.includes('<body')) {
+          console.error(`[Router] 🔴 CRÍTICO: Archivo JS contiene HTML: ${fullPath}`);
+          const { getRequestId } = await import('./core/observability/request-context.js');
+          const traceId = getRequestId() || `router-${Date.now()}`;
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'Asset corrupted: HTML served as JavaScript',
+            code: 'HTML_SERVED_AS_JS',
+            trace_id: traceId,
+            file: path
+          }), { 
+            status: 500,
+            headers: { 
+              'Content-Type': 'application/json; charset=utf-8',
+              'Cache-Control': 'no-store'
+            }
+          });
+        }
+      }
+      
+      const content = readFileSync(fullPath);
       const contentType = {
-        'css': 'text/css',
-        'js': 'application/javascript; charset=UTF-8',
-        'json': 'application/json',
+        'css': 'text/css; charset=utf-8',
+        'js': 'application/javascript; charset=utf-8', // FASE 3: charset explícito
+        'json': 'application/json; charset=utf-8',
         'png': 'image/png',
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
@@ -358,41 +412,76 @@ async function routerFunction(request, env, ctx) {
   // ============================================
   // ADMIN ROUTER - Gobernado por Admin Route Registry
   // ============================================
-  // PRIORIDAD ABSOLUTA: Todas las rutas /admin/* pasan PRIMERO por el resolver
+  // [FORENSIC][ROUTER] PRIORIDAD ABSOLUTA: Todas las rutas /admin/* pasan PRIMERO por el resolver
   // Esto garantiza que el registry es la fuente de verdad, no los bloques legacy
   if (path === "/admin" || path.startsWith("/admin/")) {
     const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
-    console.error(`[ROUTER] resolving admin route path=${path} method=${request.method} trace_id=${traceId}`);
+    console.log(`[FORENSIC][ROUTER] ════════════════════════════════════════`);
+    console.log(`[FORENSIC][ROUTER] Resolviendo ruta admin: ${path} (${request.method})`);
+    console.log(`[FORENSIC][ROUTER] trace_id: ${traceId}`);
     
     let resolved;
     try {
+      console.log(`[FORENSIC][ROUTER] Llamando resolveAdminRoute...`);
       resolved = await resolveAdminRoute(path, request.method);
+      console.log(`[FORENSIC][ROUTER] resolveAdminRoute resultado:`, {
+        found: !!resolved,
+        routeKey: resolved?.route?.key,
+        type: resolved?.type,
+        hasHandler: !!resolved?.handler
+      });
     } catch (resolveError) {
-      console.error(`[ROUTER] ERROR in resolveAdminRoute path=${path} trace_id=${traceId}`, resolveError);
+      console.error(`[FORENSIC][ROUTER] ERROR en resolveAdminRoute:`, resolveError.message);
+      console.error(`[FORENSIC][ROUTER] Stack:`, resolveError.stack);
       throw resolveError; // Relanzar para que el catch del router lo capture
     }
     
     if (resolved) {
       // Ruta encontrada en el registry, ejecutar handler
-      console.error(`[ROUTER] route resolved, executing handler routeKey=${resolved.route.key} type=${resolved.type} trace_id=${traceId}`);
+      console.log(`[FORENSIC][ROUTER] ✅ Ruta resuelta: ${resolved.route.key} (${resolved.type})`);
+      console.log(`[FORENSIC][ROUTER] Ejecutando handler...`);
       try {
         const handlerResult = await resolved.handler(request, env, ctx);
-        console.error(`[ROUTER] handler executed routeKey=${resolved.route.key} resultType=${typeof handlerResult} isResponse=${handlerResult instanceof Response} trace_id=${traceId}`);
+        console.log(`[FORENSIC][ROUTER] Handler ejecutado:`, {
+          resultType: typeof handlerResult,
+          isResponse: handlerResult instanceof Response,
+          status: handlerResult?.status,
+          contentType: handlerResult?.headers?.get('content-type')
+        });
         
         if (!handlerResult || !(handlerResult instanceof Response)) {
-          console.error(`[ROUTER] ERROR handler returned invalid result routeKey=${resolved.route.key} result=${handlerResult} resultType=${typeof handlerResult} trace_id=${traceId}`);
-          // Esto causará que el catch del router capture el error
+          console.error(`[FORENSIC][ROUTER] ❌ Handler devolvió resultado inválido:`, {
+            routeKey: resolved.route.key,
+            result: handlerResult,
+            resultType: typeof handlerResult
+          });
           throw new Error(`Handler ${resolved.route.key} devolvió resultado inválido: ${typeof handlerResult}`);
         }
         
+        console.log(`[FORENSIC][ROUTER] ✅ Respuesta válida, retornando`);
+        console.log(`[FORENSIC][ROUTER] ════════════════════════════════════════`);
         return handlerResult;
       } catch (handlerError) {
-        console.error(`[ROUTER] ERROR executing handler routeKey=${resolved.route.key} trace_id=${traceId}`, handlerError);
+        console.error(`[FORENSIC][ROUTER] ❌ Error ejecutando handler:`, handlerError.message);
+        console.error(`[FORENSIC][ROUTER] Stack:`, handlerError.stack);
         throw handlerError; // Relanzar para que el catch del router lo capture
       }
     } else {
       // Ruta NO encontrada en el registry
       console.error(`[ROUTER] route not found in registry path=${path} trace_id=${traceId}`);
+      
+      // OBJETIVO 1: BLOQUEAR HTML EN /admin/api/**
+      // Cualquier request que empiece por /admin/api/ NUNCA debe devolver HTML
+      if (path.startsWith('/admin/api/')) {
+        console.error(`[ROUTER] 🔴 CRÍTICO: Ruta API no encontrada: ${path}`);
+        const { jsonError } = await import('./core/http/json-response.js');
+        return jsonError('API route not found', 404, { 
+          code: 'API_ROUTE_NOT_FOUND',
+          path,
+          method: request.method
+        });
+      }
+      
       // PROHIBIDO: Fallback a legacy eliminado permanentemente
       // Si una ruta no existe en el registry, devolver 404 controlado
       const { createAdmin404Response } = await import('./core/admin/admin-router-resolver.js');
@@ -831,10 +920,20 @@ async function routerFunction(request, env, ctx) {
         }
       }
       
+      // [FORENSIC][ROUTER] ⚠️ BLOQUE LEGACY DETECTADO
       // Endpoints API de Theme Studio Canon v1 - ANTES del catch-all de themes
+      // ⚠️ ESTE BLOQUE NO DEBERÍA EJECUTARSE si el registry funciona correctamente
       if (path.startsWith("/admin/api/theme-studio-canon")) {
+        console.log(`[FORENSIC][ROUTER] ⚠️ BLOQUE LEGACY EJECUTADO para: ${path}`);
+        console.log(`[FORENSIC][ROUTER] ⚠️ Esta ruta debería resolverse por el registry, no por este bloque`);
         const adminThemeStudioCanonAPIHandler = (await import("./endpoints/admin-theme-studio-canon-api.js")).default;
-        return adminThemeStudioCanonAPIHandler(request, env, ctx);
+        const result = await adminThemeStudioCanonAPIHandler(request, env, ctx);
+        console.log(`[FORENSIC][ROUTER] Resultado legacy handler:`, {
+          isResponse: result instanceof Response,
+          status: result?.status,
+          contentType: result?.headers?.get('content-type')
+        });
+        return result;
       }
       
       // Endpoints API de temas (catch-all para /admin/themes/* que no sean studio-v3 o studio)
@@ -908,6 +1007,12 @@ async function routerFunction(request, env, ctx) {
       if (path === '/admin/api/system/diagnostics' && request.method === 'GET') {
         const adminSystemDiagnosticsApiHandler = (await import("./endpoints/admin-system-diagnostics-api.js")).default;
         return adminSystemDiagnosticsApiHandler(request, env, ctx);
+      }
+      
+      // GET /admin/api/system/robustness-report - ROBUSTNESS LAYER v1
+      if (path === '/admin/api/system/robustness-report' && request.method === 'GET') {
+        const adminRobustnessReportApiHandler = (await import("./endpoints/admin-robustness-report-api.js")).default;
+        return adminRobustnessReportApiHandler(request, env, ctx);
       }
 
       // Endpoints API de Señales (Admin) - ANTES del catch-all

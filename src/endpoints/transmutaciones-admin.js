@@ -264,8 +264,9 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
       height: 16px;
       cursor: pointer;
       accent-color: #4f46e5; /* indigo-600 */
-      margin-right: 8px;
+      margin-right: 10px;
       flex-shrink: 0;
+      min-width: 16px;
     }
     
     .select-all-checkbox {
@@ -829,6 +830,9 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
     const API_BASE = '/api/transmutaciones';
     let listasData = [];
     
+    // Estado de selección por lista
+    const selectedItems = {};
+    
     // Obtener password de la URL
     const urlParams = new URLSearchParams(window.location.search);
     let password = urlParams.get('password') || '';
@@ -1071,6 +1075,13 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
     }
     
     function cambiarSubTab(listaId, tipo) {
+      // Limpiar selección de la lista anterior si existe
+      const previousActive = tipo === 'recurrente' ? listaActivaRecurrente : listaActivaUnaVez;
+      if (previousActive && selectedItems[previousActive]) {
+        selectedItems[previousActive].clear();
+        updateBulkActionsBar(previousActive);
+      }
+      
       if (tipo === 'recurrente') {
         listaActivaRecurrente = listaId;
       } else {
@@ -1153,9 +1164,9 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
         </div>
       \`;
       
-      let htmlHeader = '<div class="items-header" style="display: flex; align-items: center; gap: 12px;">';
-      htmlHeader += '<input type="checkbox" class="select-all-checkbox" id="selectAll-\${listaId}" onchange="toggleSelectAll(\${listaId}, this.checked)">';
-      htmlHeader += '<h3 style="margin: 0;">Ítems (ordenados por nivel)</h3>';
+      let htmlHeader = '<div class="items-header" style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #334155;">';
+      htmlHeader += '<input type="checkbox" class="select-all-checkbox" id="selectAll-\${listaId}" onchange="toggleSelectAll(\${listaId}, this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: #4f46e5; flex-shrink: 0;">';
+      htmlHeader += '<h3 style="margin: 0; color: #ffffff; font-size: 16px;">Ítems (ordenados por nivel)</h3>';
       htmlHeader += '</div>';
       html += htmlHeader;
       
@@ -1233,8 +1244,8 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
       if (itemsOrdenados.length > 0) {
         for (const item of itemsOrdenados) {
         html += \`
-          <div class="item-card" data-item-id="\${item.id}" id="itemCard-\${item.id}">
-            <input type="checkbox" class="item-checkbox" data-item-id="\${item.id}" data-lista-id="\${listaId}" onchange="toggleItemSelection(\${listaId}, \${item.id}, this.checked)">
+          <div class="item-card" data-item-id="\${item.id}" id="itemCard-\${item.id}" style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" class="item-checkbox" data-item-id="\${item.id}" data-lista-id="\${listaId}" onchange="toggleItemSelection(\${listaId}, \${item.id}, this.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4f46e5; flex-shrink: 0;">
             <div class="item-info" style="flex: 1; display: grid; grid-template-columns: 70px 1fr 1fr 120px; gap: 10px; align-items: center;">
               <!-- Nivel -->
               <div>
@@ -1792,7 +1803,22 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
           
           html += '</div>';
           container.innerHTML = html;
-          document.getElementById('modalAlumnos').classList.add('active');
+          
+          // Reenganchar el botón de cerrar después de innerHTML
+          const modal = document.getElementById('modalAlumnos');
+          if (modal) {
+            const closeBtn = modal.querySelector('.close-modal');
+            if (closeBtn) {
+              closeBtn.onclick = () => cerrarModal('modalAlumnos');
+            }
+            // También permitir cerrar haciendo clic fuera del modal
+            modal.onclick = (e) => {
+              if (e.target === modal) {
+                cerrarModal('modalAlumnos');
+              }
+            };
+            modal.classList.add('active');
+          }
         } else {
           alert('Error: ' + (data.error || 'No se pudieron obtener los datos de los alumnos'));
         }
@@ -1809,6 +1835,202 @@ export default async function transmutacionesAdminHandler(request, env, ctx) {
     function mostrarError(mensaje) {
       alert(mensaje);
     }
+    
+    function getSelectedItems(listaId) {
+      if (!selectedItems[listaId]) {
+        selectedItems[listaId] = new Set();
+      }
+      return selectedItems[listaId];
+    }
+    
+    function toggleItemSelection(listaId, itemId, checked) {
+      const selected = getSelectedItems(listaId);
+      const card = document.getElementById(\`itemCard-\${itemId}\`);
+      
+      if (checked) {
+        selected.add(itemId);
+        if (card) card.classList.add('selected');
+      } else {
+        selected.delete(itemId);
+        if (card) card.classList.remove('selected');
+      }
+      
+      updateBulkActionsBar(listaId);
+      updateSelectAllCheckbox(listaId);
+    }
+    
+    function toggleSelectAll(listaId, checked) {
+      const container = document.getElementById(\`items-\${listaId}\`);
+      if (!container) return;
+      
+      const checkboxes = container.querySelectorAll(\`.item-checkbox[data-lista-id="\${listaId}"]\`);
+      const selected = getSelectedItems(listaId);
+      
+      checkboxes.forEach(checkbox => {
+        const itemId = parseInt(checkbox.dataset.itemId);
+        checkbox.checked = checked;
+        toggleItemSelection(listaId, itemId, checked);
+      });
+    }
+    
+    function deseleccionarTodos(listaId) {
+      toggleSelectAll(listaId, false);
+    }
+    
+    function updateBulkActionsBar(listaId) {
+      const selected = getSelectedItems(listaId);
+      const bar = document.getElementById(\`bulkActions-\${listaId}\`);
+      const count = document.getElementById(\`selectedCount-\${listaId}\`);
+      
+      if (selected.size > 0) {
+        if (bar) bar.classList.add('active');
+        if (count) count.textContent = \`\${selected.size} seleccionado\${selected.size > 1 ? 's' : ''}\`;
+      } else {
+        if (bar) bar.classList.remove('active');
+      }
+    }
+    
+    function updateSelectAllCheckbox(listaId) {
+      const container = document.getElementById(\`items-\${listaId}\`);
+      if (!container) return;
+      
+      const checkboxes = container.querySelectorAll(\`.item-checkbox[data-lista-id="\${listaId}"]\`);
+      const selectAllCheckbox = document.getElementById(\`selectAll-\${listaId}\`);
+      const selected = getSelectedItems(listaId);
+      
+      if (checkboxes.length === 0) {
+        if (selectAllCheckbox) selectAllCheckbox.checked = false;
+        return;
+      }
+      
+      const allSelected = checkboxes.length === selected.size && selected.size > 0;
+      const someSelected = selected.size > 0 && selected.size < checkboxes.length;
+      
+      if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allSelected;
+        selectAllCheckbox.indeterminate = someSelected;
+      }
+    }
+    
+    async function aplicarBulkNivel(listaId) {
+      const input = document.getElementById(\`bulkNivel-\${listaId}\`);
+      if (!input) return;
+      
+      const nivel = parseInt(input.value);
+      if (isNaN(nivel) || nivel < 1) {
+        alert('Por favor, introduce un nivel válido (>= 1)');
+        return;
+      }
+      
+      const selected = getSelectedItems(listaId);
+      if (selected.size === 0) {
+        alert('No hay ítems seleccionados');
+        return;
+      }
+      
+      if (!confirm(\`¿Cambiar el nivel a \${nivel} para \${selected.size} ítem\${selected.size > 1 ? 's' : ''}?\`)) {
+        return;
+      }
+      
+      const updates = Array.from(selected).map(itemId => 
+        updateItemField(listaId, itemId, 'nivel', nivel)
+      );
+      
+      try {
+        await Promise.all(updates);
+        input.value = '';
+        alert(\`✅ Nivel actualizado para \${selected.size} ítem\${selected.size > 1 ? 's' : ''}\`);
+        verItems(listaId);
+      } catch (error) {
+        alert('Error actualizando ítems: ' + error.message);
+      }
+    }
+    
+    async function aplicarBulkFrecuencia(listaId) {
+      const input = document.getElementById(\`bulkFrecuencia-\${listaId}\`);
+      if (!input) return;
+      
+      const valor = parseInt(input.value);
+      if (isNaN(valor) || valor < 1) {
+        alert('Por favor, introduce un valor válido (>= 1)');
+        return;
+      }
+      
+      const selected = getSelectedItems(listaId);
+      if (selected.size === 0) {
+        alert('No hay ítems seleccionados');
+        return;
+      }
+      
+      const lista = listasData.find(l => l.id === listaId);
+      const campo = lista?.tipo === 'recurrente' ? 'frecuencia_dias' : 'veces_limpiar';
+      const label = lista?.tipo === 'recurrente' ? 'días' : 'veces';
+      
+      if (!confirm(\`¿Cambiar \${label} a \${valor} para \${selected.size} ítem\${selected.size > 1 ? 's' : ''}?\`)) {
+        return;
+      }
+      
+      const updates = Array.from(selected).map(itemId => 
+        updateItemField(listaId, itemId, campo, valor)
+      );
+      
+      try {
+        await Promise.all(updates);
+        input.value = '';
+        alert(\`✅ \${label.charAt(0).toUpperCase() + label.slice(1)} actualizado para \${selected.size} ítem\${selected.size > 1 ? 's' : ''}\`);
+        verItems(listaId);
+      } catch (error) {
+        alert('Error actualizando ítems: ' + error.message);
+      }
+    }
+    
+    async function updateItemField(listaId, itemId, campo, valor) {
+      try {
+        // Obtener el item actual
+        const response = await fetchWithAuth(\`\${API_BASE}/items/\${itemId}\`);
+        const data = await response.json();
+        
+        if (!data.success || !data.data.item) {
+          throw new Error('Error obteniendo datos del ítem');
+        }
+        
+        const item = data.data.item;
+        
+        // Preparar datos para actualizar
+        const datos = {
+          nombre: item.nombre,
+          descripcion: item.descripcion,
+          nivel: item.nivel,
+          frecuencia_dias: item.frecuencia_dias,
+          veces_limpiar: item.veces_limpiar
+        };
+        
+        // Actualizar el campo
+        if (campo === 'nivel') {
+          datos.nivel = parseInt(valor);
+        } else if (campo === 'frecuencia_dias') {
+          datos.frecuencia_dias = parseInt(valor);
+        } else if (campo === 'veces_limpiar') {
+          datos.veces_limpiar = parseInt(valor);
+        }
+        
+        // Guardar cambios
+        const updateResponse = await fetchWithAuth(\`\${API_BASE}/items/\${itemId}\`, {
+          method: 'PUT',
+          body: JSON.stringify(datos)
+        });
+        
+        const updateData = await updateResponse.json();
+        
+        if (!updateData.success) {
+          throw new Error(updateData.error || 'Error guardando cambios');
+        }
+      } catch (error) {
+        console.error(\`Error actualizando ítem \${itemId}:\`, error);
+        throw error;
+      }
+    }
+    
   </script>
 </body>
 </html>

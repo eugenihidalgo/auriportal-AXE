@@ -21,25 +21,28 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Helper para verificar Content-Type y manejar errores de HTML
-async function safeJsonResponse(res, errorContext) {
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('text/html')) {
-    const htmlText = await res.text();
-    showError('La API devolvió HTML. Revisa autenticación o backend.');
-    console.error(`[ThemeStudioCanon] ${errorContext}: API devolvió HTML en lugar de JSON:`, htmlText.substring(0, 500));
-    return null;
-  }
-  
-  try {
-    return await res.json();
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      showError('La API devolvió HTML. Revisa autenticación o backend.');
-      console.error(`[ThemeStudioCanon] ${errorContext}: Error parseando JSON (probablemente recibió HTML):`, error);
-      return null;
+// ROBUSTNESS LAYER v1: Usar safeFetchJSON global (cargado antes de este script)
+// Si no está disponible, fallback a fetch tradicional con manejo de errores
+async function safeFetchJSONWrapper(url, options = {}, context = '') {
+  if (typeof window !== 'undefined' && window.safeFetchJSON) {
+    return await window.safeFetchJSON(url, options, { context });
+  } else {
+    // Fallback: usar fetch tradicional con manejo básico
+    console.warn('[ThemeStudioCanon] safeFetchJSON no disponible, usando fallback');
+    try {
+      const res = await fetch(url, options);
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        showError('La API devolvió HTML. Revisa autenticación o backend.');
+        console.error(`[ThemeStudioCanon] ${context}: API devolvió HTML:`, text.substring(0, 500));
+        return { ok: false, code: 'NON_JSON_RESPONSE', error: 'API devolvió HTML' };
+      }
+      const data = await res.json();
+      return { ok: res.ok, data, status: res.status };
+    } catch (error) {
+      return { ok: false, code: 'FETCH_ERROR', error: error.message };
     }
-    throw error;
   }
 }
 
@@ -55,16 +58,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadCapabilities() {
   try {
-    const res = await fetch(`${API_BASE}/capabilities`);
+    const result = await safeFetchJSONWrapper(`${API_BASE}/capabilities`, {}, 'loadCapabilities');
     
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+    if (!result.ok) {
+      showError(result.error || 'Error cargando capabilities');
+      console.error('[ThemeStudioCanon] Error en loadCapabilities:', result);
+      return;
     }
     
-    const data = await safeJsonResponse(res, 'loadCapabilities');
-    if (!data) return;
-    
-    if (data.ok) {
+    const data = result.data;
+    if (data && data.ok) {
       themeCapabilities = data.capabilities || [];
       allThemeTokens = data.allTokens || [];
       console.log('[ThemeStudioCanon] Capabilities cargadas:', themeCapabilities.length);
@@ -93,14 +96,15 @@ async function loadCapabilities() {
 
 async function loadThemes() {
   try {
-    const res = await fetch(`${API_BASE}/themes`);
+    const result = await safeFetchJSONWrapper(`${API_BASE}/themes`, {}, 'loadThemes');
     
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+    if (!result.ok) {
+      showError(result.error || 'Error cargando temas');
+      console.error('[ThemeStudioCanon] Error en loadThemes:', result);
+      return;
     }
     
-    const data = await safeJsonResponse(res, 'loadThemes');
-    if (!data) return; // Error ya manejado por safeJsonResponse
+    const data = result.data;
     
     if (data.ok) {
       themes = data.themes || [];
@@ -116,14 +120,15 @@ async function loadThemes() {
 
 async function loadTheme(themeId) {
   try {
-    const res = await fetch(`${API_BASE}/theme/${themeId}`);
+    const result = await safeFetchJSONWrapper(`${API_BASE}/theme/${themeId}`, {}, 'loadTheme');
     
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+    if (!result.ok) {
+      showError(result.error || 'Error cargando tema');
+      console.error('[ThemeStudioCanon] Error en loadTheme:', result);
+      return;
     }
     
-    const data = await safeJsonResponse(res, 'loadTheme');
-    if (!data) return; // Error ya manejado por safeJsonResponse
+    const data = result.data;
     
     if (data.ok && data.theme) {
       currentTheme = { id: themeId, ...data.theme, source: data.source };
@@ -520,6 +525,7 @@ async function handleNewTheme() {
   currentThemeDraft = newTheme;
   isDirty = true;
   updateDirtyIndicator();
+  updateButtonStates(); // ROBUSTNESS LAYER v1: Actualizar estados de botones
   renderEditor();
   showTabs();
   showEditorFooter();
@@ -549,6 +555,41 @@ async function handleResetDefaults() {
 function markDirty() {
   isDirty = true;
   updateDirtyIndicator();
+  // ROBUSTNESS LAYER v1: Actualizar estado de botones según validity
+  updateButtonStates();
+}
+
+// ROBUSTNESS LAYER v1: Actualiza estado de botones según validity del draft
+function updateButtonStates() {
+  if (!currentThemeDraft) {
+    // Sin draft: deshabilitar todos
+    const saveBtn = document.getElementById('saveBtn');
+    const publishBtn = document.getElementById('publishBtn');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.title = 'No hay draft para guardar';
+    }
+    if (publishBtn) {
+      publishBtn.disabled = true;
+    }
+    return;
+  }
+  
+  const validity = computeDraftClientValidity(currentThemeDraft);
+  
+  // Actualizar botón Save
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = !validity.canSave;
+    if (validity.canSave) {
+      saveBtn.title = '';
+    } else {
+      saveBtn.title = validity.reasons.join('; ');
+    }
+  }
+  
+  // Botón Publish se actualiza después de validación server
+  // (se mantiene disabled hasta validación exitosa)
 }
 
 function updateDirtyIndicator() {
@@ -562,14 +603,18 @@ async function handleValidate() {
   if (!currentThemeDraft) return;
 
   try {
-    const res = await fetch(`${API_BASE}/theme/validate`, {
+    const result = await safeFetchJSONWrapper(`${API_BASE}/theme/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: currentThemeDraft })
-    });
-
-    const data = await safeJsonResponse(res, 'handleValidate');
-    if (!data) return; // Error ya manejado
+    }, 'handleValidate');
+    
+    if (!result.ok) {
+      showError(result.error || 'Error validando');
+      return;
+    }
+    
+    const data = result.data;
     
     if (data.ok) {
       // Mostrar warnings/errors en tab Debug
@@ -594,21 +639,68 @@ async function handleValidate() {
   }
 }
 
+// ROBUSTNESS LAYER v1: Validación client-side antes de guardar
+function computeDraftClientValidity(draft) {
+  const reasons = [];
+  let canSave = true;
+  let canPreview = true;
+  let canPublish = false; // Requiere validación server
+  
+  // Save: requiere id (slug válido) + name no vacío
+  if (!draft || !draft.id || typeof draft.id !== 'string' || draft.id.trim() === '') {
+    canSave = false;
+    reasons.push('ID del tema requerido (slug válido)');
+  } else {
+    // Validar slug básico
+    const slugRegex = /^[a-z0-9-]+$/;
+    if (!slugRegex.test(draft.id.trim())) {
+      canSave = false;
+      reasons.push('ID debe ser un slug válido (solo letras minúsculas, números y guiones)');
+    }
+  }
+  
+  if (!draft || !draft.name || typeof draft.name !== 'string' || draft.name.trim() === '') {
+    canSave = false;
+    reasons.push('Nombre del tema requerido');
+  }
+  
+  // Preview: permite aunque tokens vacíos (usa defaults), pero requiere draft existente
+  if (!draft) {
+    canPreview = false;
+    reasons.push('No hay draft para previsualizar');
+  }
+  
+  // Publish: requiere validación server (no se valida aquí)
+  
+  return { canSave, canPreview, canPublish, reasons };
+}
+
 async function handleSaveDraft() {
   if (!currentThemeDraft) return;
+
+  // ROBUSTNESS LAYER v1: Validar client-side antes de enviar
+  const validity = computeDraftClientValidity(currentThemeDraft);
+  if (!validity.canSave) {
+    showError('No se puede guardar: ' + validity.reasons.join(', '));
+    return;
+  }
 
   // Actualizar meta desde inputs
   updateMetaFromInputs();
 
   try {
-    const res = await fetch(`${API_BASE}/theme/save-draft`, {
+    const result = await safeFetchJSONWrapper(`${API_BASE}/theme/save-draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: currentThemeDraft })
-    });
-
-    const data = await safeJsonResponse(res, 'handleSaveDraft');
-    if (!data) return; // Error ya manejado
+    }, 'handleSaveDraft');
+    
+    if (!result.ok) {
+      showError(result.error || 'Error guardando');
+      return;
+    }
+    
+    const data = result.data;
     
     if (data.ok) {
       isDirty = false;
@@ -640,14 +732,18 @@ async function handlePublish() {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/theme/publish`, {
+    const result = await safeFetchJSONWrapper(`${API_BASE}/theme/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme_id: currentTheme.id })
-    });
-
-    const data = await safeJsonResponse(res, 'handlePublish');
-    if (!data) return; // Error ya manejado
+    }, 'handlePublish');
+    
+    if (!result.ok) {
+      showError(result.error || 'Error publicando');
+      return;
+    }
+    
+    const data = result.data;
     
     if (data.ok) {
       isDirty = false;
@@ -669,22 +765,33 @@ async function handlePublish() {
 async function handlePreview() {
   if (!currentThemeDraft) return;
 
+  // ROBUSTNESS LAYER v1: Validar que se puede previsualizar
+  const validity = computeDraftClientValidity(currentThemeDraft);
+  if (!validity.canPreview) {
+    showError('No se puede previsualizar: ' + validity.reasons.join(', '));
+    return;
+  }
+
   updateMetaFromInputs();
 
   const snapshot = buildSnapshotFromForm();
 
   try {
-    const res = await fetch(`${API_BASE}/preview`, {
+    const result = await safeFetchJSONWrapper(`${API_BASE}/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         theme: currentThemeDraft,
         snapshot
       })
-    });
-
-    const data = await safeJsonResponse(res, 'handlePreview');
-    if (!data) return; // Error ya manejado
+    }, 'handlePreview');
+    
+    if (!result.ok) {
+      showError(result.error || 'Error en preview');
+      return;
+    }
+    
+    const data = result.data;
     
     if (data.ok) {
       previewResult = data;

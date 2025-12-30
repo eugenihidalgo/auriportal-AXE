@@ -87,6 +87,12 @@ function shouldNormalizeResponse(request) {
     const path = url.pathname;
     const acceptHeader = request.headers?.get('Accept') || '';
 
+    // OBJETIVO 4: Whitelist para /drive-webhook (endpoint externo de Google Drive)
+    // Este endpoint puede recibir content-type no JSON de Google
+    if (path === '/drive-webhook' || path === '/api/drive-webhook') {
+      return false; // NO normalizar, es webhook externo
+    }
+
     // Si el path NO empieza por /admin/api Y el Accept incluye text/html
     // → NO normalizar (es una página HTML del Admin)
     if (!path.startsWith('/admin/api') && acceptHeader.includes('text/html')) {

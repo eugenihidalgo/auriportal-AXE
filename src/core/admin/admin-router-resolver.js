@@ -24,6 +24,7 @@ import { wrapAdminHandler } from './admin-handler-guard.js';
 const HANDLER_MAP = {
   // API Handlers
   'api-system-diagnostics': () => import('../../endpoints/admin-system-diagnostics-api.js'),
+  'api-robustness-report': () => import('../../endpoints/admin-robustness-report-api.js'),
   'api-energy-clean': () => import('../../endpoints/admin-energy-api.js').then(m => ({ default: m.handleEnergyClean })),
   'api-energy-illuminate': () => import('../../endpoints/admin-energy-api.js').then(m => ({ default: m.handleEnergyIlluminate })),
   'api-registry': () => import('../../endpoints/admin-registry.js'),
@@ -63,7 +64,7 @@ const HANDLER_MAP = {
   'api-tecnicas-limpieza': () => import('../../endpoints/admin-tecnicas-limpieza-api.js'),
   'api-resolvers': () => import('../../endpoints/admin-resolvers-api.js'),
   // Theme Studio Canon v1 - Handler centralizado
-  'api-theme-studio-canon-capabilities': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
+  'api-theme-studio-canon-capabilities': () => import('../../endpoints/admin-theme-studio-canon-capabilities-api.js'),
   'api-theme-studio-canon-themes': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   'api-theme-studio-canon-theme': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
   'api-theme-studio-canon-validate': () => import('../../endpoints/admin-theme-studio-canon-api.js'),
@@ -76,6 +77,11 @@ const HANDLER_MAP = {
   'api-assembly-runs': () => import('../../endpoints/admin-assembly-check-api.js').then(m => ({ default: m.getAssemblyRunsHandler })),
   'api-assembly-run-detail': () => import('../../endpoints/admin-assembly-check-api.js').then(m => ({ default: m.getAssemblyRunDetailHandler })),
   'api-assembly-initialize': () => import('../../endpoints/admin-assembly-check-api.js').then(m => ({ default: m.initializeAssemblyChecksHandler })),
+  // Feature Flags API (OBJETIVO 3: Stubs mínimos)
+  'api-feature-flags-list': () => import('../../endpoints/admin-feature-flags-list-api.js'),
+  'api-feature-flags-enable': () => import('../../endpoints/admin-feature-flags-enable-api.js'),
+  'api-feature-flags-disable': () => import('../../endpoints/admin-feature-flags-disable-api.js'),
+  'api-feature-flags-reset': () => import('../../endpoints/admin-feature-flags-reset-api.js'),
   
   // Island Handlers (páginas con handlers específicos)
   'admin-login': () => import('../../endpoints/admin-login.js'),
@@ -109,11 +115,11 @@ const HANDLER_MAP = {
   'automation-definitions-detail': () => import('../../endpoints/admin-automation-definitions-ui.js'),
   'automation-definitions-create': () => import('../../endpoints/admin-automation-definitions-ui.js'),
   'automation-definitions-edit': () => import('../../endpoints/admin-automation-definitions-ui.js'),
-  // Feature Flags
-  'api-feature-flags-list': () => import('../../endpoints/admin-feature-flags-api.js'),
-  'api-feature-flags-enable': () => import('../../endpoints/admin-feature-flags-api.js'),
-  'api-feature-flags-disable': () => import('../../endpoints/admin-feature-flags-api.js'),
-  'api-feature-flags-reset': () => import('../../endpoints/admin-feature-flags-api.js'),
+  // Feature Flags API (OBJETIVO 3: Stubs mínimos) - Handler específico
+  'api-feature-flags-list': () => import('../../endpoints/admin-feature-flags-list-api.js'),
+  'api-feature-flags-enable': () => import('../../endpoints/admin-feature-flags-enable-api.js'),
+  'api-feature-flags-disable': () => import('../../endpoints/admin-feature-flags-disable-api.js'),
+  'api-feature-flags-reset': () => import('../../endpoints/admin-feature-flags-reset-api.js'),
   'feature-flags-ui': () => import('../../endpoints/admin-feature-flags-ui.js'),
   
   // PROHIBIDO: Legacy handlers están permanentemente deshabilitados
@@ -198,6 +204,23 @@ export async function resolveAdminRoute(path, method = 'GET') {
   
   // LOG: Ruta encontrada
   console.error(`[ADMIN_ROUTER] matched routeKey=${route.key} path=${route.path} type=${route.type} trace_id=${traceId}`);
+  
+  // OBJETIVO 1: BLOQUEAR HTML EN /admin/api/**
+  // Cualquier ruta que empiece por /admin/api/ NUNCA debe resolverse como island
+  if (path.startsWith('/admin/api/') && route.type === 'island') {
+    const error = new Error(`API route resolved as island: ${method} ${path}`);
+    error.code = 'API_ROUTE_AS_ISLAND';
+    error.details = {
+      path,
+      method,
+      routeKey: route.key,
+      routeType: route.type,
+      traceId,
+      message: 'Ruta API no puede resolverse como island. Verificar registry.'
+    };
+    console.error(`[ADMIN_ROUTER] ❌ ERROR ESTRUCTURAL: ${error.code} path=${path} method=${method} trace_id=${traceId}`);
+    throw error;
+  }
   
   // CORTAFUEGOS: Verificar si la ruta está deshabilitada ANTES de cualquier import
   if (route.disabled === true) {
@@ -379,10 +402,13 @@ export async function resolveAdminRoute(path, method = 'GET') {
 export function createAdmin404Response(path, method) {
   const traceId = getRequestId() || `admin-404-${Date.now()}`;
   
+  // OBJETIVO 1: Rutas /admin/api/** SIEMPRE devuelven JSON, nunca HTML
+  const isApiRoute = path.startsWith('/admin/api/');
+  
   return new Response(JSON.stringify({
     ok: false,
     error: `Ruta admin no encontrada: ${method} ${path}`,
-    code: 'ADMIN_ROUTE_NOT_FOUND',
+    code: isApiRoute ? 'API_ROUTE_NOT_FOUND' : 'ADMIN_ROUTE_NOT_FOUND',
     trace_id: traceId,
     details: {
       path,
@@ -392,7 +418,7 @@ export function createAdmin404Response(path, method) {
   }), {
     status: 404,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
       'Expires': '0'

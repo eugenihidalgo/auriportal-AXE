@@ -265,6 +265,30 @@ export async function renderAdminPage(options = {}) {
       sidebarHtml = '<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="' + activePath + '"><a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg">📊 Dashboard</a></div>';
     }
     
+    // ROBUSTNESS LAYER v1: Añadir meta tags para diagnóstico
+    const { getRequestId } = await import('../observability/request-context.js');
+    let traceId = null;
+    try {
+      traceId = getRequestId();
+    } catch (e) {
+      // Si falla obtener trace_id, continuar sin él
+    }
+    
+    // Inyectar meta tags antes de </head>
+    let metaTags = '';
+    if (process.env.APP_VERSION) {
+      metaTags += `<meta name="app-version" content="${process.env.APP_VERSION}">\n`;
+    }
+    if (process.env.BUILD_ID) {
+      metaTags += `<meta name="build-id" content="${process.env.BUILD_ID}">\n`;
+    }
+    if (traceId) {
+      metaTags += `<meta name="trace-id" content="${traceId}">\n`;
+    }
+    if (metaTags) {
+      html = html.replace('</head>', metaTags + '</head>');
+    }
+    
     // Reemplazar placeholders
     html = html.replace(/\{\{TITLE\}\}/g, title);
     html = html.replace(/\{\{CONTENT\}\}/g, contentHtml);
@@ -287,6 +311,9 @@ export async function renderAdminPage(options = {}) {
       }).join('\n');
       html = html.replace('</body>', scriptsHtml + '\n</body>');
     }
+    
+    // ROBUSTNESS LAYER v1: Añadir script de diagnóstico (siempre, se activa con ?debug)
+    html = html.replace('</body>', '<script src="/js/admin/robustness-diagnostics.js"></script>\n</body>');
     
     // VALIDACIÓN FINAL: Asegurar que no queden placeholders sin reemplazar
     if (html.includes('{{SIDEBAR_MENU}}')) {

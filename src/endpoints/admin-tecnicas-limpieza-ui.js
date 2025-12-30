@@ -242,7 +242,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
     if (tecnicasData.length === 0) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 8;
       td.className = 'py-4 text-center text-slate-400';
       td.textContent = 'Crea tu primera técnica arriba 👆';
       tr.appendChild(td);
@@ -1147,6 +1147,7 @@ export default async function adminTecnicasLimpiezaUiHandler(request, env, ctx) 
   } else {
     loadThemeSelector();
   }
+  
 })();
 </script>
 `;

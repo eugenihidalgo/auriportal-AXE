@@ -26,6 +26,7 @@ import { readFileSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ENDPOINTS_DIR = resolve(__dirname, '../../endpoints');
+const REPO_ROOT = resolve(__dirname, '../../../');
 
 /**
  * HANDLER_MAP del resolver (debe estar sincronizado con admin-router-resolver.js)
@@ -140,6 +141,7 @@ export async function auditAdminAPIHandlers(options = {}) {
   const report = {
     ok: [],
     missing_handlers: [],
+    missing_ui_assets: [], // ROBUSTNESS LAYER v1: Assets UI faltantes
     orphan_files: [], // Archivos en endpoints/ que no corresponden a ninguna ruta
     timestamp: new Date().toISOString()
   };
@@ -213,6 +215,45 @@ export async function auditAdminAPIHandlers(options = {}) {
     }
   }
   
+  // ROBUSTNESS LAYER v1: Auditar también rutas UI (islands) críticas
+  const uiRoutes = getRoutesByType('island');
+  const missingUiAssets = [];
+  
+  for (const route of uiRoutes) {
+    // Verificar que los scripts referenciados en HTML existen
+    // Por ahora, solo verificamos rutas críticas conocidas
+    if (route.key === 'theme-studio-canon') {
+      // Verificar scripts críticos de theme-studio-canon
+      const criticalScripts = [
+        'public/js/admin/safe-fetch-json.js',
+        'public/js/admin/theme-studio-canon.js',
+        'public/js/admin/theme-studio-canon-modals.js'
+      ];
+      
+      for (const script of criticalScripts) {
+        const scriptPath = resolve(REPO_ROOT, script);
+        if (!existsSync(scriptPath)) {
+          missingUiAssets.push({
+            routeKey: route.key,
+            routePath: route.path,
+            asset: script,
+            reason: 'ASSET_NOT_FOUND'
+          });
+        }
+      }
+    }
+  }
+  
+  if (missingUiAssets.length > 0) {
+    report.missing_ui_assets = missingUiAssets;
+    if (mode === 'warn') {
+      console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${missingUiAssets.length} UI assets missing`);
+      missingUiAssets.forEach(m => {
+        console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
+      });
+    }
+  }
+  
   // Generar mensaje según modo
   if (mode === 'warn' && report.missing_handlers.length > 0) {
     console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${report.missing_handlers.length} handlers missing`);
@@ -223,6 +264,14 @@ export async function auditAdminAPIHandlers(options = {}) {
     const error = new Error(`ADMIN_ROUTER_AUDIT_FAIL: ${report.missing_handlers.length} handlers missing`);
     error.code = 'ADMIN_HANDLERS_MISSING';
     error.details = report.missing_handlers;
+    throw error;
+  }
+  
+  // ROBUSTNESS LAYER v1: Fail-hard también para UI assets en modo fail
+  if (mode === 'fail' && missingUiAssets.length > 0) {
+    const error = new Error(`ADMIN_ROUTER_AUDIT_FAIL: ${missingUiAssets.length} UI assets missing`);
+    error.code = 'ADMIN_UI_ASSETS_MISSING';
+    error.details = missingUiAssets;
     throw error;
   }
   

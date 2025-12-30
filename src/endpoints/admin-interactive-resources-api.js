@@ -71,10 +71,33 @@ export default async function adminInteractiveResourcesApiHandler(request, env, 
         });
       }
 
-      const resources = await interactiveResourceService.listResourcesByOrigin(
-        { sot, entity_id },
-        { onlyActive, resource_type }
-      );
+      // OBJETIVO 2: Manejar error si tabla no existe (OPCIÓN A: crear migración)
+      let resources;
+      try {
+        resources = await interactiveResourceService.listResourcesByOrigin(
+          { sot, entity_id },
+          { onlyActive, resource_type }
+        );
+      } catch (dbError) {
+        // Si la tabla no existe, devolver error controlado
+        if (dbError.message && (dbError.message.includes('does not exist') || dbError.message.includes('relation "interactive_resources" does not exist'))) {
+          console.error('[AdminInteractiveResourcesAPI] Tabla interactive_resources no existe:', dbError.message);
+          return new Response(JSON.stringify({
+            ok: false,
+            error: 'Feature no inicializado: tabla interactive_resources no existe',
+            code: 'FEATURE_NOT_INITIALIZED',
+            details: {
+              message: 'La tabla interactive_resources no existe. Ejecutar migración SQL.',
+              migration: 'database/migrations/20241228_create_interactive_resources.sql'
+            }
+          }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        }
+        // Otro error de BD, relanzar
+        throw dbError;
+      }
 
       return new Response(JSON.stringify({
         ok: true,

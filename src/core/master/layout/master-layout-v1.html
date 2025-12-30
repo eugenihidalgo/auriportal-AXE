@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Panel Master de AuriPortal">
+  <title>{{TITLE}} - AuriPortal Master</title>
+  <link href="/css/tailwind.css" rel="stylesheet">
+  <style>
+    /* MASTER RULE: no inline JS, no HTML in JS strings (constitutional) */
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #0f172a; /* slate-900 */
+      margin: 0;
+      padding: 0;
+      color: #f1f5f9; /* slate-100 */
+    }
+    
+    /* Layout principal */
+    .master-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    /* Sidebar */
+    .master-sidebar-container {
+      width: 280px;
+      background-color: #1e293b; /* slate-800 */
+      border-right: 1px solid #334155; /* slate-700 */
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    
+    .master-sidebar {
+      padding: 1rem;
+    }
+    
+    .master-sidebar-item {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      color: #cbd5e1; /* slate-300 */
+      text-decoration: none;
+      border-radius: 0.5rem;
+      margin-bottom: 0.25rem;
+      transition: background-color 0.2s;
+    }
+    
+    .master-sidebar-item:hover {
+      background-color: #334155; /* slate-700 */
+    }
+    
+    .master-sidebar-item.active {
+      background-color: #4f46e5; /* indigo-600 */
+      color: white;
+    }
+    
+    .master-sidebar-icon {
+      margin-right: 0.75rem;
+      width: 1.25rem;
+      text-align: center;
+    }
+    
+    .master-sidebar-label {
+      flex: 1;
+    }
+    
+    .master-sidebar-section {
+      margin-top: 1.5rem;
+    }
+    
+    .master-sidebar-section-title {
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8; /* slate-400 */
+      margin-bottom: 0.5rem;
+    }
+    
+    .master-sidebar-footer {
+      margin-top: auto;
+      padding-top: 1.5rem;
+      border-top: 1px solid #334155;
+    }
+    
+    .master-sidebar-global {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #334155;
+    }
+    
+    .master-sidebar-search {
+      margin-bottom: 1rem;
+    }
+    
+    .master-sidebar-search-input {
+      width: 100%;
+      padding: 0.5rem;
+      background-color: #334155;
+      border: 1px solid #475569;
+      border-radius: 0.375rem;
+      color: #f1f5f9;
+      font-size: 0.875rem;
+    }
+    
+    .master-sidebar-search-input::placeholder {
+      color: #94a3b8;
+    }
+    
+    .master-sidebar-bookmarks {
+      min-height: 2rem;
+    }
+    
+    /* Main content */
+    .master-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .master-content {
+      flex: 1;
+      padding: 2rem;
+      overflow-y: auto;
+    }
+    
+    /* Notes panel */
+    .master-notes-panel {
+      width: 300px;
+      background-color: #1e293b;
+      border-left: 1px solid #334155;
+      padding: 1rem;
+      overflow-y: auto;
+      display: none;
+    }
+    
+    .master-notes-panel.visible {
+      display: block;
+    }
+    
+    /* Diagnostics panel */
+    .master-diagnostics-panel {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 400px;
+      max-height: 300px;
+      background-color: #1e293b;
+      border-top: 1px solid #334155;
+      border-left: 1px solid #334155;
+      padding: 1rem;
+      overflow-y: auto;
+      display: none;
+      z-index: 1000;
+    }
+    
+    .master-diagnostics-panel.visible {
+      display: block;
+    }
+    
+    /* Overlays */
+    .master-overlays {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 9999;
+    }
+    
+    /* Scrollbar personalizado */
+    .master-sidebar-container::-webkit-scrollbar,
+    .master-content::-webkit-scrollbar,
+    .master-notes-panel::-webkit-scrollbar,
+    .master-diagnostics-panel::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .master-sidebar-container::-webkit-scrollbar-track,
+    .master-content::-webkit-scrollbar-track,
+    .master-notes-panel::-webkit-scrollbar-track,
+    .master-diagnostics-panel::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    
+    .master-sidebar-container::-webkit-scrollbar-thumb,
+    .master-content::-webkit-scrollbar-thumb,
+    .master-notes-panel::-webkit-scrollbar-thumb,
+    .master-diagnostics-panel::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    
+    .master-sidebar-container::-webkit-scrollbar-thumb:hover,
+    .master-content::-webkit-scrollbar-thumb:hover,
+    .master-notes-panel::-webkit-scrollbar-thumb:hover,
+    .master-diagnostics-panel::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+  </style>
+</head>
+<body data-universe-id="{{UNIVERSE_ID}}">
+  <div class="master-layout">
+    <!-- SLOT: sidebar -->
+    <aside class="master-sidebar-container">
+      <nav id="master-sidebar-container" class="master-sidebar" data-sidebar-data="{{SIDEBAR_DATA}}">
+        <!-- Sidebar se renderiza vía DOM API en master-sidebar-client.js -->
+      </nav>
+    </aside>
+    
+    <!-- SLOT: main -->
+    <main class="master-main">
+      <div class="master-content" id="master-content">
+        {{CONTENT}}
+      </div>
+    </main>
+    
+    <!-- SLOT: notes_panel -->
+    <aside class="master-notes-panel" id="master-notes-panel">
+      {{NOTES_PANEL}}
+    </aside>
+    
+    <!-- SLOT: diagnostics_panel -->
+    <div class="master-diagnostics-panel" id="master-diagnostics-panel">
+      {{DIAGNOSTICS_PANEL}}
+    </div>
+    
+    <!-- SLOT: overlays -->
+    <div class="master-overlays" id="master-overlays">
+      {{OVERLAYS}}
+    </div>
+  </div>
+  
+  <!-- CONTRATO CANÓNICO: Domain Context Contract v1 -->
+  <!-- El contexto se determina en render (backend) y se expone como window.__AP_CONTEXT__ -->
+  <!-- PROHIBIDO: Inferir contexto por URL en scripts -->
+  <script>
+    // MASTER RULE: No inline JS - pero este es el único caso permitido (inyección de contexto)
+    window.__AP_CONTEXT__ = '{{DOMAIN_CONTEXT}}';
+  </script>
+  
+  <!-- CONTRATO CANÓNICO: Inyectar required_scripts desde master-layout-registry.v1.json -->
+  <!-- El loader lee este contrato y carga los scripts declarados -->
+  <script>
+    // MASTER RULE: No inline JS - pero este es el único caso permitido (inyección de contrato)
+    // El contrato se inyecta aquí porque debe estar disponible ANTES de que el loader se ejecute
+    window.__AP_MASTER_REQUIRED_SCRIPTS__ = {{REQUIRED_SCRIPTS}};
+  </script>
+  
+  <!-- ENTRY GATE CANÓNICO: inject_master.js es el único punto de entrada Master -->
+  <!-- inject_main.js NO se ejecuta en Master (aislamiento constitucional) -->
+  <script type="module" src="/js/master/inject_master.js"></script>
+</body>
+</html>
+

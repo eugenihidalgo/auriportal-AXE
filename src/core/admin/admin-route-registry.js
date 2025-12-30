@@ -292,6 +292,12 @@ export const ADMIN_ROUTES = [
     method: 'GET'
   },
   {
+    key: 'api-robustness-report',
+    path: '/admin/api/system/robustness-report',
+    type: 'api',
+    method: 'GET'
+  },
+  {
     key: 'system-diagnostics-page',
     path: '/admin/system/diagnostics',
     type: 'island'

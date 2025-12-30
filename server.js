@@ -139,8 +139,130 @@ try {
   process.exit(1);
 }
 
+// ============================================================================
+// ROBUSTNESS LAYER v1 - JS PRE-FLIGHT GUARD
+// ============================================================================
+// FASE 2: Source of Truth Único
+// DECISIÓN ESTRUCTURAL: Todos los audits usan PUBLIC_ASSETS_ROOT como única fuente de verdad.
+// Esto elimina desincronización entre:
+// - filesystem real (./public)
+// - router static serving (usa PUBLIC_ASSETS_ROOT)
+// - js-preflight-guard (usa PUBLIC_ASSETS_ROOT)
+// - asset-audit (usa PUBLIC_ASSETS_ROOT)
+// 
+// EVIDENCIA: Solo existe ./public (no hay public-assets). Todos los archivos JS críticos
+// existen en public/js/admin/. El router sirve desde public/ usando PUBLIC_ASSETS_ROOT.
+//
+// [FORENSIC][BOOT][STEP 1] Iniciando JS Pre-Flight Guard
+console.log('[FORENSIC][BOOT][STEP 1] ════════════════════════════════════════');
+console.log('[FORENSIC][BOOT][STEP 1] JS PRE-FLIGHT GUARD - INICIO');
+console.log('[FORENSIC][BOOT][STEP 1] NODE_ENV:', process.env.NODE_ENV);
+console.log('[FORENSIC][BOOT][STEP 1] AP_JS_GUARD:', process.env.AP_JS_GUARD);
+console.log('[FORENSIC][BOOT][STEP 1] ════════════════════════════════════════');
+
+// Validar sintaxis de JS críticos ANTES de aceptar servir el sistema
+try {
+  console.log('[FORENSIC][BOOT][STEP 1.1] Importando js-preflight-guard.js...');
+  const { runJsPreflightGuard } = await import('./src/core/robustness/js-preflight-guard.js');
+  console.log('[FORENSIC][BOOT][STEP 1.1] ✅ Importado runJsPreflightGuard');
+  
+  console.log('[FORENSIC][BOOT][STEP 1.2] Importando public-assets-manifest.js...');
+  const { getCriticalPublicJsFiles } = await import('./src/core/robustness/public-assets-manifest.js');
+  console.log('[FORENSIC][BOOT][STEP 1.2] ✅ Importado getCriticalPublicJsFiles');
+  
+  // Determinar modo según entorno
+  const jsGuardMode = process.env.AP_JS_GUARD || 
+    (process.env.NODE_ENV === 'production' ? 'fail' : 'warn');
+  console.log('[FORENSIC][BOOT][STEP 1.3] Modo guard:', jsGuardMode);
+  
+  console.log('[FORENSIC][BOOT][STEP 1.4] Obteniendo lista de archivos críticos...');
+  const criticalFiles = getCriticalPublicJsFiles();
+  console.log('[FORENSIC][BOOT][STEP 1.4] Archivos críticos:', criticalFiles.length);
+  criticalFiles.forEach((f, i) => {
+    console.log(`[FORENSIC][BOOT][STEP 1.4]   [${i+1}] ${f}`);
+  });
+  
+  console.log('[FORENSIC][BOOT][STEP 1.5] Ejecutando runJsPreflightGuard...');
+  const guardResult = runJsPreflightGuard({ 
+    mode: jsGuardMode, 
+    files: criticalFiles 
+  });
+  console.log('[FORENSIC][BOOT][STEP 1.5] Resultado guard:', {
+    passed: guardResult.passed,
+    errorsCount: guardResult.errors.length,
+    resultsCount: guardResult.results.length
+  });
+  
+  if (!guardResult.passed && jsGuardMode === 'fail') {
+    console.error('[FORENSIC][BOOT][STEP 1.6] ❌ FAIL-HARD: Server cannot start with invalid JS files');
+    process.exit(1);
+  }
+  console.log('[FORENSIC][BOOT][STEP 1.6] ✅ Guard completado (modo:', jsGuardMode, ')');
+} catch (guardError) {
+  // Si el guard falla en sí mismo, loggear pero continuar (fail-open para el guard)
+  console.error('[FORENSIC][BOOT][STEP 1.ERROR] ❌ Error executing JS preflight guard:', guardError.message);
+  console.error('[FORENSIC][BOOT][STEP 1.ERROR] Stack:', guardError.stack);
+  // En producción, podríamos considerar fallar aquí también
+  if (process.env.NODE_ENV === 'production' && process.env.AP_JS_GUARD === 'fail') {
+    console.error('[FORENSIC][BOOT][STEP 1.ERROR] ❌ FAIL-HARD: Guard execution failed in production');
+    process.exit(1);
+  }
+}
+console.log('[FORENSIC][BOOT][STEP 1] ════════════════════════════════════════');
+
+// ============================================================================
+// ROBUSTNESS LAYER v1 - ASSET AUDIT (Theme Studio Canon)
+// ============================================================================
+// FASE 3: Hardening - Verificar que assets críticos NO sean HTML servido como JS
+// PRINCIPIO: Un asset crítico roto debe ser IMPOSIBLE en producción
+// El sistema debe fallar ANTES de servir HTML como JS
+console.log('[ROBUSTNESS][ASSET_AUDIT] ════════════════════════════════════════');
+console.log('[ROBUSTNESS][ASSET_AUDIT] ASSET AUDIT - INICIO');
+try {
+  const { auditThemeStudioAssets } = await import('./src/core/robustness/audit-theme-studio-assets.js');
+  // FASE 3: Modo fail en producción si hay HTML_SERVED_AS_JS o FILE_NOT_FOUND
+  const assetAuditMode = process.env.AP_ASSET_AUDIT || 
+    (process.env.NODE_ENV === 'production' ? 'fail' : 'warn');
+  console.log('[ROBUSTNESS][ASSET_AUDIT] Modo audit:', assetAuditMode);
+  
+  const assetAuditResult = auditThemeStudioAssets({ mode: assetAuditMode });
+  
+  if (assetAuditResult.status === 'fail') {
+    console.error('[ROBUSTNESS][ASSET_AUDIT] ❌ FAIL-HARD: Asset audit failed');
+    console.error('[ROBUSTNESS][ASSET_AUDIT] El servidor NO puede arrancar con assets rotos.');
+    process.exit(1);
+  } else if (assetAuditResult.status === 'warn') {
+    console.warn(`[ROBUSTNESS][ASSET_AUDIT] ⚠️  WARNING: ${assetAuditResult.errors.length} asset(s) with issues`);
+    // En producción, advertir pero continuar solo si no es crítico
+    if (process.env.NODE_ENV === 'production') {
+      const hasHtmlAsJs = assetAuditResult.errors.some(e => e.errorType === 'HTML_SERVED_AS_JS');
+      if (hasHtmlAsJs) {
+        console.error('[ROBUSTNESS][ASSET_AUDIT] 🔴 CRÍTICO: HTML_SERVED_AS_JS detectado en producción');
+        console.error('[ROBUSTNESS][ASSET_AUDIT] El servidor NO puede arrancar.');
+        process.exit(1);
+      }
+    }
+  } else {
+    console.log(`[ROBUSTNESS][ASSET_AUDIT] ✅ All assets validated successfully`);
+  }
+  console.log('[ROBUSTNESS][ASSET_AUDIT] ════════════════════════════════════════');
+} catch (assetAuditError) {
+  console.error('[ROBUSTNESS][ASSET_AUDIT] ❌ Error executing asset audit:', assetAuditError.message);
+  console.error('[ROBUSTNESS][ASSET_AUDIT] Stack:', assetAuditError.stack);
+  // FASE 3: En producción, fallar si el audit mismo falla
+  if (process.env.NODE_ENV === 'production' && process.env.AP_ASSET_AUDIT === 'fail') {
+    console.error('[ROBUSTNESS][ASSET_AUDIT] ❌ FAIL-HARD: Asset audit execution failed in production');
+    process.exit(1);
+  }
+}
+
+// [FORENSIC][BOOT][STEP 2] Inicializando PostgreSQL
+console.log('[FORENSIC][BOOT][STEP 2] ════════════════════════════════════════');
+console.log('[FORENSIC][BOOT][STEP 2] Inicializando PostgreSQL...');
 // Inicializar base de datos PostgreSQL (única fuente de verdad v4)
 initPostgreSQL();
+console.log('[FORENSIC][BOOT][STEP 2] ✅ PostgreSQL inicializado');
+console.log('[FORENSIC][BOOT][STEP 2] ════════════════════════════════════════');
 
 // Inicializar UI & Experience System v1 (auto-registra layers)
 import('./src/core/ui-experience/init.js')
