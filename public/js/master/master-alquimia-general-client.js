@@ -1457,7 +1457,7 @@
         // Re-renderizar para actualizar UI
         renderListaContent();
       },
-      createEndpoint: '/admin/api/classifications/ensure' // Usar endpoint canónico con type='key'
+      createEndpoint: '/master/api/classifications' // Endpoint MASTER canónico (CLASSIFICATION SOT GLOBAL v1)
     });
     container.appendChild(categorySelector.container);
 
@@ -1485,7 +1485,7 @@
         // Re-renderizar para actualizar UI
         renderListaContent();
       },
-      createEndpoint: '/admin/api/classifications/ensure' // Usar endpoint canónico con type='subkey'
+      createEndpoint: '/master/api/classifications' // Endpoint MASTER canónico (CLASSIFICATION SOT GLOBAL v1)
     });
     container.appendChild(subtypeSelector.container);
 
