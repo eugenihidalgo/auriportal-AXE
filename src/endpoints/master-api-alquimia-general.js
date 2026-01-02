@@ -13,6 +13,7 @@ import {
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
   getStudentsForItem, markCleanStudent, markCleanAll, incrementAll, adjustRemaining
 } from '../services/alquimia-general-service.js';
+import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -189,6 +190,30 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
       }
 
+      // Obtener clasificaciones de la lista
+      try {
+        const listaWithClassification = await getListWithClassification(id);
+        if (listaWithClassification) {
+          lista.classification = {
+            category_key: listaWithClassification.category_key || null,
+            subtype_key: listaWithClassification.subtype_key || null,
+            tags: listaWithClassification.tags || []
+          };
+        }
+      } catch (error) {
+        logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones', {
+          traceId,
+          lista_id: id,
+          error: error.message
+        });
+        // Fail-open: continuar sin clasificaciones
+        lista.classification = {
+          category_key: null,
+          subtype_key: null,
+          tags: []
+        };
+      }
+
       return jsonSuccess({ lista }, traceId);
     }
 
@@ -209,6 +234,29 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
       }
 
+      // Si se envió classification, actualizarla también
+      if (body.classification !== undefined) {
+        try {
+          await updateListClassification(id, body.classification);
+          // Recargar lista con clasificaciones actualizadas
+          const listaWithClassification = await getListWithClassification(id);
+          if (listaWithClassification) {
+            updated.classification = {
+              category_key: listaWithClassification.category_key || null,
+              subtype_key: listaWithClassification.subtype_key || null,
+              tags: listaWithClassification.tags || []
+            };
+          }
+        } catch (error) {
+          logWarn('MasterApiAlquimiaGeneral', 'Error actualizando clasificaciones', {
+            traceId,
+            lista_id: id,
+            error: error.message
+          });
+          // Fail-open: continuar sin error
+        }
+      }
+
       return jsonSuccess({ lista: updated }, traceId);
     }
 
@@ -223,6 +271,81 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       }
 
       return jsonSuccess({ lista: archived }, traceId);
+    }
+
+    // GET /master/api/alquimia-general/listas/:id/classification
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)\/classification$/) && method === 'GET') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id/classification');
+      const id = params.id;
+
+      try {
+        const listaWithClassification = await getListWithClassification(id);
+        if (!listaWithClassification) {
+          return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+        }
+
+        const classification = {
+          category_key: listaWithClassification.category_key || null,
+          subtype_key: listaWithClassification.subtype_key || null,
+          tags: listaWithClassification.tags || []
+        };
+
+        return jsonSuccess({ classification }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones', {
+          traceId,
+          lista_id: id,
+          error: error.message,
+          stack: error.stack
+        });
+        throw error;
+      }
+    }
+
+    // PUT /master/api/alquimia-general/listas/:id/classification
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)\/classification$/) && method === 'PUT') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id/classification');
+      const id = params.id;
+      const body = await request.json();
+
+      try {
+        const updated = await updateListClassification(id, body);
+        if (!updated) {
+          return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+        }
+
+        const classification = {
+          category_key: updated.category_key || null,
+          subtype_key: updated.subtype_key || null,
+          tags: updated.tags || []
+        };
+
+        return jsonSuccess({ classification }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error actualizando clasificaciones', {
+          traceId,
+          lista_id: id,
+          error: error.message,
+          stack: error.stack,
+          body
+        });
+        throw error;
+      }
+    }
+
+    // GET /master/api/alquimia-general/classifications (todas las clasificaciones disponibles)
+    if (path === '/master/api/alquimia-general/classifications' && method === 'GET') {
+      try {
+        const allClassifications = await getAllClassifications();
+        return jsonSuccess(allClassifications, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error obteniendo todas las clasificaciones', {
+          traceId,
+          error: error.message,
+          stack: error.stack
+        });
+        throw error;
+      }
     }
 
     // ============================================================================

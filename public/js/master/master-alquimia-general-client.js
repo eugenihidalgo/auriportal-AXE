@@ -19,6 +19,13 @@
 (function() {
   'use strict';
 
+  // BOOT LOG único y global
+  console.log('[BOOT][MASTER][AlquimiaGeneral] JS cargado', {
+    time: Date.now(),
+    context: window.__AP_CONTEXT__,
+    readyState: document.readyState
+  });
+
   // Guard: Verificar contexto MASTER
   if (typeof window !== 'undefined' && window.__AP_CONTEXT__ !== 'MASTER') {
     console.warn('[MasterAlquimiaGeneral] No ejecutando en contexto no-MASTER');
@@ -28,7 +35,7 @@
   // Estado global de la aplicación
   const state = {
     tipoActivo: 'recurrente', // 'recurrente' | 'una_vez'
-    listaActiva: null, // { id, nombre, descripcion, tipo, ... }
+    listaActiva: null, // { id, nombre, descripcion, tipo, classification: {...}, ... }
     listas: [], // Array de listas
     items: [], // Array de items de la lista activa
     editandoLista: false,
@@ -37,7 +44,13 @@
     itemModal: null, // Item para el modal de alumnos
     // Persistencia de valores para creación ultra-rápida
     lastLevelUsed: 9,
-    lastPriorityUsed: 10
+    lastPriorityUsed: 10,
+    // Clasificaciones disponibles
+    classificationsAvailable: {
+      categories: [],
+      subtypes: [],
+      tags: []
+    }
   };
 
   // Debounce helper
@@ -177,6 +190,47 @@
   }
 
   // ============================================================================
+  // ENTRYPOINT CANÓNICO - ÚNICO PUNTO DE ENTRADA PARA CAMBIAR LISTA ACTIVA
+  // ============================================================================
+
+  /**
+   * ENTRYPOINT CANÓNICO: Establece lista activa y renderiza
+   * Esta es la ÚNICA función que debe usarse para cambiar la lista activa
+   * 
+   * @param {Object} lista - Objeto lista (debe tener id)
+   * @param {boolean} loadFull - Si cargar datos completos con clasificaciones (default: true)
+   */
+  async function setListaActivaAndRender(lista, loadFull = true) {
+    console.log('[ENTRYPOINT][AlquimiaGeneral] setListaActivaAndRender', {
+      listaId: lista?.id,
+      loadFull,
+      timestamp: Date.now()
+    });
+
+    if (!lista || !lista.id) {
+      console.warn('[ENTRYPOINT][AlquimiaGeneral] Lista inválida', lista);
+      return;
+    }
+
+    // 1. Establecer lista activa
+    state.listaActiva = lista;
+
+    // 2. Cargar datos completos si es necesario
+    if (loadFull) {
+      await loadListaCompleta(lista.id);
+    }
+
+    // 3. Cargar items
+    await loadItems(lista.id);
+
+    // 4. Re-renderizar tabs (para marcar activa)
+    renderTabsListas();
+
+    // 5. Renderizar contenido (ÚNICO punto de render)
+    renderListaContent();
+  }
+
+  // ============================================================================
   // RENDER HELPERS (DOM API only)
   // ============================================================================
 
@@ -219,14 +273,18 @@
         button.classList.add('border-transparent', 'text-slate-400');
       }
       button.dataset.tipo = tipo.key;
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
         state.tipoActivo = tipo.key;
         state.listaActiva = null;
         state.items = [];
-        loadListas();
+        await loadListas();
         renderTabsTipo();
         renderTabsListas();
-        renderListaContent();
+        // Si no hay lista activa, ocultar contenido
+        const container = document.getElementById('lista-content');
+        if (container) {
+          container.classList.add('hidden');
+        }
       });
       container.appendChild(button);
     });
@@ -253,11 +311,9 @@
       } else {
         button.classList.add('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
       }
-      button.addEventListener('click', () => {
-        state.listaActiva = lista;
-        loadItems(lista.id);
-        renderTabsListas();
-        renderListaContent();
+      button.addEventListener('click', async () => {
+        // USAR ENTRYPOINT CANÓNICO
+        await setListaActivaAndRender(lista, true);
       });
       container.appendChild(button);
     });
@@ -265,10 +321,35 @@
 
   /**
    * Renderiza contenido de la lista activa
+   * 
+   * FLUJO CANÓNICO:
+   * - Esta función SOLO renderiza, NO cambia state.listaActiva
+   * - Para cambiar lista activa, usar setListaActivaAndRender()
+   * - Se llama desde:
+   *   1. setListaActivaAndRender() (entrypoint canónico)
+   *   2. Handler botón ⚙️ (después de fetch, para mostrar editor)
+   *   3. Handler botón Cancelar (para ocultar editor)
    */
   function renderListaContent() {
+    console.log('[FORENSIC][AlquimiaGeneral] renderListaContent()', {
+      hasListaActiva: !!state.listaActiva,
+      listaId: state.listaActiva?.id,
+      timestamp: Date.now()
+    });
+    
+    // Assert suave en DEV
+    if (typeof window !== 'undefined' && window.__AP_CONTEXT__ === 'MASTER') {
+      console.assert(
+        typeof renderListaContent === 'function',
+        '[MASTER][AlquimiaGeneral] renderListaContent no definido'
+      );
+    }
+    
     const container = document.getElementById('lista-content');
-    if (!container) return;
+    if (!container) {
+      console.warn('[MASTER][AlquimiaGeneral] Contenedor lista-content no encontrado');
+      return;
+    }
 
     if (!state.listaActiva) {
       container.classList.add('hidden');
@@ -278,6 +359,7 @@
     container.classList.remove('hidden');
 
     // Limpiar contenido
+    console.log('[FORENSIC][AlquimiaGeneral] limpiando lista-content');
     while (container.firstChild) {
       container.removeChild(container.firstChild);
     }
@@ -302,7 +384,126 @@
     const headerRight = createElement('div', 'flex gap-2');
     const btnEditar = createElement('button', 'px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors', '⚙️');
     btnEditar.id = 'btn-editar-lista-header';
-    btnEditar.addEventListener('click', () => {
+    
+    // Asegurar que el botón tiene el listId en dataset
+    const listIdFromState = state.listaActiva?.id;
+    if (listIdFromState) {
+      btnEditar.dataset.listId = String(listIdFromState);
+    }
+    
+    btnEditar.addEventListener('click', async (event) => {
+      const btn = event.currentTarget;
+      
+      // LOG INMEDIATO (primera línea, antes de cualquier return)
+      console.log('[MASTER][AlquimiaGeneral] ⚙️ click', {
+        raw: {
+          listId: state.listaActiva?.id,
+          listaId: state.listaActiva?.id,
+          id: state.listaActiva?.id
+        },
+        dataset: btn.dataset.listId,
+        el: btn.outerHTML?.substring(0, 200) // Primeros 200 chars para no saturar
+      });
+      
+      // Obtener listId de forma canónica (prioridad: dataset > state)
+      let listId = btn.dataset.listId;
+      if (!listId && state.listaActiva?.id) {
+        listId = String(state.listaActiva.id);
+        btn.dataset.listId = listId; // Guardar para próxima vez
+      }
+      
+      console.log('[MASTER][AlquimiaGeneral] Cargando configuración lista', listId);
+      
+      // Validar listId
+      if (!listId) {
+        console.warn('[MASTER][AlquimiaGeneral] WARN: listId no disponible', {
+          state: state.listaActiva,
+          dataset: btn.dataset
+        });
+        
+        // Mostrar mensaje en UI
+        const errorMsg = createElement('div', 'mt-4 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm');
+        errorMsg.textContent = 'No se pudo detectar el ID de la lista (bug de UI wiring).';
+        const container = document.getElementById('lista-content');
+        if (container) {
+          const existingError = container.querySelector('.error-message-ui');
+          if (existingError) {
+            container.removeChild(existingError);
+          }
+          errorMsg.className += ' error-message-ui';
+          container.insertBefore(errorMsg, container.firstChild);
+        }
+        return;
+      }
+      
+      // Fetch explícito y visible
+      const url = `/master/api/alquimia-general/listas/${encodeURIComponent(listId)}`;
+      console.log('[MASTER][AlquimiaGeneral] Fetch', url);
+      
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log('[MASTER][AlquimiaGeneral] Fetch status', res.status);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        console.log('[MASTER][AlquimiaGeneral] Data keys', Object.keys(data || {}));
+        
+        if (data.lista) {
+          // Actualizar estado con datos frescos
+          state.listaActiva = {
+            ...state.listaActiva,
+            ...data.lista,
+            classification: data.lista.classification || {
+              category_key: null,
+              subtype_key: null,
+              tags: []
+            }
+          };
+          
+          // Asegurar que tenemos clasificaciones disponibles cargadas
+          if (state.classificationsAvailable.categories.length === 0) {
+            await loadClassificationsAvailable();
+          }
+          
+          console.log('[MASTER][AlquimiaGeneral] Lista cargada:', {
+            listId,
+            hasClassification: !!data.lista.classification,
+            category: data.lista.classification?.category_key || null,
+            subtype: data.lista.classification?.subtype_key || null,
+            tagsCount: data.lista.classification?.tags?.length || 0
+          });
+        } else {
+          console.warn('[MASTER][AlquimiaGeneral] Respuesta sin lista', data);
+        }
+      } catch (error) {
+        console.error('[MASTER][AlquimiaGeneral] Error en fetch:', error);
+        console.error('[MASTER][AlquimiaGeneral] Stack:', error.stack);
+        
+        // Mostrar mensaje en UI
+        const errorMsg = createElement('div', 'mt-4 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm');
+        errorMsg.textContent = `Error cargando configuración: ${error.message || 'Error desconocido'}`;
+        const container = document.getElementById('lista-content');
+        if (container) {
+          const existingError = container.querySelector('.error-message-ui');
+          if (existingError) {
+            container.removeChild(existingError);
+          }
+          errorMsg.className += ' error-message-ui';
+          container.insertBefore(errorMsg, container.firstChild);
+        }
+        return; // No abrir editor si hay error
+      }
+      
+      // Abrir editor
       state.editandoLista = !state.editandoLista;
       renderListaContent();
     });
@@ -321,7 +522,11 @@
     headerTop.appendChild(headerLeft);
     headerTop.appendChild(headerRight);
     header.appendChild(headerTop);
-
+    
+    console.log('[FORENSIC][AlquimiaGeneral] botón ⚙️ insertado', {
+      btnExists: !!document.getElementById('btn-editar-lista-header')
+    });
+    
     // Editor inline de lista (si está editando)
     if (state.editandoLista) {
       const editor = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
@@ -351,13 +556,29 @@
       grid.appendChild(nombreGroup);
       grid.appendChild(descripcionGroup);
       
+      grid.appendChild(nombreGroup);
+      grid.appendChild(descripcionGroup);
+      
+      editor.appendChild(grid);
+      
+      // Sección de Clasificaciones
+      const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+      const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
+      clasificacionesSection.appendChild(clasificacionesTitle);
+      
+      renderClasificacionesEditor(clasificacionesSection);
+      
+      editor.appendChild(clasificacionesSection);
+      
       const botones = createElement('div', 'mt-3 flex gap-2');
       const btnGuardar = createElement('button', 'px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors', '✓ Guardar');
       btnGuardar.addEventListener('click', async () => {
         const nombre = document.getElementById('editor-lista-nombre').value.trim();
         const descripcion = document.getElementById('editor-lista-descripcion').value.trim();
+        const classification = getClasificacionesFromEditor();
+        
         if (nombre) {
-          await updateLista(state.listaActiva.id, { nombre, descripcion });
+          await updateLista(state.listaActiva.id, { nombre, descripcion, classification });
         }
       });
       
@@ -370,9 +591,33 @@
       botones.appendChild(btnGuardar);
       botones.appendChild(btnCancelar);
       
-      editor.appendChild(grid);
       editor.appendChild(botones);
       header.appendChild(editor);
+    } else {
+      // Mostrar clasificaciones en modo visualización (si existen)
+      if (state.listaActiva.classification && (
+        state.listaActiva.classification.category_key ||
+        state.listaActiva.classification.subtype_key ||
+        (state.listaActiva.classification.tags && state.listaActiva.classification.tags.length > 0)
+      )) {
+        const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+        const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
+        clasificacionesSection.appendChild(clasificacionesTitle);
+        
+        renderClasificacionesDisplay(clasificacionesSection);
+        
+        header.appendChild(clasificacionesSection);
+      } else {
+        // Estado vacío
+        const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+        const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
+        clasificacionesSection.appendChild(clasificacionesTitle);
+        
+        const emptyMsg = createElement('p', 'text-slate-500 text-sm', 'Sin clasificaciones');
+        clasificacionesSection.appendChild(emptyMsg);
+        
+        header.appendChild(clasificacionesSection);
+      }
     }
 
     container.appendChild(header);
@@ -810,6 +1055,209 @@
     }
   }
 
+  async function loadListaCompleta(listaId) {
+    try {
+      const data = await apiFetch(`/master/api/alquimia-general/listas/${listaId}`);
+      if (data.lista) {
+        // Actualizar lista activa con clasificaciones
+        state.listaActiva = {
+          ...state.listaActiva,
+          ...data.lista,
+          classification: data.lista.classification || {
+            category_key: null,
+            subtype_key: null,
+            tags: []
+          }
+        };
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando lista completa:', error);
+    }
+  }
+
+  async function loadClassificationsAvailable() {
+    try {
+      const data = await apiFetch('/master/api/alquimia-general/classifications');
+      if (data.categories && data.subtypes && data.tags) {
+        state.classificationsAvailable = {
+          categories: data.categories || [],
+          subtypes: data.subtypes || [],
+          tags: data.tags || []
+        };
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando clasificaciones disponibles:', error);
+    }
+  }
+
+  /**
+   * Renderiza el editor de clasificaciones
+   */
+  function renderClasificacionesEditor(container) {
+    const classification = state.listaActiva.classification || {
+      category_key: null,
+      subtype_key: null,
+      tags: []
+    };
+
+    // Category
+    const categoryGroup = createElement('div', 'mb-3');
+    const categoryLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Categoría');
+    const categorySelect = createElement('select');
+    categorySelect.id = 'editor-classification-category';
+    categorySelect.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
+    
+    const categoryOptionEmpty = createElement('option');
+    categoryOptionEmpty.value = '';
+    categoryOptionEmpty.textContent = '(Ninguna)';
+    categorySelect.appendChild(categoryOptionEmpty);
+    
+    state.classificationsAvailable.categories.forEach(cat => {
+      const option = createElement('option');
+      option.value = cat.category_key;
+      option.textContent = cat.label || cat.category_key;
+      if (classification.category_key === cat.category_key) {
+        option.selected = true;
+      }
+      categorySelect.appendChild(option);
+    });
+    
+    categoryGroup.appendChild(categoryLabel);
+    categoryGroup.appendChild(categorySelect);
+    container.appendChild(categoryGroup);
+
+    // Subtype
+    const subtypeGroup = createElement('div', 'mb-3');
+    const subtypeLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Subtipo');
+    const subtypeSelect = createElement('select');
+    subtypeSelect.id = 'editor-classification-subtype';
+    subtypeSelect.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
+    
+    const subtypeOptionEmpty = createElement('option');
+    subtypeOptionEmpty.value = '';
+    subtypeOptionEmpty.textContent = '(Ninguno)';
+    subtypeSelect.appendChild(subtypeOptionEmpty);
+    
+    state.classificationsAvailable.subtypes.forEach(sub => {
+      const option = createElement('option');
+      option.value = sub.subtype_key;
+      option.textContent = sub.label || sub.subtype_key;
+      if (classification.subtype_key === sub.subtype_key) {
+        option.selected = true;
+      }
+      subtypeSelect.appendChild(option);
+    });
+    
+    subtypeGroup.appendChild(subtypeLabel);
+    subtypeGroup.appendChild(subtypeSelect);
+    container.appendChild(subtypeGroup);
+
+    // Tags
+    const tagsGroup = createElement('div', 'mb-3');
+    const tagsLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Tags');
+    const tagsContainer = createElement('div', 'flex flex-wrap gap-2');
+    tagsContainer.id = 'editor-classification-tags';
+    
+    const currentTags = classification.tags || [];
+    state.classificationsAvailable.tags.forEach(tag => {
+      const tagLabel = createElement('label', 'flex items-center gap-2 cursor-pointer');
+      const checkbox = createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = tag.tag_key;
+      checkbox.className = 'w-4 h-4';
+      if (currentTags.includes(tag.tag_key)) {
+        checkbox.checked = true;
+      }
+      
+      const tagText = createElement('span', 'text-white text-sm');
+      tagText.textContent = tag.label || tag.tag_key;
+      
+      tagLabel.appendChild(checkbox);
+      tagLabel.appendChild(tagText);
+      tagsContainer.appendChild(tagLabel);
+    });
+    
+    tagsGroup.appendChild(tagsLabel);
+    tagsGroup.appendChild(tagsContainer);
+    container.appendChild(tagsGroup);
+  }
+
+  /**
+   * Obtiene las clasificaciones del editor
+   */
+  function getClasificacionesFromEditor() {
+    const categorySelect = document.getElementById('editor-classification-category');
+    const subtypeSelect = document.getElementById('editor-classification-subtype');
+    const tagsContainer = document.getElementById('editor-classification-tags');
+    
+    const category_key = categorySelect?.value || null;
+    const subtype_key = subtypeSelect?.value || null;
+    
+    const tags = [];
+    if (tagsContainer) {
+      const checkboxes = tagsContainer.querySelectorAll('input[type="checkbox"]:checked');
+      checkboxes.forEach(cb => {
+        if (cb.value) tags.push(cb.value);
+      });
+    }
+    
+    return {
+      category_key: category_key || null,
+      subtype_key: subtype_key || null,
+      tags: tags.length > 0 ? tags : null
+    };
+  }
+
+  /**
+   * Renderiza la visualización de clasificaciones (modo lectura)
+   */
+  function renderClasificacionesDisplay(container) {
+    const classification = state.listaActiva.classification || {
+      category_key: null,
+      subtype_key: null,
+      tags: []
+    };
+
+    const infoDiv = createElement('div', 'space-y-2');
+    
+    if (classification.category_key) {
+      const category = state.classificationsAvailable.categories.find(c => c.category_key === classification.category_key);
+      const categoryDiv = createElement('div', 'text-sm');
+      const categoryLabel = createElement('span', 'text-slate-400', 'Categoría: ');
+      const categoryValue = createElement('span', 'text-white', category ? category.label : classification.category_key);
+      categoryDiv.appendChild(categoryLabel);
+      categoryDiv.appendChild(categoryValue);
+      infoDiv.appendChild(categoryDiv);
+    }
+    
+    if (classification.subtype_key) {
+      const subtype = state.classificationsAvailable.subtypes.find(s => s.subtype_key === classification.subtype_key);
+      const subtypeDiv = createElement('div', 'text-sm');
+      const subtypeLabel = createElement('span', 'text-slate-400', 'Subtipo: ');
+      const subtypeValue = createElement('span', 'text-white', subtype ? subtype.label : classification.subtype_key);
+      subtypeDiv.appendChild(subtypeLabel);
+      subtypeDiv.appendChild(subtypeValue);
+      infoDiv.appendChild(subtypeDiv);
+    }
+    
+    if (classification.tags && classification.tags.length > 0) {
+      const tagsDiv = createElement('div', 'text-sm');
+      const tagsLabel = createElement('span', 'text-slate-400', 'Tags: ');
+      tagsDiv.appendChild(tagsLabel);
+      
+      const tagsList = createElement('span', 'text-white');
+      const tagLabels = classification.tags.map(tagKey => {
+        const tag = state.classificationsAvailable.tags.find(t => t.tag_key === tagKey);
+        return tag ? tag.label : tagKey;
+      });
+      tagsList.textContent = tagLabels.join(', ');
+      tagsDiv.appendChild(tagsList);
+      infoDiv.appendChild(tagsDiv);
+    }
+    
+    container.appendChild(infoDiv);
+  }
+
   async function updateLista(id, patch) {
     try {
       await apiFetch(`/master/api/alquimia-general/listas/${id}`, {
@@ -818,9 +1266,19 @@
       });
       showSuccess('Lista actualizada');
       state.editandoLista = false;
+      
+      // Recargar listas y re-establecer lista activa usando entrypoint canónico
       await loadListas();
-      state.listaActiva = state.listas.find(l => l.id === id);
-      renderListaContent();
+      const listaActualizada = state.listas.find(l => l.id === id);
+      if (listaActualizada) {
+        await setListaActivaAndRender(listaActualizada, true);
+      } else {
+        // Si no se encuentra, ocultar contenido
+        const container = document.getElementById('lista-content');
+        if (container) {
+          container.classList.add('hidden');
+        }
+      }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error actualizando lista:', error);
     }
@@ -835,7 +1293,12 @@
       state.listaActiva = null;
       state.items = [];
       await loadListas();
-      renderListaContent();
+      renderTabsListas();
+      // Ocultar contenido si no hay lista activa
+      const container = document.getElementById('lista-content');
+      if (container) {
+        container.classList.add('hidden');
+      }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error archivando lista:', error);
     }
@@ -1000,8 +1463,24 @@
   // BOOTSTRAP
   // ============================================================================
 
+  /**
+   * ENTRYPOINT PRINCIPAL: Bootstrap de la UI
+   * 
+   * FLUJO CANÓNICO:
+   * 1. Verifica contenedores DOM
+   * 2. Añade event listeners globales
+   * 3. Renderiza tabs de tipo
+   * 4. Carga clasificaciones disponibles
+   * 5. Carga listas (esto dispara renderTabsListas)
+   * 
+   * NO establece lista activa automáticamente.
+   * El usuario debe seleccionar una lista haciendo click en un tab.
+   */
   function bootstrap() {
-    console.log('[MasterAlquimiaGeneral] Bootstrap iniciado');
+    console.log('[BOOT][MASTER][AlquimiaGeneral] Bootstrap iniciado', {
+      timestamp: Date.now(),
+      readyState: document.readyState
+    });
 
     // Verificar que existen los contenedores necesarios
     const requiredContainers = [
@@ -1017,12 +1496,13 @@
       return;
     }
 
-    // Event listeners
+    // Event listeners globales (solo una vez)
     document.getElementById('btn-crear-lista').addEventListener('click', createLista);
 
-    // Render inicial
+    // Render inicial (NO establece lista activa)
     renderTabsTipo();
-    loadListas();
+    loadClassificationsAvailable(); // Cargar clasificaciones disponibles
+    loadListas(); // Esto dispara renderTabsListas() cuando se cargan las listas
   }
 
   // Auto-ejecutar cuando el DOM esté listo

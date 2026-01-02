@@ -380,6 +380,15 @@ export async function updateListClassification(listId, classification) {
 }
 
 /**
+ * Obtiene una lista con su clasificación
+ * @param {number} listId - ID de la lista
+ * @returns {Promise<Object|null>} Lista con classification o null
+ */
+export async function getListWithClassification(listId) {
+  return await repo.getListWithClassification(listId);
+}
+
+/**
  * Obtiene todas las clasificaciones (para UI)
  */
 export async function getAllClassifications() {
