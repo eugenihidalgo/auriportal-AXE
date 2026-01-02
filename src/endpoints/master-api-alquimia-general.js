@@ -360,14 +360,37 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path === '/master/api/alquimia-general/classifications' && method === 'GET') {
       try {
         const allClassifications = await getAllClassifications();
-        return jsonSuccess(allClassifications, traceId);
+        
+        // Normalizar respuesta: siempre arrays, nunca null/undefined
+        const normalized = {
+          categories: Array.isArray(allClassifications?.categories) ? allClassifications.categories : [],
+          subtypes: Array.isArray(allClassifications?.subtypes) ? allClassifications.subtypes : [],
+          tags: Array.isArray(allClassifications?.tags) ? allClassifications.tags : []
+        };
+        
+        // Log WARN si la DB está vacía
+        if (normalized.categories.length === 0 && normalized.subtypes.length === 0 && normalized.tags.length === 0) {
+          logWarn('MasterApiAlquimiaGeneral', 'DB de clasificaciones vacía', {
+            traceId,
+            message: 'No hay categorías, subtipos ni tags en la base de datos'
+          });
+        }
+        
+        return jsonSuccess(normalized, traceId);
       } catch (error) {
-        logError('MasterApiAlquimiaGeneral', 'Error obteniendo todas las clasificaciones', {
+        // Fail-open: devolver estructura vacía en lugar de error 500
+        logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones (fail-open)', {
           traceId,
           error: error.message,
           stack: error.stack
         });
-        throw error;
+        
+        // Devolver estructura vacía en lugar de lanzar error
+        return jsonSuccess({
+          categories: [],
+          subtypes: [],
+          tags: []
+        }, traceId);
       }
     }
 

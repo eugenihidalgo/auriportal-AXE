@@ -390,19 +390,31 @@ export async function getListWithClassification(listId) {
 
 /**
  * Obtiene todas las clasificaciones (para UI)
+ * Fail-open: siempre devuelve arrays, nunca lanza error
  */
 export async function getAllClassifications() {
-  const [categories, subtypes, tags] = await Promise.all([
-    repo.listCategories({ includeDeleted: false }),
-    repo.listSubtypes({ includeDeleted: false }),
-    repo.listTags({ includeDeleted: false })
-  ]);
-  
-  return {
-    categories,
-    subtypes,
-    tags
-  };
+  try {
+    const [categories, subtypes, tags] = await Promise.all([
+      repo.listCategories({ includeDeleted: false }).catch(() => []),
+      repo.listSubtypes({ includeDeleted: false }).catch(() => []),
+      repo.listTags({ includeDeleted: false }).catch(() => [])
+    ]);
+    
+    // Normalizar: siempre arrays, nunca null/undefined
+    return {
+      categories: Array.isArray(categories) ? categories : [],
+      subtypes: Array.isArray(subtypes) ? subtypes : [],
+      tags: Array.isArray(tags) ? tags : []
+    };
+  } catch (error) {
+    // Fail-open: devolver estructura vacía en lugar de lanzar error
+    console.warn('[PDE][TRANSMUTACIONES][CLASSIFICATION] Error obteniendo todas las clasificaciones (fail-open):', error.message);
+    return {
+      categories: [],
+      subtypes: [],
+      tags: []
+    };
+  }
 }
 
 
