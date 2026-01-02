@@ -458,15 +458,40 @@
         console.log('[MASTER][AlquimiaGeneral] Data keys', Object.keys(data || {}));
         
         if (data.lista) {
+          // Normalizar classification del backend
+          let normalizedClassification = {
+            category_key: null,
+            subtype_key: null,
+            tags: []
+          };
+          
+          if (data.lista.classification) {
+            // Normalizar tags: puede ser null, array, o string JSON
+            let tagsArray = [];
+            if (data.lista.classification.tags) {
+              if (Array.isArray(data.lista.classification.tags)) {
+                tagsArray = data.lista.classification.tags;
+              } else if (typeof data.lista.classification.tags === 'string') {
+                try {
+                  tagsArray = JSON.parse(data.lista.classification.tags);
+                } catch (e) {
+                  tagsArray = [];
+                }
+              }
+            }
+            
+            normalizedClassification = {
+              category_key: data.lista.classification.category_key || null,
+              subtype_key: data.lista.classification.subtype_key || null,
+              tags: tagsArray
+            };
+          }
+          
           // Actualizar estado con datos frescos
           state.listaActiva = {
             ...state.listaActiva,
             ...data.lista,
-            classification: data.lista.classification || {
-              category_key: null,
-              subtype_key: null,
-              tags: []
-            }
+            classification: normalizedClassification
           };
           
           // Asegurar que tenemos clasificaciones disponibles cargadas
@@ -594,30 +619,32 @@
       editor.appendChild(botones);
       header.appendChild(editor);
     } else {
-      // Mostrar clasificaciones en modo visualización (si existen)
-      if (state.listaActiva.classification && (
-        state.listaActiva.classification.category_key ||
-        state.listaActiva.classification.subtype_key ||
-        (state.listaActiva.classification.tags && state.listaActiva.classification.tags.length > 0)
-      )) {
-        const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
-        const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
-        clasificacionesSection.appendChild(clasificacionesTitle);
-        
+      // Mostrar clasificaciones en modo visualización (SIEMPRE, aunque esté vacía)
+      const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+      const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
+      clasificacionesSection.appendChild(clasificacionesTitle);
+      
+      // Asegurar que classification existe
+      const classification = state.listaActiva.classification || {
+        category_key: null,
+        subtype_key: null,
+        tags: []
+      };
+      
+      // Verificar si hay datos
+      const hasData = classification.category_key || 
+                     classification.subtype_key || 
+                     (classification.tags && Array.isArray(classification.tags) && classification.tags.length > 0);
+      
+      if (hasData) {
         renderClasificacionesDisplay(clasificacionesSection);
-        
-        header.appendChild(clasificacionesSection);
       } else {
-        // Estado vacío
-        const clasificacionesSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
-        const clasificacionesTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'CLASIFICACIONES');
-        clasificacionesSection.appendChild(clasificacionesTitle);
-        
-        const emptyMsg = createElement('p', 'text-slate-500 text-sm', 'Sin clasificaciones');
-        clasificacionesSection.appendChild(emptyMsg);
-        
-        header.appendChild(clasificacionesSection);
+        // Estado vacío explícito
+        const emptyState = createElement('div', 'text-slate-400 text-sm italic', 'Sin clasificaciones');
+        clasificacionesSection.appendChild(emptyState);
       }
+      
+      header.appendChild(clasificacionesSection);
     }
 
     container.appendChild(header);
@@ -1059,15 +1086,40 @@
     try {
       const data = await apiFetch(`/master/api/alquimia-general/listas/${listaId}`);
       if (data.lista) {
-        // Actualizar lista activa con clasificaciones
+        // Normalizar classification del backend
+        let normalizedClassification = {
+          category_key: null,
+          subtype_key: null,
+          tags: []
+        };
+        
+        if (data.lista.classification) {
+          // Normalizar tags: puede ser null, array, o string JSON
+          let tagsArray = [];
+          if (data.lista.classification.tags) {
+            if (Array.isArray(data.lista.classification.tags)) {
+              tagsArray = data.lista.classification.tags;
+            } else if (typeof data.lista.classification.tags === 'string') {
+              try {
+                tagsArray = JSON.parse(data.lista.classification.tags);
+              } catch (e) {
+                tagsArray = [];
+              }
+            }
+          }
+          
+          normalizedClassification = {
+            category_key: data.lista.classification.category_key || null,
+            subtype_key: data.lista.classification.subtype_key || null,
+            tags: tagsArray
+          };
+        }
+        
+        // Actualizar lista activa con clasificaciones normalizadas
         state.listaActiva = {
           ...state.listaActiva,
           ...data.lista,
-          classification: data.lista.classification || {
-            category_key: null,
-            subtype_key: null,
-            tags: []
-          }
+          classification: normalizedClassification
         };
       }
     } catch (error) {

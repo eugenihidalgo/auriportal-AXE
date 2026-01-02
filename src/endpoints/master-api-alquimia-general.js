@@ -191,13 +191,36 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       }
 
       // Obtener clasificaciones de la lista
+      // CONTRATO: Siempre devolver classification, aunque esté vacía
       try {
         const listaWithClassification = await getListWithClassification(id);
+        
         if (listaWithClassification) {
+          // Normalizar tags: puede ser null, array, o string JSON
+          let tagsArray = [];
+          if (listaWithClassification.tags) {
+            if (Array.isArray(listaWithClassification.tags)) {
+              tagsArray = listaWithClassification.tags;
+            } else if (typeof listaWithClassification.tags === 'string') {
+              try {
+                tagsArray = JSON.parse(listaWithClassification.tags);
+              } catch (e) {
+                tagsArray = [];
+              }
+            }
+          }
+          
           lista.classification = {
             category_key: listaWithClassification.category_key || null,
             subtype_key: listaWithClassification.subtype_key || null,
-            tags: listaWithClassification.tags || []
+            tags: tagsArray
+          };
+        } else {
+          // Si no hay clasificación en DB, devolver objeto vacío
+          lista.classification = {
+            category_key: null,
+            subtype_key: null,
+            tags: []
           };
         }
       } catch (error) {
@@ -206,7 +229,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           lista_id: id,
           error: error.message
         });
-        // Fail-open: continuar sin clasificaciones
+        // Fail-open: continuar sin clasificaciones (pero siempre devolver el objeto)
         lista.classification = {
           category_key: null,
           subtype_key: null,
