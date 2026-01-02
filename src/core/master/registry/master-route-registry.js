@@ -127,11 +127,13 @@ export const MASTER_ROUTES = [
   // ============================================
   // RUTAS API TAGS (TAG SOT GLOBAL v1)
   // ============================================
+  // Las rutas /master/api/** deben declararse explícitamente como api.
+  // Cualquier fallback a island es una violación constitucional.
   {
     key: 'master-api-tags',
     path: '/master/api/tags',
-    type: 'api',
-    method: 'GET' // Múltiples métodos manejados en el handler
+    type: 'api'
+    // Handler maneja: GET, POST (sin method restringe, acepta todos)
   },
   {
     key: 'master-api-tags-id',
