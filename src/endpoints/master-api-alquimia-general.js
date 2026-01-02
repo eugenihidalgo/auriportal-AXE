@@ -376,7 +376,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           });
         }
         
-        return jsonSuccess(normalized, traceId);
+        // Formato canónico: { ok: true, data: { categories: [], subtypes: [], tags: [] } }
+        return jsonSuccess({ data: normalized }, traceId);
       } catch (error) {
         // Fail-open: devolver estructura vacía en lugar de error 500
         logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones (fail-open)', {
@@ -387,9 +388,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         
         // Devolver estructura vacía en lugar de lanzar error
         return jsonSuccess({
-          categories: [],
-          subtypes: [],
-          tags: []
+          data: {
+            categories: [],
+            subtypes: [],
+            tags: []
+          }
         }, traceId);
       }
     }
