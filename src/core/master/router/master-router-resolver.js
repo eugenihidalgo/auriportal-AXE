@@ -49,6 +49,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-mark-clean-student': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-increment-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),

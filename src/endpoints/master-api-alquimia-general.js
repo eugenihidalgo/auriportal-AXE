@@ -358,6 +358,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
     // GET /master/api/alquimia-general/classifications (todas las clasificaciones disponibles)
     if (path === '/master/api/alquimia-general/classifications' && method === 'GET') {
+      logInfo('MasterApiAlquimiaGeneral', 'classifications handler hit', {
+        traceId,
+        path,
+        method
+      });
+      
       try {
         const allClassifications = await getAllClassifications();
         

@@ -117,6 +117,12 @@ export const MASTER_ROUTES = [
     type: 'api',
     method: 'POST'
   },
+  {
+    key: 'master-api-alquimia-classifications',
+    path: '/master/api/alquimia-general/classifications',
+    type: 'api',
+    method: 'GET'
+  },
   
   // ============================================
   // RUTAS UI (Island)
