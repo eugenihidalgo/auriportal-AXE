@@ -31,6 +31,7 @@ import { dirname, join } from 'path';
 import { generateSidebarHTML } from './sidebar-registry.js';
 import { renderHtml } from '../html-response.js';
 import { logError, logWarn } from '../observability/logger.js';
+import { getRequestId } from '../observability/request-context.js';
 import { getAllFlags } from '../feature-flags/feature-flag-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -115,10 +116,32 @@ export async function renderAdminPage(options = {}) {
     error.details = {
       message: 'renderAdminPage() solo puede llamarse desde handlers resueltos por admin-router-resolver.js. Si estás llamando directamente, es un BUG estructural.'
     };
-    logError('AdminPageRenderer', 'renderAdminPage llamado fuera de contexto', {
-      error: error.message,
-      stack: new Error().stack
-    });
+    
+    // FASE 2: En PROD, loguear como WARN + FORENSIC (no ERROR repetitivo)
+    const isProd = process.env.APP_ENV === 'prod' || process.env.NODE_ENV === 'production';
+    const isForensic = process.env.DEBUG_FORENSIC === '1';
+    const traceId = getRequestId();
+    
+    if (isProd && !isForensic) {
+      // PROD: Solo WARN una vez por trace_id (evitar spam)
+      // Usar logWarnCanonical para formato estructurado
+      const { logWarnCanonical } = await import('../observability/logger.js');
+      logWarnCanonical('admin_render_outside_resolver', {
+        code: 'ADMIN_RENDER_OUTSIDE_RESOLVER',
+        message: error.message,
+        trace_id: traceId,
+        note: 'ASSERT_ESTRUCTURAL - Verificar que handler pasa por admin-router-resolver'
+      });
+    } else {
+      // DEV/FORENSIC: ERROR completo con stacktrace
+      logError('ADMIN', 'renderAdminPage llamado fuera de contexto', {
+        error: error.message,
+        code: error.code,
+        stack: new Error().stack,
+        trace_id: traceId
+      });
+    }
+    
     throw error;
   }
 

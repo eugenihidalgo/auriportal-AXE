@@ -87,19 +87,17 @@ export function resolveEntryContext(request) {
     };
   }
   
-  // Host no reconocido → log INFO (no error, solo informativo)
-  // Solo ERROR si es un intento de acceso real en producción
-  if (process.env.NODE_ENV === 'production') {
-    logWarn('EntryGate', 'Host no reconocido en PROD', { 
-      host: normalizedHost,
-      originalHost: host 
-    });
-  } else {
-    logInfo('EntryGate', 'Host no reconocido (DEV)', { 
-      host: normalizedHost,
-      originalHost: host 
-    });
-  }
+  // FASE 4: Entry Gate - Hosts desconocidos (bots, IPs directas)
+  // INFO en PROD, WARN solo si hay patrón sospechoso, nunca ERROR
+  const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'prod';
+  
+  // Detectar patrones sospechosos (muchos intentos, paths específicos, etc.)
+  // Por ahora, solo loguear como INFO
+  logInfo('ENTRY_GATE', 'Host no reconocido', { 
+    host: normalizedHost,
+    originalHost: host,
+    note: isProd ? 'PROD - Host desconocido (posible bot o acceso directo)' : 'DEV - Host no configurado'
+  });
   
   return {
     context: null,

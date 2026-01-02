@@ -118,10 +118,47 @@ function shouldLog(level, force = false) {
 }
 
 /**
- * Crea un log estructurado
+ * Dominios lógicos canónicos de AuriPortal
+ * Cada log DEBE pertenecer a UN dominio lógico
+ */
+const CANONICAL_DOMAINS = {
+  ADMIN: 'ADMIN',
+  MASTER: 'MASTER',
+  CLIENT: 'CLIENT',
+  ENTRY_GATE: 'ENTRY_GATE',
+  PUBLIC_ASSETS: 'PUBLIC_ASSETS',
+  FORENSIC: 'FORENSIC',
+  STUDENT: 'STUDENT',
+  PRACTICE: 'PRACTICE',
+  PAUSA: 'PAUSA',
+  STREAK: 'STREAK',
+  AUDIT: 'AUDIT'
+};
+
+/**
+ * Normaliza el dominio a formato canónico
+ * Si no es canónico, usa el dominio proporcionado pero emite WARN en dev
+ */
+function normalizeDomain(domain) {
+  const domainUpper = domain.toUpperCase();
+  const canonical = Object.values(CANONICAL_DOMAINS).find(d => d === domainUpper);
+  
+  if (!canonical) {
+    // En dev, advertir sobre dominios no canónicos
+    if (process.env.APP_ENV === 'dev' || process.env.DEBUG_FORENSIC === '1') {
+      console.warn(`[LOGGER] ⚠️  Dominio no canónico usado: "${domain}". Dominios canónicos: ${Object.values(CANONICAL_DOMAINS).join(', ')}`);
+    }
+    return domainUpper; // Usar el dominio proporcionado
+  }
+  
+  return canonical;
+}
+
+/**
+ * Crea un log estructurado con dominio semántico
  * 
  * @param {string} level - Nivel de log (info, warn, error)
- * @param {string} domain - Dominio del log (student, practice, pausa, streak, etc.)
+ * @param {string} domain - Dominio del log (ADMIN, MASTER, CLIENT, etc.)
  * @param {string} message - Mensaje descriptivo
  * @param {Object} meta - Metadatos opcionales (alumno_id, email, nivel, streak, etc.)
  * @param {boolean} force - Forzar log incluso si el entorno no lo permite (solo para info)
@@ -130,6 +167,9 @@ function createLog(level, domain, message, meta = {}, force = false) {
   if (!shouldLog(level, force)) {
     return; // No loguear si el entorno no lo permite
   }
+
+  // Normalizar dominio a formato canónico
+  const normalizedDomain = normalizeDomain(domain);
 
   // Obtener request_id del contexto actual (si existe)
   const requestId = getRequestId();
@@ -140,7 +180,7 @@ function createLog(level, domain, message, meta = {}, force = false) {
   const logEntry = {
     timestamp: new Date().toISOString(),
     level: level.toUpperCase(),
-    domain: domain,
+    domain: normalizedDomain,
     message: message,
     env: process.env.APP_ENV || 'prod',
     version: process.env.APP_VERSION || '4.0.0',
@@ -157,22 +197,34 @@ function createLog(level, domain, message, meta = {}, force = false) {
   }[level] || '📝';
 
   // Log estructurado en JSON (mejor para parsing)
-  console.log(JSON.stringify(logEntry));
+  const logOutput = JSON.stringify(logEntry);
+  
+  // Usar console.error para ERROR, console.warn para WARN, console.log para INFO
+  if (level === 'error') {
+    console.error(logOutput);
+  } else if (level === 'warn') {
+    console.warn(logOutput);
+  } else {
+    console.log(logOutput);
+  }
 
-  // También mostrar formato legible en consola (solo en dev/beta)
+  // También mostrar formato legible en consola (solo en dev/beta o FORENSIC)
   const env = process.env.APP_ENV || 'prod';
-  if (env === 'dev' || env === 'beta') {
+  const isForensic = process.env.DEBUG_FORENSIC === '1';
+  
+  if (env === 'dev' || env === 'beta' || isForensic) {
     const metaStr = Object.keys(safeMeta).length > 0 
       ? ` | ${JSON.stringify(safeMeta)}` 
       : '';
-    console.log(`${prefix} [${domain.toUpperCase()}] ${message}${metaStr}`);
+    const domainPrefix = `[${normalizedDomain}]`;
+    console.log(`${prefix} ${domainPrefix} ${message}${metaStr}`);
   }
 }
 
 /**
  * Exportar función de redaction para tests
  */
-export { redactSensitiveData };
+export { redactSensitiveData, CANONICAL_DOMAINS };
 
 /**
  * Log informativo

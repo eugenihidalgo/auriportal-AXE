@@ -83,10 +83,16 @@ try {
   console.log('[FORENSIC][BOOT][STEP 3.2] Modo audit:', auditMode);
   console.log('[FORENSIC][BOOT][STEP 3.3] Ejecutando auditAdminAPIHandlers...');
   
+  // Marcar que estamos en arranque para que el auditor muestre logs
+  process.env.AP_ROUTER_AUDIT_BOOT = '1';
+  
   const auditReport = await auditAdminAPIHandlers({ 
     autoFix: false, 
     mode: auditMode
   });
+  
+  // Limpiar flag después del audit
+  delete process.env.AP_ROUTER_AUDIT_BOOT;
   
   console.log('[FORENSIC][BOOT][STEP 3.3] Resultado audit:', {
     okCount: auditReport.ok.length,
@@ -94,21 +100,34 @@ try {
     missingUiAssetsCount: (auditReport.missing_ui_assets || []).length
   });
   
+  // FASE 3: ADMIN_ROUTER_AUDIT - No contaminar logs de ejecución normal
+  // Solo mostrar resumen en arranque, detalles solo en modo FORENSIC
+  const isForensic = process.env.DEBUG_FORENSIC === '1';
+  
   if (auditReport.missing_handlers.length > 0) {
-    console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${auditReport.missing_handlers.length} API handlers missing`);
-    auditReport.missing_handlers.forEach(m => {
-      console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.inferredPath || m.expectedPath || 'N/A'} [${m.reason}]`);
-    });
-    console.warn(`[ADMIN_ROUTER_AUDIT] Run with --fix to auto-create stubs: node src/core/admin/audit-admin-api-handlers.js --fix`);
+    // Resumen conciso en arranque
+    console.log(`[FORENSIC][BOOT] [AUDIT] ⚠️  ${auditReport.missing_handlers.length} handlers faltantes (clasificados como legacy/in_development)`);
+    
+    // Detalles solo en modo FORENSIC
+    if (isForensic) {
+      auditReport.missing_handlers.forEach(m => {
+        console.log(`[FORENSIC][BOOT] [AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.inferredPath || m.expectedPath || 'N/A'} [${m.reason}]`);
+      });
+      console.log(`[FORENSIC][BOOT] [AUDIT] Run with --fix to auto-create stubs: node src/core/admin/audit-admin-api-handlers.js --fix`);
+    }
   } else {
-    console.log(`[ADMIN_ROUTER_AUDIT] ✅ All ${auditReport.ok.length} API routes have valid handlers`);
+    console.log(`[FORENSIC][BOOT] [AUDIT] ✅ All ${auditReport.ok.length} API routes have valid handlers`);
   }
   
   if (auditReport.missing_ui_assets && auditReport.missing_ui_assets.length > 0) {
-    console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${auditReport.missing_ui_assets.length} UI assets missing`);
-    auditReport.missing_ui_assets.forEach(m => {
-      console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
-    });
+    console.log(`[FORENSIC][BOOT] [AUDIT] ⚠️  ${auditReport.missing_ui_assets.length} UI assets missing`);
+    
+    // Detalles solo en modo FORENSIC
+    if (isForensic) {
+      auditReport.missing_ui_assets.forEach(m => {
+        console.log(`[FORENSIC][BOOT] [AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
+      });
+    }
   }
   
   console.log('[FORENSIC][BOOT][STEP 3.4] ✅ Audit completado');

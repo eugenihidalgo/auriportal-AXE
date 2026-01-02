@@ -17,6 +17,7 @@ import { getRequestId } from './observability/request-context.js';
 import { logError } from './observability/logger.js';
 // NOTA: requireAdminContext NO debe usar logInfo (solo logError para errores críticos)
 // Los guards solo lanzan errores o devuelven Responses, no loguean INFO
+// Usar dominios canónicos: ADMIN para operaciones admin, ENTRY_GATE para routing
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,7 +110,7 @@ export async function requireStudentContext(request, env) {
       });
     } catch (err) {
       // No fallar si el audit falla (fail-open)
-      logError('audit', 'Error registrando AUTH_CONTEXT_FAIL', {
+      logError('AUDIT', 'Error registrando AUTH_CONTEXT_FAIL', {
         error: err.message
       });
     }
@@ -288,7 +289,7 @@ export async function requireAdminContext(request, env) {
       });
     } catch (err) {
       // No fallar si el audit falla (fail-open)
-      logError('audit', 'Error registrando AUTH_CONTEXT_FAIL (admin)', {
+      logError('AUDIT', 'Error registrando AUTH_CONTEXT_FAIL (admin)', {
         error: err.message
       });
     }

@@ -196,7 +196,13 @@ export async function auditAdminAPIHandlers(options = {}) {
   // Obtener todas las rutas API
   const apiRoutes = getRoutesByType('api');
   
-  console.log(`[ADMIN_ROUTER_AUDIT] Auditing ${apiRoutes.length} API routes...`);
+  // FASE 3: No contaminar logs normales - solo en modo FORENSIC o arranque
+  const isForensic = process.env.DEBUG_FORENSIC === '1';
+  const isBoot = process.env.AP_ROUTER_AUDIT_BOOT === '1';
+  
+  if (isForensic || isBoot) {
+    console.log(`[FORENSIC][BOOT] [AUDIT] Auditing ${apiRoutes.length} API routes...`);
+  }
   
   // Auditar cada ruta API
   for (const route of apiRoutes) {
@@ -306,20 +312,24 @@ export async function auditAdminAPIHandlers(options = {}) {
   
   if (missingUiAssets.length > 0) {
     report.missing_ui_assets = missingUiAssets;
-    if (mode === 'warn') {
-      console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${missingUiAssets.length} UI assets missing`);
+    if (mode === 'warn' && (isForensic || isBoot)) {
+      console.log(`[FORENSIC][BOOT] [AUDIT] ⚠️  ${missingUiAssets.length} UI assets missing`);
       missingUiAssets.forEach(m => {
-        console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
+        console.log(`[FORENSIC][BOOT] [AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.asset} [${m.reason}]`);
       });
     }
   }
   
   // Generar mensaje según modo
+  // FASE 3: No contaminar logs normales - solo resumen, detalles en FORENSIC
   if (mode === 'warn' && report.missing_handlers.length > 0) {
-    console.warn(`[ADMIN_ROUTER_AUDIT] ⚠️  WARNING: ${report.missing_handlers.length} handlers missing`);
-    report.missing_handlers.forEach(m => {
-      console.warn(`[ADMIN_ROUTER_AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.inferredPath || 'N/A'}`);
-    });
+    // Solo mostrar resumen, no detalles (a menos que sea FORENSIC)
+    if (isForensic || isBoot) {
+      console.log(`[FORENSIC][BOOT] [AUDIT] ⚠️  ${report.missing_handlers.length} handlers missing (clasificados)`);
+      report.missing_handlers.forEach(m => {
+        console.log(`[FORENSIC][BOOT] [AUDIT]   - ${m.routeKey} (${m.routePath}) → ${m.inferredPath || 'N/A'} [${m.reason}]`);
+      });
+    }
   } else if (mode === 'fail' && report.missing_handlers.length > 0) {
     const error = new Error(`ADMIN_ROUTER_AUDIT_FAIL: ${report.missing_handlers.length} handlers missing`);
     error.code = 'ADMIN_HANDLERS_MISSING';
