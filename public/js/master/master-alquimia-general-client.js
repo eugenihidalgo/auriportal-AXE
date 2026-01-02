@@ -1174,6 +1174,9 @@
    * Crea un input editable con autocomplete y creación inline.
    * PROHIBIDO usar <select> para clasificaciones.
    * 
+   * REGLA CONSTITUCIONAL: Ningún sistema de clasificación puede usar <select>.
+   * Usar este componente para tags, categories y subtypes.
+   * 
    * @param {Object} config
    * @param {string} config.type - 'tag' | 'category' | 'subtype'
    * @param {string} config.label - Label del campo
