@@ -26,7 +26,8 @@ import { ensureClassificationTerm } from '../core/classification/ensure-classifi
 function jsonSuccess(data, traceId) {
   return new Response(JSON.stringify({
     ok: true,
-    ...data
+    data: data,
+    trace_id: traceId || ''
   }), {
     status: 200,
     headers: {
@@ -138,7 +139,7 @@ export default async function masterApiClassificationsHandler(request, env, ctx)
         updated_at: row.updated_at
       }));
 
-      return jsonSuccess({ classifications }, traceId);
+      return jsonSuccess({ items: classifications }, traceId);
     }
 
     // POST /master/api/classifications - Crear classification (idempotente)

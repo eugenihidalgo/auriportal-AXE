@@ -1138,16 +1138,37 @@
 
   async function loadClassificationsAvailable() {
     try {
-      const data = await apiFetch('/master/api/alquimia-general/classifications');
-      if (data.categories && data.subtypes && data.tags) {
-        state.classificationsAvailable = {
-          categories: data.categories || [],
-          subtypes: data.subtypes || [],
-          tags: data.tags || []
-        };
-      }
+      // Cargar categories, subtypes y tags desde CLASSIFICATION SOT GLOBAL v1
+      const [categoriesResponse, subtypesResponse, tagsResponse] = await Promise.all([
+        apiFetch('/master/api/classifications?type=key&status=active'),
+        apiFetch('/master/api/classifications?type=subkey&status=active'),
+        apiFetch('/master/api/tags?status=active')
+      ]);
+      
+      // Formato: { ok: true, data: { items: [...] } } o { ok: true, data: { tags: [...] } }
+      const categories = (categoriesResponse.ok && categoriesResponse.data?.items) ? categoriesResponse.data.items : [];
+      const subtypes = (subtypesResponse.ok && subtypesResponse.data?.items) ? subtypesResponse.data.items : [];
+      const tags = (tagsResponse.ok && tagsResponse.data?.tags) ? tagsResponse.data.tags : [];
+      
+      // Normalizar formato para el componente (categories/subtypes usan value como key)
+      state.classificationsAvailable = {
+        categories: categories.map(c => ({
+          category_key: c.value,
+          label: c.value
+        })),
+        subtypes: subtypes.map(s => ({
+          subtype_key: s.value,
+          label: s.value
+        })),
+        tags: tags
+      };
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando clasificaciones disponibles:', error);
+      state.classificationsAvailable = {
+        categories: [],
+        subtypes: [],
+        tags: []
+      };
     }
   }
 

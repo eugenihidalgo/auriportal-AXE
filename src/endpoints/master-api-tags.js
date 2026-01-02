@@ -36,7 +36,7 @@ function jsonError(message, code, status = 400, traceId = null) {
 function jsonSuccess(data, traceId = null) {
   return new Response(JSON.stringify({
     ok: true,
-    ...data,
+    data: data,
     trace_id: traceId || getRequestId()
   }), {
     status: 200,
