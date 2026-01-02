@@ -1177,9 +1177,10 @@
    */
   async function loadTagsAvailable() {
     try {
-      const data = await apiFetch('/master/api/tags?status=active');
-      if (data.tags && Array.isArray(data.tags)) {
-        state.tagsAvailable = data.tags;
+      const response = await apiFetch('/master/api/tags?status=active');
+      // Formato: { ok: true, data: { tags: [...] } }
+      if (response.ok && response.data && response.data.tags && Array.isArray(response.data.tags)) {
+        state.tagsAvailable = response.data.tags;
       } else {
         state.tagsAvailable = [];
       }
