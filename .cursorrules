@@ -203,7 +203,47 @@ El Sidebar MASTER debe seguir este patrón canónico:
 - Network muestra URLs con `?v=APP_VERSION.BUILD_ID`
 - Sin problemas de caché en modo incógnito o hard reloads
 
+# =========================================
+# CONSTITUCIÓN MASTER API v1
+# =========================================
 
+## MASTER-API-001: Separación absoluta API/Island (OBLIGATORIO)
+
+### Regla Constitucional
+Toda ruta `/master/api/**` DEBE cumplir obligatoriamente:
+
+1. **Registro en Master Route Registry**
+   - OBLIGATORIO: Entrada en `src/core/master/registry/master-route-registry.js`
+   - OBLIGATORIO: `type: 'api'` (nunca `'island'`)
+   - OBLIGATORIO: `key` único canónico (formato: `master-api-*`)
+
+2. **Mapeo en MASTER_HANDLER_MAP**
+   - OBLIGATORIO: Entrada en `MASTER_HANDLER_MAP` dentro de `src/core/master/router/master-router-resolver.js`
+   - OBLIGATORIO: Handler debe existir y exportar función por defecto
+
+3. **Verificación de Funcionamiento**
+   - OBLIGATORIO: `curl -i` de la ruta debe devolver `Content-Type: application/json`
+   - PROHIBIDO: Devolver HTML (indica resolución como island)
+   - OBLIGATORIO: No debe haber errores `MASTER_API_ROUTE_AS_ISLAND_PREVENTED` en logs
+
+### Checklist Obligatorio para Cursor
+Cuando Cursor crea o modifica un endpoint `/master/api/**`:
+
+- [ ] Verificar que la ruta está en `master-route-registry.js` con `type: 'api'`
+- [ ] Verificar que la ruta está en `MASTER_HANDLER_MAP`
+- [ ] Verificar que el handler existe y exporta función por defecto
+- [ ] Ejecutar `curl -i` y verificar que devuelve JSON (no HTML)
+- [ ] Verificar logs: NO debe haber `MASTER_API_ROUTE_AS_ISLAND_PREVENTED`
+
+### Si NO se Cumple
+- Cursor NO debe dar el trabajo por terminado
+- Cursor debe corregir el registro/mapping antes de finalizar
+- Cursor debe documentar el fix si aplica
+
+### Referencias
+- Documentación completa: `docs/MASTER_API_CONTRACTS.md`
+- Registry: `src/core/master/registry/master-route-registry.js`
+- Resolver: `src/core/master/router/master-router-resolver.js`
 
 
 
