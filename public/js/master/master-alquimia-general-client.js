@@ -1169,6 +1169,258 @@
   }
 
   /**
+   * Componente canónico: ClassificationEditableSelector
+   * 
+   * Crea un input editable con autocomplete y creación inline.
+   * PROHIBIDO usar <select> para clasificaciones.
+   * 
+   * @param {Object} config
+   * @param {string} config.type - 'tag' | 'category' | 'subtype'
+   * @param {string} config.label - Label del campo
+   * @param {string} config.inputId - ID único del input
+   * @param {string} config.placeholder - Placeholder del input
+   * @param {string} config.currentValue - Valor actual (null para ninguno)
+   * @param {Array} config.availableItems - Array de items disponibles
+   * @param {Function} config.getItemValue - Función para extraer value de item
+   * @param {Function} config.getItemLabel - Función para extraer label de item
+   * @param {Function} config.onSelect - Callback cuando se selecciona/crea
+   * @param {Function} config.onRemove - Callback cuando se elimina (opcional)
+   * @param {string} config.fetchEndpoint - Endpoint para buscar items
+   * @param {string} config.createEndpoint - Endpoint para crear item
+   * @returns {Object} { container, input, dropdown }
+   */
+  function createClassificationEditableSelector(config) {
+    const {
+      type,
+      label,
+      inputId,
+      placeholder,
+      currentValue,
+      availableItems = [],
+      getItemValue = (item) => item.value || item.category_key || item.subtype_key,
+      getItemLabel = (item) => item.label || item.value || item.category_key || item.subtype_key,
+      onSelect,
+      onRemove,
+      fetchEndpoint,
+      createEndpoint
+    } = config;
+
+    const group = createElement('div', 'mb-3');
+    const labelEl = createElement('label', 'block text-xs text-slate-400 mb-1', label);
+    
+    const wrapper = createElement('div', 'relative');
+    const input = createElement('input');
+    input.type = 'text';
+    input.id = inputId;
+    input.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
+    input.placeholder = placeholder || 'Escribe para buscar o crear...';
+    
+    // Si hay valor actual, mostrarlo como chip
+    if (currentValue) {
+      const currentItem = availableItems.find(item => getItemValue(item) === currentValue);
+      if (currentItem) {
+        input.value = getItemLabel(currentItem);
+        input.dataset.currentValue = currentValue;
+      }
+    }
+
+    const dropdown = createElement('div', 'absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto hidden');
+    dropdown.id = `${inputId}-dropdown`;
+
+    let searchTimeout;
+    let isCreating = false;
+
+    // Handler de input (búsqueda)
+    input.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      const searchTerm = e.target.value.trim().toLowerCase();
+      
+      // Si el valor cambió y había un valor seleccionado, limpiar
+      if (input.dataset.currentValue && input.value !== getItemLabel(availableItems.find(item => getItemValue(item) === input.dataset.currentValue))) {
+        delete input.dataset.currentValue;
+      }
+      
+      if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+      
+      searchTimeout = setTimeout(() => {
+        filterAndShowClassificationDropdown(searchTerm, dropdown, input, availableItems, getItemValue, getItemLabel, createEndpoint, onSelect);
+      }, 200);
+    });
+
+    // Handler de teclado
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = input.value.trim();
+        if (value && !isCreating) {
+          isCreating = true;
+          await handleClassificationEnter(value, input, availableItems, getItemValue, getItemLabel, createEndpoint, onSelect);
+          isCreating = false;
+          input.value = '';
+          dropdown.classList.add('hidden');
+        }
+      } else if (e.key === 'Escape') {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // Cerrar dropdown al hacer click fuera
+    const clickHandler = (e) => {
+      if (!wrapper.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    };
+    document.addEventListener('click', clickHandler);
+    // Guardar handler para poder removerlo si es necesario
+    wrapper.dataset.clickHandler = 'active';
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(dropdown);
+    
+    group.appendChild(labelEl);
+    group.appendChild(wrapper);
+
+    // Si hay valor actual y hay callback onRemove, añadir chip con botón eliminar
+    if (currentValue && onRemove) {
+      const chipContainer = createElement('div', 'mb-2');
+      const chip = createElement('div', 'inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded');
+      const chipText = createElement('span', '', getItemLabel(availableItems.find(item => getItemValue(item) === currentValue) || { value: currentValue }));
+      const chipRemove = createElement('button', 'text-white hover:text-red-300 transition-colors', '❌');
+      chipRemove.type = 'button';
+      chipRemove.addEventListener('click', async () => {
+        await onRemove(currentValue);
+      });
+      
+      chip.appendChild(chipText);
+      chip.appendChild(chipRemove);
+      chipContainer.appendChild(chip);
+      group.insertBefore(chipContainer, wrapper);
+    }
+
+    return { container: group, input, dropdown };
+  }
+
+  /**
+   * Filtra y muestra el dropdown de autocomplete para clasificaciones
+   */
+  function filterAndShowClassificationDropdown(searchTerm, dropdown, input, availableItems, getItemValue, getItemLabel, createEndpoint, onSelect) {
+    // Limpiar dropdown
+    while (dropdown.firstChild) {
+      dropdown.removeChild(dropdown.firstChild);
+    }
+
+    // Filtrar items disponibles
+    const filtered = availableItems.filter(item => {
+      const label = getItemLabel(item).toLowerCase();
+      return label.includes(searchTerm);
+    });
+
+    // Añadir opción "Crear nuevo" si no hay coincidencias exactas
+    const exactMatch = filtered.find(item => getItemLabel(item).toLowerCase() === searchTerm);
+    if (!exactMatch && searchTerm.length > 0 && createEndpoint) {
+      const createOption = createElement('div', 'px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm');
+      const createText = createElement('span', '', `➕ Crear "${searchTerm}"`);
+      createOption.appendChild(createText);
+      createOption.addEventListener('click', async () => {
+        await handleClassificationEnter(searchTerm, input, availableItems, getItemValue, getItemLabel, createEndpoint, onSelect);
+        input.value = '';
+        dropdown.classList.add('hidden');
+      });
+      dropdown.appendChild(createOption);
+    }
+
+    // Añadir opciones filtradas
+    filtered.forEach(item => {
+      const option = createElement('div', 'px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm');
+      option.textContent = getItemLabel(item);
+      option.addEventListener('click', async () => {
+        const value = getItemValue(item);
+        input.value = getItemLabel(item);
+        input.dataset.currentValue = value;
+        dropdown.classList.add('hidden');
+        if (onSelect) {
+          await onSelect(value);
+        }
+      });
+      dropdown.appendChild(option);
+    });
+
+    if (dropdown.children.length > 0) {
+      dropdown.classList.remove('hidden');
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Maneja Enter en input de clasificación (crear o seleccionar)
+   * Soporta tags, categories (key) y subtypes (subkey)
+   */
+  async function handleClassificationEnter(value, input, availableItems, getItemValue, getItemLabel, createEndpoint, onSelect) {
+    // Buscar si existe exactamente
+    const exactMatch = availableItems.find(item => {
+      const itemValue = getItemValue(item);
+      const itemLabel = getItemLabel(item);
+      return itemValue === value || itemLabel.toLowerCase() === value.toLowerCase();
+    });
+
+    if (exactMatch) {
+      // Seleccionar existente
+      const selectedValue = getItemValue(exactMatch);
+      input.value = getItemLabel(exactMatch);
+      input.dataset.currentValue = selectedValue;
+      if (onSelect) {
+        await onSelect(selectedValue);
+      }
+    } else if (createEndpoint) {
+      // Crear nuevo usando endpoint canónico
+      try {
+        // Determinar type según el inputId
+        let type = 'tag'; // default
+        if (input.id === 'editor-classification-category') {
+          type = 'key';
+        } else if (input.id === 'editor-classification-subtype') {
+          type = 'subkey';
+        }
+
+        const createResponse = await apiFetch(createEndpoint, {
+          method: 'POST',
+          body: JSON.stringify({ type: type, value: value })
+        });
+        
+        // El endpoint /admin/api/classifications/ensure devuelve { success: true, term: {...} }
+        if (createResponse.success && createResponse.term) {
+          // Recargar items disponibles
+          await loadClassificationsAvailable();
+          
+          // Para categories/subtypes, necesitamos obtener el category_key/subtype_key desde el término
+          // El término tiene value normalizado, pero necesitamos el key real
+          // Por ahora, usar el value como key (el backend normaliza)
+          const newValue = createResponse.term.value || value;
+          input.value = createResponse.term.value || value;
+          input.dataset.currentValue = newValue;
+          
+          if (onSelect) {
+            await onSelect(newValue);
+          }
+          
+          // Re-renderizar para actualizar UI
+          renderListaContent();
+        } else {
+          console.error('[MasterAlquimiaGeneral] Respuesta inesperada al crear clasificación:', createResponse);
+          showError('Error al crear clasificación: respuesta inesperada');
+        }
+      } catch (error) {
+        console.error('[MasterAlquimiaGeneral] Error creando clasificación:', error);
+        showError('Error al crear clasificación: ' + (error.message || 'Error desconocido'));
+      }
+    }
+  }
+
+  /**
    * Renderiza el editor de clasificaciones
    */
   function renderClasificacionesEditor(container) {
@@ -1178,59 +1430,63 @@
       tags: []
     };
 
-    // Category
-    const categoryGroup = createElement('div', 'mb-3');
-    const categoryLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Categoría');
-    const categorySelect = createElement('select');
-    categorySelect.id = 'editor-classification-category';
-    categorySelect.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
-    
-    const categoryOptionEmpty = createElement('option');
-    categoryOptionEmpty.value = '';
-    categoryOptionEmpty.textContent = '(Ninguna)';
-    categorySelect.appendChild(categoryOptionEmpty);
-    
-    state.classificationsAvailable.categories.forEach(cat => {
-      const option = createElement('option');
-      option.value = cat.category_key;
-      option.textContent = cat.label || cat.category_key;
-      if (classification.category_key === cat.category_key) {
-        option.selected = true;
-      }
-      categorySelect.appendChild(option);
+    // Category - Usar ClassificationEditableSelector (PROHIBIDO <select>)
+    const categorySelector = createClassificationEditableSelector({
+      type: 'category',
+      label: 'Categoría',
+      inputId: 'editor-classification-category',
+      placeholder: 'Escribe para buscar o crear categoría...',
+      currentValue: classification.category_key || null,
+      availableItems: state.classificationsAvailable.categories || [],
+      getItemValue: (item) => item.category_key,
+      getItemLabel: (item) => item.label || item.category_key,
+      onSelect: async (value) => {
+        // Actualizar estado local
+        if (!state.listaActiva.classification) {
+          state.listaActiva.classification = {};
+        }
+        state.listaActiva.classification.category_key = value || null;
+      },
+      onRemove: async () => {
+        if (state.listaActiva.classification) {
+          state.listaActiva.classification.category_key = null;
+        }
+        // Re-renderizar para actualizar UI
+        renderListaContent();
+      },
+      createEndpoint: '/admin/api/classifications/ensure' // Usar endpoint canónico con type='key'
     });
-    
-    categoryGroup.appendChild(categoryLabel);
-    categoryGroup.appendChild(categorySelect);
-    container.appendChild(categoryGroup);
+    container.appendChild(categorySelector.container);
 
-    // Subtype
-    const subtypeGroup = createElement('div', 'mb-3');
-    const subtypeLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Subtipo');
-    const subtypeSelect = createElement('select');
-    subtypeSelect.id = 'editor-classification-subtype';
-    subtypeSelect.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
-    
-    const subtypeOptionEmpty = createElement('option');
-    subtypeOptionEmpty.value = '';
-    subtypeOptionEmpty.textContent = '(Ninguno)';
-    subtypeSelect.appendChild(subtypeOptionEmpty);
-    
-    state.classificationsAvailable.subtypes.forEach(sub => {
-      const option = createElement('option');
-      option.value = sub.subtype_key;
-      option.textContent = sub.label || sub.subtype_key;
-      if (classification.subtype_key === sub.subtype_key) {
-        option.selected = true;
-      }
-      subtypeSelect.appendChild(option);
+    // Subtype - Usar ClassificationEditableSelector (PROHIBIDO <select>)
+    const subtypeSelector = createClassificationEditableSelector({
+      type: 'subtype',
+      label: 'Subtipo',
+      inputId: 'editor-classification-subtype',
+      placeholder: 'Escribe para buscar o crear subtipo...',
+      currentValue: classification.subtype_key || null,
+      availableItems: state.classificationsAvailable.subtypes || [],
+      getItemValue: (item) => item.subtype_key,
+      getItemLabel: (item) => item.label || item.subtype_key,
+      onSelect: async (value) => {
+        // Actualizar estado local
+        if (!state.listaActiva.classification) {
+          state.listaActiva.classification = {};
+        }
+        state.listaActiva.classification.subtype_key = value || null;
+      },
+      onRemove: async () => {
+        if (state.listaActiva.classification) {
+          state.listaActiva.classification.subtype_key = null;
+        }
+        // Re-renderizar para actualizar UI
+        renderListaContent();
+      },
+      createEndpoint: '/admin/api/classifications/ensure' // Usar endpoint canónico con type='subkey'
     });
-    
-    subtypeGroup.appendChild(subtypeLabel);
-    subtypeGroup.appendChild(subtypeSelect);
-    container.appendChild(subtypeGroup);
+    container.appendChild(subtypeSelector.container);
 
-    // Tags (TAG SOT GLOBAL v1) - Sección separada
+    // Tags (TAG SOT GLOBAL v1) - Sección separada con chips múltiples
     const tagsSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
     const tagsTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'TAGS');
     tagsSection.appendChild(tagsTitle);
@@ -1254,7 +1510,7 @@
       tagsChipsContainer.appendChild(chip);
     });
 
-    // Input con autocomplete para añadir tags
+    // Input con autocomplete para añadir tags (usar ClassificationEditableSelector pattern)
     const tagsInputGroup = createElement('div', 'relative');
     const tagsInputLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Añadir tag');
     const tagsInputWrapper = createElement('div', 'relative');
@@ -1318,13 +1574,15 @@
   /**
    * Obtiene las clasificaciones del editor
    * NOTA: Tags ahora se manejan directamente con addTagToLista/removeTagFromLista
+   * Category y Subtype ahora usan ClassificationEditableSelector (input, no select)
    */
   function getClasificacionesFromEditor() {
-    const categorySelect = document.getElementById('editor-classification-category');
-    const subtypeSelect = document.getElementById('editor-classification-subtype');
+    const categoryInput = document.getElementById('editor-classification-category');
+    const subtypeInput = document.getElementById('editor-classification-subtype');
     
-    const category_key = categorySelect?.value || null;
-    const subtype_key = subtypeSelect?.value || null;
+    // Obtener valores desde dataset (establecido por ClassificationEditableSelector)
+    const category_key = categoryInput?.dataset.currentValue || null;
+    const subtype_key = subtypeInput?.dataset.currentValue || null;
     
     // Tags se obtienen directamente de state.listaActiva.classification.tags
     const tags = state.listaActiva?.classification?.tags || [];
