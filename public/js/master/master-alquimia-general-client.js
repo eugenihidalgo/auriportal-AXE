@@ -1415,16 +1415,16 @@
           body: JSON.stringify({ type: type, value: value })
         });
         
-        // El endpoint /admin/api/classifications/ensure devuelve { success: true, term: {...} }
-        if (createResponse.success && createResponse.term) {
+        // El endpoint /master/api/classifications devuelve { ok: true, data: { classification: {...} } }
+        if (createResponse.ok && createResponse.data && createResponse.data.classification) {
+          const classification = createResponse.data.classification;
+          
           // Recargar items disponibles
           await loadClassificationsAvailable();
           
-          // Para categories/subtypes, necesitamos obtener el category_key/subtype_key desde el término
-          // El término tiene value normalizado, pero necesitamos el key real
-          // Por ahora, usar el value como key (el backend normaliza)
-          const newValue = createResponse.term.value || value;
-          input.value = createResponse.term.value || value;
+          // Usar el value como key (el backend normaliza)
+          const newValue = classification.value || value;
+          input.value = classification.value || value;
           input.dataset.currentValue = newValue;
           
           if (onSelect) {
