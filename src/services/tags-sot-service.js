@@ -7,6 +7,7 @@
 import { query } from '../../database/pg.js';
 import { dispatchSignal } from '../core/signals/signal-dispatcher.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
+import { ensureClassificationTerm } from '../core/classification/ensure-classification-term.js';
 
 /**
  * Actualiza los tags de una lista usando el sistema canónico
@@ -55,30 +56,34 @@ export async function updateListaTags(listaId, tagValues, options = {}) {
       continue; // Ignorar tags vacíos
     }
 
-    // Usar ensure_classification_term para crear/obtener (idempotente)
-    const result = await query(
-      `SELECT ensure_classification_term('tag', $1) as term_id`,
-      [tagValue.trim()]
-    );
-
-    const termId = result.rows[0].term_id;
-
-    // Obtener información del tag
-    const tagInfo = await query(
-      `SELECT id, value, normalized, status FROM pde_classification_terms WHERE id = $1`,
-      [termId]
-    );
-
-    if (tagInfo.rows.length > 0 && tagInfo.rows[0].status === 'active') {
-      const normalized = tagInfo.rows[0].normalized;
-      if (!newNormalizedSet.has(normalized)) {
-        newTags.push({
-          id: tagInfo.rows[0].id,
-          value: tagInfo.rows[0].value,
-          normalized: normalized
+    // Usar helper canónico ensureClassificationTerm (idempotente)
+    try {
+      const term = await ensureClassificationTerm({ type: 'tag', value: tagValue.trim() }, { traceId });
+      
+      if (term.status === 'active') {
+        if (!newNormalizedSet.has(term.normalized)) {
+          newTags.push({
+            id: term.id,
+            value: term.value,
+            normalized: term.normalized
+          });
+          newNormalizedSet.add(term.normalized);
+        }
+      } else {
+        logWarn('TagsSotService', 'Tag no activo ignorado', {
+          tag_id: term.id,
+          value: term.value,
+          status: term.status,
+          traceId
         });
-        newNormalizedSet.add(normalized);
       }
+    } catch (error) {
+      logError('TagsSotService', 'Error asegurando tag', {
+        tagValue: tagValue.trim(),
+        error: error.message,
+        traceId
+      });
+      // Continuar con otros tags (fail-open)
     }
   }
 

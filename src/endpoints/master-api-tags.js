@@ -10,6 +10,7 @@ import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import { query } from '../../database/pg.js';
 import { dispatchSignal } from '../core/signals/signal-dispatcher.js';
+import { ensureClassificationTerm } from '../core/classification/ensure-classification-term.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -136,27 +137,18 @@ export default async function masterApiTagsHandler(request, env, ctx) {
 
       const value = body.value.trim();
 
-      // Usar ensure_classification_term para crear/obtener (idempotente)
-      const result = await query(
-        `SELECT ensure_classification_term('tag', $1) as term_id`,
-        [value]
-      );
-
-      const termId = result.rows[0].term_id;
-
-      // Obtener información completa del tag
-      const tagResult = await query(
-        `SELECT id, type, value, normalized, status, created_at, updated_at
-         FROM pde_classification_terms
-         WHERE id = $1`,
-        [termId]
-      );
-
-      if (tagResult.rows.length === 0) {
+      // Usar helper canónico ensureClassificationTerm (idempotente)
+      let tag;
+      try {
+        tag = await ensureClassificationTerm({ type: 'tag', value }, { traceId });
+      } catch (error) {
+        logError('MasterApiTags', 'Error en ensureClassificationTerm', {
+          error: error.message,
+          stack: error.stack,
+          traceId
+        });
         return jsonError('Error creando tag', 'TAG_CREATE_ERROR', 500, traceId);
       }
-
-      const tag = tagResult.rows[0];
       const tagData = {
         id: tag.id,
         value: tag.value,
