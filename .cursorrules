@@ -267,5 +267,35 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/MASTER_API_STRICT_RESOLUTION_V1.md
       - scripts/check-master-api-assembly.js
 
+  - id: ui-refetch-after-mutations
+    title: UI refetch obligatorio tras mutaciones
+    content: >
+      La UI MASTER NO debe confiar en estado local después de mutaciones.
+      OBLIGATORIO:
+      - Después de cualquier UPDATE/POST que modifique datos, hacer refetch completo (GET)
+      - Re-renderizar desde los datos frescos del backend
+      - NUNCA asumir que "ya está" sin verificar con GET
+      REGLA ESPECÍFICA:
+      - Cualquier cambio de clasificación (category/subtype/tags) debe:
+        (a) escribir en tabla relación (transmutacion_lista_classifications)
+        (b) verificarse por GET (getListWithClassification)
+        (c) re-renderizar UI desde datos frescos
+      PROHIBIDO:
+      - Actualizar estado local sin refetch
+      - Asumir persistencia sin verificación
+
+  - id: classification-attach-persistence
+    title: Persistencia obligatoria de asociación de clasificaciones
+    content: >
+      Toda asociación de clasificación (category/subtype/tags) a una lista DEBE:
+      - escribirse en transmutacion_lista_classifications (tabla de relación)
+      - proyectarse en GET usando JOINs canónicos con pde_classification_terms
+      - respetar status='active' en términos
+      - emitir logs estructurados ([CLASSIFICATION][ATTACH])
+      PROHIBIDO:
+      - Confiar solo en columnas legacy (category_key, subtype_key, tags en listas_transmutaciones)
+      - Leer clasificaciones sin JOIN con tabla de relación
+      - Persistir sin logs estructurados
+
 
 

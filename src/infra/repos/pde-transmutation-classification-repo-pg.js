@@ -387,30 +387,78 @@ export class PdeTransmutationClassificationRepoPg extends PdeTransmutationClassi
   }
 
   async getListWithClassification(listId) {
+    // ═══════════════════════════════════════════════════════════════
+    // FIX v5.50.1: Leer desde transmutacion_lista_classifications (SOT)
+    // ═══════════════════════════════════════════════════════════════
+    // Proyección canónica: JOIN transmutacion_lista_classifications
+    // con pde_classification_terms para obtener category/subtype/tags
     const sql = `
       SELECT 
-        id,
-        nombre,
-        tipo,
-        descripcion,
-        activo,
-        orden,
-        category_key,
-        subtype_key,
-        tags,
-        created_at,
-        updated_at
-      FROM listas_transmutaciones
-      WHERE id = $1
+        l.id,
+        l.nombre,
+        l.tipo,
+        l.descripcion,
+        l.activo,
+        l.orden,
+        l.created_at,
+        l.updated_at,
+        -- Category (type='key')
+        (SELECT ct.value
+         FROM transmutacion_lista_classifications tlc
+         INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+         WHERE tlc.lista_id = l.id AND ct.type = 'key' AND ct.status = 'active'
+         LIMIT 1) as category_key,
+        -- Subtype (type='subkey')
+        (SELECT ct.value
+         FROM transmutacion_lista_classifications tlc
+         INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+         WHERE tlc.lista_id = l.id AND ct.type = 'subkey' AND ct.status = 'active'
+         LIMIT 1) as subtype_key,
+        -- Tags (type='tag') - array
+        COALESCE(
+          (SELECT json_agg(ct.value ORDER BY ct.value)
+           FROM transmutacion_lista_classifications tlc
+           INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+           WHERE tlc.lista_id = l.id AND ct.type = 'tag' AND ct.status = 'active'),
+          '[]'::json
+        ) as tags
+      FROM listas_transmutaciones l
+      WHERE l.id = $1
     `;
     
     const result = await query(sql, [listId]);
     if (!result.rows[0]) return null;
     
     const row = result.rows[0];
+    
+    // Normalizar tags: puede ser JSON array, string JSON, o null
+    let tagsArray = [];
+    if (row.tags) {
+      if (Array.isArray(row.tags)) {
+        tagsArray = row.tags;
+      } else if (typeof row.tags === 'string') {
+        try {
+          tagsArray = JSON.parse(row.tags);
+        } catch (e) {
+          tagsArray = [];
+        }
+      } else if (typeof row.tags === 'object') {
+        tagsArray = Array.isArray(row.tags) ? row.tags : [];
+      }
+    }
+    
     return {
-      ...row,
-      tags: row.tags ? (typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags) : null
+      id: row.id,
+      nombre: row.nombre,
+      tipo: row.tipo,
+      descripcion: row.descripcion,
+      activo: row.activo,
+      orden: row.orden,
+      category_key: row.category_key || null,
+      subtype_key: row.subtype_key || null,
+      tags: tagsArray.length > 0 ? tagsArray : null,
+      created_at: row.created_at,
+      updated_at: row.updated_at
     };
   }
 }

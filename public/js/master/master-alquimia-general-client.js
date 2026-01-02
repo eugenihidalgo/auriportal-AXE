@@ -1466,11 +1466,9 @@
       getItemValue: (item) => item.category_key,
       getItemLabel: (item) => item.label || item.category_key,
       onSelect: async (value) => {
-        // Actualizar estado local
-        if (!state.listaActiva.classification) {
-          state.listaActiva.classification = {};
-        }
-        state.listaActiva.classification.category_key = value || null;
+        // Actualizar la lista con la nueva categoría
+        console.log('[FORENSIC][AlquimiaGeneral] classification update category_key:', value);
+        await updateLista(state.listaActiva.id, { classification: { category_key: value || null } });
       },
       onRemove: async () => {
         if (state.listaActiva.classification) {
@@ -1494,11 +1492,9 @@
       getItemValue: (item) => item.subtype_key,
       getItemLabel: (item) => item.label || item.subtype_key,
       onSelect: async (value) => {
-        // Actualizar estado local
-        if (!state.listaActiva.classification) {
-          state.listaActiva.classification = {};
-        }
-        state.listaActiva.classification.subtype_key = value || null;
+        // Actualizar la lista con el nuevo subtipo
+        console.log('[FORENSIC][AlquimiaGeneral] classification update subtype_key:', value);
+        await updateLista(state.listaActiva.id, { classification: { subtype_key: value || null } });
       },
       onRemove: async () => {
         if (state.listaActiva.classification) {
@@ -1825,11 +1821,17 @@
       showSuccess('Lista actualizada');
       state.editandoLista = false;
       
-      // Recargar listas y re-establecer lista activa usando entrypoint canónico
+      // FIX v5.50.1: Refetch obligatorio tras mutación
+      console.log('[FORENSIC][AlquimiaGeneral] classification update ok, refetching lista', { listaId: id });
       await loadListas();
       const listaActualizada = state.listas.find(l => l.id === id);
       if (listaActualizada) {
         await setListaActivaAndRender(listaActualizada, true);
+        console.log('[FORENSIC][AlquimiaGeneral] lista reloaded with classification', {
+          category: listaActualizada.classification?.category_key || null,
+          subtype: listaActualizada.classification?.subtype_key || null,
+          tags: listaActualizada.classification?.tags || []
+        });
       } else {
         // Si no se encuentra, ocultar contenido
         const container = document.getElementById('lista-content');

@@ -2,6 +2,10 @@
 // Servicio para gestionar clasificación de transmutaciones (validaciones y reglas)
 
 import { getDefaultTransmutationClassificationRepo } from '../infra/repos/pde-transmutation-classification-repo-pg.js';
+import { ensureClassificationTerm } from '../core/classification/ensure-classification-term.js';
+import { query } from '../../database/pg.js';
+import { logInfo, logWarn, logError } from '../core/observability/logger.js';
+import { getRequestId } from '../core/observability/request-context.js';
 
 const repo = getDefaultTransmutationClassificationRepo();
 
@@ -309,74 +313,223 @@ export async function softDeleteTag(tagKey) {
 
 /**
  * Actualiza la clasificación de una lista
+ * 
+ * FIX v5.50.1: Usa pde_classification_terms (SOT global) y transmutacion_lista_classifications (tabla de relación)
+ * en lugar de tablas legacy y columnas directas.
+ * 
  * @param {number} listId - ID de la lista
- * @param {Object} classification - Clasificación
+ * @param {Object} classification - Clasificación { category_key, subtype_key, tags }
  * @returns {Promise<Object>} Lista actualizada
  * @throws {Error} Si la validación falla
  */
 export async function updateListClassification(listId, classification) {
+  const traceId = getRequestId();
   const { category_key, subtype_key, tags } = classification;
   
-  // Validar category_key si se proporciona
-  if (category_key !== undefined && category_key !== null && category_key !== '') {
-    const normalizedCategoryKey = normalizeKey(category_key);
-    const category = await repo.getCategoryByKey(normalizedCategoryKey);
-    if (!category || !category.is_active) {
-      throw new Error(`Categoría "${normalizedCategoryKey}" no existe o no está activa`);
-    }
-  }
-  
-  // Validar subtype_key si se proporciona
-  if (subtype_key !== undefined && subtype_key !== null && subtype_key !== '') {
-    const normalizedSubtypeKey = normalizeKey(subtype_key);
-    const subtype = await repo.getSubtypeByKey(normalizedSubtypeKey);
-    if (!subtype || !subtype.is_active) {
-      throw new Error(`Subtipo "${normalizedSubtypeKey}" no existe o no está activo`);
-    }
-  }
-  
-  // Validar tags si se proporcionan
-  if (tags !== undefined && tags !== null) {
-    if (!Array.isArray(tags)) {
-      throw new Error('tags debe ser un array de strings');
-    }
-    
-    // Normalizar y validar cada tag
-    const normalizedTags = [];
-    for (const tag of tags) {
-      if (typeof tag !== 'string' || tag.trim().length === 0) {
-        continue; // Ignorar tags vacíos
-      }
-      const normalizedTag = normalizeKey(tag);
-      const tagExists = await repo.getTagByKey(normalizedTag);
-      if (!tagExists || !tagExists.is_active) {
-        // FAIL-OPEN: Permitir tags que no existen pero emitir warning (se puede crear después)
-        console.warn(`[PDE][TRANSMUTACIONES][CLASSIFICATION] Tag "${normalizedTag}" no existe en tabla, pero se permite (fail-open)`);
-      }
-      normalizedTags.push(normalizedTag);
-    }
-    
-    // Actualizar con tags normalizados (puede ser array vacío)
-    classification.tags = normalizedTags.length > 0 ? normalizedTags : null;
-  }
-  
-  // Regla mínima: debe tener al menos una dimensión
-  const finalCategoryKey = category_key === '' ? null : category_key;
-  const finalSubtypeKey = subtype_key === '' ? null : subtype_key;
-  const finalTags = tags && Array.isArray(tags) && tags.length > 0 ? tags : null;
-  
-  const hasClassification = finalCategoryKey || finalSubtypeKey || finalTags;
-  
-  if (!hasClassification) {
-    // FAIL-OPEN: Permitir pero emitir warning
-    console.warn(`[PDE][TRANSMUTACIONES][CLASSIFICATION] Lista ${listId} sin clasificación (category/subtype/tags). Se permite pero se recomienda clasificar.`);
-  }
-  
-  return await repo.updateListClassification(listId, {
-    category_key: finalCategoryKey || null,
-    subtype_key: finalSubtypeKey || null,
-    tags: finalTags
+  logInfo('UpdateListClassification', 'Iniciando actualización', {
+    lista_id: listId,
+    category_key: category_key || null,
+    subtype_key: subtype_key || null,
+    tags_count: tags?.length || 0,
+    traceId
   });
+  
+  try {
+    // ═══════════════════════════════════════════════════════════════
+    // PASO 1: Asegurar términos en pde_classification_terms (SOT)
+    // ═══════════════════════════════════════════════════════════════
+    const termIds = {
+      category: null,
+      subtype: null,
+      tags: []
+    };
+    
+    // Category (type='key')
+    if (category_key !== undefined && category_key !== null && category_key !== '') {
+      try {
+        const categoryTerm = await ensureClassificationTerm(
+          { type: 'key', value: category_key },
+          { traceId }
+        );
+        termIds.category = categoryTerm.id;
+        logInfo('UpdateListClassification', 'Category term asegurado', {
+          lista_id: listId,
+          category_key,
+          term_id: categoryTerm.id,
+          traceId
+        });
+      } catch (error) {
+        logError('UpdateListClassification', 'Error asegurando category term', {
+          lista_id: listId,
+          category_key,
+          error: error.message,
+          traceId
+        });
+        throw new Error(`Error asegurando categoría "${category_key}": ${error.message}`);
+      }
+    }
+    
+    // Subtype (type='subkey')
+    if (subtype_key !== undefined && subtype_key !== null && subtype_key !== '') {
+      try {
+        const subtypeTerm = await ensureClassificationTerm(
+          { type: 'subkey', value: subtype_key },
+          { traceId }
+        );
+        termIds.subtype = subtypeTerm.id;
+        logInfo('UpdateListClassification', 'Subtype term asegurado', {
+          lista_id: listId,
+          subtype_key,
+          term_id: subtypeTerm.id,
+          traceId
+        });
+      } catch (error) {
+        logError('UpdateListClassification', 'Error asegurando subtype term', {
+          lista_id: listId,
+          subtype_key,
+          error: error.message,
+          traceId
+        });
+        throw new Error(`Error asegurando subtipo "${subtype_key}": ${error.message}`);
+      }
+    }
+    
+    // Tags (type='tag') - múltiples
+    if (tags !== undefined && tags !== null && Array.isArray(tags)) {
+      for (const tagValue of tags) {
+        if (typeof tagValue !== 'string' || !tagValue.trim()) {
+          continue; // Ignorar tags vacíos
+        }
+        try {
+          const tagTerm = await ensureClassificationTerm(
+            { type: 'tag', value: tagValue.trim() },
+            { traceId }
+          );
+          termIds.tags.push(tagTerm.id);
+          logInfo('UpdateListClassification', 'Tag term asegurado', {
+            lista_id: listId,
+            tag_value: tagValue,
+            term_id: tagTerm.id,
+            traceId
+          });
+        } catch (error) {
+          logWarn('UpdateListClassification', 'Error asegurando tag term (continuando)', {
+            lista_id: listId,
+            tag_value: tagValue,
+            error: error.message,
+            traceId
+          });
+          // Fail-open: continuar con otros tags
+        }
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // PASO 2: Actualizar tabla de relación transmutacion_lista_classifications
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Primero, eliminar relaciones existentes para esta lista (solo de type 'key' y 'subkey')
+    // NOTA: Los tags se manejan de forma diferente (pueden ser múltiples)
+    await query(
+      `DELETE FROM transmutacion_lista_classifications tlc
+       USING pde_classification_terms ct
+       WHERE tlc.lista_id = $1
+         AND tlc.classification_term_id = ct.id
+         AND ct.type IN ('key', 'subkey')`,
+      [listId]
+    );
+    
+    logInfo('UpdateListClassification', 'Relaciones category/subtype eliminadas', {
+      lista_id: listId,
+      traceId
+    });
+    
+    // Insertar nueva relación para category (si existe)
+    if (termIds.category) {
+      await query(
+        `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (lista_id, classification_term_id) DO NOTHING`,
+        [listId, termIds.category]
+      );
+      logInfo('UpdateListClassification', '[CLASSIFICATION][ATTACH]', {
+        lista_id: listId,
+        type: 'key',
+        term_id: termIds.category,
+        key: category_key,
+        traceId
+      });
+    }
+    
+    // Insertar nueva relación para subtype (si existe)
+    if (termIds.subtype) {
+      await query(
+        `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (lista_id, classification_term_id) DO NOTHING`,
+        [listId, termIds.subtype]
+      );
+      logInfo('UpdateListClassification', '[CLASSIFICATION][ATTACH]', {
+        lista_id: listId,
+        type: 'subkey',
+        term_id: termIds.subtype,
+        key: subtype_key,
+        traceId
+      });
+    }
+    
+    // Para tags: eliminar todos los tags existentes y reinsertar
+    await query(
+      `DELETE FROM transmutacion_lista_classifications tlc
+       USING pde_classification_terms ct
+       WHERE tlc.lista_id = $1
+         AND tlc.classification_term_id = ct.id
+         AND ct.type = 'tag'`,
+      [listId]
+    );
+    
+    // Insertar relaciones para tags
+    for (const tagTermId of termIds.tags) {
+      await query(
+        `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (lista_id, classification_term_id) DO NOTHING`,
+        [listId, tagTermId]
+      );
+    }
+    
+    if (termIds.tags.length > 0) {
+      logInfo('UpdateListClassification', '[CLASSIFICATION][ATTACH] tags', {
+        lista_id: listId,
+        type: 'tag',
+        tags_count: termIds.tags.length,
+        traceId
+      });
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // PASO 3: Mantener compatibilidad con columnas directas (legacy)
+    // ═══════════════════════════════════════════════════════════════
+    // NOTA: Por compatibilidad, también actualizamos las columnas directas
+    // Esto permite que el sistema legacy siga funcionando mientras migramos
+    const finalCategoryKey = category_key === '' ? null : category_key;
+    const finalSubtypeKey = subtype_key === '' ? null : subtype_key;
+    const finalTags = tags && Array.isArray(tags) && tags.length > 0 ? tags : null;
+    
+    return await repo.updateListClassification(listId, {
+      category_key: finalCategoryKey || null,
+      subtype_key: finalSubtypeKey || null,
+      tags: finalTags
+    });
+  } catch (error) {
+    logError('UpdateListClassification', 'Error actualizando clasificación', {
+      lista_id: listId,
+      error: error.message,
+      stack: error.stack,
+      traceId
+    });
+    throw error;
+  }
 }
 
 /**
