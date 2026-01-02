@@ -1700,6 +1700,13 @@
 
       // Añadir tag a la lista
       const newTags = [...currentTags, tagValue];
+      console.log('[CLASSIFICATION][TAGS][WRITE] Añadiendo tag', {
+        listaId: state.listaActiva.id,
+        tagValue,
+        currentTags,
+        newTags
+      });
+      
       await apiFetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -1709,14 +1716,25 @@
         })
       });
 
-      // Actualizar estado local
-      if (!state.listaActiva.classification) {
-        state.listaActiva.classification = {};
-      }
-      state.listaActiva.classification.tags = newTags;
-
-      // Re-renderizar
+      // FIX v5.52.3: Refetch obligatorio tras mutación (ui-refetch-after-mutations)
+      console.log('[CLASSIFICATION][TAGS][WRITE] Tag añadido, refetching lista completa', {
+        listaId: state.listaActiva.id
+      });
+      
+      // Recargar lista completa desde servidor
+      await loadListaCompleta(state.listaActiva.id);
+      
+      // Recargar listado para sincronizar sidebar
+      await loadListas();
+      
+      // Re-renderizar con datos frescos
       renderListaContent();
+      
+      console.log('[CLASSIFICATION][TAGS][READ] Lista recargada tras añadir tag', {
+        listaId: state.listaActiva.id,
+        tags: state.listaActiva.classification?.tags || []
+      });
+      
       showSuccess('Tag añadido');
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error añadiendo tag:', error);
@@ -1737,6 +1755,13 @@
     const newTags = currentTags.filter(t => t !== tagValue);
 
     try {
+      console.log('[CLASSIFICATION][TAGS][WRITE] Eliminando tag', {
+        listaId: state.listaActiva.id,
+        tagValue,
+        currentTags,
+        newTags
+      });
+      
       await apiFetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -1746,13 +1771,25 @@
         })
       });
 
-      // Actualizar estado local
-      if (state.listaActiva.classification) {
-        state.listaActiva.classification.tags = newTags;
-      }
-
-      // Re-renderizar
+      // FIX v5.52.3: Refetch obligatorio tras mutación (ui-refetch-after-mutations)
+      console.log('[CLASSIFICATION][TAGS][WRITE] Tag eliminado, refetching lista completa', {
+        listaId: state.listaActiva.id
+      });
+      
+      // Recargar lista completa desde servidor
+      await loadListaCompleta(state.listaActiva.id);
+      
+      // Recargar listado para sincronizar sidebar
+      await loadListas();
+      
+      // Re-renderizar con datos frescos
       renderListaContent();
+      
+      console.log('[CLASSIFICATION][TAGS][READ] Lista recargada tras eliminar tag', {
+        listaId: state.listaActiva.id,
+        tags: state.listaActiva.classification?.tags || []
+      });
+      
       showSuccess('Tag eliminado');
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error eliminando tag:', error);

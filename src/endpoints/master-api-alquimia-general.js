@@ -118,6 +118,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             const listaWithClassification = await getListWithClassification(lista.id);
             const listaTags = await getListaTags(lista.id);
             
+            // FIX v5.52.3: Log forense para debugging
+            logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][READ] GET /listas', {
+              traceId,
+              lista_id: lista.id,
+              tags_count: listaTags?.length || 0,
+              tags: listaTags || []
+            });
+            
             lista.classification = {
               category_key: listaWithClassification?.category_key || null,
               subtype_key: listaWithClassification?.subtype_key || null,
@@ -227,6 +235,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           // Obtener tags desde SOT
           const listaTags = await getListaTags(id);
           
+          // FIX v5.52.3: Log forense para debugging
+          logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][READ] GET /listas/:id', {
+            traceId,
+            lista_id: id,
+            tags_count: listaTags?.length || 0,
+            tags: listaTags || []
+          });
+          
           lista.classification = {
             category_key: listaWithClassification.category_key || null,
             subtype_key: listaWithClassification.subtype_key || null,
@@ -282,9 +298,22 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           // Actualizar tags usando TAG SOT GLOBAL v1
           if (classification.tags !== undefined) {
             try {
+              // FIX v5.52.3: Log forense para debugging
+              logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][WRITE] PUT /listas/:id', {
+                traceId,
+                lista_id: id,
+                tags_count: classification.tags?.length || 0,
+                tags: classification.tags || []
+              });
+              
               await updateListaTags(id, classification.tags, {
                 authCtx,
                 traceId
+              });
+              
+              logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][WRITE] Tags actualizados correctamente', {
+                traceId,
+                lista_id: id
               });
             } catch (tagsError) {
               logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
@@ -381,9 +410,22 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // Actualizar tags usando TAG SOT GLOBAL v1
         if (body.tags !== undefined) {
           try {
+            // FIX v5.52.3: Log forense para debugging
+            logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][WRITE] PUT /listas/:id/classification', {
+              traceId,
+              lista_id: id,
+              tags_count: body.tags?.length || 0,
+              tags: body.tags || []
+            });
+            
             await updateListaTags(id, body.tags, {
               authCtx,
               traceId
+            });
+            
+            logInfo('MasterApiAlquimiaGeneral', '[CLASSIFICATION][TAGS][WRITE] Tags actualizados correctamente', {
+              traceId,
+              lista_id: id
             });
           } catch (tagsError) {
             logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {

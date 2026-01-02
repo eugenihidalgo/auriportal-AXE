@@ -497,31 +497,49 @@ export async function updateListClassification(listId, classification) {
       });
     }
     
-    // Para tags: eliminar todos los tags existentes y reinsertar
-    await query(
-      `DELETE FROM transmutacion_lista_classifications tlc
-       USING pde_classification_terms ct
-       WHERE tlc.lista_id = $1
-         AND tlc.classification_term_id = ct.id
-         AND ct.type = 'tag'`,
-      [listId]
-    );
-    
-    // Insertar relaciones para tags
-    for (const tagTermId of termIds.tags) {
+    // Para tags: SOLO eliminar/reinsertar si tags está explícitamente definido
+    // FIX v5.52.0: Si tags es undefined, NO tocar los tags existentes
+    // Esto permite que updateListaTags() gestione los tags sin interferencia
+    if (tags !== undefined) {
+      // Eliminar todos los tags existentes y reinsertar
       await query(
-        `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
-         VALUES ($1, $2, now())
-         ON CONFLICT (lista_id, classification_term_id) DO NOTHING`,
-        [listId, tagTermId]
+        `DELETE FROM transmutacion_lista_classifications tlc
+         USING pde_classification_terms ct
+         WHERE tlc.lista_id = $1
+           AND tlc.classification_term_id = ct.id
+           AND ct.type = 'tag'`,
+        [listId]
       );
-    }
-    
-    if (termIds.tags.length > 0) {
-      logInfo('UpdateListClassification', '[CLASSIFICATION][ATTACH] tags', {
+      
+      logInfo('UpdateListClassification', '[CLASSIFICATION][TAG][WRITE] Tags eliminados (reemplazo)', {
         lista_id: listId,
-        type: 'tag',
+        tags_defined: true,
         tags_count: termIds.tags.length,
+        traceId
+      });
+      
+      // Insertar relaciones para tags
+      for (const tagTermId of termIds.tags) {
+        await query(
+          `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
+           VALUES ($1, $2, now())
+           ON CONFLICT (lista_id, classification_term_id) DO NOTHING`,
+          [listId, tagTermId]
+        );
+      }
+      
+      if (termIds.tags.length > 0) {
+        logInfo('UpdateListClassification', '[CLASSIFICATION][TAG][WRITE] Tags insertados', {
+          lista_id: listId,
+          type: 'tag',
+          tags_count: termIds.tags.length,
+          traceId
+        });
+      }
+    } else {
+      logInfo('UpdateListClassification', '[CLASSIFICATION][TAG][WRITE] Tags no modificados (undefined)', {
+        lista_id: listId,
+        tags_defined: false,
         traceId
       });
     }

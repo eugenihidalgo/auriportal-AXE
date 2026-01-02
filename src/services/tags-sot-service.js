@@ -8,6 +8,7 @@ import { query } from '../../database/pg.js';
 import { dispatchSignal } from '../core/signals/signal-dispatcher.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 import { ensureClassificationTerm } from '../core/classification/ensure-classification-term.js';
+import { getRequestId } from '../core/observability/request-context.js';
 
 /**
  * Actualiza los tags de una lista usando el sistema canónico
@@ -20,6 +21,7 @@ import { ensureClassificationTerm } from '../core/classification/ensure-classifi
  */
 export async function updateListaTags(listaId, tagValues, options = {}) {
   const { authCtx = {}, traceId = null } = options;
+  const finalTraceId = traceId || getRequestId();
 
   if (!listaId) {
     throw new Error('listaId es requerido');
@@ -28,6 +30,14 @@ export async function updateListaTags(listaId, tagValues, options = {}) {
   if (!Array.isArray(tagValues)) {
     throw new Error('tagValues debe ser un array');
   }
+
+  // FIX v5.52.3: Log forense al inicio
+  logInfo('TagsSotService', '[CLASSIFICATION][TAGS][WRITE] updateListaTags iniciado', {
+    lista_id: listaId,
+    tags_count: tagValues.length,
+    tags: tagValues,
+    traceId: finalTraceId
+  });
 
   // Obtener tags actuales de la lista
   const currentTagsResult = await query(
@@ -214,6 +224,16 @@ export async function updateListaTags(listaId, tagValues, options = {}) {
 
   const finalTags = finalTagsResult.rows.map(row => row.value);
 
+  // FIX v5.52.3: Log forense al finalizar
+  logInfo('TagsSotService', '[CLASSIFICATION][TAGS][WRITE] updateListaTags completado', {
+    lista_id: listaId,
+    tags_finales_count: finalTags.length,
+    tags_finales: finalTags,
+    added: toAdd.length,
+    removed: toRemove.length,
+    traceId: finalTraceId
+  });
+
   return {
     lista_id: listaId,
     tags: finalTags,
@@ -232,6 +252,8 @@ export async function getListaTags(listaId) {
     throw new Error('listaId es requerido');
   }
 
+  const traceId = getRequestId();
+
   const result = await query(
     `SELECT ct.value
      FROM pde_classification_terms ct
@@ -242,5 +264,15 @@ export async function getListaTags(listaId) {
     [listaId]
   );
 
-  return result.rows.map(row => row.value);
+  const tags = result.rows.map(row => row.value);
+
+  // FIX v5.52.3: Log forense para debugging
+  logInfo('TagsSotService', '[CLASSIFICATION][TAGS][READ] getListaTags', {
+    lista_id: listaId,
+    tags_count: tags.length,
+    tags: tags,
+    traceId
+  });
+
+  return tags;
 }
