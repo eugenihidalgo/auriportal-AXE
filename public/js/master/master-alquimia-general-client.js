@@ -222,7 +222,12 @@
       await loadListaCompleta(lista.id);
     }
 
-    // 3. Cargar items
+    // 3. Cargar tags disponibles si no están cargados
+    if (state.tagsAvailable.length === 0) {
+      await loadTagsAvailable();
+    }
+
+    // 4. Cargar items
     await loadItems(lista.id);
 
     // 5. Re-renderizar tabs (para marcar activa)
@@ -1312,28 +1317,168 @@
 
   /**
    * Obtiene las clasificaciones del editor
+   * NOTA: Tags ahora se manejan directamente con addTagToLista/removeTagFromLista
    */
   function getClasificacionesFromEditor() {
     const categorySelect = document.getElementById('editor-classification-category');
     const subtypeSelect = document.getElementById('editor-classification-subtype');
-    const tagsContainer = document.getElementById('editor-classification-tags');
     
     const category_key = categorySelect?.value || null;
     const subtype_key = subtypeSelect?.value || null;
     
-    const tags = [];
-    if (tagsContainer) {
-      const checkboxes = tagsContainer.querySelectorAll('input[type="checkbox"]:checked');
-      checkboxes.forEach(cb => {
-        if (cb.value) tags.push(cb.value);
-      });
-    }
+    // Tags se obtienen directamente de state.listaActiva.classification.tags
+    const tags = state.listaActiva?.classification?.tags || [];
     
     return {
       category_key: category_key || null,
       subtype_key: subtype_key || null,
       tags: tags.length > 0 ? tags : null
     };
+  }
+
+  /**
+   * Filtra y muestra el dropdown de autocomplete de tags
+   */
+  function filterAndShowTagsDropdown(searchTerm, dropdown, input) {
+    // Limpiar dropdown
+    while (dropdown.firstChild) {
+      dropdown.removeChild(dropdown.firstChild);
+    }
+
+    // Filtrar tags disponibles
+    const filtered = state.tagsAvailable.filter(tag => {
+      const normalized = tag.value.toLowerCase();
+      return normalized.includes(searchTerm);
+    });
+
+    // Añadir opción "Crear nuevo tag" si no hay coincidencias exactas
+    const exactMatch = filtered.find(tag => tag.value.toLowerCase() === searchTerm);
+    if (!exactMatch && searchTerm.length > 0) {
+      const createOption = createElement('div', 'px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm');
+      const createText = createElement('span', '', `➕ Crear "${searchTerm}"`);
+      createOption.appendChild(createText);
+      createOption.addEventListener('click', async () => {
+        await addTagToLista(searchTerm);
+        input.value = '';
+        dropdown.classList.add('hidden');
+      });
+      dropdown.appendChild(createOption);
+    }
+
+    // Añadir opciones filtradas
+    filtered.forEach(tag => {
+      const option = createElement('div', 'px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm');
+      option.textContent = tag.value;
+      option.addEventListener('click', async () => {
+        await addTagToLista(tag.value);
+        input.value = '';
+        dropdown.classList.add('hidden');
+      });
+      dropdown.appendChild(option);
+    });
+
+    if (dropdown.children.length > 0) {
+      dropdown.classList.remove('hidden');
+    } else {
+      dropdown.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Añade un tag a la lista actual
+   */
+  async function addTagToLista(tagValue) {
+    if (!state.listaActiva || !state.listaActiva.id) {
+      showError('No hay lista activa');
+      return;
+    }
+
+    const currentTags = state.listaActiva.classification?.tags || [];
+    
+    // Evitar duplicados (normalización por backend, pero check básico aquí)
+    if (currentTags.includes(tagValue)) {
+      showError('El tag ya está asociado a esta lista');
+      return;
+    }
+
+    try {
+      // Verificar si el tag existe, si no crearlo
+      let tagExists = state.tagsAvailable.find(t => t.value === tagValue);
+      
+      if (!tagExists) {
+        // Crear tag nuevo
+        const createResponse = await apiFetch('/master/api/tags', {
+          method: 'POST',
+          body: JSON.stringify({ value: tagValue })
+        });
+        
+        if (createResponse.ok && createResponse.tag) {
+          // Añadir a tags disponibles
+          state.tagsAvailable.push(createResponse.tag);
+          tagExists = createResponse.tag;
+        }
+      }
+
+      // Añadir tag a la lista
+      const newTags = [...currentTags, tagValue];
+      await apiFetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          classification: {
+            tags: newTags
+          }
+        })
+      });
+
+      // Actualizar estado local
+      if (!state.listaActiva.classification) {
+        state.listaActiva.classification = {};
+      }
+      state.listaActiva.classification.tags = newTags;
+
+      // Re-renderizar
+      renderListaContent();
+      showSuccess('Tag añadido');
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error añadiendo tag:', error);
+      showError('Error al añadir tag');
+    }
+  }
+
+  /**
+   * Elimina un tag de la lista actual
+   */
+  async function removeTagFromLista(tagValue) {
+    if (!state.listaActiva || !state.listaActiva.id) {
+      showError('No hay lista activa');
+      return;
+    }
+
+    const currentTags = state.listaActiva.classification?.tags || [];
+    const newTags = currentTags.filter(t => t !== tagValue);
+
+    try {
+      await apiFetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          classification: {
+            tags: newTags
+          }
+        })
+      });
+
+      // Actualizar estado local
+      if (state.listaActiva.classification) {
+        state.listaActiva.classification.tags = newTags;
+      }
+
+      // Re-renderizar
+      renderListaContent();
+      showSuccess('Tag eliminado');
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error eliminando tag:', error);
+      showError('Error al eliminar tag');
+    }
   }
 
   /**
