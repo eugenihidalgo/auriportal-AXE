@@ -14,6 +14,7 @@ import {
   getStudentsForItem, markCleanStudent, markCleanAll, incrementAll, adjustRemaining
 } from '../services/alquimia-general-service.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
+import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -196,24 +197,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         const listaWithClassification = await getListWithClassification(id);
         
         if (listaWithClassification) {
-          // Normalizar tags: puede ser null, array, o string JSON
-          let tagsArray = [];
-          if (listaWithClassification.tags) {
-            if (Array.isArray(listaWithClassification.tags)) {
-              tagsArray = listaWithClassification.tags;
-            } else if (typeof listaWithClassification.tags === 'string') {
-              try {
-                tagsArray = JSON.parse(listaWithClassification.tags);
-              } catch (e) {
-                tagsArray = [];
-              }
-            }
-          }
+          // Obtener tags desde SOT
+          const listaTags = await getListaTags(id);
           
           lista.classification = {
             category_key: listaWithClassification.category_key || null,
             subtype_key: listaWithClassification.subtype_key || null,
-            tags: tagsArray
+            tags: listaTags // Usar tags desde SOT
           };
         } else {
           // Si no hay clasificación en DB, devolver objeto vacío
@@ -260,14 +250,40 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       // Si se envió classification, actualizarla también
       if (body.classification !== undefined) {
         try {
-          await updateListClassification(id, body.classification);
+          const classification = body.classification;
+          
+          // Actualizar tags usando TAG SOT GLOBAL v1
+          if (classification.tags !== undefined) {
+            try {
+              await updateListaTags(id, classification.tags, {
+                authCtx,
+                traceId
+              });
+            } catch (tagsError) {
+              logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
+                traceId,
+                lista_id: id,
+                error: tagsError.message
+              });
+            }
+          }
+          
+          // Actualizar category_key y subtype_key (sistema legacy)
+          await updateListClassification(id, {
+            category_key: classification.category_key,
+            subtype_key: classification.subtype_key,
+            tags: undefined // Ya se actualizó arriba
+          });
+          
           // Recargar lista con clasificaciones actualizadas
           const listaWithClassification = await getListWithClassification(id);
+          const listaTags = await getListaTags(id); // Obtener tags desde SOT
+          
           if (listaWithClassification) {
             updated.classification = {
               category_key: listaWithClassification.category_key || null,
               subtype_key: listaWithClassification.subtype_key || null,
-              tags: listaWithClassification.tags || []
+              tags: listaTags // Usar tags desde SOT
             };
           }
         } catch (error) {
@@ -307,10 +323,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
         }
 
+        // Obtener tags desde SOT
+        const listaTags = await getListaTags(id);
+
         const classification = {
           category_key: listaWithClassification.category_key || null,
           subtype_key: listaWithClassification.subtype_key || null,
-          tags: listaWithClassification.tags || []
+          tags: listaTags // Usar tags desde SOT
         };
 
         return jsonSuccess({ classification }, traceId);
@@ -332,15 +351,40 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const body = await request.json();
 
       try {
-        const updated = await updateListClassification(id, body);
+        // Actualizar tags usando TAG SOT GLOBAL v1
+        if (body.tags !== undefined) {
+          try {
+            await updateListaTags(id, body.tags, {
+              authCtx,
+              traceId
+            });
+          } catch (tagsError) {
+            logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
+              traceId,
+              lista_id: id,
+              error: tagsError.message
+            });
+          }
+        }
+
+        // Actualizar category_key y subtype_key (sistema legacy)
+        const updated = await updateListClassification(id, {
+          category_key: body.category_key,
+          subtype_key: body.subtype_key,
+          tags: undefined // Ya se actualizó arriba
+        });
+        
         if (!updated) {
           return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
         }
 
+        // Obtener tags desde SOT
+        const listaTags = await getListaTags(id);
+
         const classification = {
           category_key: updated.category_key || null,
           subtype_key: updated.subtype_key || null,
-          tags: updated.tags || []
+          tags: listaTags // Usar tags desde SOT
         };
 
         return jsonSuccess({ classification }, traceId);

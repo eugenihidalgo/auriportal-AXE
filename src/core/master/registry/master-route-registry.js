@@ -125,6 +125,28 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API TAGS (TAG SOT GLOBAL v1)
+  // ============================================
+  {
+    key: 'master-api-tags',
+    path: '/master/api/tags',
+    type: 'api',
+    method: 'GET' // Múltiples métodos manejados en el handler
+  },
+  {
+    key: 'master-api-tags-id',
+    path: '/master/api/tags/:id',
+    type: 'api',
+    method: 'PATCH' // Múltiples métodos manejados en el handler
+  },
+  {
+    key: 'master-api-tags-id-deprecate',
+    path: '/master/api/tags/:id/deprecate',
+    type: 'api',
+    method: 'POST'
+  },
+  
+  // ============================================
   // RUTAS UI (Island)
   // ============================================
   {

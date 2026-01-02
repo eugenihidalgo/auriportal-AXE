@@ -51,6 +51,11 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   
+  // Tags API Handlers (TAG SOT GLOBAL v1)
+  'master-api-tags': () => import('../../../endpoints/master-api-tags.js'),
+  'master-api-tags-id': () => import('../../../endpoints/master-api-tags.js'),
+  'master-api-tags-id-deprecate': () => import('../../../endpoints/master-api-tags.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),
