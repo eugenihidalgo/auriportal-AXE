@@ -111,6 +111,33 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         
         const listas = await listListas({ onlyActive: true, tipo });
         
+        // FIX v5.50.1: Añadir classification a cada lista del listado
+        // Garantiza consistencia con GET /listas/:id
+        for (const lista of listas) {
+          try {
+            const listaWithClassification = await getListWithClassification(lista.id);
+            const listaTags = await getListaTags(lista.id);
+            
+            lista.classification = {
+              category_key: listaWithClassification?.category_key || null,
+              subtype_key: listaWithClassification?.subtype_key || null,
+              tags: listaTags || []
+            };
+          } catch (error) {
+            logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo classification para lista en listado', {
+              traceId,
+              lista_id: lista.id,
+              error: error.message
+            });
+            // Fail-open: continuar con classification vacía
+            lista.classification = {
+              category_key: null,
+              subtype_key: null,
+              tags: []
+            };
+          }
+        }
+        
         logInfo('MasterApiAlquimiaGeneral', 'GET /listas completado', { 
           traceId, 
           tipo, 
