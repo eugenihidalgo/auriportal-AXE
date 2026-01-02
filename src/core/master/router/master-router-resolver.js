@@ -109,6 +109,105 @@ export async function resolveMasterRoute(path, method = 'GET') {
     return null;
   }
   
+  // ═══════════════════════════════════════════════════════════════
+  // PRE-CHECK ESTRUCTURAL: BLINDAJE ABSOLUTO PARA /master/api/**
+  // ═══════════════════════════════════════════════════════════════
+  // MASTER API Strict Resolution v1: Hacer IMPOSIBLE que una ruta
+  // /master/api/** se resuelva como island o caiga en fallback.
+  // Este check se ejecuta ANTES de cualquier búsqueda de rutas.
+  if (normalizedPath.startsWith('/master/api/')) {
+    // Buscar ruta en registry (por path exacto o parámetros dinámicos)
+    let apiRoute = null;
+    
+    // Primero: búsqueda exacta
+    apiRoute = MASTER_ROUTES.find(r => {
+      const routePath = r.path.endsWith('/') && r.path !== '/' ? r.path.slice(0, -1) : r.path;
+      if (routePath === normalizedPath) {
+        if (r.method && r.method !== effectiveMethod) {
+          return false;
+        }
+        return true;
+      }
+      return false;
+    });
+    
+    // Segundo: búsqueda por parámetros dinámicos
+    if (!apiRoute) {
+      const routesWithParams = MASTER_ROUTES.filter(r => r.path.includes(':'));
+      const sortedRoutesWithParams = routesWithParams.sort((a, b) => b.path.length - a.path.length);
+      
+      apiRoute = sortedRoutesWithParams.find(r => {
+        const routePath = r.path.endsWith('/') && r.path !== '/' ? r.path.slice(0, -1) : r.path;
+        
+        if (r.method && r.method !== effectiveMethod) {
+          return false;
+        }
+        
+        if (routePath.includes(':')) {
+          const paramPattern = routePath.replace(/:[^/]+/g, '([^/]+)');
+          const regex = new RegExp(`^${paramPattern}$`);
+          if (regex.test(normalizedPath)) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+    }
+    
+    // Si NO existe en registry → ERROR HARD
+    if (!apiRoute) {
+      const error = new Error(`MASTER API route not registered: ${method} ${normalizedPath}`);
+      error.code = 'MASTER_API_ROUTE_NOT_REGISTERED';
+      error.details = {
+        path: normalizedPath,
+        method: effectiveMethod,
+        traceId,
+        message: `Ruta /master/api/** debe estar registrada en master-route-registry.js con type='api'`
+      };
+      logError('MasterRouter', 'MASTER API route not registered', error.details);
+      throw error;
+    }
+    
+    // Si existe pero type !== 'api' → ERROR HARD
+    if (apiRoute.type !== 'api') {
+      const error = new Error(`MASTER API route has wrong type: ${method} ${normalizedPath} (type=${apiRoute.type})`);
+      error.code = 'MASTER_API_ROUTE_WRONG_TYPE';
+      error.details = {
+        path: normalizedPath,
+        method: effectiveMethod,
+        routeKey: apiRoute.key,
+        routePath: apiRoute.path,
+        routeType: apiRoute.type,
+        expectedType: 'api',
+        traceId,
+        message: `Ruta /master/api/** debe tener type='api' en el registry`
+      };
+      logError('MasterRouter', 'MASTER API route wrong type', error.details);
+      throw error;
+    }
+    
+    // Si existe pero NO tiene handler mapeado → ERROR HARD
+    const handlerLoader = MASTER_HANDLER_MAP[apiRoute.key];
+    if (!handlerLoader) {
+      const error = new Error(`MASTER API handler not mapped: ${method} ${normalizedPath} (routeKey=${apiRoute.key})`);
+      error.code = 'MASTER_API_HANDLER_NOT_MAPPED';
+      error.details = {
+        path: normalizedPath,
+        method: effectiveMethod,
+        routeKey: apiRoute.key,
+        routePath: apiRoute.path,
+        traceId,
+        message: `Ruta /master/api/** debe estar mapeada en MASTER_HANDLER_MAP`
+      };
+      logError('MasterRouter', 'MASTER API handler not mapped', error.details);
+      throw error;
+    }
+    
+    // Si pasa todas las validaciones, continuar con resolución normal (pero ya sabemos que es API)
+    // Nota: El código siguiente también buscará la ruta, pero ahora ya sabemos que existe y es API
+  }
+  
   // Buscar ruta exacta primero
   let route = MASTER_ROUTES.find(r => {
     const routePath = r.path.endsWith('/') && r.path !== '/' ? r.path.slice(0, -1) : r.path;

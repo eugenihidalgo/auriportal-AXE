@@ -242,8 +242,30 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 ### Referencias
 - Documentación completa: `docs/MASTER_API_CONTRACTS.md`
+- Documentación Strict Resolution: `docs/MASTER_API_STRICT_RESOLUTION_V1.md`
 - Registry: `src/core/master/registry/master-route-registry.js`
 - Resolver: `src/core/master/router/master-router-resolver.js`
+  
+  - id: master-api-strict-resolution-v1
+    title: MASTER API Strict Resolution v1 - Blindaje absoluto
+    content: >
+      Cualquier endpoint /master/api/** DEBE cumplir obligatoriamente:
+      (a) estar registrado en master-route-registry.js con type='api'
+      (b) estar mapeado en MASTER_HANDLER_MAP
+      (c) pasar npm run check:master-api
+      PROHIBIDO:
+      - rutas /master/api/** con type='island'
+      - fallback a island para rutas API
+      - inferencia de handlers (debe ser explícito)
+      - rutas API sin registro en registry
+      - llamar /admin/api/** desde código MASTER
+      OBLIGATORIO:
+      - pre-check en resolver (fail-hard si no está registrada)
+      - assembly check en compile-time
+      - error hard inmediato si path empieza por /master/api/ y no está registrada
+      Referencias:
+      - docs/MASTER_API_STRICT_RESOLUTION_V1.md
+      - scripts/check-master-api-assembly.js
 
 
 
