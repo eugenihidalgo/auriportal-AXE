@@ -15,6 +15,8 @@ import { dirname, join } from 'path';
 import { getDefaultAuditRepo } from '../infra/repos/audit-repo-pg.js';
 import { getRequestId } from './observability/request-context.js';
 import { logError } from './observability/logger.js';
+// NOTA: requireAdminContext NO debe usar logInfo (solo logError para errores críticos)
+// Los guards solo lanzan errores o devuelven Responses, no loguean INFO
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -242,11 +244,8 @@ export async function requireAdminContext(request, env) {
       const redirectUrl = encodeURIComponent(redirectPath);
       const loginUrl = `/admin/login?redirect=${redirectUrl}`;
       
-      logInfo('AUTH', 'MASTER REQUIRE_ADMIN redirigiendo a login', { 
-        path: url.pathname,
-        redirectUrl: loginUrl,
-        traceId: getRequestId()
-      });
+      // NOTA: No usar logInfo aquí - requireAdminContext solo lanza errores o devuelve Responses
+      // El logging detallado se hace en console.log para diagnóstico
       console.log(`[AUTH][REDIRECT][MASTER] Redirigiendo desde requireAdminContext`, { 
         path: url.pathname,
         loginUrl,
@@ -270,7 +269,8 @@ export async function requireAdminContext(request, env) {
     }
     
     // Para ADMIN: mostrar login (comportamiento original)
-    logInfo('AUTH', 'ADMIN REQUIRE_ADMIN mostrando login', { traceId: getRequestId() });
+    // NOTA: No usar logInfo aquí - requireAdminContext solo lanza errores o devuelve Responses
+    console.log(`[AUTH][ADMIN] requireAdminContext mostrando login`, { traceId: getRequestId() });
     
     // Registrar evento de auditoría (sin datos sensibles)
     try {
