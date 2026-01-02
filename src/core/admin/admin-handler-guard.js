@@ -28,12 +28,46 @@ export function wrapAdminHandler(routeKey, handlerFn, routeContext = null) {
     const path = url.pathname;
     const method = request.method;
     
-    // Determinar si es API o page/island
+    // ═══════════════════════════════════════════════════════════════
+    // INVARIANTE ESTRUCTURAL 3: APIs NUNCA USAN renderAdminPage
+    // ═══════════════════════════════════════════════════════════════
+    // 
+    // REGLA DURA (NO NEGOCIABLE):
+    // Si una ruta empieza por /admin/api/:
+    //   - NO debe tener routeContext (que permite renderAdminPage)
+    //   - NO debe usar renderAdminPage()
+    //   - DEBE devolver JSON siempre
+    // 
+    // Esta verificación previene que APIs intenten renderizar HTML
+    // ═══════════════════════════════════════════════════════════════
     const isApi = path.startsWith('/admin/api');
     
-    // Establecer contexto para renderAdminPage si viene del resolver
+    if (isApi && routeContext) {
+      const error = new Error(`API route has routeContext (forbids renderAdminPage): ${method} ${path}`);
+      error.code = 'API_ROUTE_HAS_UI_CONTEXT';
+      error.details = {
+        path,
+        method,
+        routeKey,
+        traceId,
+        message: 'Ruta API no puede tener routeContext. Las APIs nunca usan renderAdminPage().'
+      };
+      
+      logErrorCanonical('admin_handler_error', {
+        route_key: routeKey,
+        path,
+        method,
+        error_type: 'API_ROUTE_HAS_UI_CONTEXT',
+        trace_id: traceId
+      });
+      
+      throw error;
+    }
+    
+    // Establecer contexto para renderAdminPage SOLO si NO es API
+    // El contexto permite que renderAdminPage() valide que se llama desde un handler resuelto
     let contextWasSet = false;
-    if (routeContext) {
+    if (routeContext && !isApi) {
       const { _setRenderAdminPageCallContext, _clearRenderAdminPageCallContext } = await import('../admin/admin-page-renderer.js');
       _setRenderAdminPageCallContext(routeContext);
       contextWasSet = true;
@@ -103,6 +137,55 @@ export function wrapAdminHandler(routeKey, handlerFn, routeContext = null) {
               </div>
             `,
             activePath: path
+          });
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // INVARIANTE ESTRUCTURAL 4: APIs SIEMPRE DEVUELVEN JSON
+      // ═══════════════════════════════════════════════════════════════
+      // 
+      // REGLA DURA (NO NEGOCIABLE):
+      // Si la ruta es /admin/api/*:
+      //   - Content-Type DEBE ser application/json
+      //   - El body DEBE ser JSON válido
+      //   - NUNCA HTML, NUNCA text/html
+      // 
+      // Esta validación previene que APIs devuelvan HTML por error
+      // ═══════════════════════════════════════════════════════════════
+      if (isApi) {
+        const contentType = result.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const error = new Error(`API route returned non-JSON content-type: ${contentType}`);
+          error.code = 'API_NON_JSON_RESPONSE';
+          error.details = {
+            path,
+            method,
+            routeKey,
+            contentType,
+            traceId,
+            message: 'Ruta API debe devolver Content-Type: application/json'
+          };
+          
+          logErrorCanonical('admin_handler_error', {
+            route_key: routeKey,
+            path,
+            method,
+            error_type: 'API_NON_JSON_RESPONSE',
+            content_type: contentType,
+            trace_id: traceId
+          });
+          
+          // Forzar respuesta JSON de error
+          return toErrorResponse({
+            code: 'API_NON_JSON_RESPONSE',
+            message: 'Error interno del servidor',
+            trace_id: traceId,
+            status: 500,
+            details: process.env.APP_ENV !== 'prod' ? {
+              original_content_type: contentType,
+              message: 'API devolvió respuesta no-JSON. Esto viola el contrato API.'
+            } : undefined
           });
         }
       }

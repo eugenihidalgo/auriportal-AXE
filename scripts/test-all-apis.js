@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 import { verificarAcceso, obtenerDatosCompletosPersona } from '../src/services/kajabi.js';
 import { verificarAccesoDesdeSQL, sincronizarEmailKajabiASQL, existeEstudiante } from '../src/services/kajabi-sync-sql.js';
 import { findStudentByEmail, getOrCreateStudent } from '../src/modules/student.js';
-import { getDatabase, students } from '../database/db.js';
-import { initDatabase } from '../database/db.js';
+// SQLite eliminado - PostgreSQL es el único Source of Truth
+// import { query } from '../database/pg.js';
 
 dotenv.config();
 
@@ -123,24 +123,28 @@ async function testKajabiAPI(email) {
 }
 
 async function testSQLDatabase() {
-  logSection('TEST 2: BASE DE DATOS SQL');
+  logSection('TEST 2: BASE DE DATOS POSTGRESQL');
   
   try {
-    logTest('Inicializar Base de Datos');
-    const db = initDatabase();
-    logSuccess('Base de datos inicializada');
+    logTest('Conectar a PostgreSQL');
+    const { query } = await import('../database/pg.js');
+    logSuccess('PostgreSQL conectado');
     
     logTest('Consultar Tabla students');
-    const stmt = db.prepare('SELECT COUNT(*) as total FROM students');
-    const count = stmt.get();
-    logInfo(`Total estudiantes en BD: ${count.total}`);
+    const result = await query('SELECT COUNT(*) as total FROM students');
+    const count = parseInt(result.rows[0]?.total || 0, 10);
+    logInfo(`Total estudiantes en BD: ${count}`);
     
     logTest('Consultar Últimos 5 estudiantes');
-    const stmt2 = db.prepare('SELECT email, tiene_mundo_de_luz, sync_updated_at FROM students ORDER BY updated_at DESC LIMIT 5');
-    const recent = stmt2.all();
-    if (recent.length > 0) {
-      recent.forEach((s, i) => {
-        logInfo(`${i + 1}. ${s.email} - Mundo de Luz: ${s.tiene_mundo_de_luz ? 'SÍ' : 'NO'}`);
+    const recentResult = await query(`
+      SELECT email, estado_suscripcion, created_at 
+      FROM students 
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `);
+    if (recentResult.rows.length > 0) {
+      recentResult.rows.forEach((s, i) => {
+        logInfo(`${i + 1}. ${s.email} - Estado: ${s.estado_suscripcion || 'N/A'}`);
       });
     } else {
       logWarning('No hay estudiantes en la base de datos');
@@ -148,7 +152,7 @@ async function testSQLDatabase() {
     
     return true;
   } catch (err) {
-    logError(`Error en Base de Datos SQL: ${err.message}`);
+    logError(`Error en Base de Datos PostgreSQL: ${err.message}`);
     console.error(err.stack);
     return false;
   }

@@ -210,3 +210,7 @@ psql -U postgres -d aurelinportal -f database/migrations/20241228_create_interac
 - ✅ Feature flags handlers exportados correctamente
 - ✅ Runtime guard whitelist aplicada
 
+
+
+
+

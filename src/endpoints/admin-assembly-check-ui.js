@@ -205,26 +205,8 @@ export default async function adminAssemblyCheckUIHandler(request, env, ctx) {
                     <th style="padding: 0.75rem; text-align: left; font-weight: 600; font-size: 0.875rem;">Duración</th>
                   </tr>
                 </thead>
-                <tbody>
-                  ${checksWithStatus.map(check => {
-                    const statusColor = check.last_status === 'OK' ? '#10b981' : check.last_status === 'WARN' ? '#f59e0b' : check.last_status === 'BROKEN' ? '#ef4444' : '#6b7280';
-                    const statusText = check.last_status === 'OK' ? '✅ OK' : check.last_status === 'WARN' ? '⚠️ WARN' : check.last_status === 'BROKEN' ? '❌ BROKEN' : '⏸️ Sin ejecutar';
-                    const duration = check.last_duration_ms ? `${check.last_duration_ms}ms` : '—';
-                    return `
-                      <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 0.75rem; font-family: monospace; font-size: 0.875rem;">${check.ui_key}</td>
-                        <td style="padding: 0.75rem; font-size: 0.875rem;">
-                          <a href="${check.route_path}" target="_blank" style="color: #3b82f6; text-decoration: none;">${check.route_path}</a>
-                        </td>
-                        <td style="padding: 0.75rem; font-size: 0.875rem;">${check.feature_flag_key || '—'}</td>
-                        <td style="padding: 0.75rem; text-align: center;">${check.expected_sidebar ? '✅' : '—'}</td>
-                        <td style="padding: 0.75rem; text-align: center;">
-                          <span style="color: ${statusColor}; font-weight: 500;">${statusText}</span>
-                        </td>
-                        <td style="padding: 0.75rem; font-size: 0.875rem; color: #6b7280; font-family: monospace;">${duration}</td>
-                      </tr>
-                    `;
-                  }).join('')}
+                <tbody id="assembly-checks-tbody">
+                  <!-- Se llena dinámicamente con DOM API -->
                 </tbody>
               </table>
             </div>
@@ -386,13 +368,101 @@ export default async function adminAssemblyCheckUIHandler(request, env, ctx) {
             btn.textContent = '🔄 Inicializar Checks';
           }
         });
+        
+        // Renderizar tabla de checks usando DOM API (sin template literals con datos)
+        function renderChecksTable(checks) {
+          const tbody = document.getElementById('assembly-checks-tbody');
+          if (!tbody) return;
+          
+          tbody.textContent = '';
+          
+          if (!checks || checks.length === 0) {
+            return;
+          }
+          
+          checks.forEach(check => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #e5e7eb';
+            
+            // UI Key
+            const tdKey = document.createElement('td');
+            tdKey.style.padding = '0.75rem';
+            tdKey.style.fontFamily = 'monospace';
+            tdKey.style.fontSize = '0.875rem';
+            tdKey.textContent = check.ui_key || '';
+            tr.appendChild(tdKey);
+            
+            // Route Path
+            const tdPath = document.createElement('td');
+            tdPath.style.padding = '0.75rem';
+            tdPath.style.fontSize = '0.875rem';
+            const link = document.createElement('a');
+            link.href = check.route_path || '#';
+            link.target = '_blank';
+            link.style.color = '#3b82f6';
+            link.style.textDecoration = 'none';
+            link.textContent = check.route_path || '';
+            tdPath.appendChild(link);
+            tr.appendChild(tdPath);
+            
+            // Feature Flag
+            const tdFlag = document.createElement('td');
+            tdFlag.style.padding = '0.75rem';
+            tdFlag.style.fontSize = '0.875rem';
+            tdFlag.textContent = check.feature_flag_key || '—';
+            tr.appendChild(tdFlag);
+            
+            // Sidebar
+            const tdSidebar = document.createElement('td');
+            tdSidebar.style.padding = '0.75rem';
+            tdSidebar.style.textAlign = 'center';
+            tdSidebar.textContent = check.expected_sidebar ? '✅' : '—';
+            tr.appendChild(tdSidebar);
+            
+            // Status
+            const tdStatus = document.createElement('td');
+            tdStatus.style.padding = '0.75rem';
+            tdStatus.style.textAlign = 'center';
+            const statusColor = check.last_status === 'OK' ? '#10b981' : check.last_status === 'WARN' ? '#f59e0b' : check.last_status === 'BROKEN' ? '#ef4444' : '#6b7280';
+            const statusText = check.last_status === 'OK' ? '✅ OK' : check.last_status === 'WARN' ? '⚠️ WARN' : check.last_status === 'BROKEN' ? '❌ BROKEN' : '⏸️ Sin ejecutar';
+            const span = document.createElement('span');
+            span.style.color = statusColor;
+            span.style.fontWeight = '500';
+            span.textContent = statusText;
+            tdStatus.appendChild(span);
+            tr.appendChild(tdStatus);
+            
+            // Duration
+            const tdDuration = document.createElement('td');
+            tdDuration.style.padding = '0.75rem';
+            tdDuration.style.fontSize = '0.875rem';
+            tdDuration.style.color = '#6b7280';
+            tdDuration.style.fontFamily = 'monospace';
+            tdDuration.textContent = check.last_duration_ms ? check.last_duration_ms + 'ms' : '—';
+            tr.appendChild(tdDuration);
+            
+            tbody.appendChild(tr);
+          });
+        }
+        
+        // Renderizar checks al cargar la página
+        const checksData = ${JSON.stringify(checksWithStatus)};
+        renderChecksTable(checksData);
       </script>
     `;
     
     return renderAdminPage({
       title: 'Assembly Check System',
       contentHtml,
-      activePath
+      activePath,
+      acsRuntimeContract: {
+        ui_key: 'assembly-check',
+        required_endpoints: [
+          '/admin/api/assembly-check',
+          '/admin/api/assembly-check/run'
+        ],
+        strict_mode: true
+      }
     });
   } catch (error) {
     logError('AssemblyCheckUI', 'Error renderizando UI', {

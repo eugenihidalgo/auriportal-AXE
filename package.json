@@ -25,6 +25,7 @@
     "validate:layout-registry": "node src/core/admin/layout/validate-layout-registry-cli.js",
     "validate:master-layout-registry": "node src/core/master/registry/validate-master-layout-registry.js",
     "check:master-ui": "node scripts/master-ui-assembly-check.js",
+    "check:assets-master": "node scripts/check-assets-master.js",
     "mcp:google-workspace": "node mcp-server/google-workspace.js",
     "mcp:test": "node mcp-server/test-connection.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",

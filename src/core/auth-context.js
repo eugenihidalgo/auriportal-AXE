@@ -189,13 +189,28 @@ export async function requireAdminContext(request, env) {
   console.log('[ADMIN AUTH QA] requireAdminContext acepta la sesión:', isValidSession);
   
   if (!isValidSession) {
-    // Si no hay sesión válida → pantalla de login admin
-    console.log(`⚠️  [auth-context] No hay sesión admin válida, mostrando login`);
+    // Si no hay sesión válida → redirigir a login con redirect (si es contexto MASTER)
+    console.log(`⚠️  [auth-context] No hay sesión admin válida`);
     
-    // Si está intentando acceder a /admin/login o /admin/logout, permitir (evitar loop)
+    // FASE 2: BLINDAJE ABSOLUTO - Rutas públicas NUNCA protegidas
     const url = new URL(request.url);
-    if (url.pathname === '/admin/login' || url.pathname === '/admin/logout') {
-      // Permitir acceso a /admin/login y /admin/logout sin autenticación
+    const publicPaths = [
+      '/admin/login',
+      '/admin/logout',
+      '/admin/assets',
+      '/admin/public'
+    ];
+    
+    const isPublicPath = publicPaths.some(publicPath => 
+      url.pathname === publicPath || url.pathname.startsWith(publicPath + '/')
+    );
+    
+    if (isPublicPath) {
+      // BYPASS TOTAL: No redirect, no throw, no logs de auth, return ctx público
+      console.log(`[AUTH][BYPASS][ADMIN_LOGIN] Ruta pública detectada en requireAdminContext, bypass total`, { 
+        path: url.pathname,
+        traceId: getRequestId()
+      });
       return {
         user: null,
         isAdmin: false,
@@ -204,6 +219,58 @@ export async function requireAdminContext(request, env) {
         requestId: getRequestId()
       };
     }
+    
+    // Detectar si es contexto MASTER (por path, no por host, porque requireAdminContext se llama desde handlers)
+    const isMasterPath = url.pathname.startsWith('/master/') || url.pathname === '/master';
+    
+    if (isMasterPath) {
+      // Para MASTER: redirigir a login con redirect
+      // FASE 3: REDIRECT SEGURO - Nunca permitir redirect a /admin/login
+      let redirectPath = url.pathname + (url.search || '');
+      
+      // Validar que redirect no apunte a login
+      if (redirectPath === '/admin/login' || redirectPath.startsWith('/admin/login?')) {
+        // Si redirect apunta a login, usar /master como fallback seguro
+        redirectPath = '/master';
+        console.log(`[AUTH][REDIRECT][MASTER] Redirect inseguro detectado en requireAdminContext, usando fallback`, { 
+          original: url.pathname,
+          fallback: redirectPath,
+          traceId: getRequestId()
+        });
+      }
+      
+      const redirectUrl = encodeURIComponent(redirectPath);
+      const loginUrl = `/admin/login?redirect=${redirectUrl}`;
+      
+      logInfo('AUTH', 'MASTER REQUIRE_ADMIN redirigiendo a login', { 
+        path: url.pathname,
+        redirectUrl: loginUrl,
+        traceId: getRequestId()
+      });
+      console.log(`[AUTH][REDIRECT][MASTER] Redirigiendo desde requireAdminContext`, { 
+        path: url.pathname,
+        loginUrl,
+        traceId: getRequestId()
+      });
+      
+      // Obtener URL absoluta para redirect
+      let absoluteLoginUrl;
+      try {
+        absoluteLoginUrl = `${url.protocol}//${url.host}${loginUrl}`;
+      } catch (error) {
+        absoluteLoginUrl = loginUrl;
+      }
+      
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': absoluteLoginUrl
+        }
+      });
+    }
+    
+    // Para ADMIN: mostrar login (comportamiento original)
+    logInfo('AUTH', 'ADMIN REQUIRE_ADMIN mostrando login', { traceId: getRequestId() });
     
     // Registrar evento de auditoría (sin datos sensibles)
     try {

@@ -244,16 +244,17 @@
   </div>
 </div>
 
-<!-- Modal ver alumnos (stub por ahora) -->
-<div id="modal-alumnos" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+<!-- Modal ver alumnos -->
+<div id="modal-alumnos" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" data-modal-backdrop>
+  <div class="bg-slate-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" data-modal-content>
     <div class="flex justify-between items-center mb-4">
       <h2 id="modal-alumnos-titulo" class="text-2xl font-bold text-white"></h2>
       <button 
         id="btn-cerrar-modal-alumnos"
-        class="text-slate-400 hover:text-white text-2xl"
+        class="text-slate-400 hover:text-white text-2xl font-bold w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+        title="Cerrar (ESC)"
       >
-        ×
+        ❌
       </button>
     </div>
     <div id="modal-alumnos-content">
@@ -891,8 +892,14 @@
       return;
     }
     
+    const listaIdNum = parseInt(listaId);
+    if (isNaN(listaIdNum) || listaIdNum <= 0) {
+      alert('ID de lista inválido');
+      return;
+    }
+    
     const itemData = {
-      lista_id: parseInt(listaId),
+      lista_id: listaIdNum,
       nombre: nombre,
       nivel: nivel,
       descripcion: descripcion
@@ -914,10 +921,12 @@
         body: JSON.stringify(itemData)
       });
       
-      if (!response.ok) throw new Error('Error creando item');
-      
       const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error || `Error ${response.status}: ${response.statusText}`;
+        throw new Error(errorMsg);
+      }
       
       // Mantener nivel (sticky)
       if (nivel) {
@@ -993,18 +1002,20 @@
     }
   }
 
-  // OPERACIONES MASTER (stub/implementación básica)
+  // OPERACIONES MASTER - Usar nuevo endpoint canónico
   async function verAlumnos(itemId, tipo) {
     try {
-      const endpoint = tipo === 'recurrente'
-        ? '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/students-recurrent'
-        : '/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/students-one-time';
+      // Usar nuevo endpoint canónico de Student SOT v1
+      const endpoint = '/admin/api/transmutations/' + encodeURIComponent(itemId) + '/students?product_key=pde';
       
       const response = await fetch(endpoint);
-      if (!response.ok) throw new Error('Error cargando alumnos');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error('Error cargando alumnos: ' + errorText);
+      }
       
       const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      if (!data.ok) throw new Error(data.error || 'Error desconocido');
       
       mostrarModalAlumnos(itemId, tipo, data);
     } catch (error) {
@@ -1014,44 +1025,83 @@
   }
 
   // MOSTRAR MODAL ALUMNOS - DOM API (sin concatenación de strings)
+  // Usa nuevo endpoint canónico con resolveTemporalState
   function mostrarModalAlumnos(itemId, tipo, data) {
     const modal = document.getElementById('modal-alumnos');
     const titulo = document.getElementById('modal-alumnos-titulo');
     const content = document.getElementById('modal-alumnos-content');
     
-    const item = data.item || {};
-    titulo.textContent = 'Alumnos: ' + (item.nombre || 'Item');
+    if (!modal || !titulo || !content) {
+      console.error('Elementos del modal no encontrados');
+      return;
+    }
+    
+    // Usar datos del nuevo endpoint canónico
+    const students = data.students || [];
+    const recurrenceDays = data.recurrence_days || 30;
+    
+    // Agrupar por estado temporal
+    const limpio = [];
+    const pendiente = [];
+    const critico = [];
+    
+    students.forEach(s => {
+      if (s.temporal_state === 'clean') {
+        limpio.push(s);
+      } else if (s.temporal_state === 'pending') {
+        pendiente.push(s);
+      } else if (s.temporal_state === 'critical') {
+        critico.push(s);
+      }
+    });
+    
+    // Conteo total derivado de datos (no del DOM)
+    const totalAlumnos = limpio.length + pendiente.length + critico.length;
+    titulo.textContent = 'Alumnos: ' + totalAlumnos + ' total';
     
     // Limpiar content
     content.textContent = '';
     
-    if (tipo === 'recurrente') {
-      const { limpio, pendiente, critico } = data.states || {};
-      const container = document.createElement('div');
-      container.className = 'space-y-4';
+    // Si no hay datos, mostrar error
+    if (students.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-slate-400 text-sm';
+      p.textContent = 'No hay alumnos registrados para este ítem.';
+      content.appendChild(p);
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+      return;
+    }
+    
+    const container = document.createElement('div');
+    container.className = 'space-y-4';
       
       // Sección Limpio
       const divLimpio = document.createElement('div');
       const h3Limpio = document.createElement('h3');
       h3Limpio.className = 'text-green-400 font-semibold mb-2';
-      h3Limpio.textContent = '✅ Limpio (' + (limpio?.length || 0) + ')';
+      h3Limpio.textContent = '✅ Limpio (' + limpio.length + ')';
       divLimpio.appendChild(h3Limpio);
       
       const divLimpioItems = document.createElement('div');
       divLimpioItems.className = 'space-y-1';
-      if (limpio && limpio.length > 0) {
+      if (limpio.length > 0) {
         limpio.forEach(s => {
           const divItem = document.createElement('div');
           divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
           
-          const spanEmail = document.createElement('span');
-          spanEmail.className = 'text-white text-sm';
-          spanEmail.textContent = s.student_email || '';
-          divItem.appendChild(spanEmail);
+          const spanName = document.createElement('span');
+          spanName.className = 'text-white text-sm';
+          spanName.textContent = s.student_name || 'Sin nombre';
+          divItem.appendChild(spanName);
           
           const spanDias = document.createElement('span');
           spanDias.className = 'text-slate-400 text-xs';
-          spanDias.textContent = (s.days_since_last_clean || 0) + ' días';
+          const daysText = s.days_since_last_clean !== null 
+            ? s.days_since_last_clean + ' días'
+            : 'Nunca limpiado';
+          spanDias.textContent = daysText;
           divItem.appendChild(spanDias);
           
           divLimpioItems.appendChild(divItem);
@@ -1069,30 +1119,37 @@
       const divPendiente = document.createElement('div');
       const h3Pendiente = document.createElement('h3');
       h3Pendiente.className = 'text-yellow-400 font-semibold mb-2';
-      h3Pendiente.textContent = '⏳ Pendiente (' + (pendiente?.length || 0) + ')';
+      h3Pendiente.textContent = '⏳ Pendiente (' + pendiente.length + ')';
       divPendiente.appendChild(h3Pendiente);
       
       const divPendienteItems = document.createElement('div');
       divPendienteItems.className = 'space-y-1';
-      if (pendiente && pendiente.length > 0) {
+      if (pendiente.length > 0) {
         pendiente.forEach(s => {
           const divItem = document.createElement('div');
           divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
           
-          const spanEmail = document.createElement('span');
-          spanEmail.className = 'text-white text-sm';
-          spanEmail.textContent = s.student_email || '';
-          divItem.appendChild(spanEmail);
+          const spanName = document.createElement('span');
+          spanName.className = 'text-white text-sm';
+          spanName.textContent = s.student_name || 'Sin nombre';
+          divItem.appendChild(spanName);
+          
+          const spanDias = document.createElement('span');
+          spanDias.className = 'text-yellow-400 text-xs mr-2';
+          spanDias.textContent = s.days_since_last_clean !== null 
+            ? s.days_since_last_clean + ' días'
+            : 'Nunca limpiado';
+          divItem.appendChild(spanDias);
           
           const btn = document.createElement('button');
           btn.className = 'btn-marcar-limpio-individual px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded';
           btn.setAttribute('data-item-id', String(itemId));
-          btn.setAttribute('data-student', s.student_email || '');
+          btn.setAttribute('data-student-id', String(s.student_id));
           btn.textContent = 'Marcar Limpio';
           btn.addEventListener('click', function() {
             const itemId = this.getAttribute('data-item-id');
-            const studentEmail = this.getAttribute('data-student');
-            marcarLimpioIndividual(itemId, studentEmail);
+            const studentId = this.getAttribute('data-student-id');
+            marcarLimpioIndividual(itemId, studentId);
           });
           divItem.appendChild(btn);
           
@@ -1111,30 +1168,37 @@
       const divCritico = document.createElement('div');
       const h3Critico = document.createElement('h3');
       h3Critico.className = 'text-red-400 font-semibold mb-2';
-      h3Critico.textContent = '🚨 Crítico (' + (critico?.length || 0) + ')';
+      h3Critico.textContent = '🚨 Crítico (' + critico.length + ')';
       divCritico.appendChild(h3Critico);
       
       const divCriticoItems = document.createElement('div');
       divCriticoItems.className = 'space-y-1';
-      if (critico && critico.length > 0) {
+      if (critico.length > 0) {
         critico.forEach(s => {
           const divItem = document.createElement('div');
           divItem.className = 'bg-slate-700 p-2 rounded flex justify-between items-center';
           
-          const spanEmail = document.createElement('span');
-          spanEmail.className = 'text-white text-sm';
-          spanEmail.textContent = s.student_email || '';
-          divItem.appendChild(spanEmail);
+          const spanName = document.createElement('span');
+          spanName.className = 'text-white text-sm';
+          spanName.textContent = s.student_name || 'Sin nombre';
+          divItem.appendChild(spanName);
+          
+          const spanDias = document.createElement('span');
+          spanDias.className = 'text-red-400 text-xs mr-2';
+          spanDias.textContent = s.days_since_last_clean !== null 
+            ? s.days_since_last_clean + ' días'
+            : 'Nunca limpiado';
+          divItem.appendChild(spanDias);
           
           const btn = document.createElement('button');
           btn.className = 'btn-marcar-limpio-individual px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded';
           btn.setAttribute('data-item-id', String(itemId));
-          btn.setAttribute('data-student', s.student_email || '');
+          btn.setAttribute('data-student-id', String(s.student_id));
           btn.textContent = 'Marcar Limpio';
           btn.addEventListener('click', function() {
             const itemId = this.getAttribute('data-item-id');
-            const studentEmail = this.getAttribute('data-student');
-            marcarLimpioIndividual(itemId, studentEmail);
+            const studentId = this.getAttribute('data-student-id');
+            marcarLimpioIndividual(itemId, studentId);
           });
           divItem.appendChild(btn);
           
@@ -1150,92 +1214,35 @@
       container.appendChild(divCritico);
       
       content.appendChild(container);
-    } else {
-      // Una vez
-      const states = data.states || [];
-      const container = document.createElement('div');
-      container.className = 'space-y-2';
-      
-      if (states && states.length > 0) {
-        states.forEach(s => {
-          const divItem = document.createElement('div');
-          divItem.className = 'bg-slate-700 p-3 rounded flex justify-between items-center';
-          
-          const divInfo = document.createElement('div');
-          const divNombre = document.createElement('div');
-          divNombre.className = 'text-white font-medium';
-          divNombre.textContent = s.student_email || '';
-          divInfo.appendChild(divNombre);
-          
-          const divStats = document.createElement('div');
-          divStats.className = 'text-slate-400 text-sm';
-          const spanRemaining = document.createElement('span');
-          spanRemaining.id = 'remaining-' + String(s.student_email || '').replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
-          spanRemaining.textContent = String(s.remaining || 0);
-          divStats.textContent = 'Restantes: ';
-          divStats.appendChild(spanRemaining);
-          divStats.appendChild(document.createTextNode(' | Completadas: ' + (s.completed || 0)));
-          divInfo.appendChild(divStats);
-          divItem.appendChild(divInfo);
-          
-          const divActions = document.createElement('div');
-          divActions.className = 'flex gap-2 items-center';
-          
-          const input = document.createElement('input');
-          input.type = 'number';
-          input.id = 'input-remaining-' + String(s.student_email || '').replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
-          input.value = String(s.remaining || 0);
-          input.min = '0';
-          input.className = 'w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm';
-          divActions.appendChild(input);
-          
-          const btn = document.createElement('button');
-          btn.className = 'btn-ajustar-remaining px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded';
-          btn.setAttribute('data-item-id', String(itemId));
-          btn.setAttribute('data-student', s.student_email || '');
-          btn.textContent = 'Ajustar';
-          btn.addEventListener('click', function() {
-            const itemId = this.getAttribute('data-item-id');
-            const studentEmail = this.getAttribute('data-student');
-            const inputId = 'input-remaining-' + String(studentEmail).replace(/[^a-zA-Z0-9]/g, '_') + '-' + String(itemId);
-            const inputEl = document.getElementById(inputId);
-            const newRemaining = parseInt(inputEl ? inputEl.value : '0') || 0;
-            ajustarRemaining(itemId, studentEmail, newRemaining);
-          });
-          divActions.appendChild(btn);
-          
-          divItem.appendChild(divActions);
-          container.appendChild(divItem);
-        });
-      } else {
-        const p = document.createElement('p');
-        p.className = 'text-slate-500 text-center py-4';
-        p.textContent = 'No hay alumnos con estado registrado';
-        container.appendChild(p);
-      }
-      
-      content.appendChild(container);
-    }
     
-    modal.classList.remove('hidden');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
   }
-
+  
+  // Función global para cerrar modal de alumnos
   function cerrarModalAlumnos() {
-    document.getElementById('modal-alumnos').classList.add('hidden');
+    const modalEl = document.getElementById('modal-alumnos');
+    if (modalEl) {
+      modalEl.classList.add('hidden');
+    }
   }
 
-  async function marcarLimpioIndividual(itemId, studentEmail) {
+  async function marcarLimpioIndividual(itemId, studentId) {
     try {
-      const response = await fetch('/admin/pde/transmutaciones-energeticas/api/items/' + encodeURIComponent(itemId) + '/master/mark-clean-student', {
+      // Usar nuevo endpoint canónico
+      const response = await fetch('/admin/api/students/' + encodeURIComponent(studentId) + '/domains/transmutation/items/' + encodeURIComponent(itemId) + '/clean?product_key=pde', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_email: studentEmail })
+        headers: { 'Content-Type': 'application/json' }
       });
       
-      if (!response.ok) throw new Error('Error marcando limpio');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error marcando limpio');
+      }
       
       const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'Error desconocido');
+      if (!data.ok) throw new Error(data.error || 'Error desconocido');
       
       // Recargar modal
       const tipo = listaActiva?.tipo || tipoActivo;
@@ -1637,21 +1644,50 @@
       alert('Error: ' + error.message);
     }
     
-    // Modal alumnos
+    // Modal alumnos - Inicializar cierre
     const btnCerrarModal = document.getElementById('btn-cerrar-modal-alumnos');
     if (btnCerrarModal) {
       btnCerrarModal.addEventListener('click', cerrarModalAlumnos);
     }
+    
+    // Cerrar modal con ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('modal-alumnos');
+        if (modal && !modal.classList.contains('hidden')) {
+          cerrarModalAlumnos();
+        }
+      }
+    });
+    
+    // Cerrar modal al hacer click fuera (en el backdrop)
+    const modal = document.getElementById('modal-alumnos');
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        // Si el click es en el backdrop (no en el contenido)
+        // Si el click es en el backdrop (el modal mismo, no en el contenido interno)
+        if (e.target === modal || e.target.hasAttribute('data-modal-backdrop')) {
+          cerrarModalAlumnos();
+        }
+      });
+    }
   }
 
   // HELPERS
+  // escapeHtml es seguro: solo escapa texto, no inserta contenido dinámico
   function escapeHtml(text) {
+    if (text === null || text === undefined) {
+      return '';
+    }
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
   }
 
   function escapeAttr(text) {
+    if (text === null || text === undefined) {
+      return '';
+    }
     return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
   }
 })();

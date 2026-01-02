@@ -9,7 +9,7 @@
  *   npm run check:master-ui
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { MASTER_ROUTES, validateMasterRouteRegistry } from '../src/core/master/registry/master-route-registry.js';
@@ -22,11 +22,15 @@ const checks = {
   routing: { passed: false, errors: [] },
   layout_slots: { passed: false, errors: [] },
   sidebar_dom_api: { passed: false, errors: [] },
+  sidebar_registry: { passed: false, errors: [] },
+  sidebar_header: { passed: false, errors: [] },
+  sidebar_no_admin: { passed: false, errors: [] },
   scripts_once: { passed: false, errors: [] },
   registry: { passed: false, errors: [] },
   api_json: { passed: false, errors: [] },
   public_assets: { passed: false, errors: [] },
-  entry_gate: { passed: false, errors: [] }
+  entry_gate: { passed: false, errors: [] },
+  required_scripts: { passed: false, errors: [], warnings: [] }
 };
 
 // Check 1: Registry válido
@@ -90,12 +94,18 @@ try {
 // Check 4: Sidebar usa DOM API (no innerHTML)
 console.log('[Assembly Check] Verificando sidebar DOM API...');
 try {
-  const sidebarPath = join(ROOT, 'src/core/master/sidebar/master-sidebar-client.js');
+  const sidebarPath = join(ROOT, 'public/js/master/master-sidebar-client.js');
   const sidebarContent = readFileSync(sidebarPath, 'utf-8');
   
   // Verificar que NO usa innerHTML
   if (sidebarContent.includes('.innerHTML') && !sidebarContent.includes('// PROHIBIDO')) {
     checks.sidebar_dom_api.errors.push('Sidebar usa innerHTML (prohibido)');
+  }
+  
+  // Verificar que NO usa template literals con HTML
+  const htmlTemplatePattern = /`[^`]*<[^>]+>/;
+  if (htmlTemplatePattern.test(sidebarContent) && !sidebarContent.includes('// PROHIBIDO')) {
+    checks.sidebar_dom_api.errors.push('Sidebar usa template literals con HTML (prohibido)');
   }
   
   // Verificar que usa DOM API
@@ -114,6 +124,102 @@ try {
 } catch (error) {
   checks.sidebar_dom_api.errors.push(`Error leyendo sidebar: ${error.message}`);
   console.error('  ❌ Error verificando sidebar:', error.message);
+}
+
+// Check 4.1: Sidebar Registry tiene header canónico
+console.log('[Assembly Check] Verificando sidebar registry...');
+try {
+  const registryPath = join(ROOT, 'src/core/master/registry/master-sidebar-registry.js');
+  const registryContent = readFileSync(registryPath, 'utf-8');
+  
+  // Verificar que tiene MASTER_SIDEBAR_HEADER
+  if (!registryContent.includes('MASTER_SIDEBAR_HEADER')) {
+    checks.sidebar_registry.errors.push('Registry no tiene MASTER_SIDEBAR_HEADER');
+  }
+  
+  // Verificar que tiene "El Templo de Ankhar"
+  if (!registryContent.includes('El Templo de Ankhar')) {
+    checks.sidebar_registry.errors.push('Registry no tiene título canónico "El Templo de Ankhar"');
+  }
+  
+  // Verificar que tiene "Donde los milagros suceden"
+  if (!registryContent.includes('Donde los milagros suceden')) {
+    checks.sidebar_registry.errors.push('Registry no tiene subtítulo canónico');
+  }
+  
+  // Verificar que retorna header en getMasterSidebarData
+  if (!registryContent.includes('header: MASTER_SIDEBAR_HEADER')) {
+    checks.sidebar_registry.errors.push('getMasterSidebarData no retorna header');
+  }
+  
+  if (checks.sidebar_registry.errors.length === 0) {
+    checks.sidebar_registry.passed = true;
+    console.log('  ✅ Sidebar registry tiene header canónico');
+  } else {
+    console.error('  ❌ Errores en sidebar registry:', checks.sidebar_registry.errors);
+  }
+} catch (error) {
+  checks.sidebar_registry.errors.push(`Error leyendo registry: ${error.message}`);
+  console.error('  ❌ Error verificando registry:', error.message);
+}
+
+// Check 4.2: Sidebar Client renderiza header
+console.log('[Assembly Check] Verificando sidebar header render...');
+try {
+  const sidebarPath = join(ROOT, 'public/js/master/master-sidebar-client.js');
+  const sidebarContent = readFileSync(sidebarPath, 'utf-8');
+  
+  // Verificar que tiene función createSidebarHeader
+  if (!sidebarContent.includes('createSidebarHeader')) {
+    checks.sidebar_header.errors.push('Sidebar client no tiene createSidebarHeader');
+  }
+  
+  // Verificar que renderMasterSidebar usa el header
+  if (!sidebarContent.includes('sidebarData.header')) {
+    checks.sidebar_header.errors.push('renderMasterSidebar no usa sidebarData.header');
+  }
+  
+  // Verificar que usa DOM API para header
+  if (!sidebarContent.includes('master-sidebar-header')) {
+    checks.sidebar_header.errors.push('Sidebar no crea elemento master-sidebar-header');
+  }
+  
+  if (checks.sidebar_header.errors.length === 0) {
+    checks.sidebar_header.passed = true;
+    console.log('  ✅ Sidebar client renderiza header canónico');
+  } else {
+    console.error('  ❌ Errores en sidebar header:', checks.sidebar_header.errors);
+  }
+} catch (error) {
+  checks.sidebar_header.errors.push(`Error leyendo sidebar: ${error.message}`);
+  console.error('  ❌ Error verificando sidebar header:', error.message);
+}
+
+// Check 4.3: Sidebar no tiene dependencias de Admin
+console.log('[Assembly Check] Verificando sidebar sin dependencias Admin...');
+try {
+  const sidebarPath = join(ROOT, 'public/js/master/master-sidebar-client.js');
+  const sidebarContent = readFileSync(sidebarPath, 'utf-8');
+  
+  // Verificar que NO importa código de Admin
+  if (sidebarContent.includes('admin-sidebar') || sidebarContent.includes('admin/sidebar')) {
+    checks.sidebar_no_admin.errors.push('Sidebar importa código de Admin (prohibido)');
+  }
+  
+  // Verificar que NO usa funciones de Admin
+  if (sidebarContent.includes('renderAdminPage') || sidebarContent.includes('admin-router')) {
+    checks.sidebar_no_admin.errors.push('Sidebar usa funciones de Admin (prohibido)');
+  }
+  
+  if (checks.sidebar_no_admin.errors.length === 0) {
+    checks.sidebar_no_admin.passed = true;
+    console.log('  ✅ Sidebar sin dependencias de Admin');
+  } else {
+    console.error('  ❌ Sidebar tiene dependencias de Admin:', checks.sidebar_no_admin.errors);
+  }
+} catch (error) {
+  checks.sidebar_no_admin.errors.push(`Error leyendo sidebar: ${error.message}`);
+  console.error('  ❌ Error verificando dependencias:', error.message);
 }
 
 // Check 5: Scripts tienen guards idempotentes
@@ -240,8 +346,18 @@ try {
     const injectMasterContent = readFileSync(injectMasterPath, 'utf-8');
     injectMasterExists = true;
     
+    // Verificar que NO tiene return (causa Illegal return statement en ES modules)
+    if (injectMasterContent.includes('return') && !injectMasterContent.includes('//')) {
+      checks.entry_gate.errors.push('inject_master.js contiene return (causará Illegal return statement en ES module)');
+    }
+    
+    // Verificar que NO está envuelto en IIFE (no es necesario si no hay return)
+    if (injectMasterContent.includes('(() => {')) {
+      checks.entry_gate.errors.push('inject_master.js está envuelto en IIFE innecesariamente');
+    }
+    
     // Verificar que tiene el guard constitucional
-    if (!injectMasterContent.includes('window.__AP_CONTEXT__ !== \'MASTER\'')) {
+    if (!injectMasterContent.includes('window.__AP_CONTEXT__ === \'MASTER\'')) {
       checks.entry_gate.errors.push('inject_master.js no tiene guard constitucional');
     }
     
@@ -282,10 +398,16 @@ try {
       checks.entry_gate.errors.push('master-layout-v1.html carga inject_main.js (prohibido)');
     }
     
-    // Verificar que carga inject_master.js
+    // Verificar que carga inject_master.js como ES module
     const injectMasterPattern = /<script[^>]*src=["'][^"']*inject_master\.js["'][^>]*>/i;
-    if (!injectMasterPattern.test(layoutContent)) {
+    const injectMasterMatch = layoutContent.match(injectMasterPattern);
+    if (!injectMasterMatch) {
       checks.entry_gate.errors.push('master-layout-v1.html no carga inject_master.js');
+    } else {
+      // Verificar que tiene type="module"
+      if (!injectMasterMatch[0].includes('type="module"') && !injectMasterMatch[0].includes("type='module'")) {
+        checks.entry_gate.errors.push('master-layout-v1.html carga inject_master.js sin type="module" (requerido para ES module)');
+      }
     }
     
     // Verificar que inyecta contexto
@@ -301,15 +423,151 @@ try {
     checks.entry_gate.errors.push(`Error verificando layout: ${err.message}`);
   }
   
+  // Check adicional: Verificar que no hay render legacy en Master
+  console.log('[Assembly Check] Verificando bloqueo de render legacy...');
+  try {
+    const sidebarClientPath = join(ROOT, 'public/js/master/master-sidebar-client.js');
+    const sidebarClientContent = readFileSync(sidebarClientPath, 'utf-8');
+    
+    // Verificar que tiene bootstrap autoejecutable (IIFE)
+    const hasIIFE = sidebarClientContent.includes('(function bootstrapMasterSidebar()') || 
+                    sidebarClientContent.includes('(function()') ||
+                    sidebarClientContent.includes('(() => {');
+    if (!hasIIFE) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no tiene bootstrap autoejecutable (IIFE)');
+    }
+    
+    // Verificar que tiene llamada directa a init
+    const hasDirectInit = sidebarClientContent.includes('initMasterSidebar(') && 
+                          (sidebarClientContent.includes('doInit()') || 
+                           sidebarClientContent.includes('initMasterSidebar(universeId'));
+    if (!hasDirectInit) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no tiene llamada directa a initMasterSidebar');
+    }
+    
+    // Verificar que bloquea render legacy
+    if (!sidebarClientContent.includes('__AP_ADMIN_SIDEBAR_RENDER__')) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no bloquea render legacy de Admin');
+    }
+    
+    // Verificar que verifica contexto MASTER
+    if (!sidebarClientContent.includes('window.__AP_CONTEXT__ !== \'MASTER\'')) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no verifica contexto MASTER');
+    }
+    
+    // Verificar que busca contenedor correcto
+    if (!sidebarClientContent.includes('master-sidebar-container')) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no busca contenedor master-sidebar-container');
+    }
+    
+    // Verificar que tiene logs de render
+    if (!sidebarClientContent.includes('[MasterSidebar]')) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no tiene logs de render');
+    }
+    
+    // Verificar que tiene log de bootstrap
+    if (!sidebarClientContent.includes('Bootstrap iniciado')) {
+      checks.entry_gate.errors.push('master-sidebar-client.js no tiene log de bootstrap');
+    }
+  } catch (error) {
+    checks.entry_gate.errors.push(`Error verificando bloqueo legacy: ${error.message}`);
+  }
+  
+  // Verificar que el layout tiene el contenedor correcto
+  try {
+    const layoutContent = readFileSync(layoutPath, 'utf-8');
+    if (!layoutContent.includes('id="master-sidebar-container"')) {
+      checks.entry_gate.errors.push('master-layout-v1.html no tiene id="master-sidebar-container"');
+    }
+  } catch (error) {
+    checks.entry_gate.errors.push(`Error verificando contenedor: ${error.message}`);
+  }
+  
   if (checks.entry_gate.errors.length === 0) {
     checks.entry_gate.passed = true;
-    console.log('  ✅ Entry Gate Master: inject_master.js presente, inject_main.js aislado');
+    console.log('  ✅ Entry Gate Master: inject_master.js presente, inject_main.js aislado, render legacy bloqueado');
   } else {
     console.error('  ❌ Errores en Entry Gate Master:', checks.entry_gate.errors);
   }
 } catch (error) {
   checks.entry_gate.errors.push(`Error verificando entry gate: ${error.message}`);
   console.error('  ❌ Error verificando entry gate:', error.message);
+}
+
+// Check 9: Required Scripts (ASSETS_SYSTEM_V1)
+console.log('[Assembly Check] Verificando required_scripts del contrato...');
+try {
+  const registryPath = join(ROOT, 'src/core/master/registry/master-layout-registry.v1.json');
+  if (!existsSync(registryPath)) {
+    checks.required_scripts.errors.push(`Registry no encontrado: ${registryPath}`);
+  } else {
+    const registryContent = readFileSync(registryPath, 'utf-8');
+    const registry = JSON.parse(registryContent);
+    const requiredScripts = registry.required_scripts || [];
+    
+    if (!Array.isArray(requiredScripts) || requiredScripts.length === 0) {
+      checks.required_scripts.errors.push('required_scripts no es array o está vacío');
+    } else {
+      const publicAssetsRoot = join(ROOT, 'public');
+      
+      for (const scriptDef of requiredScripts) {
+        // Normalizar: aceptar string o objeto
+        const script = typeof scriptDef === 'string' ? { path: scriptDef, id: scriptDef } : scriptDef;
+        const scriptPath = script.path || script.src;
+        
+        if (!scriptPath) {
+          checks.required_scripts.errors.push(`Script sin path: ${JSON.stringify(script)}`);
+          continue;
+        }
+        
+        // Construir ruta completa en filesystem
+        const fsPath = join(publicAssetsRoot, scriptPath);
+        
+        // Verificar existencia
+        try {
+          const scriptContent = readFileSync(fsPath, 'utf-8');
+          
+          // Sniff: verificar que NO es HTML
+          const trimmed = scriptContent.trim();
+          if (trimmed.startsWith('<!') || 
+              trimmed.startsWith('<html') || 
+              trimmed.startsWith('<!DOCTYPE') ||
+              trimmed.toLowerCase().includes('<html') ||
+              trimmed.toLowerCase().includes('<!doctype')) {
+            checks.required_scripts.errors.push(`Script ${script.id || scriptPath} parece HTML en lugar de JS (primeros bytes: ${trimmed.substring(0, 50)})`);
+          }
+          
+          // Opcional: verificar extensión
+          if (!scriptPath.endsWith('.js')) {
+            checks.required_scripts.warnings.push(`Script ${script.id || scriptPath} no tiene extensión .js`);
+          }
+          
+        } catch (err) {
+          if (err.code === 'ENOENT') {
+            checks.required_scripts.errors.push(`Script ${script.id || scriptPath} no existe en filesystem: ${fsPath}`);
+          } else {
+            checks.required_scripts.errors.push(`Error leyendo script ${script.id || scriptPath}: ${err.message}`);
+          }
+        }
+      }
+    }
+  }
+  
+  if (checks.required_scripts.errors.length === 0) {
+    checks.required_scripts.passed = true;
+    const registryContent = readFileSync(join(ROOT, 'src/core/master/registry/master-layout-registry.v1.json'), 'utf-8');
+    const registry = JSON.parse(registryContent);
+    const requiredScripts = registry.required_scripts || [];
+    console.log(`  ✅ Required scripts: ${requiredScripts.length} scripts válidos`);
+    if (checks.required_scripts.warnings.length > 0) {
+      console.log(`  ⚠️  Warnings: ${checks.required_scripts.warnings.join('; ')}`);
+    }
+  } else {
+    console.error('  ❌ Errores en required_scripts:', checks.required_scripts.errors);
+  }
+} catch (error) {
+  checks.required_scripts.errors.push(`Error verificando required_scripts: ${error.message}`);
+  console.error('  ❌ Error verificando required_scripts:', error.message);
 }
 
 // Resumen

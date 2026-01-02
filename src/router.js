@@ -37,13 +37,29 @@ import healthAuthHandler from "./endpoints/health-auth.js";
 
 import { ADMIN_ROUTES, validateAdminRouteRegistry } from './core/admin/admin-route-registry.js';
 import { resolveAdminRoute, createAdmin404Response } from './core/admin/admin-router-resolver.js';
+import { MASTER_ROUTES, validateMasterRouteRegistry } from './core/master/registry/master-route-registry.js';
+import { resolveMasterRoute, createMaster404Response } from './core/master/router/master-router-resolver.js';
+import { resolveEntryContext, ENTRY_CONTEXT, isMasterContext, isStudentContext, isAdminLegacyContext } from './core/entry-gate/entry-context-resolver.js';
 
-// Validar el registry al arrancar (solo una vez)
+// Validar los registries al arrancar (solo una vez)
 // Si hay error, el servidor NO arranca (esto es deseado)
 try {
   validateAdminRouteRegistry();
 } catch (error) {
   console.error('[Router] ❌ ERROR CRÍTICO: Admin Route Registry inválido');
+  console.error('[Router] El servidor NO puede arrancar hasta que se corrija el registry');
+  console.error('[Router] Error:', error.message);
+  // En producción, podríamos lanzar el error para detener el servidor
+  // Por ahora, solo logueamos para no romper el arranque en desarrollo
+  // throw error;
+}
+
+// Validar Master Route Registry
+try {
+  validateMasterRouteRegistry();
+  console.log('[Router] ✅ Master Route Registry válido');
+} catch (error) {
+  console.error('[Router] ❌ ERROR CRÍTICO: Master Route Registry inválido');
   console.error('[Router] El servidor NO puede arrancar hasta que se corrija el registry');
   console.error('[Router] Error:', error.message);
   // En producción, podríamos lanzar el error para detener el servidor
@@ -154,20 +170,104 @@ async function routerFunction(request, env, ctx) {
       }
 
     const url = new URL(request.url);
-    const path = url.pathname;
+    let path = url.pathname;
     const host = url.hostname;
+    
+    // ============================================
+    // PUBLIC ASSETS GATE - ANTES de cualquier routing UI
+    // ============================================
+    // INVARIANTE ABSOLUTA: Cualquier request a /public/* debe resolverse como ASSET,
+    // NUNCA HTML. Este gate se ejecuta ANTES del Entry Gate para evitar que rutas
+    // /public/* sean transformadas por el mapeo de rutas Master.
+    const { canHandlePublicAsset, handlePublicAsset } = await import('./core/assets/public-assets-handler.js');
+    if (canHandlePublicAsset(path)) {
+      return await handlePublicAsset(request);
+    }
+    
+    // ============================================
+    // ENTRY GATE CANÓNICO - Separación por dominio
+    // ============================================
+    // PRINCIPIO CONSTITUCIONAL: El dominio define el universo
+    // Este gate se ejecuta ANTES de cualquier routing o autenticación
+    const entryContextResult = resolveEntryContext(request);
+    const entryContext = entryContextResult.context;
+    const isRecognized = entryContextResult.recognized;
+    
+    // Si el host no es reconocido, devolver error explícito
+    if (!isRecognized || !entryContext) {
+      const { getRequestId } = await import('./core/observability/request-context.js');
+      const traceId = getRequestId() || `router-${Date.now()}`;
+      console.error(`[EntryGate] ❌ Host no reconocido: ${host}`);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: `Host no reconocido: ${host}`,
+        code: 'UNRECOGNIZED_HOST',
+        trace_id: traceId
+      }), {
+        status: 400,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        }
+      });
+    }
+    
+    // ============================================
+    // FASE 1: RUTAS PÚBLICAS ABSOLUTAS (ANTES DE CUALQUIER AUTENTICACIÓN O MAPEO)
+    // ============================================
+    // Estas rutas NUNCA deben ser protegidas ni redirigidas
+    // Debe ejecutarse ANTES del mapeo de rutas MASTER
+    const publicRoutes = [
+      '/admin/login',
+      '/admin/logout',
+      '/admin/assets',
+      '/admin/public'
+    ];
+    
+    const isPublicRoute = publicRoutes.some(route => 
+      path === route || path.startsWith(route + '/')
+    );
+    
+    if (isPublicRoute) {
+      const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
+      console.log(`[AUTH][BYPASS][PUBLIC_ROUTE] Ruta pública detectada, bypass total de autenticación y mapeo`, { 
+        path, 
+        originalPath: url.pathname,
+        traceId 
+      });
+      // IMPORTANTE: NO aplicar mapeo MASTER, NO verificar sesión, continuar con flujo normal
+      // Estas rutas se procesan normalmente sin pasar por Entry Gate MASTER
+    }
+    
+    // MASTER: Mapear rutas sin prefijo /master a rutas con prefijo /master
+    // Ejemplo: /templo-luz/alquimia-general → /master/templo-luz/alquimia-general
+    // IMPORTANTE: NO mapear si es ruta pública (ya detectada arriba)
+    // IMPORTANTE: NO mapear rutas /admin/* (van al Admin Router)
+    if (isMasterContext(entryContext) && !isPublicRoute && !path.startsWith('/admin/')) {
+      // Si la ruta NO empieza con /master, añadir el prefijo
+      if (!path.startsWith('/master')) {
+        // Rutas especiales: / → /master, /templo-luz/... → /master/templo-luz/...
+        if (path === '/' || path === '') {
+          path = '/master';
+        } else {
+          path = `/master${path}`;
+        }
+        console.log(`[EntryGate][MASTER] Ruta mapeada: ${url.pathname} → ${path}`);
+      }
+    }
+    
     // #region agent log
     if (path.includes('catalog-registry') || path.includes('admin/pde')) {
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:59',message:'Router: petición recibida (catalog-registry)',data:{path,method:request.method,host,fullUrl:request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'router.js:59',message:'Router: petición recibida (catalog-registry)',data:{path,method:request.method,host,fullUrl:request.url,entryContext},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     }
     // #endregion
     
     // Log forense mínimo para / y /enter
     if (DEBUG_FORENSIC && (path === '/' || path === '/enter')) {
-      console.log(`[Router] ${request.method} ${path} | host: ${host}`);
+      console.log(`[Router] ${request.method} ${path} | host: ${host} | context: ${entryContext}`);
     }
   
-  // Manejar favicon.ico antes de otros archivos estáticos
+  // Manejar favicon.ico (después del Entry Gate y mapeo de rutas)
   // Favicon con cache reducido para permitir actualizaciones sin versionado
   if (path === '/favicon.ico') {
     const { readFileSync, existsSync } = await import('fs');
@@ -205,143 +305,10 @@ async function routerFunction(request, env, ctx) {
     });
   }
   
-  
-  // Servir archivos estáticos (CSS, JS, imágenes, etc.)
-  // FASE 2: ESTO DEBE IR ANTES DE CUALQUIER MANEJO DE HOST ESPECÍFICO
-  // Usar PUBLIC_ASSETS_ROOT como source of truth único
-  if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/public/') || path.startsWith('/uploads/')) {
-    const { readFileSync, existsSync } = await import('fs');
-    const { PUBLIC_ASSETS_ROOT, resolvePublicAsset } = await import('./core/robustness/public-assets-root.js');
-    
-    try {
-      // Normalizar la ruta usando source of truth único
-      let fullPath;
-      if (path.startsWith('/uploads/')) {
-        // uploads/ es subdirectorio de public/
-        const uploadPath = path.slice(9); // quitar '/uploads/'
-        fullPath = resolvePublicAsset(`uploads/${uploadPath}`);
-      } else if (path.startsWith('/public/')) {
-        // /public/js/... -> js/...
-        fullPath = resolvePublicAsset(path.slice(8)); // quitar '/public/'
-      } else {
-        // /js/... o /css/... -> js/... o css/...
-        fullPath = resolvePublicAsset(path.slice(1)); // quitar leading '/'
-      }
-      
-      // Verificar que el archivo esté dentro de public (seguridad)
-      if (!fullPath.startsWith(PUBLIC_ASSETS_ROOT)) {
-        console.error(`[Router] Ruta fuera de public: ${fullPath}`);
-        const { getRequestId } = await import('./core/observability/request-context.js');
-        const traceId = getRequestId() || `router-${Date.now()}`;
-        return new Response(JSON.stringify({
-          ok: false,
-          error: 'Forbidden',
-          code: 'FORBIDDEN',
-          trace_id: traceId
-        }), { 
-          status: 403,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      // Verificar que el archivo existe
-      if (!existsSync(fullPath)) {
-        console.error(`[Router] Archivo no encontrado: ${fullPath}`);
-        // 404 limpio - nunca debe convertirse en 500
-        // Headers defensivos para evitar caché de errores 404
-        const { getErrorDefensiveHeaders } = await import('./core/responses.js');
-        const { getRequestId } = await import('./core/observability/request-context.js');
-        const traceId = getRequestId() || `router-${Date.now()}`;
-        return new Response(JSON.stringify({
-          ok: false,
-          error: 'Not Found',
-          code: 'NOT_FOUND',
-          trace_id: traceId
-        }), { 
-          status: 404,
-          headers: { 
-            "Content-Type": "application/json",
-            ...getErrorDefensiveHeaders()
-          }
-        });
-      }
-      
-      // FASE 3: Hardening - Verificar que el archivo NO sea HTML antes de servir como JS
-      const ext = fullPath.split('.').pop().toLowerCase();
-      const isJsFile = ext === 'js';
-      
-      if (isJsFile) {
-        // Leer primeros bytes para verificar que NO es HTML
-        const firstBytes = readFileSync(fullPath, { encoding: 'utf-8', flag: 'r', start: 0, end: 300 });
-        if (firstBytes.trim().startsWith('<!DOCTYPE') || firstBytes.trim().startsWith('<html') || firstBytes.includes('<body')) {
-          console.error(`[Router] 🔴 CRÍTICO: Archivo JS contiene HTML: ${fullPath}`);
-          const { getRequestId } = await import('./core/observability/request-context.js');
-          const traceId = getRequestId() || `router-${Date.now()}`;
-          return new Response(JSON.stringify({
-            ok: false,
-            error: 'Asset corrupted: HTML served as JavaScript',
-            code: 'HTML_SERVED_AS_JS',
-            trace_id: traceId,
-            file: path
-          }), { 
-            status: 500,
-            headers: { 
-              'Content-Type': 'application/json; charset=utf-8',
-              'Cache-Control': 'no-store'
-            }
-          });
-        }
-      }
-      
-      const content = readFileSync(fullPath);
-      const contentType = {
-        'css': 'text/css; charset=utf-8',
-        'js': 'application/javascript; charset=utf-8', // FASE 3: charset explícito
-        'json': 'application/json; charset=utf-8',
-        'png': 'image/png',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'svg': 'image/svg+xml',
-        'ico': 'image/x-icon',
-        'gif': 'image/gif',
-        'webp': 'image/webp'
-      }[ext] || 'application/octet-stream';
-      
-      console.log(`[Router] Sirviendo archivo estático: ${path} -> ${fullPath} (${content.length} bytes, ${contentType})`);
-      
-      // Determinar Cache-Control según si está versionado
-      const urlObj = new URL(request.url, `http://${request.headers.get('host') || 'localhost'}`);
-      const hasVersionParam = urlObj.searchParams.has('v');
-      const isDevOrBeta = process.env.APP_ENV === 'development' || process.env.APP_ENV === 'beta';
-      
-      // Si tiene parámetro v= (versionado), cache largo es seguro
-      // Si no tiene, usar cache corto para forzar actualización
-      const cacheControl = hasVersionParam 
-        ? 'public, max-age=31536000, immutable' // 1 año, solo si está versionado
-        : (isDevOrBeta ? 'no-cache' : 'public, max-age=3600'); // 1 hora si no está versionado
-      
-      return new Response(content, {
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': cacheControl,
-          'Access-Control-Allow-Origin': '*', // Permitir CORS para imágenes
-          'Content-Length': content.length.toString()
-        }
-      });
-    } catch (error) {
-      // CRÍTICO: Cualquier error en archivos estáticos debe devolver 404 limpio, nunca 500
-      console.error(`[Router] Error sirviendo archivo estático ${path}:`, error.message);
-      // Headers defensivos para evitar caché de errores 404
-      const { getErrorDefensiveHeaders } = await import('./core/responses.js');
-      return new Response("Not Found", { 
-        status: 404,
-        headers: { 
-          "Content-Type": "text/plain",
-          ...getErrorDefensiveHeaders()
-        }
-      });
-    }
-  }
+  // NOTA: El manejo de archivos estáticos ahora se hace en el Public Assets Gate
+  // (antes del Entry Gate) para evitar que rutas /public/* sean transformadas
+  // por el mapeo de rutas Master. Este bloque legacy se mantiene comentado
+  // por compatibilidad pero no debería ejecutarse nunca.
   
   // ============================================
   // BLOQUEO DE RUTAS LEGACY /admin/pde/*
@@ -373,7 +340,6 @@ async function routerFunction(request, env, ctx) {
       const { getRequestId } = await import('./core/observability/request-context.js');
       const { getOrCreateTraceId } = await import('./core/observability/with-trace.js');
       const { logWarnCanonical } = await import('./core/observability/logger.js');
-      const { renderAdminPage } = await import('./core/admin/admin-page-renderer.js');
       
       const traceId = getOrCreateTraceId(request);
       
@@ -384,36 +350,204 @@ async function routerFunction(request, env, ctx) {
         trace_id: traceId
       });
       
-      // Respuesta controlada: página admin con mensaje claro
-      return renderAdminPage({
-        title: 'Sección desactivada',
-        contentHtml: `
-          <div style="padding: 2rem; max-width: 800px; margin: 0 auto;">
-            <h1 style="color: #ef4444; margin-bottom: 1rem;">⚠️ Sección desactivada</h1>
-            <p style="color: #6b7280; margin-bottom: 1rem; line-height: 1.6;">
-              El Admin PDE legacy ha sido desactivado.
-            </p>
-            <p style="color: #6b7280; margin-bottom: 1.5rem; line-height: 1.6;">
-              Usa el nuevo editor en <a href="/admin/packages" style="color: #3b82f6; text-decoration: underline;">/admin/packages</a>.
-            </p>
-            <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.5rem;">
-              <strong>Trace ID:</strong> <code style="background: #1f2937; padding: 0.25rem 0.5rem; border-radius: 4px; color: #9ca3af;">${traceId}</code>
-            </p>
-            <a href="/admin/packages" style="display: inline-block; background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 500;">
-              Ir al Editor de Paquetes
-            </a>
-          </div>
-        `,
-        activePath: '/admin/packages'
-      });
+      // Respuesta controlada: HTML simple sin usar renderAdminPage (fuera de contexto del resolver)
+      // PROHIBIDO: No llamar renderAdminPage() aquí porque no pasó por el resolver
+      const { renderHtml } = await import('./core/html-response.js');
+      const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sección desactivada - AuriPortal Admin</title>
+  <link href="/css/tailwind.css" rel="stylesheet">
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #0f172a;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 800px;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 2rem;
+      border: 1px solid #334155;
+    }
+    h1 { color: #ef4444; margin-bottom: 1rem; }
+    p { color: #94a3b8; margin-bottom: 1rem; line-height: 1.6; }
+    a { color: #60a5fa; text-decoration: underline; }
+    code {
+      background: #1f2937;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .btn {
+      display: inline-block;
+      background: #3b82f6;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 500;
+      margin-top: 1rem;
+    }
+    .btn:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚠️ Sección desactivada</h1>
+    <p>El Admin PDE legacy ha sido desactivado.</p>
+    <p>Usa el nuevo editor en <a href="/admin/packages">/admin/packages</a>.</p>
+    <p><strong>Trace ID:</strong> <code>${traceId}</code></p>
+    <a href="/admin/packages" class="btn">Ir al Editor de Paquetes</a>
+  </div>
+</body>
+</html>
+      `;
+      return renderHtml(html, { status: 404 });
     }
   }
   
   // ============================================
-  // ADMIN ROUTER - Gobernado por Admin Route Registry
+  // MASTER ROUTER - Gobernado por Master Route Registry
   // ============================================
-  // [FORENSIC][ROUTER] PRIORIDAD ABSOLUTA: Todas las rutas /admin/* pasan PRIMERO por el resolver
-  // Esto garantiza que el registry es la fuente de verdad, no los bloques legacy
+  // ENTRY GATE: Solo se ejecuta si el contexto es MASTER
+  // FASE 2: Verificar sesión admin ANTES de resolver rutas (excepto rutas API que ya verifican)
+  // IMPORTANTE: NO procesar si es ruta pública (ya verificado arriba en línea ~227)
+  // IMPORTANTE: NO procesar rutas /admin/* (van al Admin Router)
+  // NOTA: isPublicRoute se define arriba, antes del mapeo de rutas MASTER
+  if (isMasterContext(entryContext) && 
+      (path === "/master" || path.startsWith("/master/")) && 
+      !isPublicRoute && 
+      !path.startsWith("/admin/")) {
+    const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
+    console.log(`[MASTER_ROUTER][EntryGate] Contexto MASTER detectado - Resolviendo ruta: ${path} (${request.method}) trace_id=${traceId}`);
+    
+    // Verificar sesión admin (excepto rutas API que ya usan requireAdminContext)
+    // Rutas API verifican en su handler, rutas UI verifican aquí
+    const isApiRoute = path.startsWith('/master/api/');
+    
+    if (!isApiRoute) {
+      const { validateAdminSession } = await import('./modules/admin-auth.js');
+      const hasValidSession = validateAdminSession(request);
+      
+      if (!hasValidSession) {
+        // FASE 3: REDIRECT SEGURO - Nunca permitir redirect a /admin/login
+        const redirectUrl = encodeURIComponent(path);
+        
+        // Validar que redirect no apunte a login
+        let safeRedirect = redirectUrl;
+        if (decodeURIComponent(redirectUrl) === '/admin/login' || 
+            decodeURIComponent(redirectUrl).startsWith('/admin/login?')) {
+          // Si redirect apunta a login, usar /master como fallback seguro
+          safeRedirect = encodeURIComponent('/master');
+          console.log(`[AUTH][REDIRECT][MASTER] Redirect inseguro detectado, usando fallback`, { 
+            original: redirectUrl,
+            fallback: safeRedirect,
+            traceId 
+          });
+        }
+        
+        const loginUrl = `/admin/login?redirect=${safeRedirect}`;
+        
+        const { logInfo } = await import('./core/observability/logger.js');
+        logInfo('AUTH', 'MASTER REQUIRE_ADMIN sesión no válida', { 
+          path, 
+          redirectUrl: loginUrl,
+          traceId 
+        });
+        console.log(`[AUTH][REDIRECT][MASTER] Redirigiendo a login`, { path, loginUrl, traceId });
+        
+        // Obtener URL absoluta para redirect
+        let absoluteLoginUrl;
+        try {
+          const requestUrl = new URL(request.url);
+          absoluteLoginUrl = `${requestUrl.protocol}//${requestUrl.host}${loginUrl}`;
+        } catch (error) {
+          absoluteLoginUrl = loginUrl;
+        }
+        
+        return new Response(null, {
+          status: 302,
+          headers: {
+            'Location': absoluteLoginUrl
+          }
+        });
+      }
+      
+      const { logInfo } = await import('./core/observability/logger.js');
+      logInfo('AUTH', 'MASTER REQUIRE_ADMIN sesión válida', { path, traceId });
+    }
+    
+    let resolved;
+    try {
+      resolved = await resolveMasterRoute(path, request.method);
+    } catch (resolveError) {
+      console.error(`[MASTER_ROUTER] ERROR en resolveMasterRoute:`, resolveError.message);
+      throw resolveError;
+    }
+    
+    if (resolved) {
+      // Ruta encontrada en el registry, ejecutar handler
+      console.log(`[MASTER_ROUTER] ✅ Ruta resuelta: ${resolved.route.key} (${resolved.type})`);
+      try {
+        // Establecer contexto para renderMasterPage
+        const { _setRenderMasterPageCallContext } = await import('./core/master/layout/master-page-renderer.js');
+        _setRenderMasterPageCallContext({
+          routeKey: resolved.route.key,
+          routePath: resolved.route.path,
+          routeType: resolved.type,
+          traceId
+        });
+        
+        // CRÍTICO: Master NO usa ctx de alumno, crear contexto vacío para Master
+        const masterCtx = {}; // Contexto vacío - Master no depende de alumno
+        
+        const handlerResult = await resolved.handler(request, env, masterCtx);
+        
+        // Limpiar contexto
+        const { _clearRenderMasterPageCallContext } = await import('./core/master/layout/master-page-renderer.js');
+        _clearRenderMasterPageCallContext();
+        
+        if (!handlerResult || !(handlerResult instanceof Response)) {
+          throw new Error(`Handler ${resolved.route.key} devolvió resultado inválido: ${typeof handlerResult}`);
+        }
+        
+        console.log(`[MASTER_ROUTER] ✅ Respuesta válida, retornando`);
+        return handlerResult;
+      } catch (handlerError) {
+        console.error(`[MASTER_ROUTER] ❌ Error ejecutando handler:`, handlerError.message);
+        throw handlerError;
+      }
+    } else {
+      // Ruta NO encontrada en el registry
+      console.error(`[MASTER_ROUTER] Ruta no encontrada: ${path} trace_id=${traceId}`);
+      
+      // Rutas /master/api/** SIEMPRE devuelven JSON
+      if (path.startsWith('/master/api/')) {
+        return createMaster404Response(path, request.method);
+      }
+      
+      // Otras rutas Master también devuelven JSON 404
+      return createMaster404Response(path, request.method);
+    }
+  }
+  
+  // ============================================
+  // ADMIN ROUTER - Gobernado por Admin Route Registry (LEGACY)
+  // ============================================
+  // [FORENSIC][ROUTER] PRIORIDAD: Rutas /admin/* se resuelven DESPUÉS de /master/*
+  // Esto garantiza que Master tiene prioridad sobre Admin legacy
   if (path === "/admin" || path.startsWith("/admin/")) {
     const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
     console.log(`[FORENSIC][ROUTER] ════════════════════════════════════════`);
@@ -489,8 +623,12 @@ async function routerFunction(request, env, ctx) {
     }
   }
   
-  // Detectar subdominios de pdeeugenihidalgo.org
-  if (host.includes('pdeeugenihidalgo.org')) {
+  // ============================================
+  // STUDENT ROUTER - Portal del alumno
+  // ============================================
+  // ENTRY GATE: Solo se ejecuta si el contexto es STUDENT
+  // Comportamiento actual intacto: login, cookies, contexto alumno, progreso, etc.
+  if (isStudentContext(entryContext) && host.includes('pdeeugenihidalgo.org')) {
     // Portal principal (incluye dominio principal y subdominio portal)
     if (host === 'portal.pdeeugenihidalgo.org' || host.startsWith('portal.') || host === 'pdeeugenihidalgo.org' || host === 'www.pdeeugenihidalgo.org') {
       // Portal principal - manejar todas las rutas principales
@@ -804,8 +942,10 @@ async function routerFunction(request, env, ctx) {
     }
     
     // ============================================
-    // ADMIN ROUTER - AuriPortal Admin Panel
+    // ADMIN ROUTER - AuriPortal Admin Panel (LEGACY)
     // ============================================
+    // ENTRY GATE: Solo se ejecuta si el contexto es ADMIN_LEGACY
+    // Comportamiento actual intacto: no se migra nada, no se rompe nada
     // 
     // ❗ REGLA DE ORO: Ver comentarios al inicio del archivo sobre ADMIN ROUTE REGISTRY
     // 
@@ -816,7 +956,7 @@ async function routerFunction(request, env, ctx) {
     // Todas las rutas admin deben estar registradas en:
     // src/core/admin/admin-route-registry.js
     // ============================================
-    if (host === 'admin.pdeeugenihidalgo.org' || host.startsWith('admin.')) {
+    if (isAdminLegacyContext(entryContext) && (host === 'admin.pdeeugenihidalgo.org' || host.startsWith('admin.'))) {
       // Health checks (sistema)
       if (path === "/health-check" || path === "/health" || path === "/status") {
         return healthCheckHandler(request, env, ctx);

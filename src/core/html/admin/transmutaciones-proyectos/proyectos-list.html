@@ -1,0 +1,818 @@
+<div class="p-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-white">🚀 Proyectos de Transmutación Energética</h1>
+    <div class="flex gap-2">
+      <button 
+        id="btn-limpiar-seleccionados"
+        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors hidden"
+      >
+        Limpiar seleccionados
+      </button>
+      <button 
+        id="btn-limpiar-todos"
+        class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors"
+      >
+        Limpiar todos los proyectos
+      </button>
+    </div>
+  </div>
+  
+  <p class="text-slate-400 mb-6">
+    Gestión de proyectos activos de transmutación energética. Los proyectos se pueden limpiar individualmente, por selección o en masa.
+  </p>
+  
+  <div class="bg-slate-800 rounded-lg p-6">
+    <div class="mb-4">
+      <button 
+        id="btn-crear-proyecto"
+        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
+      >
+        + Crear Proyecto Rápido
+      </button>
+    </div>
+    
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead>
+          <tr class="border-b border-slate-700">
+            <th class="pb-3 px-4 text-slate-300 font-semibold w-12">
+              <input type="checkbox" id="checkbox-seleccionar-todos" aria-label="Seleccionar todos los proyectos" />
+            </th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Nombre del Proyecto</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Descripción</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold sortable-column" data-sort-key="alumno" style="cursor: pointer;">
+              Alumno Creador <span class="sort-indicator"></span>
+            </th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Hace X días</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Estado</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Recurrencia (días)</th>
+            <th class="pb-3 px-4 text-slate-300 font-semibold">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="proyectos-tbody">
+          {{PROYECTOS_ROWS}}
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="mt-4 text-sm text-slate-400">
+      Total: <span id="proyectos-total">{{PROYECTOS_TOTAL}}</span> proyecto{{PROYECTOS_TOTAL_PLURAL}}
+    </div>
+  </div>
+</div>
+
+<!-- Modal para editar proyecto -->
+<div id="modal-editar-proyecto" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" data-modal-backdrop>
+  <div class="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" data-modal-content>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-white">Editar Proyecto</h2>
+      <button 
+        id="btn-cerrar-modal-editar"
+        class="text-slate-400 hover:text-white text-2xl font-bold w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+        title="Cerrar (ESC)"
+      >
+        ❌
+      </button>
+    </div>
+    
+    <form id="form-editar-proyecto">
+      <input type="hidden" id="editar-proyecto-id" />
+      <input type="hidden" id="editar-proyecto-student-id" />
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Nombre del Proyecto *</label>
+        <input 
+          type="text"
+          id="editar-nombre-proyecto"
+          required
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        />
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Descripción</label>
+        <textarea 
+          id="editar-descripcion-proyecto"
+          rows="3"
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        ></textarea>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Alumno Asignado (Master)</label>
+        <select
+          id="editar-alumno-asignado"
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        >
+          <option value="">-- Sin asignar --</option>
+          {{ALUMNOS_OPTIONS}}
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Recurrencia Recomendada (días) *</label>
+        <input 
+          type="number"
+          id="editar-frecuencia-proyecto"
+          required
+          min="1"
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        />
+      </div>
+      
+      <div class="flex justify-end gap-3">
+        <button 
+          type="button"
+          id="btn-cancelar-editar-proyecto"
+          class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors"
+        >
+          Cancelar
+        </button>
+        <button 
+          type="submit"
+          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
+        >
+          Guardar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para crear proyecto -->
+<div id="modal-crear-proyecto" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" data-modal-backdrop>
+  <div class="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <h2 class="text-2xl font-bold text-white mb-4">Crear Proyecto Rápido</h2>
+    
+    <form id="form-crear-proyecto">
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Nombre del Proyecto *</label>
+        <input 
+          type="text"
+          id="input-nombre-proyecto"
+          required
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+          placeholder="Ej: Proyecto de Sanación"
+        />
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Descripción</label>
+        <textarea 
+          id="input-descripcion-proyecto"
+          rows="3"
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+          placeholder="Descripción del proyecto (opcional)"
+        ></textarea>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Alumno Creador *</label>
+        <select
+          id="input-alumno-proyecto"
+          required
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        >
+          <option value="">-- Seleccionar alumno --</option>
+          {{ALUMNOS_OPTIONS}}
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Estado *</label>
+        <select
+          id="input-estado-proyecto"
+          required
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        >
+          <option value="activo">Activo</option>
+          <option value="inactivo">No activo</option>
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-slate-300 mb-2">Recurrencia Recomendada (días) *</label>
+        <input 
+          type="number"
+          id="input-frecuencia-proyecto"
+          required
+          min="1"
+          value="30"
+          class="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-indigo-500 focus:outline-none"
+        />
+      </div>
+      
+      <div class="flex justify-end gap-3">
+        <button 
+          type="button"
+          id="btn-cerrar-modal-crear"
+          class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors"
+        >
+          Cancelar
+        </button>
+        <button 
+          type="submit"
+          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
+        >
+          Crear Proyecto
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// CÓDIGO SEGURO: Sin onclick/onchange inline
+// ============================================================================
+// - Usa data attributes en lugar de onclick/onchange
+// - Usa event listeners con delegación de eventos
+// - Usa DOM API preferida (addEventListener, querySelector, etc.)
+// ============================================================================
+
+(function() {
+  'use strict';
+  
+  // Estado de selección
+  let proyectosSeleccionados = new Set();
+  let sortOrder = { key: null, direction: 'asc' };
+  
+  // ============================================================================
+  // DEFINIR FUNCIONES PRIMERO (antes de usarlas)
+  // ============================================================================
+  
+  function mostrarModalCrearProyecto() {
+    const modal = document.getElementById('modal-crear-proyecto');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+  
+  function cerrarModalCrearProyecto() {
+    const modal = document.getElementById('modal-crear-proyecto');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    const form = document.getElementById('form-crear-proyecto');
+    if (form) {
+      form.reset();
+    }
+  }
+  
+  function cerrarModalEditarProyecto() {
+    const modal = document.getElementById('modal-editar-proyecto');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    const form = document.getElementById('form-editar-proyecto');
+    if (form) {
+      form.reset();
+    }
+  }
+  
+  async function mostrarModalEditarProyecto(proyectoId, studentId) {
+    try {
+      // Intentar obtener datos del nuevo sistema primero
+      let proyectoData = null;
+      if (studentId) {
+        try {
+          const response = await fetch('/admin/api/students/' + encodeURIComponent(studentId) + '/domains/projects?product_key=pde');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.ok && data.projects) {
+              proyectoData = data.projects.find(function(p) {
+                return p.item_ref === String(proyectoId);
+              });
+            }
+          }
+        } catch (error) {
+          console.warn('Error obteniendo datos del nuevo sistema, usando legacy:', error);
+        }
+      }
+      
+      // Si no hay datos del nuevo sistema, obtener del legacy
+      if (!proyectoData) {
+        const response = await fetch('/admin/api/transmutaciones/proyectos');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && data.proyectos) {
+            proyectoData = data.proyectos.find(function(p) {
+              return p.id == proyectoId;
+            });
+          }
+        }
+      }
+      
+      if (!proyectoData) {
+        alert('Proyecto no encontrado');
+        return;
+      }
+      
+      // Llenar formulario usando DOM API
+      const proyectoIdInput = document.getElementById('editar-proyecto-id');
+      const studentIdInput = document.getElementById('editar-proyecto-student-id');
+      const nombreInput = document.getElementById('editar-nombre-proyecto');
+      const descripcionInput = document.getElementById('editar-descripcion-proyecto');
+      const alumnoAsignadoInput = document.getElementById('editar-alumno-asignado');
+      const frecuenciaInput = document.getElementById('editar-frecuencia-proyecto');
+      
+      if (proyectoIdInput) proyectoIdInput.value = String(proyectoId);
+      if (studentIdInput) studentIdInput.value = String(studentId || '');
+      if (nombreInput) nombreInput.value = proyectoData.name || proyectoData.nombre || '';
+      if (descripcionInput) descripcionInput.value = proyectoData.description || proyectoData.descripcion || '';
+      if (alumnoAsignadoInput) {
+        const assignedValue = proyectoData.assigned_person_name || proyectoData.created_by_student_id || '';
+        alumnoAsignadoInput.value = String(assignedValue);
+      }
+      if (frecuenciaInput) {
+        const freqValue = proyectoData.recurrence_days || proyectoData.recommended_recurrence_days || proyectoData.frecuencia_dias || 30;
+        frecuenciaInput.value = String(freqValue);
+      }
+      
+      // Mostrar modal
+      const modal = document.getElementById('modal-editar-proyecto');
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Error mostrando modal editar:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+  
+  async function editarProyecto(event) {
+    event.preventDefault();
+    
+    const proyectoIdInput = document.getElementById('editar-proyecto-id');
+    const studentIdInput = document.getElementById('editar-proyecto-student-id');
+    const nombreInput = document.getElementById('editar-nombre-proyecto');
+    const descripcionInput = document.getElementById('editar-descripcion-proyecto');
+    const alumnoAsignadoInput = document.getElementById('editar-alumno-asignado');
+    
+    if (!proyectoIdInput || !nombreInput) {
+      alert('Error: campos requeridos no encontrados');
+      return;
+    }
+    
+    const proyectoId = proyectoIdInput.value;
+    const studentId = studentIdInput ? studentIdInput.value : '';
+    const nombre = nombreInput.value.trim();
+    const descripcion = descripcionInput ? descripcionInput.value.trim() : '';
+    const alumnoAsignado = alumnoAsignadoInput ? alumnoAsignadoInput.value : '';
+    
+    if (!nombre) {
+      alert('El nombre es requerido');
+      return;
+    }
+    
+    try {
+      // Intentar usar nuevo endpoint canónico si hay studentId
+      if (studentId) {
+        const response = await fetch('/admin/api/students/' + encodeURIComponent(studentId) + '/domains/projects/items/' + encodeURIComponent(proyectoId) + '?product_key=pde', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: nombre,
+            description: descripcion,
+            assigned_person_name: alumnoAsignado || null
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok) {
+            alert('✅ Proyecto actualizado correctamente');
+            cerrarModalEditarProyecto();
+            window.location.reload();
+            return;
+          }
+        }
+      }
+      
+      // Fallback a legacy si no hay studentId o falla el nuevo endpoint
+      alert('⚠️ Actualización parcial: algunos campos pueden requerir el nuevo sistema');
+      window.location.reload();
+    } catch (error) {
+      console.error('Error editando proyecto:', error);
+      alert('Error: ' + error.message);
+    }
+  }
+  
+  // ============================================================================
+  // INICIALIZACIÓN
+  // ============================================================================
+  
+  // Inicialización cuando el DOM está listo
+  document.addEventListener('DOMContentLoaded', function() {
+    inicializarEventListeners();
+    actualizarBotonSeleccionados();
+  });
+  
+  function inicializarEventListeners() {
+    // Botón crear proyecto
+    const btnCrearProyecto = document.getElementById('btn-crear-proyecto');
+    if (btnCrearProyecto) {
+      btnCrearProyecto.addEventListener('click', mostrarModalCrearProyecto);
+    }
+    
+    // Botón cerrar modal
+    const btnCerrarModal = document.getElementById('btn-cerrar-modal-crear');
+    if (btnCerrarModal) {
+      btnCerrarModal.addEventListener('click', cerrarModalCrearProyecto);
+    }
+    
+    // Cerrar modal crear al hacer clic fuera
+    const modalCrear = document.getElementById('modal-crear-proyecto');
+    if (modalCrear) {
+      modalCrear.addEventListener('click', function(event) {
+        if (event.target.hasAttribute('data-modal-backdrop')) {
+          cerrarModalCrearProyecto();
+        }
+      });
+    }
+    
+    // Modal editar proyecto
+    const btnCerrarModalEditar = document.getElementById('btn-cerrar-modal-editar');
+    if (btnCerrarModalEditar) {
+      btnCerrarModalEditar.addEventListener('click', cerrarModalEditarProyecto);
+    }
+    
+    const btnCancelarEditar = document.getElementById('btn-cancelar-editar-proyecto');
+    if (btnCancelarEditar) {
+      btnCancelarEditar.addEventListener('click', cerrarModalEditarProyecto);
+    }
+    
+    // Cerrar modal editar al hacer clic fuera
+    const modalEditar = document.getElementById('modal-editar-proyecto');
+    if (modalEditar) {
+      modalEditar.addEventListener('click', function(event) {
+        if (event.target.hasAttribute('data-modal-backdrop')) {
+          cerrarModalEditarProyecto();
+        }
+      });
+    }
+    
+    // Cerrar modales con ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const modalCrearEl = document.getElementById('modal-crear-proyecto');
+        const modalEditarEl = document.getElementById('modal-editar-proyecto');
+        if (modalCrearEl && !modalCrearEl.classList.contains('hidden')) {
+          cerrarModalCrearProyecto();
+        }
+        if (modalEditarEl && !modalEditarEl.classList.contains('hidden')) {
+          cerrarModalEditarProyecto();
+        }
+      }
+    });
+    
+    // Formulario editar proyecto
+    const formEditar = document.getElementById('form-editar-proyecto');
+    if (formEditar) {
+      formEditar.addEventListener('submit', editarProyecto);
+    }
+    
+    // Formulario crear proyecto
+    const formCrear = document.getElementById('form-crear-proyecto');
+    if (formCrear) {
+      formCrear.addEventListener('submit', crearProyecto);
+    }
+    
+    // Checkbox seleccionar todos
+    const checkboxTodos = document.getElementById('checkbox-seleccionar-todos');
+    if (checkboxTodos) {
+      checkboxTodos.addEventListener('change', function(event) {
+        const checked = event.target.checked;
+        document.querySelectorAll('.checkbox-proyecto').forEach(cb => {
+          cb.checked = checked;
+          const proyectoId = cb.getAttribute('data-proyecto-id');
+          if (checked) {
+            proyectosSeleccionados.add(proyectoId);
+          } else {
+            proyectosSeleccionados.delete(proyectoId);
+          }
+        });
+        actualizarBotonSeleccionados();
+      });
+    }
+    
+    // Delegación de eventos para checkboxes individuales
+    document.addEventListener('change', function(event) {
+      if (event.target.classList.contains('checkbox-proyecto')) {
+        const proyectoId = event.target.getAttribute('data-proyecto-id');
+        if (event.target.checked) {
+          proyectosSeleccionados.add(proyectoId);
+        } else {
+          proyectosSeleccionados.delete(proyectoId);
+        }
+        actualizarCheckboxTodos();
+        actualizarBotonSeleccionados();
+      }
+    });
+    
+    // Delegación de eventos para botones limpiar
+    document.addEventListener('click', function(event) {
+      const btnLimpiar = event.target.closest('.btn-limpiar-proyecto');
+      if (btnLimpiar) {
+        event.preventDefault();
+        const proyectoId = btnLimpiar.getAttribute('data-proyecto-id');
+        if (proyectoId) {
+          limpiarProyecto(proyectoId);
+        }
+      }
+    });
+    
+    // Delegación de eventos para botones editar
+    document.addEventListener('click', function(event) {
+      const btnEditar = event.target.closest('.btn-editar-proyecto');
+      if (btnEditar) {
+        event.preventDefault();
+        const proyectoId = btnEditar.getAttribute('data-proyecto-id');
+        const studentId = btnEditar.getAttribute('data-student-id');
+        if (proyectoId) {
+          mostrarModalEditarProyecto(proyectoId, studentId);
+        }
+      }
+    });
+    
+    // Delegación de eventos para inputs de recurrencia
+    document.addEventListener('change', function(event) {
+      if (event.target.classList.contains('input-recurrencia')) {
+        const proyectoId = event.target.getAttribute('data-proyecto-id');
+        const frecuencia = event.target.value;
+        if (proyectoId && frecuencia) {
+          actualizarRecurrencia(proyectoId, frecuencia);
+        }
+      }
+    });
+    
+    // Botón limpiar todos
+    const btnLimpiarTodos = document.getElementById('btn-limpiar-todos');
+    if (btnLimpiarTodos) {
+      btnLimpiarTodos.addEventListener('click', limpiarTodosProyectos);
+    }
+    
+    // Botón limpiar seleccionados
+    const btnLimpiarSeleccionados = document.getElementById('btn-limpiar-seleccionados');
+    if (btnLimpiarSeleccionados) {
+      btnLimpiarSeleccionados.addEventListener('click', limpiarSeleccionados);
+    }
+    
+    // Columnas ordenables
+    document.querySelectorAll('.sortable-column').forEach(col => {
+      col.addEventListener('click', function() {
+        const key = this.getAttribute('data-sort-key');
+        if (key) {
+          ordenarPorColumna(key);
+        }
+      });
+    });
+  }
+  
+  function actualizarBotonSeleccionados() {
+    const btn = document.getElementById('btn-limpiar-seleccionados');
+    if (btn) {
+      if (proyectosSeleccionados.size > 0) {
+        btn.classList.remove('hidden');
+      } else {
+        btn.classList.add('hidden');
+      }
+    }
+  }
+  
+  function actualizarCheckboxTodos() {
+    const checkboxTodos = document.getElementById('checkbox-seleccionar-todos');
+    const checkboxes = document.querySelectorAll('.checkbox-proyecto');
+    if (checkboxTodos && checkboxes.length > 0) {
+      const todosMarcados = Array.from(checkboxes).every(cb => cb.checked);
+      const algunoMarcado = Array.from(checkboxes).some(cb => cb.checked);
+      checkboxTodos.checked = todosMarcados;
+      checkboxTodos.indeterminate = algunoMarcado && !todosMarcados;
+    }
+  }
+  
+  function ordenarPorColumna(key) {
+    // Toggle dirección
+    if (sortOrder.key === key) {
+      sortOrder.direction = sortOrder.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortOrder.key = key;
+      sortOrder.direction = 'asc';
+    }
+    
+    // Actualizar indicadores visuales
+    document.querySelectorAll('.sort-indicator').forEach(ind => {
+      ind.textContent = '';
+    });
+    const currentCol = document.querySelector(`[data-sort-key="${key}"]`);
+    if (currentCol) {
+      const indicator = currentCol.querySelector('.sort-indicator');
+      if (indicator) {
+        indicator.textContent = sortOrder.direction === 'asc' ? ' ↑' : ' ↓';
+      }
+    }
+    
+    // Ordenar filas (client-side sorting)
+    const tbody = document.getElementById('proyectos-tbody');
+    if (!tbody) return;
+    
+    const rows = Array.from(tbody.querySelectorAll('tr[data-proyecto-id]'));
+    rows.sort((a, b) => {
+      let aVal, bVal;
+      if (key === 'alumno') {
+        aVal = a.cells[3].textContent.trim();
+        bVal = b.cells[3].textContent.trim();
+      }
+      
+      if (aVal < bVal) return sortOrder.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    // Reordenar en el DOM
+    rows.forEach(row => tbody.appendChild(row));
+  }
+  
+  async function limpiarProyecto(proyectoId) {
+    if (!confirm('¿Estás seguro de que quieres limpiar este proyecto?')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/admin/api/transmutaciones/proyectos/${proyectoId}/limpiar`, {
+        method: 'POST'
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        alert(`✅ Proyecto limpiado correctamente. ${data.marcados || 0} registro(s) actualizado(s).`);
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error || 'Error desconocido'}${data.trace_id ? ' (trace_id: ' + data.trace_id + ')' : ''}`);
+      }
+    } catch (error) {
+      console.error('Error limpiando proyecto:', error);
+      alert('❌ Error limpiando proyecto: ' + error.message);
+    }
+  }
+  
+  async function limpiarSeleccionados() {
+    const ids = Array.from(proyectosSeleccionados).map(id => parseInt(id)).filter(id => !isNaN(id));
+    if (ids.length === 0) {
+      alert('No hay proyectos seleccionados');
+      return;
+    }
+    
+    if (!confirm(`¿Estás seguro de que quieres limpiar ${ids.length} proyecto(s) seleccionado(s)?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('/admin/api/transmutaciones/proyectos/limpiar-seleccionados', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ proyecto_ids: ids })
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        alert(`✅ ${data.marcados || 0} proyecto(s) limpiado(s) correctamente.`);
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error || 'Error desconocido'}${data.trace_id ? ' (trace_id: ' + data.trace_id + ')' : ''}`);
+      }
+    } catch (error) {
+      console.error('Error limpiando proyectos seleccionados:', error);
+      alert('❌ Error limpiando proyectos seleccionados: ' + error.message);
+    }
+  }
+  
+  async function limpiarTodosProyectos() {
+    if (!confirm('¿Estás seguro de que quieres limpiar TODOS los proyectos listados? Esta acción es auditable.')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('/admin/api/transmutaciones/proyectos/limpiar-todos', {
+        method: 'POST'
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        alert(`✅ Todos los proyectos limpiados correctamente. ${data.marcados || 0} registro(s) actualizado(s).`);
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error || 'Error desconocido'}${data.trace_id ? ' (trace_id: ' + data.trace_id + ')' : ''}`);
+      }
+    } catch (error) {
+      console.error('Error limpiando todos los proyectos:', error);
+      alert('❌ Error limpiando todos los proyectos: ' + error.message);
+    }
+  }
+  
+  async function actualizarRecurrencia(proyectoId, frecuenciaDias) {
+    const frecuencia = parseInt(frecuenciaDias);
+    
+    if (isNaN(frecuencia) || frecuencia < 1) {
+      alert('La recurrencia debe ser un número positivo');
+      const input = document.querySelector(`.input-recurrencia[data-proyecto-id="${proyectoId}"]`);
+      if (input) {
+        input.value = input.getAttribute('data-original-value') || '30';
+      }
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/admin/api/transmutaciones/proyectos/${proyectoId}/recurrencia`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ frecuencia_dias: frecuencia })
+      });
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        alert(`❌ Error: ${data.error || 'Error desconocido'}${data.trace_id ? ' (trace_id: ' + data.trace_id + ')' : ''}`);
+        const input = document.querySelector(`.input-recurrencia[data-proyecto-id="${proyectoId}"]`);
+        if (input) {
+          input.value = input.getAttribute('data-original-value') || '30';
+        }
+      } else {
+        // Guardar valor original para poder restaurar si hay error
+        const input = document.querySelector(`.input-recurrencia[data-proyecto-id="${proyectoId}"]`);
+        if (input) {
+          input.setAttribute('data-original-value', frecuencia);
+        }
+      }
+    } catch (error) {
+      console.error('Error actualizando recurrencia:', error);
+      alert('❌ Error actualizando recurrencia: ' + error.message);
+      const input = document.querySelector(`.input-recurrencia[data-proyecto-id="${proyectoId}"]`);
+      if (input) {
+        input.value = input.getAttribute('data-original-value') || '30';
+      }
+    }
+  }
+  
+  async function crearProyecto(event) {
+    event.preventDefault();
+    
+    const nombre = document.getElementById('input-nombre-proyecto').value.trim();
+    const descripcion = document.getElementById('input-descripcion-proyecto').value.trim();
+    const alumnoId = document.getElementById('input-alumno-proyecto').value;
+    const estado = document.getElementById('input-estado-proyecto').value;
+    const frecuencia = parseInt(document.getElementById('input-frecuencia-proyecto').value);
+    
+    if (!nombre) {
+      alert('El nombre es requerido');
+      return;
+    }
+    
+    if (!alumnoId) {
+      alert('El alumno creador es requerido');
+      return;
+    }
+    
+    if (isNaN(frecuencia) || frecuencia < 1) {
+      alert('La recurrencia debe ser un número positivo');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/admin/api/transmutaciones/proyectos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nombre,
+          descripcion: descripcion || null,
+          frecuencia_dias: frecuencia,
+          created_by_student_id: parseInt(alumnoId),
+          activo: estado === 'activo'
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        alert('✅ Proyecto creado correctamente');
+        cerrarModalCrearProyecto();
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error || 'Error desconocido'}${data.trace_id ? ' (trace_id: ' + data.trace_id + ')' : ''}`);
+      }
+    } catch (error) {
+      console.error('Error creando proyecto:', error);
+      alert('❌ Error creando proyecto: ' + error.message);
+    }
+  }
+})();
+</script>

@@ -1,494 +1,484 @@
 // src/endpoints/admin-panel-modo-maestro.js
-// Modo Maestro: Vista completa y detallada de un alumno
+// Modo Maestro: Vista completa del alumno usando Student SOT v1
+//
+// GET /admin/modo-maestro - Lista de alumnos con buscador
+// GET /admin/modo-maestro?student_id=X - Universo completo del alumno
 
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { query } from '../../database/pg.js';
-import { generarAurigraph } from '../services/aurigraph.js';
-import { replaceAdminTemplate } from '../core/admin/admin-template-helper.js';
+import { requireAdminContext } from '../core/auth-context.js';
+import { getRequestId } from '../core/observability/request-context.js';
+import { renderAdminPage } from '../core/admin/admin-page-renderer.js';
+import { logError } from '../core/observability/logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const baseTemplate = readFileSync(join(__dirname, '../core/html/admin/base.html'), 'utf-8');
-
-function replace(html, placeholders) {
-  let output = html;
-  for (const key in placeholders) {
-    const value = placeholders[key] ?? "";
-    const regex = new RegExp(`{{${key}}}`, "g");
-    output = output.replace(regex, value);
+/**
+ * GET /admin/modo-maestro
+ * Vista principal: buscador y lista de alumnos
+ */
+async function renderModoMaestro(request, env, ctx) {
+  const traceId = getRequestId();
+  
+  try {
+    const authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return authCtx;
+    }
+    
+    const url = new URL(request.url);
+    const studentId = url.searchParams.get('student_id');
+    
+    if (studentId) {
+      // Mostrar universo del alumno
+      return await renderStudentUniverse(parseInt(studentId, 10), traceId);
+    } else {
+      // Mostrar buscador y lista
+      return await renderStudentSearch(traceId);
+    }
+  } catch (error) {
+    logError('AdminModoMaestro', 'Error en renderModoMaestro', {
+      error: error.message,
+      traceId
+    });
+    
+    return renderAdminPage({
+      title: 'Error - Modo Master',
+      contentHtml: `
+        <div class="p-6">
+          <div class="bg-red-900/30 border border-red-700 rounded-lg p-6">
+            <h2 class="text-xl font-bold text-red-400 mb-2">Error</h2>
+            <p class="text-red-200">${error.message}</p>
+            <p class="text-red-300 text-sm mt-2">Trace ID: ${traceId}</p>
+          </div>
+        </div>
+      `,
+      activePath: '/admin/modo-maestro',
+      userContext: { isAdmin: true }
+    });
   }
-  return output;
 }
 
 /**
- * GET /admin/modo-maestro?alumno_id=X - Vista completa del alumno
+ * Renderiza el buscador de alumnos
  */
-export async function renderModoMaestro(request, env) {
-  try {
-    const url = new URL(request.url);
-    const alumno_id = url.searchParams.get('alumno_id');
-
-    if (!alumno_id) {
-      // Mostrar lista de alumnos ACTIVOS para seleccionar (Modo Master solo para activos)
-      // Primero obtener TODOS los alumnos para debug, luego filtrar
-      const todosAlumnos = await query(
-        `SELECT a.id, a.email, a.apodo, a.nombre_completo, COALESCE(a.apodo, a.nombre_completo, a.email) as nombre, 
-                a.nivel_actual as nivel, a.streak as racha, a.estado_suscripcion, 
-                COALESCE(nf.fase, 'sanación') as fase,
-                a.fecha_ultima_practica
-         FROM alumnos a
-         LEFT JOIN niveles_fases nf ON a.nivel_actual >= nf.nivel_min 
-                                    AND (nf.nivel_max IS NULL OR a.nivel_actual <= nf.nivel_max)
-         ORDER BY COALESCE(a.apodo, a.nombre_completo, a.email)`
-      );
+async function renderStudentSearch(traceId) {
+  const contentHtml = `
+    <div class="p-6">
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white mb-2">🧙 Modo Master</h1>
+        <p class="text-slate-300">Busca un alumno para ver su universo completo (Student SOT v1)</p>
+      </div>
       
-      // Filtrar solo los que tienen estado 'activa' o 'active' (case insensitive)
-      const alumnos = {
-        rows: todosAlumnos.rows.filter(a => {
-          const estado = (a.estado_suscripcion || '').toLowerCase().trim();
-          return estado === 'activa' || estado === 'active';
-        })
-      };
+      <!-- Buscador -->
+      <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 mb-6">
+        <label for="student-search" class="block text-sm font-medium text-slate-300 mb-2">
+          Buscar alumno (email o nombre)
+        </label>
+        <div class="flex gap-2">
+          <input
+            type="text"
+            id="student-search"
+            placeholder="Escribe email o nombre..."
+            class="flex-1 px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onkeypress="if(event.key==='Enter') { event.preventDefault(); searchStudents(); }"
+          />
+          <button
+            onclick="searchStudents()"
+            class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Buscar
+          </button>
+        </div>
+      </div>
       
-      // Debug: mostrar qué alumnos se están obteniendo
-      console.log(`[Modo Master] Total alumnos en BD: ${todosAlumnos.rows.length}`);
-      console.log(`[Modo Master] Alumnos activos encontrados: ${alumnos.rows.length}`);
-      if (todosAlumnos.rows.length > 0) {
-        const estadosUnicos = [...new Set(todosAlumnos.rows.map(a => a.estado_suscripcion || 'NULL'))];
-        console.log(`[Modo Master] Estados únicos en BD:`, estadosUnicos);
+      <!-- Resultados -->
+      <div id="search-results" class="space-y-4"></div>
+      
+      <!-- Loading -->
+      <div id="loading" class="hidden text-center py-8">
+        <div class="text-slate-400">Buscando...</div>
+      </div>
+      
+      <!-- Error -->
+      <div id="error" class="hidden bg-red-900/30 border border-red-700 rounded-lg p-4">
+        <p class="text-red-200" id="error-message"></p>
+        <p class="text-red-300 text-sm mt-2" id="error-trace"></p>
+      </div>
+    </div>
+    
+    <script>
+      async function searchStudents() {
+        const query = document.getElementById('student-search').value.trim();
+        const resultsEl = document.getElementById('search-results');
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        
+        // Limpiar resultados anteriores
+        resultsEl.innerHTML = '';
+        errorEl.classList.add('hidden');
+        
+        if (!query || query.length < 2) {
+          return;
+        }
+        
+        loadingEl.classList.remove('hidden');
+        
+        try {
+          const response = await fetch('/admin/api/students/search?q=' + encodeURIComponent(query));
+          const data = await response.json();
+          
+          loadingEl.classList.add('hidden');
+          
+          if (!data.ok) {
+            throw new Error(data.error || 'Error en búsqueda');
+          }
+          
+          if (data.students.length === 0) {
+            resultsEl.innerHTML = '<div class="text-center py-8 text-slate-400">No se encontraron alumnos</div>';
+            return;
+          }
+          
+          // Renderizar resultados usando DOM API
+          const container = document.createElement('div');
+          container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+          
+          data.students.forEach(student => {
+            const card = document.createElement('a');
+            card.href = '/admin/modo-maestro?student_id=' + student.id;
+            card.className = 'bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-indigo-500 hover:shadow-xl transition-all block';
+            
+            const displayName = student.display_name || student.email;
+            const estado = student.estado_suscripcion || 'N/A';
+            const nivel = student.nivel_actual || 1;
+            const streak = student.streak || 0;
+            
+            card.innerHTML = 
+              '<div class="flex items-start justify-between mb-2">' +
+                '<h3 class="font-semibold text-lg text-white">' + displayName + '</h3>' +
+                '<span class="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded font-semibold">✓ ' + estado + '</span>' +
+              '</div>' +
+              (student.email ? '<p class="text-sm text-slate-400 mb-2">' + student.email + '</p>' : '') +
+              '<div class="mt-3 space-y-1 text-xs">' +
+                '<div class="flex items-center gap-2 text-slate-300">' +
+                  '<span class="text-indigo-400">⭐ Nivel ' + nivel + '</span>' +
+                  '<span>•</span>' +
+                  '<span class="text-yellow-400">🔥 Racha ' + streak + ' días</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="mt-3 pt-3 border-t border-slate-700">' +
+                '<span class="text-indigo-400 text-sm font-medium">→ Ver Universo Completo</span>' +
+              '</div>';
+            
+            container.appendChild(card);
+          });
+          
+          resultsEl.appendChild(container);
+        } catch (error) {
+          loadingEl.classList.add('hidden');
+          errorEl.classList.remove('hidden');
+          document.getElementById('error-message').textContent = error.message;
+          document.getElementById('error-trace').textContent = 'Trace ID: ' + (data?.trace_id || 'N/A');
+        }
       }
+    </script>
+  `;
+  
+  return renderAdminPage({
+    title: 'Modo Master - Admin',
+    contentHtml,
+    activePath: '/admin/modo-maestro',
+    userContext: { isAdmin: true }
+  });
+}
 
-      const content = `
-        <div class="px-4 py-5 sm:p-6">
-          <div class="mb-6">
-            <h2 class="text-2xl font-bold text-white mb-2">🧙 Modo Master</h2>
-            <p class="text-slate-300">Selecciona un alumno con suscripción activa para ver su perfil completo.</p>
-            <p class="text-slate-400 text-sm mt-2">⚠️ Solo se muestran alumnos con estado_suscripcion = 'activa'</p>
+/**
+ * Renderiza el universo completo del alumno
+ */
+async function renderStudentUniverse(studentId, traceId) {
+  try {
+    // Usar servicios directamente (estamos en el servidor)
+    const { getStudent } = await import('../services/student-sot-service.js');
+    const { getDefaultStudentDomainPolicyRepo } = await import('../infra/repos/student-domain-policy-repo-pg.js');
+    const { getDefaultStudentItemStateRepo } = await import('../infra/repos/student-item-state-repo-pg.js');
+    const { getDefaultStudentAuditRepo } = await import('../infra/repos/student-audit-repo-pg.js');
+    const { query } = await import('../../database/pg.js');
+    
+    const student = await getStudent(studentId);
+    if (!student) {
+      return renderAdminPage({
+        title: 'Alumno no encontrado - Modo Master',
+        contentHtml: `
+          <div class="p-6">
+            <div class="bg-red-900/30 border border-red-700 rounded-lg p-6">
+              <h2 class="text-xl font-bold text-red-400 mb-2">Alumno no encontrado</h2>
+              <p class="text-red-200">El alumno con ID ${studentId} no existe.</p>
+              <a href="/admin/modo-maestro" class="inline-block mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                ← Volver a búsqueda
+              </a>
+            </div>
           </div>
-          
-          ${alumnos.rows.length === 0 ? `
-            <div class="bg-yellow-900/30 border border-yellow-700 rounded-lg p-6 text-center">
-              <p class="text-yellow-200 text-lg mb-2">No hay alumnos con suscripción activa</p>
-              <p class="text-yellow-300 text-sm">Todos los alumnos están pausados, cancelados o expirados.</p>
-            </div>
-          ` : `
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              ${alumnos.rows
-                .filter(a => {
-                  // Filtrar solo los que realmente tienen estado activo
-                  const estado = (a.estado_suscripcion || '').toLowerCase();
-                  return estado === 'activa' || estado === 'active';
-                })
-                .map(a => {
-                  const estado = (a.estado_suscripcion || '').toLowerCase();
-                  const esActiva = estado === 'activa' || estado === 'active';
-                  
-                  return `
-                <a href="/admin/master/${a.id}" 
-                   class="bg-slate-800 border ${esActiva ? 'border-green-600' : 'border-red-600'} rounded-lg p-4 hover:border-purple-500 hover:shadow-xl transition-all">
-                  <div class="flex items-start justify-between mb-2">
-                    <h3 class="font-semibold text-lg text-white">${a.nombre}</h3>
-                    ${esActiva ? `
-                      <span class="px-2 py-1 bg-green-900/30 text-green-400 text-xs rounded font-semibold">✓ Activa</span>
-                    ` : `
-                      <span class="px-2 py-1 bg-red-900/30 text-red-400 text-xs rounded">⚠ ${a.estado_suscripcion || 'Sin estado'}</span>
-                    `}
-                  </div>
-                  ${a.email ? `<p class="text-sm text-slate-400 mb-2">${a.email}</p>` : ''}
-                  <div class="mt-3 space-y-1 text-xs">
-                    <div class="flex items-center gap-2 text-slate-300">
-                      <span class="text-indigo-400">⭐ Nivel ${a.nivel || 1}</span>
-                      <span>•</span>
-                      <span class="text-yellow-400">🔥 Racha ${a.racha || 0} días</span>
-                    </div>
-                    ${a.fase ? `<div class="text-slate-400">🔑 Fase: ${a.fase}</div>` : ''}
-                    ${a.fecha_ultima_practica ? `
-                      <div class="text-slate-400">📅 Última práctica: ${new Date(a.fecha_ultima_practica).toLocaleDateString('es-ES')}</div>
-                    ` : ''}
-                    <div class="text-slate-500 mt-2 pt-2 border-t border-slate-700">
-                      Estado: <strong>${a.estado_suscripcion || 'NULL'}</strong>
-                    </div>
-                  </div>
-                  <div class="mt-3 pt-3 border-t border-slate-700">
-                    <span class="text-purple-400 text-sm font-medium">→ Abrir Modo Master</span>
-                  </div>
-                </a>
-              `;
-                }).join('')}
-            </div>
-          `}
-        </div>
-      `;
-
-      return new Response(
-        replace(baseTemplate, {
-          TITLE: 'Modo Maestro - Admin',
-          CONTENT: content
-        }),
-        {
-          headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-        }
-      );
+        `,
+        activePath: '/admin/modo-maestro',
+        userContext: { isAdmin: true }
+      });
     }
-
-    // Si hay alumno_id, redirigir al nuevo sistema Modo Master
-    // Verificar que el alumno tenga suscripción activa
-    const alumnoResult = await query(
-      `SELECT id, estado_suscripcion FROM alumnos WHERE id = $1`,
-      [alumno_id]
+    
+    // Obtener productos
+    const productsResult = await query(
+      'SELECT * FROM student_product_memberships WHERE student_id = $1',
+      [studentId]
     );
-
-    if (alumnoResult.rows.length === 0) {
-      return new Response('Alumno no encontrado', { status: 404 });
-    }
-
-    const alumno = alumnoResult.rows[0];
+    const products = productsResult.rows || [];
     
-    // Si no tiene suscripción activa, mostrar error
-    if (alumno.estado_suscripcion !== 'activa') {
-      const content = `
-        <div class="px-4 py-5 sm:p-6">
-          <div class="bg-red-900/30 border border-red-700 rounded-lg p-6 text-center">
-            <h2 class="text-2xl font-bold text-red-400 mb-4">🔒 Acceso Denegado</h2>
-            <p class="text-red-200 text-lg mb-2">El Modo Master solo está disponible para alumnos con suscripción activa.</p>
-            <p class="text-red-300 text-sm mb-4">Este alumno tiene estado: <strong>${alumno.estado_suscripcion}</strong></p>
-            <a href="/admin/modo-maestro" class="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
-              ← Volver a lista de alumnos activos
-            </a>
+    // Obtener dominios
+    const domains = {};
+    const domainKeys = ['transmutaciones_energeticas', 'proyectos', 'lugares', 'apadrinados'];
+    const policyRepo = getDefaultStudentDomainPolicyRepo();
+    const stateRepo = getDefaultStudentItemStateRepo();
+    
+    for (const domainKey of domainKeys) {
+      const policy = await policyRepo.getPolicy(studentId, domainKey);
+      const activeItems = await stateRepo.listStates(studentId, domainKey, { isActive: true });
+      const allItems = await stateRepo.listStates(studentId, domainKey);
+      const activeCount = await stateRepo.countActiveItems(studentId, domainKey);
+      
+      const limit = policy?.active_limit_override ?? policy?.active_limit_default ?? 1;
+      
+      domains[domainKey] = {
+        active_limit: limit,
+        active_limit_override: policy?.active_limit_override,
+        can_activate_multiple: policy?.can_activate_multiple || false,
+        active_count: activeCount,
+        active_items: activeItems,
+        all_items: allItems,
+        warnings: activeCount > limit ? [`Límite excedido: ${activeCount} > ${limit}`] : []
+      };
+    }
+    
+    // Obtener overrides
+    const allPolicies = await policyRepo.listPolicies(studentId);
+    const overrides = allPolicies.filter(p => p.active_limit_override !== null);
+    
+    // Obtener auditoría reciente
+    const auditRepo = getDefaultStudentAuditRepo();
+    const auditRecent = await auditRepo.listAuditEvents(studentId, { limit: 10, offset: 0 });
+    
+    // Renderizar HTML
+    const domainNames = {
+      transmutaciones_energeticas: 'Transmutaciones Energéticas',
+      proyectos: 'Proyectos',
+      lugares: 'Lugares',
+      apadrinados: 'Apadrinados'
+    };
+    
+    // Construir HTML de dominios
+    let domainsHtml = '';
+    for (const [key, domain] of Object.entries(domains)) {
+      const domainName = domainNames[key] || key;
+      const overrideText = domain.active_limit_override ? ` (override: ${domain.active_limit_override})` : '';
+      const activeCountClass = domain.active_count > domain.active_limit ? 'text-red-400' : 'text-green-400';
+      const warningsHtml = domain.warnings.length > 0 
+        ? `<div class="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-yellow-200 text-sm">⚠️ ${domain.warnings.join(', ')}</div>`
+        : '';
+      
+      let activeItemsHtml = '';
+      if (domain.active_items.length > 0) {
+        activeItemsHtml = '<div class="space-y-2"><h4 class="text-sm font-semibold text-slate-400 mb-2">Ítems Activos:</h4>';
+        for (const item of domain.active_items) {
+          const cleanClass = item.is_clean ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400';
+          const cleanText = item.is_clean ? '✓ Limpio' : '⚠ Pendiente';
+          const lastCleaned = item.last_cleaned_at ? new Date(item.last_cleaned_at).toLocaleDateString('es-ES') : 'N/A';
+          const cleanCountHtml = item.clean_count > 0 
+            ? `<div class="text-slate-400 mt-1">Limpiezas: ${item.clean_count} | Última: ${lastCleaned}</div>`
+            : '';
+          
+          activeItemsHtml += `
+            <div class="bg-slate-900 border border-slate-700 rounded p-3 text-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-white">Item ID: ${item.item_id}</span>
+                <span class="px-2 py-1 rounded text-xs ${cleanClass}">${cleanText}</span>
+              </div>
+              ${cleanCountHtml}
+            </div>
+          `;
+        }
+        activeItemsHtml += '</div>';
+      } else {
+        activeItemsHtml = '<p class="text-slate-400 text-sm">Sin ítems activos</p>';
+      }
+      
+      domainsHtml += `
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-white">${domainName}</h3>
+            <div class="text-sm text-slate-400">
+              Límite: <span class="font-semibold text-indigo-400">${domain.active_limit}</span>${overrideText}
+            </div>
           </div>
+          <div class="mb-4">
+            <div class="text-sm text-slate-300 mb-2">
+              Activos: <span class="font-semibold ${activeCountClass}">${domain.active_count}</span> / ${domain.active_limit}
+            </div>
+            ${warningsHtml}
+          </div>
+          ${activeItemsHtml}
         </div>
       `;
-      return new Response(
-        replace(baseTemplate, {
-          TITLE: 'Acceso Denegado - Modo Master',
-          CONTENT: content
-        }),
-        {
-          status: 403,
-          headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-        }
-      );
     }
     
-    // Redirigir al nuevo sistema Modo Master
-    return new Response(null, {
-      status: 302,
-      headers: { 'Location': `/admin/master/${alumno_id}` }
-    });
-    const practicas = await query(`
-      SELECT 
-        p.*,
-        ap.nombre as aspecto_nombre
-      FROM practicas p
-      LEFT JOIN aspectos_practica ap ON p.aspecto_id = ap.id
-      WHERE p.alumno_id = $1
-      ORDER BY p.fecha DESC
-      LIMIT 20
-    `, [alumno_id]);
-
-    // Obtener reflexiones recientes (últimas 10)
-    const reflexiones = await query(`
-      SELECT *
-      FROM reflexiones
-      WHERE alumno_id = $1
-      ORDER BY fecha DESC
-      LIMIT 10
-    `, [alumno_id]);
-
-    // Obtener logros
-    const logros = await query(`
-      SELECT 
-        l.*,
-        ld.nombre,
-        ld.descripcion,
-        ld.icono
-      FROM logros l
-      JOIN logros_definicion ld ON l.codigo_logro = ld.codigo
-      WHERE l.alumno_id = $1
-      ORDER BY l.fecha_obtenido DESC
-    `, [alumno_id]);
-
-    // Obtener misiones
-    const misiones = await query(`
-      SELECT 
-        ma.*,
-        m.nombre,
-        m.descripcion,
-        m.condiciones
-      FROM misiones_alumnos ma
-      JOIN misiones m ON ma.mision_id = m.id
-      WHERE ma.alumno_id = $1
-      ORDER BY ma.completada ASC, ma.created_at DESC
-    `, [alumno_id]);
-
-    // Estadísticas
-    const stats = await query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE fecha >= NOW() - INTERVAL '7 days') as practicas_semana,
-        COUNT(*) FILTER (WHERE fecha >= NOW() - INTERVAL '30 days') as practicas_mes,
-        COUNT(*) as practicas_total,
-        COUNT(DISTINCT DATE(fecha)) FILTER (WHERE fecha >= NOW() - INTERVAL '30 days') as dias_activos_mes
-      FROM practicas
-      WHERE alumno_id = $1
-    `, [alumno_id]);
+    // Construir HTML de overrides
+    let overridesHtml = '';
+    if (overrides.length > 0) {
+      overridesHtml = '<div class="bg-slate-800 border border-slate-700 rounded-lg p-6"><h3 class="text-xl font-bold text-white mb-4">Overrides Activos</h3><div class="space-y-2">';
+      for (const override of overrides) {
+        const overrideDomainName = domainNames[override.domain_key] || override.domain_key;
+        const reasonHtml = override.reason ? `<p class="text-slate-400 text-sm mt-1">${override.reason}</p>` : '';
+        overridesHtml += `
+          <div class="bg-slate-900 border border-slate-700 rounded p-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-white font-semibold">${overrideDomainName}</span>
+                <span class="text-slate-400 text-sm ml-2">Límite: ${override.active_limit_override}</span>
+              </div>
+              <button
+                onclick="removeOverride(${studentId}, '${override.id}')"
+                class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+              >
+                Retirar
+              </button>
+            </div>
+            ${reasonHtml}
+          </div>
+        `;
+      }
+      overridesHtml += '</div></div>';
+    } else {
+      overridesHtml = '<div class="bg-slate-800 border border-slate-700 rounded-lg p-6"><p class="text-slate-400">Sin overrides activos</p></div>';
+    }
     
-    const statsData = stats.rows[0] || {};
-
-    // Emociones recientes
-    const emocionesRecientes = await query(`
-      SELECT 
-        DATE(fecha) as fecha,
-        AVG(energia_emocional) as energia_media
-      FROM reflexiones
-      WHERE alumno_id = $1
-        AND energia_emocional IS NOT NULL
-        AND fecha >= NOW() - INTERVAL '30 days'
-      GROUP BY DATE(fecha)
-      ORDER BY fecha DESC
-      LIMIT 10
-    `, [alumno_id]);
-
-    const content = `
-      <div class="px-4 py-5 sm:p-6">
-        <div class="flex justify-between items-center mb-6">
+    // Construir HTML de auditoría
+    let auditHtml = '';
+    if (auditRecent.length > 0) {
+      auditHtml = '<div class="bg-slate-800 border border-slate-700 rounded-lg p-6"><h3 class="text-xl font-bold text-white mb-4">Auditoría Reciente</h3><div class="space-y-2 max-h-96 overflow-y-auto">';
+      for (const audit of auditRecent) {
+        const auditDate = new Date(audit.created_at).toLocaleString('es-ES');
+        auditHtml += `
+          <div class="bg-slate-900 border border-slate-700 rounded p-3 text-sm">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-white font-semibold">${audit.action}</span>
+              <span class="text-slate-400">${auditDate}</span>
+            </div>
+            <div class="text-slate-400">
+              Dominio: ${audit.domain_key} | Item: ${audit.item_id} | Actor: ${audit.actor_type}
+            </div>
+          </div>
+        `;
+      }
+      auditHtml += '</div></div>';
+    } else {
+      auditHtml = '<div class="bg-slate-800 border border-slate-700 rounded-lg p-6"><p class="text-slate-400">Sin eventos de auditoría</p></div>';
+    }
+    
+    const contentHtml = `
+      <div class="p-6">
+        <div class="mb-6">
+          <a href="/admin/modo-maestro" class="text-indigo-400 hover:text-indigo-300 text-sm mb-2 inline-block">← Volver a búsqueda</a>
+          <h1 class="text-3xl font-bold text-white mt-2">🧙 Universo del Alumno</h1>
+          <div class="mt-4 bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <div class="text-slate-400">Email</div>
+                <div class="text-white font-semibold">${student.email || 'N/A'}</div>
+              </div>
+              <div>
+                <div class="text-slate-400">Nombre</div>
+                <div class="text-white font-semibold">${student.apodo || student.email || 'N/A'}</div>
+              </div>
+              <div>
+                <div class="text-slate-400">Nivel</div>
+                <div class="text-indigo-400 font-semibold text-xl">${student.nivel_actual || 1}</div>
+              </div>
+              <div>
+                <div class="text-slate-400">Racha</div>
+                <div class="text-yellow-400 font-semibold text-xl">${student.streak || 0} días</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="space-y-6">
           <div>
-            <a href="/admin/modo-maestro" class="text-indigo-400 hover:text-indigo-300 text-sm">← Volver a lista</a>
-            <h2 class="text-3xl font-bold text-white mt-2">🧙 Modo Maestro: ${alumno.nombre}</h2>
-            ${alumno.email ? `<p class="text-lg text-slate-300">${alumno.email}</p>` : ''}
+            <h2 class="text-2xl font-bold text-white mb-4">Dominios Energéticos</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              ${domainsHtml}
+            </div>
           </div>
-          <div class="text-right bg-slate-800 rounded-lg p-4 border border-slate-700">
-            <div class="text-sm text-slate-400">Nivel</div>
-            <div class="text-3xl font-bold text-indigo-400">${alumno.nivel_actual || 1}</div>
-            <div class="text-sm text-slate-400 mt-2">Racha: <span class="text-yellow-400 font-semibold">${alumno.streak || 0}</span> días</div>
-          </div>
-        </div>
-
-        <!-- Grid de 2 columnas -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          <!-- Columna izquierda: Aurigraph y estadísticas -->
-          <div class="space-y-6">
-            
-            <!-- Aurigraph -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">📊 Aurigraph</h3>
-              <div class="flex justify-center">
-                ${aurigraph.svg}
-              </div>
-              <div class="mt-4 grid grid-cols-3 gap-2 text-sm">
-                <div class="text-center bg-slate-900 p-2 rounded">
-                  <div class="font-semibold text-slate-400">Nivel</div>
-                  <div class="text-indigo-400 text-xl">${aurigraph.metricas.nivel}</div>
-                </div>
-                <div class="text-center bg-slate-900 p-2 rounded">
-                  <div class="font-semibold text-slate-400">Racha</div>
-                  <div class="text-yellow-400 text-xl">${aurigraph.metricas.racha}</div>
-                </div>
-                <div class="text-center bg-slate-900 p-2 rounded">
-                  <div class="font-semibold text-slate-400">Energía</div>
-                  <div class="text-green-400 text-xl">${aurigraph.metricas.energia}</div>
-                </div>
-                <div class="text-center bg-slate-900 p-2 rounded">
-                  <div class="font-semibold text-slate-400">Intensidad</div>
-                  <div class="text-blue-400 text-xl">${aurigraph.metricas.intensidad}</div>
-                </div>
-                <div class="text-center bg-slate-900 p-2 rounded">
-                  <div class="font-semibold text-slate-400">Diversidad</div>
-                  <div class="text-cyan-400 text-xl">${aurigraph.metricas.diversidad}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Estadísticas -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">📈 Estadísticas</h3>
-              <div class="space-y-3">
-                <div class="flex justify-between text-slate-200">
-                  <span>Prácticas esta semana:</span>
-                  <span class="font-semibold text-indigo-400">${statsData.practicas_semana || 0}</span>
-                </div>
-                <div class="flex justify-between text-slate-200">
-                  <span>Prácticas este mes:</span>
-                  <span class="font-semibold text-purple-400">${statsData.practicas_mes || 0}</span>
-                </div>
-                <div class="flex justify-between text-slate-200">
-                  <span>Prácticas totales:</span>
-                  <span class="font-semibold text-blue-400">${statsData.practicas_total || 0}</span>
-                </div>
-                <div class="flex justify-between text-slate-200">
-                  <span>Días activos (30d):</span>
-                  <span class="font-semibold text-green-400">${statsData.dias_activos_mes || 0}</span>
-                </div>
-                <div class="flex justify-between text-slate-200">
-                  <span>Energía emocional:</span>
-                  <span class="font-semibold ${alumno.energia_emocional >= 7 ? 'text-green-400' : alumno.energia_emocional >= 4 ? 'text-yellow-400' : 'text-red-400'}">
-                    ${alumno.energia_emocional || 'N/A'}/10
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Logros -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">🏆 Logros (${logros.rows.length})</h3>
-              ${logros.rows.length === 0 ? `
-                <p class="text-slate-400 text-sm">Sin logros aún</p>
-              ` : `
-                <div class="space-y-2">
-                  ${logros.rows.map(l => {
-                    const fecha = new Date(l.fecha_obtenido);
-                    return `
-                      <div class="flex items-center gap-3 p-2 bg-slate-900 rounded">
-                        <div class="text-2xl">${l.icono || '🏆'}</div>
-                        <div class="flex-1">
-                          <div class="font-semibold text-sm text-white">${l.nombre}</div>
-                          <div class="text-xs text-slate-400">${fecha.toLocaleDateString('es-ES')}</div>
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              `}
-            </div>
-
-            <!-- Misiones -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">🎯 Misiones</h3>
-              ${misiones.rows.length === 0 ? `
-                <p class="text-slate-400 text-sm">Sin misiones asignadas</p>
-              ` : `
-                <div class="space-y-2">
-                  ${misiones.rows.map(m => `
-                    <div class="p-3 ${m.completada ? 'bg-green-900/30 border border-green-700' : 'bg-slate-900 border border-slate-700'} rounded">
-                      <div class="flex items-center justify-between">
-                        <span class="font-semibold text-sm text-white">${m.nombre}</span>
-                        <span class="px-2 py-1 text-xs rounded ${m.completada ? 'bg-green-700 text-green-100' : 'bg-slate-700 text-slate-300'}">
-                          ${m.completada ? '✓ Completada' : 'En progreso'}
-                        </span>
-                      </div>
-                      ${m.descripcion ? `<p class="text-xs text-slate-300 mt-1">${m.descripcion}</p>` : ''}
-                    </div>
-                  `).join('')}
-                </div>
-              `}
-            </div>
-
+          <div>
+            <h2 class="text-2xl font-bold text-white mb-4">Overrides del Master</h2>
+            ${overridesHtml}
           </div>
-
-          <!-- Columna derecha: Actividad reciente -->
-          <div class="space-y-6">
-            
-            <!-- Emociones recientes -->
-            ${emocionesRecientes.rows.length > 0 ? `
-              <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-                <h3 class="text-xl font-bold text-white mb-4">🌡️ Termómetro Emocional (últimos 10 días)</h3>
-                <div class="space-y-2">
-                  ${emocionesRecientes.rows.map(e => {
-                    const energia = parseFloat(e.energia_media).toFixed(1);
-                    const fecha = new Date(e.fecha);
-                    const barWidth = (energia / 10) * 100;
-                    const color = energia >= 7 ? 'bg-green-500' : energia >= 4 ? 'bg-yellow-500' : 'bg-red-500';
-                    
-                    return `
-                      <div>
-                        <div class="flex justify-between text-xs text-slate-300 mb-1">
-                          <span>${fecha.toLocaleDateString('es-ES')}</span>
-                          <span class="font-semibold">${energia}/10</span>
-                        </div>
-                        <div class="w-full bg-slate-900 rounded-full h-2">
-                          <div class="${color} h-2 rounded-full" style="width: ${barWidth}%"></div>
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              </div>
-            ` : ''}
-
-            <!-- Reflexiones recientes -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">💬 Reflexiones Recientes</h3>
-              ${reflexiones.rows.length === 0 ? `
-                <p class="text-slate-400 text-sm">Sin reflexiones</p>
-              ` : `
-                <div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
-                  ${reflexiones.rows.map(r => {
-                    const fecha = new Date(r.fecha);
-                    return `
-                      <div class="p-3 bg-slate-900 rounded border border-slate-700">
-                        <div class="flex justify-between items-start mb-2">
-                          <div class="text-xs text-slate-400">${fecha.toLocaleString('es-ES')}</div>
-                          ${r.energia_emocional ? `
-                            <span class="text-xs font-semibold px-2 py-1 rounded ${r.energia_emocional >= 7 ? 'bg-green-900 text-green-300' : r.energia_emocional >= 4 ? 'bg-yellow-900 text-yellow-300' : 'bg-red-900 text-red-300'}">
-                              ${r.energia_emocional}/10
-                            </span>
-                          ` : ''}
-                        </div>
-                        <p class="text-sm text-slate-200 whitespace-pre-wrap">${r.texto.length > 200 ? r.texto.substring(0, 200) + '...' : r.texto}</p>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              `}
-            </div>
-
-            <!-- Prácticas recientes -->
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-lg">
-              <h3 class="text-xl font-bold text-white mb-4">🔥 Prácticas Recientes</h3>
-              ${practicas.rows.length === 0 ? `
-                <p class="text-slate-400 text-sm">Sin prácticas</p>
-              ` : `
-                <div class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
-                  ${practicas.rows.map(p => {
-                    const fecha = new Date(p.fecha);
-                    return `
-                      <div class="flex justify-between items-center p-2 bg-slate-900 rounded text-sm border border-slate-700">
-                        <div class="flex-1">
-                          <div class="font-semibold text-white">${p.tipo || 'Práctica'}</div>
-                          ${p.aspecto_nombre ? `<div class="text-xs text-indigo-400">${p.aspecto_nombre}</div>` : ''}
-                        </div>
-                        <div class="text-xs text-slate-400">
-                          ${fecha.toLocaleDateString('es-ES')}
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              `}
-            </div>
-
+          
+          <div>
+            <h2 class="text-2xl font-bold text-white mb-4">Auditoría</h2>
+            ${auditHtml}
           </div>
         </div>
-
-        <!-- Acciones rápidas -->
-        <div class="mt-6 flex gap-3 flex-wrap">
-          <a href="/admin/alumnos" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg">
-            Ver detalles completos →
-          </a>
-          <a href="/admin/auricalendar?alumno_id=${alumno_id}" class="bg-slate-700 text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors border border-slate-600">
-            📆 Ver calendario
-          </a>
-          <a href="/admin/reflexiones?alumno_id=${alumno_id}" class="bg-slate-700 text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors border border-slate-600">
-            💬 Ver todas las reflexiones
+      </div>
+      
+      <script>
+        async function removeOverride(studentId, overrideId) {
+          if (!confirm('¿Retirar este override?')) return;
+          
+          try {
+            const response = await fetch('/admin/api/students/' + studentId + '/overrides/' + overrideId, {
+              method: 'DELETE'
+            });
+            const data = await response.json();
+            
+            if (data.ok) {
+              alert('Override retirado correctamente');
+              window.location.reload();
+            } else {
+              alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+          } catch (error) {
+            alert('Error: ' + error.message);
+          }
+        }
+      </script>
+    `;
+    
+    const studentName = student.apodo || student.email || 'N/A';
+    return renderAdminPage({
+      title: `Modo Master: ${studentName} - Admin`,
+      contentHtml,
+      activePath: '/admin/modo-maestro',
+      userContext: { isAdmin: true }
+    });
+  } catch (error) {
+    logError('AdminModoMaestro', 'Error en renderStudentUniverse', {
+      studentId,
+      error: error.message,
+      traceId
+    });
+    
+    const errorHtml = `
+      <div class="p-6">
+        <div class="bg-red-900/30 border border-red-700 rounded-lg p-6">
+          <h2 class="text-xl font-bold text-red-400 mb-2">Error</h2>
+          <p class="text-red-200">${error.message}</p>
+          <p class="text-red-300 text-sm mt-2">Trace ID: ${traceId}</p>
+          <a href="/admin/modo-maestro" class="inline-block mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+            ← Volver
           </a>
         </div>
       </div>
     `;
-
-    return new Response(
-      replace(baseTemplate, {
-        TITLE: `Modo Maestro: ${alumno.nombre} - Admin`,
-        CONTENT: content
-      }),
-      {
-        headers: { 'Content-Type': 'text/html; charset=UTF-8' }
-      }
-    );
-  } catch (error) {
-    console.error('❌ Error en renderModoMaestro:', error);
-    return new Response('Error interno del servidor: ' + error.message, { status: 500 });
+    
+    return renderAdminPage({
+      title: 'Error - Modo Master',
+      contentHtml: errorHtml,
+      activePath: '/admin/modo-maestro',
+      userContext: { isAdmin: true }
+    });
   }
 }
-
+export default renderModoMaestro;

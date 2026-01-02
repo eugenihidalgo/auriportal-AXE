@@ -1,0 +1,888 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aurelinportal.eugenihidalgo.work/schemas/ui-admin-schema-v1.json",
+  "title": "AuriPortal UI Admin Schema v1",
+  "description": "Schema canónico para validar UIs Admin de AuriPortal. Garantiza cumplimiento del Contrato Canónico v1 (INV-001 a INV-028, GAR-001 a GAR-029).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "route",
+    "context",
+    "permissions",
+    "capabilities",
+    "data",
+    "actions",
+    "layout",
+    "navigation",
+    "observability",
+    "diagnostics",
+    "lifecycle"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Metadata de la UI Admin: identificación, versionado, estado",
+      "required": ["id", "name", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Identificador único de la UI Admin (kebab-case, sin espacios)"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Nombre descriptivo de la UI Admin"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Descripción opcional de la UI Admin"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "active", "archived"],
+          "description": "Estado de la UI Admin. 'active' requiere 'version' (INV-001)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Versión semántica (requerido si status='active')"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fecha de creación (ISO 8601)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fecha de última actualización (ISO 8601)"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Usuario o sistema que creó la UI Admin"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            }
+          },
+          "then": {
+            "required": ["version"],
+            "description": "Si status='active', version es obligatorio (INV-001)"
+          }
+        }
+      ]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuración de routing. Protege INV-001, INV-002, INV-003, INV-004",
+      "required": ["key", "path", "type"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Identificador único de la ruta (debe coincidir con Router Registry)"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(/admin|/admin/(?!api/).+)$",
+          "description": "Ruta de la UI Admin. Puede ser /admin exactamente o /admin/ seguido de algo que NO empiece con api/ (INV-002)"
+        },
+        "type": {
+          "type": "string",
+          "const": "island",
+          "description": "Tipo de ruta. Para UIs Admin solo puede ser 'island' (INV-002). Las rutas /admin/api/* son type='api' y no son UIs Admin."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "Método HTTP permitido (opcional, por defecto todos)"
+        },
+        "handlerPath": {
+          "type": "string",
+          "pattern": "^src/endpoints/.*\\.js$",
+          "description": "Ruta al handler (opcional, puede inferirse desde key)"
+        }
+      },
+      "not": {
+        "allOf": [
+          {
+            "properties": {
+              "path": {
+                "pattern": "^/admin/api/"
+              }
+            }
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "island"
+              }
+            }
+          }
+        ],
+        "description": "INV-002: Rutas /admin/api/* NUNCA pueden ser type='island'"
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Contexto requerido por la UI Admin. Protege INV-005, INV-007",
+      "required": ["user", "systemMode", "featureFlags"],
+      "properties": {
+        "user": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Contexto de usuario requerido (INV-005)",
+          "required": ["required"],
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "const": true,
+              "description": "Contexto de usuario es obligatorio para todas las UIs Admin"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["admin", "master", "viewer"]
+              },
+              "description": "Roles permitidos (opcional, si no se especifica todos los roles autenticados)"
+            }
+          }
+        },
+        "systemMode": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Modo del sistema requerido (INV-007)",
+          "required": ["required"],
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "const": true,
+              "description": "Modo del sistema es obligatorio para todas las UIs Admin"
+            },
+            "allowedModes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["NORMAL", "DEGRADED", "BROKEN"]
+              },
+              "description": "Modos permitidos (opcional, por defecto todos)"
+            },
+            "blockWritesInBroken": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-007: En modo BROKEN, escrituras deben estar bloqueadas"
+            }
+          }
+        },
+        "featureFlags": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Feature flags requeridos",
+          "required": ["required"],
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "const": true,
+              "description": "Feature flags son obligatorios para todas las UIs Admin"
+            },
+            "requiredFlags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Feature flags específicos requeridos (opcional)"
+            }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Variables de entorno requeridas",
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "default": false
+            },
+            "requiredVars": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Variables de entorno específicas requeridas"
+            }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Permisos requeridos. Protege INV-006, INV-020",
+      "required": ["read", "write"],
+      "properties": {
+        "read": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Permisos requeridos para lectura (INV-006)"
+        },
+        "write": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Permisos requeridos para escritura (INV-006)"
+        },
+        "delete": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Permisos requeridos para eliminación (opcional)"
+        },
+        "admin": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Permisos de administración (opcional)"
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Capacidades declaradas por la UI Admin. Solo admite IDs de capacidades [CORE] y [READY]",
+      "required": ["declared"],
+      "properties": {
+        "declared": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(CTX|OBS|ACT|AUT|NAV|LAY|THM|SEC|AUD|DIA|EDI)-\\d{3}$",
+            "description": "IDs de capacidades declaradas (formato PREFIJO-NNN). Solo capacidades [CORE] y [READY]"
+          },
+          "minItems": 1,
+          "description": "Lista de capacidades que esta UI Admin declara usar"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(CTX|OBS|ACT|AUT|NAV|LAY|THM|SEC|AUD|DIA|EDI)-\\d{3}$"
+          },
+          "description": "Capacidades requeridas (opcional, subconjunto de declared que son críticas)"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Contratos de datos que consume la UI Admin. Protege INV-027 (READY)",
+      "required": ["contracts"],
+      "properties": {
+        "contracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["entity", "operation"],
+            "properties": {
+              "entity": {
+                "type": "string",
+                "description": "Entidad del Source of Truth (ej: 'alumno', 'catalogo', 'automation')"
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["read", "write", "list", "search"],
+                "description": "Operación sobre la entidad"
+              },
+              "schema": {
+                "type": "string",
+                "description": "Referencia al schema de validación (opcional)"
+              },
+              "validation": {
+                "type": "object",
+                "description": "Reglas de validación (opcional)"
+              }
+            }
+          },
+          "description": "Contratos de datos declarativos (INV-027). Obligatorio para capacidades [READY] relacionadas con Editor"
+        }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Acciones disponibles en la UI Admin. Protege INV-008, INV-009, INV-010",
+      "required": ["mutations"],
+      "properties": {
+        "mutations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "entity", "permission", "service"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$",
+                "description": "Identificador único de la mutación"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["create", "update", "delete", "archive"],
+                "description": "Tipo de mutación"
+              },
+              "entity": {
+                "type": "string",
+                "description": "Entidad del Source of Truth afectada"
+              },
+              "permission": {
+                "type": "string",
+                "description": "Permiso requerido para esta acción (INV-006). Obligatorio."
+              },
+              "service": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$",
+                "description": "Servicio canónico que ejecuta la mutación (INV-008). Obligatorio."
+              },
+              "validation": {
+                "type": "object",
+                "description": "Reglas de validación (INV-010)"
+              },
+              "requiresConfirmation": {
+                "type": "boolean",
+                "default": false,
+                "description": "Si requiere confirmación (ACT-004, para acciones destructivas)"
+              },
+              "auditable": {
+                "type": "boolean",
+                "const": true,
+                "description": "INV-009: Todas las mutaciones deben ser auditables"
+              },
+              "signals": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "Señales registradas que se emiten tras la mutación (INV-012)"
+                },
+                "description": "Señales que se emiten después de la mutación"
+              }
+            }
+          },
+          "description": "Mutaciones disponibles. Todas deben pasar por servicios canónicos (INV-008)"
+        },
+        "queries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "entity", "permission"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$"
+              },
+              "entity": {
+                "type": "string"
+              },
+              "permission": {
+                "type": "string",
+                "description": "Permiso requerido para esta consulta (INV-006)"
+              },
+              "service": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$",
+                "description": "Servicio canónico que ejecuta la consulta"
+              },
+              "filters": {
+                "type": "object",
+                "description": "Filtros disponibles (opcional)"
+              }
+            }
+          },
+          "description": "Consultas disponibles (lecturas de SOT)"
+        },
+        "navigation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "target"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["route", "external", "signal"],
+                "description": "Tipo de navegación"
+              },
+              "target": {
+                "type": "string",
+                "description": "Destino de la navegación (ruta, URL, o señal)"
+              },
+              "permission": {
+                "type": "string",
+                "description": "Permiso requerido para esta navegación (opcional)"
+              }
+            }
+          },
+          "description": "Acciones de navegación disponibles"
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuración de layout y render. Protege INV-014, INV-015, INV-016, INV-021, INV-022",
+      "required": ["template", "placeholders"],
+      "properties": {
+        "template": {
+          "type": "string",
+          "const": "base",
+          "description": "INV-014: Toda UI Admin debe usar template base canónico"
+        },
+        "placeholders": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "content"],
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Título de la UI Admin (reemplaza {{TITLE}})"
+            },
+            "content": {
+              "type": "string",
+              "description": "Contenido principal (reemplaza {{CONTENT}}). INV-015: Debe estar presente"
+            },
+            "sidebar": {
+              "type": "string",
+              "const": "auto",
+              "description": "INV-019: Sidebar se genera automáticamente desde registry"
+            }
+          },
+          "description": "INV-015: Todos los placeholders deben ser reemplazados"
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^/js/.*\\.js$",
+                "description": "Ruta al script (debe empezar con /js/)"
+              },
+              "global": {
+                "type": "boolean",
+                "default": false,
+                "description": "Si es script global (INV-016: debe cargarse una sola vez)"
+              },
+              "idempotent": {
+                "type": "boolean",
+                "default": false,
+                "description": "Si tiene guard idempotente (requerido para scripts globales)"
+              }
+            }
+          },
+          "description": "Scripts adicionales a cargar (INV-016: scripts globales únicos)"
+        },
+        "styles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^/css/.*\\.css$",
+                "description": "Ruta al estilo (debe empezar con /css/)"
+              }
+            }
+          },
+          "description": "Estilos adicionales a cargar"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Capabilities semánticas declaradas (INV-021: no hardcodeo visual)"
+          },
+          "description": "INV-021: Capabilities semánticas (ej: 'primary-action', 'warning-badge')"
+        },
+        "theme": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuración de tema (INV-022)",
+          "properties": {
+            "resolve": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-022: Tema debe resolverse desde Theme Resolver"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Capabilities semánticas que requieren resolución de tema"
+            }
+          }
+        }
+      }
+    },
+    "navigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuración de navegación. Protege INV-019, INV-020",
+      "required": ["sidebar"],
+      "properties": {
+        "sidebar": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source"],
+          "properties": {
+            "source": {
+              "type": "string",
+              "const": "registry",
+              "description": "INV-019: Sidebar debe generarse desde Sidebar Registry, no hardcodeado"
+            },
+            "activePath": {
+              "type": "string",
+              "description": "Ruta activa para resaltado (opcional, se infiere de route.path)"
+            }
+          }
+        },
+        "hierarchy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Jerarquía de navegación (opcional)",
+          "properties": {
+            "section": {
+              "type": "string",
+              "description": "Sección principal"
+            },
+            "subsection": {
+              "type": "string",
+              "description": "Subsección"
+            }
+          }
+        },
+        "filterByPermissions": {
+          "type": "boolean",
+          "const": true,
+          "description": "INV-020: Navegación debe filtrarse por permisos"
+        },
+        "filterByFeatureFlags": {
+          "type": "boolean",
+          "default": true,
+          "description": "Navegación debe filtrarse por feature flags"
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuración de observabilidad. Protege INV-011, INV-012, INV-013",
+      "required": ["traceId", "logging", "signals"],
+      "properties": {
+        "traceId": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["propagate"],
+          "properties": {
+            "propagate": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-011: Trace ID debe propagarse en todas las operaciones"
+            },
+            "required": {
+              "type": "boolean",
+              "const": true,
+              "description": "Trace ID es obligatorio"
+            }
+          }
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["structured"],
+          "properties": {
+            "structured": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-013: Logging debe ser estructurado"
+            },
+            "level": {
+              "type": "string",
+              "enum": ["debug", "info", "warn", "error"],
+              "default": "info",
+              "description": "Nivel de logging por defecto"
+            },
+            "includeMetadata": {
+              "type": "boolean",
+              "const": true,
+              "description": "Logging debe incluir metadata"
+            }
+          }
+        },
+        "signals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["onlyRegistered"],
+          "properties": {
+            "onlyRegistered": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-012: Solo se pueden emitir señales registradas"
+            },
+            "emitted": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "IDs de señales registradas que esta UI Admin puede emitir"
+              },
+              "description": "Señales que esta UI Admin puede emitir (deben estar registradas)"
+            }
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuración de diagnóstico. Protege INV-025, INV-026",
+      "required": ["errorContract", "correlation"],
+      "properties": {
+        "errorContract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version"],
+          "properties": {
+            "version": {
+              "type": "string",
+              "const": "v1",
+              "description": "INV-025: Errores deben usar Error Contract v1"
+            },
+            "includeDiagnosis": {
+              "type": "boolean",
+              "const": true,
+              "description": "Errores deben incluir diagnóstico claro"
+            }
+          }
+        },
+        "correlation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["byTraceId"],
+          "properties": {
+            "byTraceId": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-026: Búsqueda de errores debe poder correlacionarse por trace_id"
+            }
+          }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Ciclo de vida de la UI Admin",
+      "required": ["render"],
+      "properties": {
+        "render": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "renderAdminPage",
+              "description": "INV-004: Solo puede renderizarse usando renderAdminPage() desde contexto de Router Resolver"
+            },
+            "contextRequired": {
+              "type": "boolean",
+              "const": true,
+              "description": "INV-004: Requiere contexto de Router Resolver"
+            }
+          }
+        },
+        "degradation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuración de degradación controlada (INV-017, INV-018)",
+          "properties": {
+            "criticalLayers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["router", "context", "sot", "security", "runtime"]
+              },
+              "description": "Capas críticas que deben fallar explícitamente (fail-closed)"
+            },
+            "nonCriticalLayers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["observability", "automations", "sidebar", "themes", "audit"]
+              },
+              "description": "Capas no críticas que pueden degradarse (fail-open)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "INV-002: route.type solo puede ser 'island' para UIs Admin",
+      "properties": {
+        "route": {
+          "properties": {
+            "type": {
+              "const": "island"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-008: Todas las mutaciones deben pasar por servicios canónicos",
+      "properties": {
+        "actions": {
+          "properties": {
+            "mutations": {
+              "items": {
+                "required": ["service"],
+                "properties": {
+                  "service": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "INV-008: Servicio canónico obligatorio"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-009: Todas las mutaciones deben ser auditables",
+      "properties": {
+        "actions": {
+          "properties": {
+            "mutations": {
+              "items": {
+                "properties": {
+                  "auditable": {
+                    "const": true,
+                    "description": "INV-009: Mutaciones deben ser auditables"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-012: Solo señales registradas pueden emitirse",
+      "properties": {
+        "observability": {
+          "properties": {
+            "signals": {
+              "properties": {
+                "onlyRegistered": {
+                  "const": true,
+                  "description": "INV-012: Solo señales registradas"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-014: Template base obligatorio",
+      "properties": {
+        "layout": {
+          "properties": {
+            "template": {
+              "const": "base",
+              "description": "INV-014: Template base canónico obligatorio"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-019: Sidebar debe generarse desde registry",
+      "properties": {
+        "navigation": {
+          "properties": {
+            "sidebar": {
+              "properties": {
+                "source": {
+                  "const": "registry",
+                  "description": "INV-019: Sidebar gobernado, no hardcodeado"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-021: Capability-first, no hardcodeo visual",
+      "properties": {
+        "layout": {
+          "properties": {
+            "capabilities": {
+              "type": "array",
+              "minItems": 1,
+              "description": "INV-021: Debe declarar capabilities semánticas"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "INV-022: Resolución de themes obligatoria",
+      "properties": {
+        "layout": {
+          "properties": {
+            "theme": {
+              "properties": {
+                "resolve": {
+                  "const": true,
+                  "description": "INV-022: Tema debe resolverse desde Theme Resolver"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+

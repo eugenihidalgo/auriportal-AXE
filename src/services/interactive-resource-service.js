@@ -214,6 +214,17 @@ export async function createResource(resourceData) {
     const repo = getInteractiveResourceRepo();
     return await repo.createResource(createData);
   } catch (error) {
+    // OBJETIVO 2: Detectar si la tabla no existe
+    if (error.message && (error.message.includes('does not exist') || error.message.includes('relation "interactive_resources" does not exist'))) {
+      const tableError = new Error('Tabla interactive_resources no existe');
+      tableError.code = 'FEATURE_NOT_INITIALIZED';
+      tableError.details = {
+        message: 'La tabla interactive_resources no existe. Ejecutar migración SQL.',
+        migration: 'database/migrations/20241228_create_interactive_resources.sql'
+      };
+      throw tableError;
+    }
+    
     logError('InteractiveResourceService', 'Error creando recurso', {
       resource_type: resourceData.resource_type,
       error: error.message

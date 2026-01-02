@@ -70,6 +70,38 @@ export async function renderHtml(html, options = {}) {
   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'html-response.js:57',message:'Before getHtmlCacheHeaders',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
   // #endregion
   
+  // CLIENT STATE RESET v1: Inyectar reset ANTES de cualquier script
+  // Esto garantiza que el estado persistente se limpie antes de que scripts carguen estado antiguo
+  // Solo para CLIENT (no ADMIN ni MASTER, que ya lo tienen en sus renderers específicos)
+  // Detección: si NO es ADMIN ni MASTER, es CLIENT
+  const isAdmin = html.includes('/admin/') || html.includes('AuriPortal Admin') || html.includes('admin-sidebar-scroll');
+  const isMaster = html.includes('/master/') || html.includes('AuriPortal Master') || html.includes('master-sidebar-container');
+  
+  if (!isAdmin && !isMaster) {
+    // Es CLIENT: inyectar variables de versión si no existen
+    if (!html.includes('window.__AP_APP_VERSION__') && !html.includes('window.__AP_BUILD_ID__')) {
+      const appVersion = process.env.APP_VERSION || 'unknown';
+      const buildId = process.env.BUILD_ID || 'unknown';
+      const clientVersioningScript = `
+<script>
+  // CLIENT STATE RESET v1 - Variables de versión para CLIENT
+  window.__AP_APP_VERSION__ = ${JSON.stringify(appVersion)};
+  window.__AP_BUILD_ID__ = ${JSON.stringify(buildId)};
+</script>
+`;
+      html = html.replace('</head>', clientVersioningScript + '\n</head>');
+    }
+    
+    // Inyectar reset ANTES de cualquier script
+    const clientStateResetScript = `<script src="/js/core/client-state-reset.js"></script>`;
+    // Insertar antes del primer script o antes de </head>
+    if (html.includes('<script')) {
+      html = html.replace(/(<script[^>]*>)/, clientStateResetScript + '\n$1');
+    } else {
+      html = html.replace('</head>', clientStateResetScript + '\n</head>');
+    }
+  }
+  
   // Obtener headers anti-cache base
   let cacheHeaders;
   try {

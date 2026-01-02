@@ -1,0 +1,495 @@
+// src/endpoints/master-api-alquimia-general.js
+// Endpoints API MASTER para Alquimia General
+//
+// Endpoints bajo /master/api/alquimia-general/*
+// Usa requireAdminContext() para auth (mismo sistema de sesión que Admin)
+// Devuelve JSON siempre (nunca HTML)
+
+import { requireAdminContext } from '../core/auth-context.js';
+import { getRequestId } from '../core/observability/request-context.js';
+import { logError, logInfo, logWarn } from '../core/observability/logger.js';
+import {
+  listListas, getListaById, createLista, updateListaMeta, archiveLista,
+  listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
+  getStudentsForItem, markCleanStudent, markCleanAll, incrementAll, adjustRemaining
+} from '../services/alquimia-general-service.js';
+
+/**
+ * Helper: Respuesta JSON de error
+ */
+function jsonError(message, code, status = 400, traceId = null) {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: message,
+    code: code || 'ERROR',
+    trace_id: traceId || getRequestId()
+  }), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Trace-Id': traceId || getRequestId()
+    }
+  });
+}
+
+/**
+ * Helper: Respuesta JSON de éxito
+ */
+function jsonSuccess(data, traceId = null) {
+  return new Response(JSON.stringify({
+    ok: true,
+    ...data,
+    trace_id: traceId || getRequestId()
+  }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Trace-Id': traceId || getRequestId()
+    }
+  });
+}
+
+/**
+ * Helper: Extrae parámetros de ruta
+ */
+function extractRouteParams(path, pattern) {
+  const pathParts = path.split('/').filter(p => p);
+  const patternParts = pattern.split('/').filter(p => p);
+  const params = {};
+  
+  for (let i = 0; i < patternParts.length; i++) {
+    if (patternParts[i].startsWith(':')) {
+      const paramName = patternParts[i].slice(1);
+      params[paramName] = pathParts[i];
+    }
+  }
+  
+  return params;
+}
+
+/**
+ * Handler principal de endpoints API Alquimia General
+ */
+export default async function masterApiAlquimiaGeneralHandler(request, env, ctx) {
+  const traceId = getRequestId();
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const method = request.method;
+
+  // Auth: usar requireAdminContext (mismo sistema de sesión)
+  const authCtx = await requireAdminContext(request, env);
+  if (authCtx instanceof Response) {
+    // Si requireAdminContext devuelve Response (HTML de login), convertir a JSON 401
+    return new Response(JSON.stringify({
+      ok: false,
+      error: 'No autorizado',
+      code: 'UNAUTHORIZED',
+      trace_id: traceId
+    }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Trace-Id': traceId
+      }
+    });
+  }
+
+  logInfo('MasterApiAlquimiaGeneral', 'Request recibido', { path, method, traceId, query: url.search });
+
+  try {
+    // ============================================================================
+    // ENDPOINTS DE LISTAS
+    // ============================================================================
+
+    // GET /master/api/alquimia-general/listas?tipo=recurrente|una_vez
+    if (path === '/master/api/alquimia-general/listas' && method === 'GET') {
+      try {
+        const tipo = url.searchParams.get('tipo') || null;
+        logInfo('MasterApiAlquimiaGeneral', 'GET /listas iniciado', { traceId, tipo });
+        
+        const listas = await listListas({ onlyActive: true, tipo });
+        
+        logInfo('MasterApiAlquimiaGeneral', 'GET /listas completado', { 
+          traceId, 
+          tipo, 
+          count: listas?.length || 0 
+        });
+        
+        return jsonSuccess({ listas }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en GET /listas', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack,
+          tipo: url.searchParams.get('tipo')
+        });
+        throw error;
+      }
+    }
+
+    // POST /master/api/alquimia-general/listas
+    if (path === '/master/api/alquimia-general/listas' && method === 'POST') {
+      let body = null;
+      try {
+        body = await request.json();
+        logInfo('MasterApiAlquimiaGeneral', 'POST /listas iniciado', { traceId, body });
+        
+        if (!body.nombre) {
+          return jsonError('nombre es requerido', 'MISSING_NOMBRE', 400, traceId);
+        }
+
+        const listaData = {
+          nombre: body.nombre.trim(),
+          tipo: body.tipo || 'recurrente',
+          descripcion: body.descripcion?.trim() || null,
+          orden: body.orden !== undefined ? parseInt(body.orden) : 0,
+          status: body.status || 'active'
+        };
+
+        logInfo('MasterApiAlquimiaGeneral', 'POST /listas - listaData preparado', { traceId, listaData });
+        
+        const created = await createLista(listaData);
+        
+        logInfo('MasterApiAlquimiaGeneral', 'POST /listas completado', { 
+          traceId, 
+          lista_id: created?.id 
+        });
+        
+        return new Response(JSON.stringify({
+          ok: true,
+          lista: created,
+          trace_id: traceId
+        }), {
+          status: 201,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'X-Trace-Id': traceId
+          }
+        });
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /listas', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack,
+          body
+        });
+        throw error;
+      }
+    }
+
+    // GET /master/api/alquimia-general/listas/:id
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)$/) && method === 'GET') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id');
+      const id = params.id;
+
+      const lista = await getListaById(id);
+      if (!lista) {
+        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ lista }, traceId);
+    }
+
+    // PUT /master/api/alquimia-general/listas/:id
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)$/) && method === 'PUT') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id');
+      const id = params.id;
+      const body = await request.json();
+
+      const patch = {};
+      if (body.nombre !== undefined) patch.nombre = body.nombre.trim();
+      if (body.tipo !== undefined) patch.tipo = body.tipo;
+      if (body.descripcion !== undefined) patch.descripcion = body.descripcion?.trim() || null;
+      if (body.orden !== undefined) patch.orden = parseInt(body.orden);
+
+      const updated = await updateListaMeta(id, patch);
+      if (!updated) {
+        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ lista: updated }, traceId);
+    }
+
+    // DELETE /master/api/alquimia-general/listas/:id (soft delete)
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)$/) && method === 'DELETE') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id');
+      const id = params.id;
+
+      const archived = await archiveLista(id);
+      if (!archived) {
+        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ lista: archived }, traceId);
+    }
+
+    // ============================================================================
+    // ENDPOINTS DE ITEMS
+    // ============================================================================
+
+    // GET /master/api/alquimia-general/listas/:id/items
+    if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)\/items$/) && method === 'GET') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id/items');
+      const listaId = params.id;
+
+      const items = await listItems(listaId, { onlyActive: true });
+      return jsonSuccess({ items }, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items
+    if (path === '/master/api/alquimia-general/items' && method === 'POST') {
+      const body = await request.json();
+
+      if (!body.lista_id || !body.nombre) {
+        return jsonError('lista_id y nombre son requeridos', 'MISSING_REQUIRED', 400, traceId);
+      }
+
+      const listaId = parseInt(body.lista_id);
+      if (isNaN(listaId) || listaId <= 0) {
+        return jsonError('lista_id debe ser un número válido', 'INVALID_LISTA_ID', 400, traceId);
+      }
+
+      // FIX v1.1: Aceptar priority (integer) y days (alias de frecuencia_dias)
+      // priority 1 = máxima prioridad, default 10
+      // days default 20
+      // FIX CRÍTICO: Validación defensiva para prevenir NaN
+      const nivelParsed = body.nivel !== undefined ? parseInt(body.nivel, 10) : null;
+      const priorityParsed = body.priority !== undefined ? parseInt(body.priority, 10) : 10;
+      const daysParsed = body.days !== undefined ? parseInt(body.days, 10) : (body.frecuencia_dias !== undefined ? parseInt(body.frecuencia_dias, 10) : 20);
+      const vecesParsed = body.veces_limpiar !== undefined ? parseInt(body.veces_limpiar, 10) : null;
+      
+      // Aplicar fallbacks canónicos si es NaN
+      const nivel = Number.isFinite(nivelParsed) ? nivelParsed : null;
+      const priority = Number.isFinite(priorityParsed) && priorityParsed >= 1 ? priorityParsed : 10;
+      const days = Number.isFinite(daysParsed) && daysParsed >= 1 ? daysParsed : 20;
+      const veces_limpiar = Number.isFinite(vecesParsed) && vecesParsed >= 1 ? vecesParsed : null;
+      
+      // Log warning si se corrigió un NaN (solo una línea)
+      if (!Number.isFinite(nivelParsed) && body.nivel !== undefined) {
+        logWarn('MasterApiAlquimiaGeneral', 'Nivel NaN corregido a null', { traceId, nivelOriginal: body.nivel });
+      }
+      if (!Number.isFinite(priorityParsed) && body.priority !== undefined) {
+        logWarn('MasterApiAlquimiaGeneral', 'Priority NaN corregido a 10', { traceId, priorityOriginal: body.priority });
+      }
+      if (!Number.isFinite(daysParsed) && (body.days !== undefined || body.frecuencia_dias !== undefined)) {
+        logWarn('MasterApiAlquimiaGeneral', 'Days NaN corregido a 20', { traceId, daysOriginal: body.days || body.frecuencia_dias });
+      }
+      
+      const itemData = {
+        lista_id: listaId,
+        nombre: body.nombre.trim(),
+        descripcion: body.descripcion?.trim() || null,
+        nivel,
+        priority,
+        days,
+        veces_limpiar,
+        status: body.status || 'active'
+      };
+
+      const item = await createItem(itemData);
+      return new Response(JSON.stringify({
+        ok: true,
+        item,
+        trace_id: traceId
+      }), {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-Trace-Id': traceId
+        }
+      });
+    }
+
+    // GET /master/api/alquimia-general/items/:id
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)$/) && method === 'GET') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:id');
+      const id = params.id;
+
+      const item = await getItemById(id);
+      if (!item) {
+        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ item }, traceId);
+    }
+
+    // PUT /master/api/alquimia-general/items/:id
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)$/) && method === 'PUT') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:id');
+      const id = params.id;
+      const body = await request.json();
+
+      const patch = {};
+      if (body.nombre !== undefined) patch.nombre = body.nombre.trim();
+      if (body.descripcion !== undefined) patch.descripcion = body.descripcion?.trim() || null;
+      if (body.nivel !== undefined) patch.nivel = body.nivel !== null ? parseInt(body.nivel) : null;
+      if (body.prioridad !== undefined) patch.prioridad = body.prioridad;
+      if (body.frecuencia_dias !== undefined) patch.frecuencia_dias = body.frecuencia_dias !== null ? parseInt(body.frecuencia_dias) : null;
+      if (body.veces_limpiar !== undefined) patch.veces_limpiar = body.veces_limpiar !== null ? parseInt(body.veces_limpiar) : null;
+
+      const updated = await updateItem(id, patch);
+      if (!updated) {
+        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ item: updated }, traceId);
+    }
+
+    // DELETE /master/api/alquimia-general/items/:id (soft delete)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)$/) && method === 'DELETE') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:id');
+      const id = params.id;
+
+      const archived = await archiveItem(id);
+      if (!archived) {
+        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      }
+
+      return jsonSuccess({ item: archived }, traceId);
+    }
+
+    // ============================================================================
+    // ENDPOINTS MASTER - Estado de Alumnos
+    // ============================================================================
+
+    // GET /master/api/alquimia-general/items/:item_ref/students (modal)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/students$/) && method === 'GET') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/students');
+      const itemRef = params.item_ref;
+      const productKey = url.searchParams.get('product_key') || 'pde';
+      const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : null;
+      const offset = url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset'), 10) : 0;
+
+      // Obtener item para conocer tipo
+      const item = await getItemByRef(itemRef);
+      if (!item) {
+        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      }
+
+      // Obtener lista para conocer tipo
+      const lista = await getListaById(item.lista_id);
+      if (!lista) {
+        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      }
+
+      const tipo = lista.tipo;
+      const result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset });
+
+      return jsonSuccess({
+        item_ref: itemRef,
+        tipo,
+        ...result
+      }, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all (recurrente)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-clean-all$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-clean-all');
+      const itemRef = params.item_ref;
+      const productKey = url.searchParams.get('product_key') || 'pde';
+
+      const result = await markCleanAll(itemRef, productKey);
+      return jsonSuccess(result, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student (recurrente)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-clean-student$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student');
+      const itemRef = params.item_ref;
+      const body = await request.json();
+      const productKey = url.searchParams.get('product_key') || 'pde';
+
+      if (!body.student_id) {
+        return jsonError('student_id es requerido', 'MISSING_STUDENT_ID', 400, traceId);
+      }
+
+      const studentId = parseInt(body.student_id);
+      if (isNaN(studentId) || studentId <= 0) {
+        return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+
+      const state = await markCleanStudent(studentId, itemRef, productKey);
+      if (!state) {
+        return jsonError('Error marcando limpio', 'MARK_CLEAN_ERROR', 500, traceId);
+      }
+
+      return jsonSuccess({ state }, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items/:item_ref/master/increment-all (una_vez)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/increment-all$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/increment-all');
+      const itemRef = params.item_ref;
+      const productKey = url.searchParams.get('product_key') || 'pde';
+
+      const result = await incrementAll(itemRef, productKey);
+      return jsonSuccess(result, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items/:item_ref/master/adjust-remaining (una_vez)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/adjust-remaining$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/adjust-remaining');
+      const itemRef = params.item_ref;
+      const body = await request.json();
+      const productKey = url.searchParams.get('product_key') || 'pde';
+
+      if (!body.student_id || body.remaining === undefined) {
+        return jsonError('student_id y remaining son requeridos', 'MISSING_REQUIRED', 400, traceId);
+      }
+
+      const studentId = parseInt(body.student_id);
+      if (isNaN(studentId) || studentId <= 0) {
+        return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+
+      const remaining = parseInt(body.remaining);
+      if (isNaN(remaining) || remaining < 0) {
+        return jsonError('remaining debe ser un número >= 0', 'INVALID_REMAINING', 400, traceId);
+      }
+
+      const state = await adjustRemaining(studentId, itemRef, remaining, productKey);
+      if (!state) {
+        return jsonError('Error ajustando remaining', 'ADJUST_REMAINING_ERROR', 500, traceId);
+      }
+
+      return jsonSuccess({ state }, traceId);
+    }
+
+    // Ruta no encontrada
+    return jsonError(`Ruta no encontrada: ${method} ${path}`, 'ROUTE_NOT_FOUND', 404, traceId);
+
+  } catch (error) {
+    logError('MasterApiAlquimiaGeneral', 'Error no manejado en handler', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      path,
+      method,
+      query: url.search
+    });
+
+    // Degradación fail-open para GET /listas (no romper UI)
+    if (path === '/master/api/alquimia-general/listas' && method === 'GET') {
+      logError('MasterApiAlquimiaGeneral', 'Degradación fail-open: devolviendo []', {
+        traceId,
+        original_error: error.message,
+        code: error.code
+      });
+      
+      return jsonSuccess({ 
+        listas: [],
+        warnings: [`Error al cargar listas: ${error.message}`]
+      }, traceId);
+    }
+
+    return jsonError(
+      error.message || 'Error interno del servidor',
+      'INTERNAL_ERROR',
+      500,
+      traceId
+    );
+  }
+}

@@ -1,20 +1,30 @@
 // database/db.js
-// STUB para compatibilidad con archivos legacy
-// AuriPortal v4 usa PostgreSQL, este archivo es solo para evitar errores de import
+// ⚠️ SQLITE ELIMINADO DEFINITIVAMENTE - NO USAR
+// AuriPortal v4+ usa PostgreSQL como único Source of Truth
+// Este archivo existe solo para fail-hard explícito
 
-console.warn('⚠️  database/db.js (SQLite) está deprecado. Usa database/pg.js (PostgreSQL) en su lugar.');
+/**
+ * FAIL-HARD: SQLite está eliminado definitivamente
+ * NO se debe importar ni usar este archivo bajo ninguna circunstancia
+ */
+function failHardSQLite() {
+  throw new Error(
+    'SQLite está eliminado definitivamente. ' +
+    'AuriPortal v4+ usa PostgreSQL (database/pg.js) como único Source of Truth. ' +
+    'NO se permite importar database/db.js en runtime.'
+  );
+}
 
-// Exportar funciones stub para compatibilidad
 export function getDatabase() {
-  throw new Error('SQLite está deprecado. Usa PostgreSQL (database/pg.js) en su lugar.');
+  failHardSQLite();
 }
 
 export const students = {
-  find: () => { throw new Error('SQLite está deprecado'); },
-  create: () => { throw new Error('SQLite está deprecado'); },
-  update: () => { throw new Error('SQLite está deprecado'); }
+  find: () => { failHardSQLite(); },
+  create: () => { failHardSQLite(); },
+  update: () => { failHardSQLite(); }
 };
 
 export function initDatabase() {
-  console.warn('⚠️  initDatabase() está deprecado. Usa initPostgreSQL() en su lugar.');
+  failHardSQLite();
 }

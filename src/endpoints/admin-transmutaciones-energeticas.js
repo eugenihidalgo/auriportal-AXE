@@ -52,7 +52,14 @@ export async function renderTransmutacionesList(request, env) {
     title: 'Transmutaciones Energéticas',
     contentHtml,
     activePath,
-    userContext: { isAdmin: true }
+    userContext: { isAdmin: true },
+    acsRuntimeContract: {
+      ui_key: 'transmutaciones-energeticas',
+      required_endpoints: [
+        '/admin/api/transmutaciones/energeticas'
+      ],
+      strict_mode: true
+    }
   });
 }
 
@@ -329,10 +336,18 @@ export default async function adminTransmutacionesEnergeticasHandler(request, en
         });
       }
 
-      // Asegurar que lista_id sea número
+      // Asegurar que lista_id sea número válido
+      const listaId = parseInt(body.lista_id);
+      if (isNaN(listaId) || listaId <= 0) {
+        return new Response(JSON.stringify({ success: false, error: 'lista_id debe ser un número válido' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
       const itemData = {
         ...body,
-        lista_id: parseInt(body.lista_id)
+        lista_id: listaId
       };
       
       console.error('[transmutaciones] Creando item con datos:', JSON.stringify(itemData));

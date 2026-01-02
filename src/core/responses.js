@@ -39,14 +39,24 @@ function replace(html, placeholders) {
 
 /**
  * Obtiene headers de Cache-Control para respuestas HTML
- * En dev/beta: no-store para evitar cache
- * En producción: max-age=0 para forzar revalidación
+ * 
+ * REGLA CANÓNICA AURIPORTAL:
+ * HTML → NUNCA cacheado (siempre headers anti-cache completos)
+ * 
+ * Headers aplicados:
+ * - Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+ * - Pragma: no-cache
+ * - Expires: 0
+ * 
+ * Esto garantiza que el navegador siempre cargue la última versión de la UI
+ * sin necesidad de modo incógnito o hard refresh manual.
  */
 export function getHtmlCacheHeaders() {
-  const isDevOrBeta = process.env.APP_ENV === 'development' || process.env.APP_ENV === 'beta';
   return {
     'Content-Type': 'text/html; charset=UTF-8',
-    'Cache-Control': isDevOrBeta ? 'no-store' : 'max-age=0, must-revalidate'
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0'
   };
 }
 

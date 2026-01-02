@@ -1417,3 +1417,7 @@ Resuelve la pregunta: **"¿Cuándo un paquete (o widget, o automatización) toma
 
 Este documento define el Context Resolver v1 canónico. La implementación debe seguir este diseño exactamente.
 
+
+
+
+

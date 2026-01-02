@@ -1,7 +1,7 @@
 // src/endpoints/admin-panel.js
 // Panel de control administrativo para AuriPortal
 
-import { getDatabase } from "../../database/db.js";
+import { query } from "../../database/pg.js";
 import { renderHtml } from '../core/html-response.js';
 
 /**
@@ -41,10 +41,8 @@ export function verificarAccesoAdmin(request, env) {
 /**
  * Renderiza el panel de administración
  */
-function renderAdminPanel(env) {
-  const db = getDatabase();
-  
-  // Obtener estadísticas de la base de datos
+async function renderAdminPanel(env) {
+  // Obtener estadísticas de la base de datos PostgreSQL
   let stats = {
     students: 0,
     practices: 0,
@@ -53,17 +51,24 @@ function renderAdminPanel(env) {
   };
   
   try {
-    const stmtStudents = db.prepare('SELECT COUNT(*) as count FROM students');
-    stats.students = stmtStudents.get().count;
+    // Usar PostgreSQL como Source of Truth
+    const studentsResult = await query('SELECT COUNT(*) as count FROM students');
+    stats.students = parseInt(studentsResult.rows[0]?.count || 0, 10);
     
-    const stmtPractices = db.prepare('SELECT COUNT(*) as count FROM practices');
-    stats.practices = stmtPractices.get().count;
+    const practicesResult = await query('SELECT COUNT(*) as count FROM practicas');
+    stats.practices = parseInt(practicesResult.rows[0]?.count || 0, 10);
     
-    const stmtLogs = db.prepare('SELECT COUNT(*) as count FROM sync_log');
-    stats.syncLogs = stmtLogs.get().count;
+    // sync_log puede no existir en PostgreSQL (legacy), usar 0 si falla
+    try {
+      const logsResult = await query('SELECT COUNT(*) as count FROM sync_log');
+      stats.syncLogs = parseInt(logsResult.rows[0]?.count || 0, 10);
+    } catch (logsErr) {
+      // sync_log es legacy, no existe en PostgreSQL
+      stats.syncLogs = 0;
+    }
     
-    const stmtStreak = db.prepare('SELECT COUNT(*) as count FROM students WHERE racha_actual > 0');
-    stats.studentsWithStreak = stmtStreak.get().count;
+    const streakResult = await query('SELECT COUNT(*) as count FROM students WHERE streak > 0');
+    stats.studentsWithStreak = parseInt(streakResult.rows[0]?.count || 0, 10);
   } catch (err) {
     console.error('Error obteniendo estadísticas:', err);
   }
@@ -539,9 +544,6 @@ function renderAdminPanel(env) {
   
   <!-- Script para suprimir errores de extensiones del navegador -->
   <script src="/js/error-handler.js"></script>
-  
-    
-  </script>
 </body>
 </html>
   `;
@@ -575,10 +577,10 @@ export default async function adminPanelHandler(request, env, ctx) {
   // Si es POST para ejecutar SQL
   if (request.method === "POST" && path === "/admin/sql") {
     try {
-      const { query } = await request.json();
+      const { query: sqlQuery } = await request.json();
       
       // Solo permitir SELECT por seguridad
-      if (!query.trim().toUpperCase().startsWith('SELECT')) {
+      if (!sqlQuery.trim().toUpperCase().startsWith('SELECT')) {
         return new Response(
           JSON.stringify({ success: false, error: "Solo se permiten consultas SELECT" }),
           {
@@ -588,12 +590,10 @@ export default async function adminPanelHandler(request, env, ctx) {
         );
       }
       
-      const db = getDatabase();
-      const stmt = db.prepare(query);
-      const result = stmt.all();
+      const result = await query(sqlQuery);
       
       return new Response(
-        JSON.stringify({ success: true, result }),
+        JSON.stringify({ success: true, result: result.rows }),
         {
           headers: { "Content-Type": "application/json" }
         }
@@ -612,16 +612,14 @@ export default async function adminPanelHandler(request, env, ctx) {
   // Si es GET para ver logs
   if (request.method === "GET" && path === "/admin/logs") {
     try {
-      const db = getDatabase();
-      const stmt = db.prepare(`
-        SELECT * FROM sync_log 
-        ORDER BY synced_at DESC 
-        LIMIT 50
-      `);
-      const logs = stmt.all();
-      
+      // sync_log es legacy SQLite, no existe en PostgreSQL
+      // Retornar array vacío o mensaje informativo
       return new Response(
-        JSON.stringify({ success: true, logs }),
+        JSON.stringify({ 
+          success: true, 
+          logs: [],
+          message: 'sync_log es legacy SQLite. Los logs ahora se gestionan en PostgreSQL.'
+        }),
         {
           headers: { "Content-Type": "application/json" }
         }
@@ -638,7 +636,7 @@ export default async function adminPanelHandler(request, env, ctx) {
   }
   
   // Renderizar panel principal
-  const html = renderAdminPanel(env);
+  const html = await renderAdminPanel(env);
   // Usar renderHtml centralizado (aplica headers anti-cache automáticamente)
   return renderHtml(html);
 }

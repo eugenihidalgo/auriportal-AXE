@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UI Master Schema v1",
+  "description": "Schema canónico para pantallas Master en AuriPortal",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["meta", "route", "context", "permissions"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["id", "name", "status", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "active", "archived"]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "owner": {
+          "type": "string"
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "required": ["key", "path", "type"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/master"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["island", "api"]
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "boolean"
+            }
+          }
+        },
+        "systemMode": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "blockWritesInBroken": {
+              "type": "boolean"
+            },
+            "allowedModes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["NORMAL", "DEGRADED", "BROKEN"]
+              }
+            }
+          }
+        },
+        "featureFlags": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "write": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "flags": {
+      "type": "object",
+      "properties": {
+        "featureFlags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systemModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["NORMAL", "DEGRADED", "BROKEN"]
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "type": "object",
+      "properties": {
+        "visible": {
+          "type": "boolean"
+        },
+        "section": {
+          "type": "string"
+        },
+        "order": {
+          "type": "number"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
+
+

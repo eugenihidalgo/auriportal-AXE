@@ -1,0 +1,2362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Panel de administración de AuriPortal">
+  <title>AuriPortal · Admin - AuriPortal Admin</title>
+  <link href="/css/tailwind.css" rel="stylesheet">
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #0f172a; /* slate-900 */
+    }
+    
+    /* Scrollbar del sidebar - más ancho y visible */
+    .sidebar-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1e293b;
+    }
+    .sidebar-scroll::-webkit-scrollbar {
+      width: 12px; /* Más ancho para mejor accesibilidad */
+    }
+    .sidebar-scroll::-webkit-scrollbar-track {
+      background: #1e293b; /* slate-800 */
+      border-left: 1px solid #334155; /* Separación visual */
+    }
+    .sidebar-scroll::-webkit-scrollbar-thumb {
+      background: #475569; /* slate-600 */
+      border-radius: 6px;
+      border: 2px solid #1e293b; /* Espacio para evitar solapamiento */
+    }
+    .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+      background: #64748b; /* slate-500 */
+    }
+    .sidebar-scroll::-webkit-scrollbar-thumb:active {
+      background: #94a3b8; /* slate-400 */
+    }
+    
+    /* Active menu item */
+    .menu-item-active {
+      background-color: #4f46e5;
+      color: white;
+    }
+    
+    /* Custom scrollbar for main content */
+    .content-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+    .content-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .content-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    .content-scroll::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+    
+    /* Sidebar collapse styles */
+    .sidebar {
+      transition: width 0.3s ease;
+      position: relative;
+      min-width: 4rem;
+      max-width: 500px;
+    }
+    .sidebar.collapsed {
+      width: 4rem !important;
+    }
+    .sidebar.collapsed .sidebar-resizer {
+      display: none;
+    }
+    
+    /* Sidebar resizer */
+    .sidebar-resizer {
+      position: absolute;
+      right: -4px;
+      top: 0;
+      bottom: 0;
+      width: 8px;
+      cursor: col-resize;
+      background-color: transparent;
+      z-index: 10;
+      user-select: none;
+      transition: background-color 0.2s;
+    }
+    .sidebar-resizer:hover {
+      background-color: rgba(79, 70, 229, 0.6);
+      width: 8px;
+    }
+    .sidebar-resizer.resizing {
+      background-color: rgba(79, 70, 229, 0.9);
+      width: 8px;
+    }
+    
+    @media (max-width: 768px) {
+      .sidebar-resizer {
+        display: none;
+      }
+    }
+    .sidebar.collapsed .sidebar-content {
+      display: none;
+    }
+    .sidebar.collapsed .sidebar-icon {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .sidebar.collapsed .sidebar-header {
+      justify-content: center;
+      padding: 1rem 0.5rem;
+    }
+    .sidebar-toggle {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0.375rem;
+      border-radius: 0.375rem;
+      transition: all 0.2s;
+      opacity: 0.6;
+      font-size: 1rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      flex-shrink: 0;
+    }
+    .sidebar-toggle:hover {
+      opacity: 1;
+      background: rgba(51, 65, 85, 0.4);
+      color: #cbd5e1;
+    }
+    .sidebar.collapsed .sidebar-toggle {
+      margin: 0 auto;
+    }
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar-icon {
+      display: none;
+    }
+    
+    /* Secciones colapsables del sidebar */
+    .sidebar-section-header {
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+    .sidebar-section-header:hover {
+      background-color: rgba(51, 65, 85, 0.4);
+    }
+    .sidebar-section-header[aria-expanded="true"] .sidebar-section-toggle {
+      transform: rotate(180deg);
+    }
+    .sidebar-section-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+      opacity: 0;
+    }
+    .sidebar-section-content.open {
+      max-height: 2000px; /* Valor suficientemente alto */
+      opacity: 1;
+    }
+    .sidebar-section-toggle {
+      transition: transform 0.2s ease;
+      font-size: 0.75rem;
+    }
+    
+    /* Responsive para móvil */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      
+      .sidebar.collapsed {
+        transform: translateX(-100%);
+      }
+      
+      /* Overlay para móvil */
+      .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+      }
+      
+      .sidebar-overlay.active {
+        display: block;
+      }
+      
+      /* Botón hamburguesa */
+      .mobile-menu-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        background: #1e293b;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 60;
+        touch-action: manipulation;
+      }
+      
+      /* Ajustar contenido principal en móvil */
+      .main-content-wrapper {
+        margin-left: 0;
+        width: 100%;
+      }
+      
+      /* Header responsive */
+      header {
+        padding: 12px 16px !important;
+      }
+      
+      header h2 {
+        font-size: 1.1rem !important;
+        margin-left: 50px;
+      }
+      
+      /* Tabs responsive */
+      .tabs-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+      }
+      
+      .tabs-container::-webkit-scrollbar {
+        height: 4px;
+      }
+      
+      /* Contenido responsive */
+      main {
+        padding: 12px !important;
+      }
+      
+      /* Ajustar tamaños de texto en móvil */
+      .sidebar-content {
+        font-size: 0.875rem;
+      }
+      
+      /* Botones más grandes para touch */
+      nav a, nav button {
+        min-height: 44px;
+        padding: 12px 16px !important;
+      }
+    }
+    
+    @media (min-width: 769px) {
+      .mobile-menu-button {
+        display: none;
+      }
+      
+      .sidebar-overlay {
+        display: none !important;
+      }
+    }
+  </style>
+<meta name="app-version" content="5.30.0-sidebar-audit-canonical">
+<meta name="build-id" content="029c6bf">
+<meta name="trace-id" content="req_1767052012335_ldg0ug">
+
+  <style>
+    .dashboard-container {
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .dashboard-header {
+      margin-bottom: 2rem;
+    }
+    
+    .dashboard-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+    }
+    
+    .dashboard-header p {
+      color: #64748b;
+      font-size: 1rem;
+    }
+    
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .dashboard-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e2e8f0;
+    }
+    
+    .dashboard-card h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    
+    .status-badge.normal {
+      background: #dcfce7;
+      color: #166534;
+    }
+    
+    .status-badge.degraded {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    
+    .status-badge.broken {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    
+    .status-description {
+      color: #64748b;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    
+    .diagnostics-summary {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .diagnostic-stat {
+      text-align: center;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 8px;
+    }
+    
+    .diagnostic-stat .number {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.25rem;
+    }
+    
+    .diagnostic-stat .label {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .diagnostics-link {
+      display: inline-block;
+      margin-top: 0.5rem;
+      color: #3b82f6;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    
+    .diagnostics-link:hover {
+      text-decoration: underline;
+    }
+    
+    .core-routes-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .core-routes-list li {
+      margin-bottom: 0.75rem;
+    }
+    
+    .core-route-link {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: #f8fafc;
+      border-radius: 8px;
+      text-decoration: none;
+      color: #1e293b;
+      transition: all 0.2s;
+    }
+    
+    .core-route-link:hover {
+      background: #e2e8f0;
+      transform: translateX(4px);
+    }
+    
+    .core-route-link .icon {
+      font-size: 1.25rem;
+    }
+    
+    .migration-progress {
+      margin-bottom: 1rem;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+      transition: width 0.3s ease;
+    }
+    
+    .migration-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    
+    .master-zone {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      text-align: center;
+    }
+    
+    .master-zone h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    
+    .master-zone p {
+      font-size: 0.875rem;
+      opacity: 0.9;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #64748b;
+    }
+  </style>
+  
+</head>
+<body class="bg-slate-900">
+  <!-- Botón hamburguesa para móvil -->
+  <button id="mobile-menu-button" class="mobile-menu-button" aria-label="Abrir menú">
+    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+    </svg>
+  </button>
+  
+  <!-- Overlay para móvil -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+  
+  <!-- Layout con Sidebar -->
+  <div class="flex h-screen overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar bg-slate-950 text-slate-200 flex flex-col border-r border-slate-800">
+      <!-- Resizer handle -->
+      <div id="sidebar-resizer" class="sidebar-resizer" title="Arrastra para redimensionar"></div>
+      
+      <!-- Logo/Header -->
+      <div class="p-4 border-b border-slate-800 sidebar-header">
+        <h1 class="text-xl font-bold text-white sidebar-content">✨ AuriPortal Admin</h1>
+        <div class="sidebar-icon">✨</div>
+        <button id="sidebar-toggle" class="sidebar-toggle" title="Colapsar/Expandir menú" aria-label="Colapsar menú">
+          <span class="sidebar-content">◀</span>
+          <span class="sidebar-icon">◀</span>
+        </button>
+      </div>
+      
+      <!-- Navigation Menu -->
+      <nav id="sidebar-nav" class="flex-1 overflow-y-auto sidebar-scroll px-2 py-4">
+        <div class="space-y-1 sidebar-content">
+          
+          <!-- SIDEBAR CANÓNICO: Generado por sidebar-registry.js -->
+          <!-- LEGACY SIDEBAR REMOVED — DO NOT USE -->
+          <!-- El sidebar se genera automáticamente desde generateSidebarHTML() -->
+          <div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="/admin/dashboard" data-active-section="Dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            Dashboard
+          </a>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⭐ Favoritos
+          </div>
+          
+          <!-- Favoritos (carga dinámica) -->
+          <div id="favoritos-container">
+            <p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>
+          </div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="dashboard" 
+               data-section-name="Dashboard"
+               role="button"
+               aria-expanded="true">
+            <span>Dashboard</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content open" data-section-id="dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard" data-section="Dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Dashboard</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---master-insight" 
+               data-section-name="🧠 MASTER INSIGHT"
+               role="button"
+               aria-expanded="false">
+            <span>🧠 MASTER INSIGHT</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---master-insight">
+          <a href="/admin/master-insight/overview" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="master-insight-overview" data-section="🧠 MASTER INSIGHT">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Visión General</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---gesti-n-del-alumno" 
+               data-section-name="👤 Gestión del alumno"
+               role="button"
+               aria-expanded="false">
+            <span>👤 Gestión del alumno</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---gesti-n-del-alumno">
+          <a href="/admin/alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="alumnos" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧍</span>
+            <span class="flex-1">Alumnos</span>
+            
+          </a>
+          <a href="/admin/progreso-v4" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="progreso-v4" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧬</span>
+            <span class="flex-1">Estado del Alumno</span>
+            
+          </a>
+          <a href="/admin/modo-maestro" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modo-maestro" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧙</span>
+            <span class="flex-1">Modo Master</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---comunicaci-n-con-los-alumnos" 
+               data-section-name="💬 Comunicación con los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💬 Comunicación con los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---comunicaci-n-con-los-alumnos">
+          <a href="/admin/comunicacion-directa" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="comunicacion-directa" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">💬</span>
+            <span class="flex-1">Canalizaciones y comentarios</span>
+            
+          </a>
+          <a href="/admin/respuestas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="respuestas" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Feedbacks de los alumnos</span>
+            
+          </a>
+          <a href="/admin/email" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="email" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📨</span>
+            <span class="flex-1">Email</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---transmutaci-n-energ-tica-de-la-pde" 
+               data-section-name="🌟 Transmutación energética de la PDE"
+               role="button"
+               aria-expanded="false">
+            <span>🌟 Transmutación energética de la PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---transmutaci-n-energ-tica-de-la-pde">
+          <a href="/admin/transmutaciones/personas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-personas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">👥</span>
+            <span class="flex-1">Personas de la plataforma</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/lugares" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-lugares" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🏠</span>
+            <span class="flex-1">Lugares Activados</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/proyectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-proyectos" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🚀</span>
+            <span class="flex-1">Proyectos Activados</span>
+            
+          </a>
+          <a href="/admin/pde/transmutaciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-energeticas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Transmutaciones Energéticas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---contenido-pde" 
+               data-section-name="📚 Contenido PDE"
+               role="button"
+               aria-expanded="false">
+            <span>📚 Contenido PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---contenido-pde">
+          <a href="/admin/tecnicas-limpieza" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-limpieza" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🧹</span>
+            <span class="flex-1">Técnicas de transmutación energética</span>
+            
+          </a>
+          <a href="/admin/preparaciones-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="preparaciones-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Preparación para la práctica</span>
+            
+          </a>
+          <a href="/admin/tecnicas-post-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-post-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🎯</span>
+            <span class="flex-1">Técnicas por práctica</span>
+            
+          </a>
+          <a href="/admin/protecciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="protecciones-energeticas" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🛡️</span>
+            <span class="flex-1">Protecciones Energéticas</span>
+            
+          </a>
+          <a href="/admin/decretos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="decretos" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Biblioteca de Decretos</span>
+            
+          </a>
+          <a href="/admin/frases" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="frases" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🪬</span>
+            <span class="flex-1">Frases PDE</span>
+            
+          </a>
+          <a href="/admin/tarot" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tarot" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Tarot (Cartas)</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---editor-pde" 
+               data-section-name="✏️ EDITOR PDE"
+               role="button"
+               aria-expanded="false">
+            <span>✏️ EDITOR PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---editor-pde">
+          <a href="/admin/pde/catalog-registry" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="catalog-registry" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Registro de Catálogos</span>
+            
+          </a>
+          <a href="/admin/contexts" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="contexts-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🗺️</span>
+            <span class="flex-1">Contextos & Mappings</span>
+            
+          </a>
+          <a href="/admin/packages" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="packages-creator" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📦</span>
+            <span class="flex-1">Creador de Paquetes</span>
+            
+          </a>
+          <a href="/admin/resolvers" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="resolvers-studio" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧠</span>
+            <span class="flex-1">Resolvers</span>
+            
+          </a>
+          <a href="/admin/pde/widgets-v2" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="widgets-creator-v2" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Widgets</span>
+            
+          </a>
+          <a href="/admin/senales" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="senales-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📡</span>
+            <span class="flex-1">Señales</span>
+            
+          </a>
+          <a href="/admin/automations" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="automations-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Automatizaciones V2</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---i-d-de-los-alumnos" 
+               data-section-name="💡 I+D de los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💡 I+D de los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---i-d-de-los-alumnos">
+          <a href="/admin/iad-alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="iad-alumnos" data-section="💡 I+D de los alumnos">
+            <span class="mr-3 text-lg">✨</span>
+            <span class="flex-1">Aspectos personalizados</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---navegaciones" 
+               data-section-name="🧭 Navegaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🧭 Navegaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---navegaciones">
+          <a href="/admin/navigation" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todas las navegaciones</span>
+            
+          </a>
+          <a href="/admin/navigation/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation-new" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nueva navegación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----recorridos" 
+               data-section-name="🗺️ Recorridos"
+               role="button"
+               aria-expanded="false">
+            <span>🗺️ Recorridos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----recorridos">
+          <a href="/admin/recorridos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todos los recorridos</span>
+            
+          </a>
+          <a href="/admin/recorridos/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos-new" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nuevo recorrido</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="--el-brillo-de-auriportal" 
+               data-section-name="✨ El brillo de AuriPortal"
+               role="button"
+               aria-expanded="false">
+            <span>✨ El brillo de AuriPortal</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="--el-brillo-de-auriportal">
+          <a href="/admin/theme-studio-canon" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-studio-canon" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio · Canon (v1)</span>
+            
+          </a>
+          <a href="/admin/theme-bindings" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-bindings-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Bindings de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-diagnostics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-diagnostics-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧪</span>
+            <span class="flex-1">Diagnóstico de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-docs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-docs" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Documentación de Temas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---apariencia" 
+               data-section-name="🎨 Apariencia"
+               role="button"
+               aria-expanded="false">
+            <span>🎨 Apariencia</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---apariencia">
+          <a href="/admin/recorrido-pedagogico" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorrido-pedagogico" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">📱</span>
+            <span class="flex-1">Pantallas</span>
+            
+          </a>
+          <a href="/admin/configuracion-workflow" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-workflow" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Workflow</span>
+            
+          </a>
+          <a href="/admin/configuracion-caminos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-caminos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Caminos Pedagógicos</span>
+            
+          </a>
+          <a href="/admin/editor-pantallas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="editor-pantallas" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Editor de Pantallas</span>
+            
+          </a>
+          <a href="/admin/themes/studio-v3" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="themes-studio-v3" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio</span>
+            
+          </a>
+          <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-aspectos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🔥</span>
+            <span class="flex-1">Aspectos de Práctica</span>
+            
+          </a>
+          <a href="/admin/sellos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="sellos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🏆</span>
+            <span class="flex-1">Sellos / Rituales</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---recursos-t-cnicos" 
+               data-section-name="🎵 Recursos técnicos"
+               role="button"
+               aria-expanded="false">
+            <span>🎵 Recursos técnicos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---recursos-t-cnicos">
+          <a href="/admin/recursos-tecnicos/musicas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-musicas" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🎵</span>
+            <span class="flex-1">Músicas de meditación</span>
+            
+          </a>
+          <a href="/admin/recursos-tecnicos/tonos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-tonos" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🔔</span>
+            <span class="flex-1">Tonos de meditación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----clasificaciones" 
+               data-section-name="🏷️ Clasificaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🏷️ Clasificaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----clasificaciones">
+          <a href="/admin/niveles-energeticos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="niveles-energeticos" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Niveles Energéticos</span>
+            
+          </a>
+          <a href="/admin/configuracion-racha" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-racha" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Racha y fases</span>
+            
+          </a>
+          <a href="/admin/logros" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logros" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">🌟</span>
+            <span class="flex-1">Logros</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---analytics" 
+               data-section-name="📊 Analytics"
+               role="button"
+               aria-expanded="false">
+            <span>📊 Analytics</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---analytics">
+          <a href="/admin/analytics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Analytics</span>
+            
+          </a>
+          <a href="/admin/analytics-resumen" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics-resumen" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📝</span>
+            <span class="flex-1">Resumen Diario</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---system---configuraci-n" 
+               data-section-name="⚙️ System / Configuración"
+               role="button"
+               aria-expanded="false">
+            <span>⚙️ System / Configuración</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---system---configuraci-n">
+          <a href="/admin/system/capabilities" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="system-capabilities" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Capabilities</span>
+            
+          </a>
+          <a href="/admin/configuracion-favoritos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-favoritos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⭐</span>
+            <span class="flex-1">Favoritos</span>
+            
+          </a>
+          <a href="/admin/modulos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modulos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Módulos ON / BETA / OFF</span>
+            
+          </a>
+          <a href="/admin/configuracion" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Configuración General</span>
+            
+          </a>
+          <a href="/admin/logs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logs" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Logs</span>
+            
+          </a>
+          <a href="/admin/system/assembly" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="assembly-check" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Assembly Check</span>
+            
+          </a>
+          <a href="/admin/feature-flags" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="feature-flags" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🏷️</span>
+            <span class="flex-1">Feature Flags</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          
+          <!-- Cerrar Sesión -->
+          <form method="POST" action="/admin/logout" class="w-full">
+            <button type="submit" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-red-900 bg-red-950 text-red-200 transition-colors">
+              <span class="mr-3 text-lg">🔴</span>
+              Cerrar Sesión
+            </button>
+          </form></div>
+          
+        </div>
+      </nav>
+    </aside>
+    
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden bg-slate-900 main-content-wrapper">
+      
+      <!-- Top Bar -->
+      <header class="bg-slate-800 shadow-lg border-b border-slate-700 px-6 py-4">
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-semibold text-white">AuriPortal · Admin</h2>
+          <div class="text-sm text-slate-400">
+            <span id="currentTime"></span>
+          </div>
+        </div>
+      </header>
+      
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto bg-slate-900 content-scroll">
+        <div class="p-6">
+          
+  <div class="dashboard-container">
+    <div class="dashboard-header">
+      <h1>🚀 AuriPortal · Admin</h1>
+      <p>Centro de mando del sistema</p>
+    </div>
+    
+    <div class="dashboard-grid">
+      <!-- Estado del Sistema -->
+      <div class="dashboard-card">
+        <h2>⚙️ Estado del Sistema</h2>
+        <div class="system-status">
+          <span class="status-badge normal">NORMAL</span>
+        </div>
+        <p class="status-description">Sistema completamente operativo. Todas las funcionalidades disponibles.</p>
+        <div style="margin-top: 1rem; font-size: 0.75rem; color: #94a3b8;">
+          <div>Total contratos: 12</div>
+          <div>Activos: 12 | Degradados: 0 | Rotos: 0</div>
+        </div>
+      </div>
+      
+      <!-- Diagnóstico Rápido -->
+      <div class="dashboard-card">
+        <h2>🔍 Diagnóstico Rápido</h2>
+        <div class="diagnostics-summary">
+          <div class="diagnostic-stat">
+            <div class="number" id="diag-total">-</div>
+            <div class="label">Total</div>
+          </div>
+          <div class="diagnostic-stat">
+            <div class="number" id="diag-active">-</div>
+            <div class="label">Activos</div>
+          </div>
+          <div class="diagnostic-stat">
+            <div class="number" id="diag-degraded">-</div>
+            <div class="label">Degradados</div>
+          </div>
+          <div class="diagnostic-stat">
+            <div class="number" id="diag-broken">-</div>
+            <div class="label">Rotos</div>
+          </div>
+        </div>
+        <a href="/admin/system/diagnostics" class="diagnostics-link">Ver diagnóstico completo →</a>
+      </div>
+      
+      <!-- Accesos Núcleo -->
+      <div class="dashboard-card">
+        <h2>🎯 Accesos Núcleo</h2>
+        <ul class="core-routes-list">
+          
+            <li>
+              <a href="/admin/contexts" class="core-route-link">
+                <span class="icon">🗺️</span>
+                <span>Contextos & Mappings</span>
+              </a>
+            </li>
+          
+            <li>
+              <a href="/admin/pde/packages-v2" class="core-route-link">
+                <span class="icon">📦</span>
+                <span>Paquetes</span>
+              </a>
+            </li>
+          
+        </ul>
+      </div>
+      
+      <!-- Estado de Migración -->
+      <div class="dashboard-card">
+        <h2>📊 Estado de Migración</h2>
+        <div class="migration-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 63%"></div>
+          </div>
+          <div class="migration-stats">
+            <span>91 activas</span>
+            <span>54 legacy</span>
+          </div>
+        </div>
+        <p style="font-size: 0.875rem; color: #64748b; margin-top: 0.5rem;">
+          Progreso: 63% migrado
+        </p>
+      </div>
+      
+      <!-- Zona Master -->
+      <div class="dashboard-card">
+        <div class="master-zone">
+          <h3>👑 Modo Master</h3>
+          <p>Modo Master activo. Sistema bajo control.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+        </div>
+      </main>
+      
+    </div>
+  </div>
+  
+  <script>
+      // VALIDACIÓN ANTI-REGRESIÓN CLIENTE: Detectar sidebar incompleto
+      document.addEventListener('DOMContentLoaded', function() {
+        // Verificar que el sidebar tenga contenido válido
+        // NOTA: sidebarNav ahora es manejado por sidebar-client.js
+        // Este código legacy se mantiene solo para validación
+        const sidebarScroll = document.getElementById('admin-sidebar-scroll');
+        if (sidebarScroll) {
+          const sidebarLinks = sidebarScroll.querySelectorAll('a');
+          const sidebarText = sidebarScroll.textContent || '';
+          
+          // Detectar problemas comunes
+          if (sidebarText.includes('<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="/admin/dashboard" data-active-section="Dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            Dashboard
+          </a>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⭐ Favoritos
+          </div>
+          
+          <!-- Favoritos (carga dinámica) -->
+          <div id="favoritos-container">
+            <p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>
+          </div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="dashboard" 
+               data-section-name="Dashboard"
+               role="button"
+               aria-expanded="true">
+            <span>Dashboard</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content open" data-section-id="dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard" data-section="Dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Dashboard</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---master-insight" 
+               data-section-name="🧠 MASTER INSIGHT"
+               role="button"
+               aria-expanded="false">
+            <span>🧠 MASTER INSIGHT</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---master-insight">
+          <a href="/admin/master-insight/overview" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="master-insight-overview" data-section="🧠 MASTER INSIGHT">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Visión General</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---gesti-n-del-alumno" 
+               data-section-name="👤 Gestión del alumno"
+               role="button"
+               aria-expanded="false">
+            <span>👤 Gestión del alumno</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---gesti-n-del-alumno">
+          <a href="/admin/alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="alumnos" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧍</span>
+            <span class="flex-1">Alumnos</span>
+            
+          </a>
+          <a href="/admin/progreso-v4" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="progreso-v4" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧬</span>
+            <span class="flex-1">Estado del Alumno</span>
+            
+          </a>
+          <a href="/admin/modo-maestro" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modo-maestro" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧙</span>
+            <span class="flex-1">Modo Master</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---comunicaci-n-con-los-alumnos" 
+               data-section-name="💬 Comunicación con los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💬 Comunicación con los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---comunicaci-n-con-los-alumnos">
+          <a href="/admin/comunicacion-directa" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="comunicacion-directa" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">💬</span>
+            <span class="flex-1">Canalizaciones y comentarios</span>
+            
+          </a>
+          <a href="/admin/respuestas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="respuestas" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Feedbacks de los alumnos</span>
+            
+          </a>
+          <a href="/admin/email" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="email" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📨</span>
+            <span class="flex-1">Email</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---transmutaci-n-energ-tica-de-la-pde" 
+               data-section-name="🌟 Transmutación energética de la PDE"
+               role="button"
+               aria-expanded="false">
+            <span>🌟 Transmutación energética de la PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---transmutaci-n-energ-tica-de-la-pde">
+          <a href="/admin/transmutaciones/personas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-personas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">👥</span>
+            <span class="flex-1">Personas de la plataforma</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/lugares" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-lugares" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🏠</span>
+            <span class="flex-1">Lugares Activados</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/proyectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-proyectos" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🚀</span>
+            <span class="flex-1">Proyectos Activados</span>
+            
+          </a>
+          <a href="/admin/pde/transmutaciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-energeticas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Transmutaciones Energéticas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---contenido-pde" 
+               data-section-name="📚 Contenido PDE"
+               role="button"
+               aria-expanded="false">
+            <span>📚 Contenido PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---contenido-pde">
+          <a href="/admin/tecnicas-limpieza" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-limpieza" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🧹</span>
+            <span class="flex-1">Técnicas de transmutación energética</span>
+            
+          </a>
+          <a href="/admin/preparaciones-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="preparaciones-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Preparación para la práctica</span>
+            
+          </a>
+          <a href="/admin/tecnicas-post-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-post-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🎯</span>
+            <span class="flex-1">Técnicas por práctica</span>
+            
+          </a>
+          <a href="/admin/protecciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="protecciones-energeticas" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🛡️</span>
+            <span class="flex-1">Protecciones Energéticas</span>
+            
+          </a>
+          <a href="/admin/decretos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="decretos" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Biblioteca de Decretos</span>
+            
+          </a>
+          <a href="/admin/frases" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="frases" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🪬</span>
+            <span class="flex-1">Frases PDE</span>
+            
+          </a>
+          <a href="/admin/tarot" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tarot" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Tarot (Cartas)</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---editor-pde" 
+               data-section-name="✏️ EDITOR PDE"
+               role="button"
+               aria-expanded="false">
+            <span>✏️ EDITOR PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---editor-pde">
+          <a href="/admin/pde/catalog-registry" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="catalog-registry" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Registro de Catálogos</span>
+            
+          </a>
+          <a href="/admin/contexts" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="contexts-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🗺️</span>
+            <span class="flex-1">Contextos & Mappings</span>
+            
+          </a>
+          <a href="/admin/packages" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="packages-creator" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📦</span>
+            <span class="flex-1">Creador de Paquetes</span>
+            
+          </a>
+          <a href="/admin/resolvers" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="resolvers-studio" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧠</span>
+            <span class="flex-1">Resolvers</span>
+            
+          </a>
+          <a href="/admin/pde/widgets-v2" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="widgets-creator-v2" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Widgets</span>
+            
+          </a>
+          <a href="/admin/senales" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="senales-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📡</span>
+            <span class="flex-1">Señales</span>
+            
+          </a>
+          <a href="/admin/automations" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="automations-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Automatizaciones V2</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---i-d-de-los-alumnos" 
+               data-section-name="💡 I+D de los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💡 I+D de los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---i-d-de-los-alumnos">
+          <a href="/admin/iad-alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="iad-alumnos" data-section="💡 I+D de los alumnos">
+            <span class="mr-3 text-lg">✨</span>
+            <span class="flex-1">Aspectos personalizados</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---navegaciones" 
+               data-section-name="🧭 Navegaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🧭 Navegaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---navegaciones">
+          <a href="/admin/navigation" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todas las navegaciones</span>
+            
+          </a>
+          <a href="/admin/navigation/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation-new" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nueva navegación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----recorridos" 
+               data-section-name="🗺️ Recorridos"
+               role="button"
+               aria-expanded="false">
+            <span>🗺️ Recorridos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----recorridos">
+          <a href="/admin/recorridos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todos los recorridos</span>
+            
+          </a>
+          <a href="/admin/recorridos/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos-new" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nuevo recorrido</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="--el-brillo-de-auriportal" 
+               data-section-name="✨ El brillo de AuriPortal"
+               role="button"
+               aria-expanded="false">
+            <span>✨ El brillo de AuriPortal</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="--el-brillo-de-auriportal">
+          <a href="/admin/theme-studio-canon" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-studio-canon" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio · Canon (v1)</span>
+            
+          </a>
+          <a href="/admin/theme-bindings" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-bindings-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Bindings de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-diagnostics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-diagnostics-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧪</span>
+            <span class="flex-1">Diagnóstico de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-docs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-docs" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Documentación de Temas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---apariencia" 
+               data-section-name="🎨 Apariencia"
+               role="button"
+               aria-expanded="false">
+            <span>🎨 Apariencia</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---apariencia">
+          <a href="/admin/recorrido-pedagogico" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorrido-pedagogico" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">📱</span>
+            <span class="flex-1">Pantallas</span>
+            
+          </a>
+          <a href="/admin/configuracion-workflow" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-workflow" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Workflow</span>
+            
+          </a>
+          <a href="/admin/configuracion-caminos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-caminos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Caminos Pedagógicos</span>
+            
+          </a>
+          <a href="/admin/editor-pantallas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="editor-pantallas" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Editor de Pantallas</span>
+            
+          </a>
+          <a href="/admin/themes/studio-v3" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="themes-studio-v3" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio</span>
+            
+          </a>
+          <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-aspectos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🔥</span>
+            <span class="flex-1">Aspectos de Práctica</span>
+            
+          </a>
+          <a href="/admin/sellos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="sellos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🏆</span>
+            <span class="flex-1">Sellos / Rituales</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---recursos-t-cnicos" 
+               data-section-name="🎵 Recursos técnicos"
+               role="button"
+               aria-expanded="false">
+            <span>🎵 Recursos técnicos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---recursos-t-cnicos">
+          <a href="/admin/recursos-tecnicos/musicas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-musicas" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🎵</span>
+            <span class="flex-1">Músicas de meditación</span>
+            
+          </a>
+          <a href="/admin/recursos-tecnicos/tonos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-tonos" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🔔</span>
+            <span class="flex-1">Tonos de meditación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----clasificaciones" 
+               data-section-name="🏷️ Clasificaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🏷️ Clasificaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----clasificaciones">
+          <a href="/admin/niveles-energeticos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="niveles-energeticos" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Niveles Energéticos</span>
+            
+          </a>
+          <a href="/admin/configuracion-racha" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-racha" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Racha y fases</span>
+            
+          </a>
+          <a href="/admin/logros" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logros" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">🌟</span>
+            <span class="flex-1">Logros</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---analytics" 
+               data-section-name="📊 Analytics"
+               role="button"
+               aria-expanded="false">
+            <span>📊 Analytics</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---analytics">
+          <a href="/admin/analytics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Analytics</span>
+            
+          </a>
+          <a href="/admin/analytics-resumen" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics-resumen" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📝</span>
+            <span class="flex-1">Resumen Diario</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---system---configuraci-n" 
+               data-section-name="⚙️ System / Configuración"
+               role="button"
+               aria-expanded="false">
+            <span>⚙️ System / Configuración</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---system---configuraci-n">
+          <a href="/admin/system/capabilities" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="system-capabilities" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Capabilities</span>
+            
+          </a>
+          <a href="/admin/configuracion-favoritos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-favoritos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⭐</span>
+            <span class="flex-1">Favoritos</span>
+            
+          </a>
+          <a href="/admin/modulos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modulos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Módulos ON / BETA / OFF</span>
+            
+          </a>
+          <a href="/admin/configuracion" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Configuración General</span>
+            
+          </a>
+          <a href="/admin/logs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logs" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Logs</span>
+            
+          </a>
+          <a href="/admin/system/assembly" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="assembly-check" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Assembly Check</span>
+            
+          </a>
+          <a href="/admin/feature-flags" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="feature-flags" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🏷️</span>
+            <span class="flex-1">Feature Flags</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          
+          <!-- Cerrar Sesión -->
+          <form method="POST" action="/admin/logout" class="w-full">
+            <button type="submit" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-red-900 bg-red-950 text-red-200 transition-colors">
+              <span class="mr-3 text-lg">🔴</span>
+              Cerrar Sesión
+            </button>
+          </form></div>')) {
+            console.error('[SIDEBAR_FIX] ❌ Placeholder <div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="/admin/dashboard" data-active-section="Dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            Dashboard
+          </a>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ⭐ Favoritos
+          </div>
+          
+          <!-- Favoritos (carga dinámica) -->
+          <div id="favoritos-container">
+            <p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>
+          </div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="dashboard" 
+               data-section-name="Dashboard"
+               role="button"
+               aria-expanded="true">
+            <span>Dashboard</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content open" data-section-id="dashboard">
+          <a href="/admin/dashboard" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors menu-item-active" data-item-id="dashboard" data-section="Dashboard">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Dashboard</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---master-insight" 
+               data-section-name="🧠 MASTER INSIGHT"
+               role="button"
+               aria-expanded="false">
+            <span>🧠 MASTER INSIGHT</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---master-insight">
+          <a href="/admin/master-insight/overview" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="master-insight-overview" data-section="🧠 MASTER INSIGHT">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Visión General</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---gesti-n-del-alumno" 
+               data-section-name="👤 Gestión del alumno"
+               role="button"
+               aria-expanded="false">
+            <span>👤 Gestión del alumno</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---gesti-n-del-alumno">
+          <a href="/admin/alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="alumnos" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧍</span>
+            <span class="flex-1">Alumnos</span>
+            
+          </a>
+          <a href="/admin/progreso-v4" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="progreso-v4" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧬</span>
+            <span class="flex-1">Estado del Alumno</span>
+            
+          </a>
+          <a href="/admin/modo-maestro" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modo-maestro" data-section="👤 Gestión del alumno">
+            <span class="mr-3 text-lg">🧙</span>
+            <span class="flex-1">Modo Master</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---comunicaci-n-con-los-alumnos" 
+               data-section-name="💬 Comunicación con los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💬 Comunicación con los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---comunicaci-n-con-los-alumnos">
+          <a href="/admin/comunicacion-directa" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="comunicacion-directa" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">💬</span>
+            <span class="flex-1">Canalizaciones y comentarios</span>
+            
+          </a>
+          <a href="/admin/respuestas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="respuestas" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Feedbacks de los alumnos</span>
+            
+          </a>
+          <a href="/admin/email" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="email" data-section="💬 Comunicación con los alumnos">
+            <span class="mr-3 text-lg">📨</span>
+            <span class="flex-1">Email</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---transmutaci-n-energ-tica-de-la-pde" 
+               data-section-name="🌟 Transmutación energética de la PDE"
+               role="button"
+               aria-expanded="false">
+            <span>🌟 Transmutación energética de la PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---transmutaci-n-energ-tica-de-la-pde">
+          <a href="/admin/transmutaciones/personas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-personas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">👥</span>
+            <span class="flex-1">Personas de la plataforma</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/lugares" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-lugares" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🏠</span>
+            <span class="flex-1">Lugares Activados</span>
+            
+          </a>
+          <a href="/admin/transmutaciones/proyectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-proyectos" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🚀</span>
+            <span class="flex-1">Proyectos Activados</span>
+            
+          </a>
+          <a href="/admin/pde/transmutaciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="transmutaciones-energeticas" data-section="🌟 Transmutación energética de la PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Transmutaciones Energéticas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---contenido-pde" 
+               data-section-name="📚 Contenido PDE"
+               role="button"
+               aria-expanded="false">
+            <span>📚 Contenido PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---contenido-pde">
+          <a href="/admin/tecnicas-limpieza" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-limpieza" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🧹</span>
+            <span class="flex-1">Técnicas de transmutación energética</span>
+            
+          </a>
+          <a href="/admin/preparaciones-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="preparaciones-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Preparación para la práctica</span>
+            
+          </a>
+          <a href="/admin/tecnicas-post-practica" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tecnicas-post-practica" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🎯</span>
+            <span class="flex-1">Técnicas por práctica</span>
+            
+          </a>
+          <a href="/admin/protecciones-energeticas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="protecciones-energeticas" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🛡️</span>
+            <span class="flex-1">Protecciones Energéticas</span>
+            
+          </a>
+          <a href="/admin/decretos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="decretos" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Biblioteca de Decretos</span>
+            
+          </a>
+          <a href="/admin/frases" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="frases" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🪬</span>
+            <span class="flex-1">Frases PDE</span>
+            
+          </a>
+          <a href="/admin/tarot" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="tarot" data-section="📚 Contenido PDE">
+            <span class="mr-3 text-lg">🔮</span>
+            <span class="flex-1">Tarot (Cartas)</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---editor-pde" 
+               data-section-name="✏️ EDITOR PDE"
+               role="button"
+               aria-expanded="false">
+            <span>✏️ EDITOR PDE</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---editor-pde">
+          <a href="/admin/pde/catalog-registry" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="catalog-registry" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Registro de Catálogos</span>
+            
+          </a>
+          <a href="/admin/contexts" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="contexts-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🗺️</span>
+            <span class="flex-1">Contextos & Mappings</span>
+            
+          </a>
+          <a href="/admin/packages" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="packages-creator" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📦</span>
+            <span class="flex-1">Creador de Paquetes</span>
+            
+          </a>
+          <a href="/admin/resolvers" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="resolvers-studio" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧠</span>
+            <span class="flex-1">Resolvers</span>
+            
+          </a>
+          <a href="/admin/pde/widgets-v2" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="widgets-creator-v2" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Widgets</span>
+            
+          </a>
+          <a href="/admin/senales" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="senales-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">📡</span>
+            <span class="flex-1">Señales</span>
+            
+          </a>
+          <a href="/admin/automations" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="automations-manager" data-section="✏️ EDITOR PDE">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Automatizaciones V2</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---i-d-de-los-alumnos" 
+               data-section-name="💡 I+D de los alumnos"
+               role="button"
+               aria-expanded="false">
+            <span>💡 I+D de los alumnos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---i-d-de-los-alumnos">
+          <a href="/admin/iad-alumnos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="iad-alumnos" data-section="💡 I+D de los alumnos">
+            <span class="mr-3 text-lg">✨</span>
+            <span class="flex-1">Aspectos personalizados</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---navegaciones" 
+               data-section-name="🧭 Navegaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🧭 Navegaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---navegaciones">
+          <a href="/admin/navigation" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todas las navegaciones</span>
+            
+          </a>
+          <a href="/admin/navigation/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="navigation-new" data-section="🧭 Navegaciones">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nueva navegación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----recorridos" 
+               data-section-name="🗺️ Recorridos"
+               role="button"
+               aria-expanded="false">
+            <span>🗺️ Recorridos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----recorridos">
+          <a href="/admin/recorridos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">📋</span>
+            <span class="flex-1">Todos los recorridos</span>
+            
+          </a>
+          <a href="/admin/recorridos/new" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorridos-new" data-section="🗺️ Recorridos">
+            <span class="mr-3 text-lg">➕</span>
+            <span class="flex-1">Nuevo recorrido</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="--el-brillo-de-auriportal" 
+               data-section-name="✨ El brillo de AuriPortal"
+               role="button"
+               aria-expanded="false">
+            <span>✨ El brillo de AuriPortal</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="--el-brillo-de-auriportal">
+          <a href="/admin/theme-studio-canon" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-studio-canon" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio · Canon (v1)</span>
+            
+          </a>
+          <a href="/admin/theme-bindings" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-bindings-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧩</span>
+            <span class="flex-1">Bindings de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-diagnostics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-diagnostics-ui" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">🧪</span>
+            <span class="flex-1">Diagnóstico de Tema</span>
+            
+          </a>
+          <a href="/admin/theme-docs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="theme-docs" data-section="✨ El brillo de AuriPortal">
+            <span class="mr-3 text-lg">📚</span>
+            <span class="flex-1">Documentación de Temas</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---apariencia" 
+               data-section-name="🎨 Apariencia"
+               role="button"
+               aria-expanded="false">
+            <span>🎨 Apariencia</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---apariencia">
+          <a href="/admin/recorrido-pedagogico" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recorrido-pedagogico" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">📱</span>
+            <span class="flex-1">Pantallas</span>
+            
+          </a>
+          <a href="/admin/configuracion-workflow" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-workflow" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Workflow</span>
+            
+          </a>
+          <a href="/admin/configuracion-caminos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-caminos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Caminos Pedagógicos</span>
+            
+          </a>
+          <a href="/admin/editor-pantallas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="editor-pantallas" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Editor de Pantallas</span>
+            
+          </a>
+          <a href="/admin/themes/studio-v3" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="themes-studio-v3" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🎨</span>
+            <span class="flex-1">Theme Studio</span>
+            
+          </a>
+          <a href="/admin/configuracion-aspectos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-aspectos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🔥</span>
+            <span class="flex-1">Aspectos de Práctica</span>
+            
+          </a>
+          <a href="/admin/sellos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="sellos" data-section="🎨 Apariencia">
+            <span class="mr-3 text-lg">🏆</span>
+            <span class="flex-1">Sellos / Rituales</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---recursos-t-cnicos" 
+               data-section-name="🎵 Recursos técnicos"
+               role="button"
+               aria-expanded="false">
+            <span>🎵 Recursos técnicos</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---recursos-t-cnicos">
+          <a href="/admin/recursos-tecnicos/musicas" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-musicas" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🎵</span>
+            <span class="flex-1">Músicas de meditación</span>
+            
+          </a>
+          <a href="/admin/recursos-tecnicos/tonos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="recursos-tecnicos-tonos" data-section="🎵 Recursos técnicos">
+            <span class="mr-3 text-lg">🔔</span>
+            <span class="flex-1">Tonos de meditación</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="----clasificaciones" 
+               data-section-name="🏷️ Clasificaciones"
+               role="button"
+               aria-expanded="false">
+            <span>🏷️ Clasificaciones</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="----clasificaciones">
+          <a href="/admin/niveles-energeticos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="niveles-energeticos" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">⚡</span>
+            <span class="flex-1">Niveles Energéticos</span>
+            
+          </a>
+          <a href="/admin/configuracion-racha" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-racha" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">→</span>
+            <span class="flex-1">Racha y fases</span>
+            
+          </a>
+          <a href="/admin/logros" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logros" data-section="🏷️ Clasificaciones">
+            <span class="mr-3 text-lg">🌟</span>
+            <span class="flex-1">Logros</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---analytics" 
+               data-section-name="📊 Analytics"
+               role="button"
+               aria-expanded="false">
+            <span>📊 Analytics</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---analytics">
+          <a href="/admin/analytics" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📊</span>
+            <span class="flex-1">Analytics</span>
+            
+          </a>
+          <a href="/admin/analytics-resumen" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="analytics-resumen" data-section="📊 Analytics">
+            <span class="mr-3 text-lg">📝</span>
+            <span class="flex-1">Resumen Diario</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          <div class="sidebar-section-header flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-800/50 transition-colors rounded-lg" 
+               data-section-id="---system---configuraci-n" 
+               data-section-name="⚙️ System / Configuración"
+               role="button"
+               aria-expanded="false">
+            <span>⚙️ System / Configuración</span>
+            <span class="sidebar-section-toggle text-slate-400 transition-transform duration-200">▼</span>
+          </div>
+          <div class="sidebar-section-content " data-section-id="---system---configuraci-n">
+          <a href="/admin/system/capabilities" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="system-capabilities" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Capabilities</span>
+            
+          </a>
+          <a href="/admin/configuracion-favoritos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion-favoritos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⭐</span>
+            <span class="flex-1">Favoritos</span>
+            
+          </a>
+          <a href="/admin/modulos" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="modulos" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Módulos ON / BETA / OFF</span>
+            
+          </a>
+          <a href="/admin/configuracion" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="configuracion" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">⚙️</span>
+            <span class="flex-1">Configuración General</span>
+            
+          </a>
+          <a href="/admin/logs" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="logs" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">📜</span>
+            <span class="flex-1">Logs</span>
+            
+          </a>
+          <a href="/admin/system/assembly" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="assembly-check" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🔧</span>
+            <span class="flex-1">Assembly Check</span>
+            
+          </a>
+          <a href="/admin/feature-flags" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors " data-item-id="feature-flags" data-section="⚙️ System / Configuración">
+            <span class="mr-3 text-lg">🏷️</span>
+            <span class="flex-1">Feature Flags</span>
+            
+          </a></div>
+          <!-- Divider -->
+          <div class="my-2 border-t border-slate-800"></div>
+          
+          <!-- Cerrar Sesión -->
+          <form method="POST" action="/admin/logout" class="w-full">
+            <button type="submit" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-red-900 bg-red-950 text-red-200 transition-colors">
+              <span class="mr-3 text-lg">🔴</span>
+              Cerrar Sesión
+            </button>
+          </form></div> sin reemplazar detectado en cliente');
+          } else if (sidebarLinks.length < 2) {
+            console.warn('[SIDEBAR_FIX] ⚠️ Sidebar tiene menos de 2 items visibles', {
+              linkCount: sidebarLinks.length
+            });
+          } else if (sidebarLinks.length === 1 && sidebarText.includes('Dashboard')) {
+          console.warn('[SIDEBAR_FIX] ⚠️ Sidebar solo muestra Dashboard (posible error)', {
+            linkCount: sidebarLinks.length
+          });
+        }
+      }
+      
+      // NOTA: El resaltado de menú activo, scroll, toggle y resize ahora se manejan completamente
+      // en sidebar-client.js. Este código legacy ha sido eliminado para evitar:
+      // - Redeclaraciones de variables (sidebarNav)
+      // - Conflictos de listeners
+      // - Duplicación de lógica
+      
+      // Cargar favoritos
+      loadFavoritos();
+      
+      // Actualizar reloj
+      function updateTime() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('es-ES', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        const dateString = now.toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        const timeElement = document.getElementById('currentTime');
+        if (timeElement) {
+          timeElement.textContent = dateString + ' - ' + timeString;
+        }
+      }
+      
+      updateTime();
+      setInterval(updateTime, 1000);
+    });
+    
+    // Cargar favoritos dinámicamente
+    let loadFavoritosErrorCount = 0;
+    async function loadFavoritos() {
+      try {
+        const response = await fetch('/admin/api/favoritos', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        // Verificar status HTTP primero
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          loadFavoritosErrorCount++;
+          // No mostrar error repetitivo
+          if (loadFavoritosErrorCount <= 1) {
+            const container = document.getElementById('favoritos-container');
+            if (container) {
+              container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+            }
+          }
+          return;
+        }
+        
+        // Leer el texto de la respuesta una sola vez
+        const text = await response.text();
+        
+        // Verificar que la respuesta sea JSON antes de parsear
+        const contentType = response.headers.get('content-type') || '';
+        const isJsonContentType = contentType.includes('application/json');
+        
+        // Si es HTML (empieza con <!DOCTYPE, <html, o simplemente <), es un error
+        const trimmedText = text.trim();
+        if (trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<html') || 
+            (trimmedText.startsWith('<') && !trimmedText.startsWith('{'))) {
+          loadFavoritosErrorCount++;
+          // No mostrar error repetitivo
+          if (loadFavoritosErrorCount <= 1) {
+            const container = document.getElementById('favoritos-container');
+            if (container) {
+              container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+            }
+          }
+          return;
+        }
+        
+        // Intentar parsear como JSON
+        let favoritos;
+        try {
+          favoritos = JSON.parse(text);
+        } catch (parseError) {
+          // Si el error es porque el texto contiene HTML, no lanzar error
+          if (parseError.message && parseError.message.includes('Unexpected token') && 
+              (text.includes('<!DOCTYPE') || text.includes('<html') || text.trim().startsWith('<'))) {
+            loadFavoritosErrorCount++;
+            if (loadFavoritosErrorCount <= 1) {
+              const container = document.getElementById('favoritos-container');
+              if (container) {
+                container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+              }
+            }
+            return;
+          }
+          
+          // Si no se puede parsear y no es HTML, es un error
+          if (!isJsonContentType) {
+            loadFavoritosErrorCount++;
+            if (loadFavoritosErrorCount <= 1) {
+              const container = document.getElementById('favoritos-container');
+              if (container) {
+                container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+              }
+            }
+            return;
+          }
+          throw parseError;
+        }
+        
+        // Si la respuesta no es OK pero tenemos JSON, verificar si hay error en el JSON
+        if (!response.ok) {
+          loadFavoritosErrorCount++;
+          if (loadFavoritosErrorCount <= 1) {
+            const container = document.getElementById('favoritos-container');
+            if (container) {
+              container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+            }
+          }
+          return;
+        }
+        
+        // Si llegamos aquí, la carga fue exitosa
+        loadFavoritosErrorCount = 0;
+        
+        const container = document.getElementById('favoritos-container');
+        if (!container) return;
+        
+        if (favoritos.length === 0) {
+          container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+          return;
+        }
+        
+        container.innerHTML = favoritos.map(f => `
+          <a href="${f.ruta}" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">
+            <span class="mr-3 text-lg">${f.icono || '⭐'}</span>
+            ${f.nombre}
+          </a>
+        `).join('');
+        
+        // Resaltar favorito activo si corresponde
+        const currentPath = window.location.pathname;
+        container.querySelectorAll('a').forEach(item => {
+          if (item.getAttribute('href') === currentPath) {
+            item.classList.add('menu-item-active');
+          }
+        });
+      } catch (error) {
+        loadFavoritosErrorCount++;
+        // Solo mostrar error en consola si no es un error repetitivo
+        if (loadFavoritosErrorCount <= 3) {
+          console.error('Error cargando favoritos:', error);
+        }
+        const container = document.getElementById('favoritos-container');
+        if (container && loadFavoritosErrorCount <= 1) {
+          container.innerHTML = '<p class="px-3 py-2 text-xs text-slate-500">Configura tus favoritos en Configuración</p>';
+        }
+      }
+    }
+    
+    // Manejo del menú móvil
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    
+    function openMobileMenu() {
+      sidebar?.classList.add('mobile-open');
+      sidebarOverlay?.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    
+    function closeMobileMenu() {
+      sidebar?.classList.remove('mobile-open');
+      sidebarOverlay?.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    
+    mobileMenuButton?.addEventListener('click', openMobileMenu);
+    sidebarOverlay?.addEventListener('click', closeMobileMenu);
+    
+    // Cerrar menú al hacer click en un enlace (móvil)
+    if (window.innerWidth <= 768) {
+      document.querySelectorAll('aside nav a').forEach(link => {
+        link.addEventListener('click', () => {
+          setTimeout(closeMobileMenu, 100);
+        });
+      });
+    }
+    
+    // Cerrar menú al redimensionar a desktop
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeMobileMenu();
+      }
+    });
+    
+    
+  </script>
+  
+  <style>
+    .menu-dropdown button {
+      cursor: pointer;
+    }
+    #listas-menu {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    #listas-arrow {
+      transition: transform 0.2s ease;
+    }
+  </style>
+  
+  <!-- Error Handler - Debe cargarse ANTES de otros scripts para capturar errores de extensiones -->
+  <script src="/js/error-handler.js"></script>
+  
+  <!-- Sidebar Runtime State Management -->
+  <script src="/js/admin/sidebar-client.js"></script>
+<script>
+    async function loadQuickDiagnostics() {
+      try {
+        const response = await fetch('/admin/api/system/diagnostics');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.ok && data.data) {
+          const stats = data.data.stats;
+          document.getElementById('diag-total').textContent = stats.total || 0;
+          document.getElementById('diag-active').textContent = stats.active || 0;
+          document.getElementById('diag-degraded').textContent = stats.degraded || 0;
+          document.getElementById('diag-broken').textContent = stats.broken || 0;
+        }
+      } catch (error) {
+        console.error('[DASHBOARD] Error cargando diagnóstico rápido:', error);
+        // No mostrar error, solo dejar los guiones
+      }
+    }
+    
+    // Cargar diagnóstico al iniciar
+    loadQuickDiagnostics();
+  </script>
+<script src="/js/admin/robustness-diagnostics.js"></script>
+</body>
+</html>

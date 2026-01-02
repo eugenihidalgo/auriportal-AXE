@@ -886,3 +886,7 @@
 Este documento es la base para diseñar el Sistema de Contextos canónico. No propone soluciones, solo documenta el estado actual.
 
 
+
+
+
+

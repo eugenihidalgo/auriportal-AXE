@@ -118,3 +118,7 @@ Si falla: `THEME_CAPS_FAIL_HARD=1` detiene el servidor.
 
 **Última actualización**: 2025-01-XX
 
+
+
+
+

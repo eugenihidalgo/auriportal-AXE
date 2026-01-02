@@ -3,7 +3,8 @@
 
 import { CLICKUP } from "../config/config.js";
 import { clickup } from "../services/clickup.js";
-import { getDatabase, students } from "../../database/db.js";
+// SQLite eliminado - PostgreSQL es el único Source of Truth
+// Este módulo está deshabilitado (legacy)
 
 /**
  * Configuración de niveles basados en días desde inscripción

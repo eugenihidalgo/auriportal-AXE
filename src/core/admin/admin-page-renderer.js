@@ -160,7 +160,10 @@ export async function renderAdminPage(options = {}) {
     activePath = '',
     extraScripts = [],
     extraStyles = [],
-    userContext = {}
+    userContext = {},
+    acsRuntimeContract = null, // Contrato ACS-R por pantalla (opcional)
+    layoutId = null, // Layout ID del LayoutRegistry (opcional)
+    sidebarId = null // Sidebar ID del LayoutRegistry (opcional)
   } = options;
   
   // Validar tipos de propiedades
@@ -242,14 +245,22 @@ export async function renderAdminPage(options = {}) {
       featureFlags
     };
     
-    // Generar sidebar usando el sistema gobernado
+    // Generar sidebar usando el sistema gobernado o layout específico
     let sidebarHtml;
     try {
-      sidebarHtml = generateSidebarHTML(activePath, enrichedUserContext);
+      // Si se especifica sidebarId, usar sidebar específico del layout
+      if (sidebarId === 'sidebar_limpiezas_v1') {
+        const { generateLimpiezasSidebarHTML } = await import('./layout/sidebar-limpiezas-v1.js');
+        sidebarHtml = generateLimpiezasSidebarHTML(activePath);
+      } else {
+        // Usar sidebar gobernado por defecto
+        sidebarHtml = generateSidebarHTML(activePath, enrichedUserContext);
+      }
     } catch (sidebarError) {
       logError('AdminPageRenderer', 'Error generando sidebar', {
         error: sidebarError.message,
-        activePath
+        activePath,
+        sidebarId
       });
       // Fail-open: sidebar vacío en lugar de romper la página
       sidebarHtml = '<div id="admin-sidebar-scroll" class="sidebar-scroll overflow-y-auto" data-current-path="' + activePath + '"><p class="px-3 py-2 text-xs text-slate-500">Error cargando sidebar</p></div>';
@@ -274,20 +285,55 @@ export async function renderAdminPage(options = {}) {
       // Si falla obtener trace_id, continuar sin él
     }
     
+    // BUILD STAMP: Añadir identificador único para verificar cache busting
+    const buildId = process.env.BUILD_ID || `dev-${Date.now()}`;
+    const appVersion = process.env.APP_VERSION || require('../../package.json').version || 'unknown';
+    
     // Inyectar meta tags antes de </head>
     let metaTags = '';
-    if (process.env.APP_VERSION) {
-      metaTags += `<meta name="app-version" content="${process.env.APP_VERSION}">\n`;
-    }
-    if (process.env.BUILD_ID) {
-      metaTags += `<meta name="build-id" content="${process.env.BUILD_ID}">\n`;
-    }
+    metaTags += `<meta name="app-version" content="${appVersion}">\n`;
+    metaTags += `<meta name="build-id" content="${buildId}">\n`;
     if (traceId) {
       metaTags += `<meta name="trace-id" content="${traceId}">\n`;
     }
-    if (metaTags) {
-      html = html.replace('</head>', metaTags + '</head>');
-    }
+    html = html.replace('</head>', metaTags + '</head>');
+    
+    // Añadir data attributes al body para diagnóstico
+    html = html.replace('<body', `<body data-build-id="${buildId}" data-app-version="${appVersion}"`);
+    
+    // Añadir window.__BUILD__ para ACS-R
+    // FIX CANÓNICO: Usar JSON seguro (type="application/json") para evitar SyntaxError
+    // por interpolación insegura de buildId/appVersion en JS ejecutable
+    const buildData = { buildId, appVersion };
+    const buildStampScript = `
+<script type="application/json" id="build-data">
+${JSON.stringify(buildData)}
+</script>
+<script>
+  const el = document.getElementById('build-data');
+  if (el) {
+    window.__BUILD__ = JSON.parse(el.textContent);
+    console.info('[BUILD_STAMP]', window.__BUILD__);
+  }
+</script>
+`;
+    html = html.replace('</body>', buildStampScript + '\n</body>');
+    
+    // ASSET VERSIONING v1: Inyectar APP_VERSION y BUILD_ID para versionado de assets
+    // Estas variables son requeridas por withAssetVersion() en el frontend
+    const assetVersioningScript = `
+<script>
+  // ASSET VERSIONING CANÓNICO v1 - Inyectado por renderAdminPage()
+  window.__AP_APP_VERSION__ = ${JSON.stringify(appVersion)};
+  window.__AP_BUILD_ID__ = ${JSON.stringify(buildId)};
+</script>
+`;
+    html = html.replace('</head>', assetVersioningScript + '\n</head>');
+    
+    // CLIENT STATE RESET v1: Cargar reset ANTES de cualquier script UI
+    // Esto garantiza que el estado persistente se limpie antes de que scripts carguen estado antiguo
+    const clientStateResetScript = `<script src="/js/core/client-state-reset.js"></script>`;
+    html = html.replace('</head>', clientStateResetScript + '\n</head>');
     
     // Reemplazar placeholders
     html = html.replace(/\{\{TITLE\}\}/g, title);
@@ -303,14 +349,23 @@ export async function renderAdminPage(options = {}) {
     // Inyectar scripts adicionales antes de </body>
     if (extraScripts.length > 0) {
       const scriptsHtml = extraScripts.map(src => {
-        if (src.startsWith('<script')) {
-          return src; // Ya es HTML
+        if (src.trim().startsWith('<script')) {
+          return src.trim(); // Ya es HTML
         } else {
           return `<script src="${src}"></script>`;
         }
       }).join('\n');
       html = html.replace('</body>', scriptsHtml + '\n</body>');
     }
+    
+    // ACS-R v1: Añadir contrato por pantalla si está definido
+    if (acsRuntimeContract) {
+      const contractScript = `<script type="application/json" id="acs-r-contract">${JSON.stringify(acsRuntimeContract)}</script>`;
+      html = html.replace('</head>', contractScript + '\n</head>');
+    }
+    
+    // ACS-R v1: Añadir runtime guard (siempre, se ejecuta al cargar)
+    html = html.replace('</body>', '<script src="/js/admin/acs-runtime-guard.js"></script>\n</body>');
     
     // ROBUSTNESS LAYER v1: Añadir script de diagnóstico (siempre, se activa con ?debug)
     html = html.replace('</body>', '<script src="/js/admin/robustness-diagnostics.js"></script>\n</body>');

@@ -353,20 +353,48 @@
         const sidebarScroll = document.getElementById('admin-sidebar-scroll');
         if (sidebarScroll) {
           const sidebarLinks = sidebarScroll.querySelectorAll('a');
-          const sidebarText = sidebarScroll.textContent || '';
           
-          // Detectar problemas comunes
-          if (sidebarText.includes('{{SIDEBAR_MENU}}')) {
-            console.error('[SIDEBAR_FIX] ❌ Placeholder {{SIDEBAR_MENU}} sin reemplazar detectado en cliente');
+          // Detectar placeholder sin reemplazar: si no hay enlaces, el sidebar probablemente no fue renderizado
+          // Verificamos usando DOM, no strings HTML
+          const hasValidContent = sidebarLinks.length > 0;
+          
+          // Si no hay enlaces, puede ser que el placeholder no fue reemplazado
+          // Verificamos también si el elemento tiene hijos que no sean enlaces (texto de error, etc.)
+          const hasNonLinkChildren = Array.from(sidebarScroll.children).some(child => child.tagName !== 'A');
+          const isEmpty = sidebarScroll.children.length === 0;
+          
+          if (!hasValidContent && (isEmpty || hasNonLinkChildren)) {
+            // Verificar si hay texto que indique placeholder (solo texto, no HTML)
+            const textNodes = Array.from(sidebarScroll.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+            const hasPlaceholderText = textNodes.some(node => {
+              const text = node.textContent || '';
+              return text.indexOf('{{SIDEBAR_MENU}}') !== -1;
+            });
+            
+            if (hasPlaceholderText) {
+              console.error('[SIDEBAR_FIX] ❌ Placeholder {{SIDEBAR_MENU}} sin reemplazar detectado en cliente');
+            }
           } else if (sidebarLinks.length < 2) {
             console.warn('[SIDEBAR_FIX] ⚠️ Sidebar tiene menos de 2 items visibles', {
-              linkCount: sidebarLinks.length,
-              textPreview: sidebarText.substring(0, 200)
+              linkCount: sidebarLinks.length
             });
-          } else if (sidebarLinks.length === 1 && sidebarText.includes('Dashboard')) {
-          console.warn('[SIDEBAR_FIX] ⚠️ Sidebar solo muestra Dashboard (posible error)', {
-            linkCount: sidebarLinks.length
-          });
+          } else if (sidebarLinks.length === 1) {
+            // Verificar si el único enlace es Dashboard usando DOM (href o textContent, no HTML)
+            const firstLink = sidebarLinks[0];
+            const linkHref = firstLink.getAttribute('href') || '';
+            const linkText = (firstLink.textContent || '').trim();
+            
+            // Verificar por href (más confiable) o por texto del enlace
+            const isDashboard = linkHref === '/admin/dashboard' || 
+                               linkHref.indexOf('/admin/dashboard') === 0 ||
+                               linkText.indexOf('Dashboard') !== -1;
+            
+            if (isDashboard) {
+              console.warn('[SIDEBAR_FIX] ⚠️ Sidebar solo muestra Dashboard (posible error)', {
+                linkCount: sidebarLinks.length
+              });
+            }
+          }
         }
       }
       
@@ -583,7 +611,7 @@
   </style>
   
   <!-- Error Handler - Debe cargarse ANTES de otros scripts para capturar errores de extensiones -->
-  <script src="/js/error-handler.js">  </script>
+  <script src="/js/error-handler.js"></script>
   
   <!-- Sidebar Runtime State Management -->
   <script src="/js/admin/sidebar-client.js"></script>

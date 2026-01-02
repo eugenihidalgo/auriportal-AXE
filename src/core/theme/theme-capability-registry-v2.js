@@ -286,3 +286,7 @@ export function initializeThemeCapabilityRegistry() {
 // Auto-inicializar en módulo
 initializeThemeCapabilityRegistry();
 
+
+
+
+

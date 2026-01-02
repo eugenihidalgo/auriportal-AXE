@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aurelinportal.eugenihidalgo.work/schemas/ui-admin-registry-schema-v1.json",
+  "title": "AuriPortal UI Admin Registry Schema v1",
+  "description": "Schema canónico para validar entradas del UI Admin Registry. Garantiza cumplimiento de REG-INV-001 a REG-INV-009.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entries"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Versión del UI Admin Registry Schema"
+    },
+    "entries": {
+      "type": "array",
+      "description": "Lista de entradas del registry",
+      "items": {
+        "$ref": "#/$defs/UIAdminScreenRegistryEntry"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "UIAdminScreenRegistryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Entrada del UI Admin Registry que declara y gobierna una UI Admin",
+      "required": [
+        "id",
+        "routeKey",
+        "status",
+        "route",
+        "schemaVersion",
+        "schemaValidation",
+        "capabilities",
+        "flags",
+        "sidebar"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "REG-INV-001: Identificador único canónico e inmutable de la UI Admin (kebab-case)"
+        },
+        "routeKey": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "REG-INV-002: Clave de ruta que coincide con Router Registry (inmutable)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "active", "deprecated", "hidden"],
+          "description": "Estado del ciclo de vida de la UI Admin"
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuración de routing. Protege REG-INV-005, REG-INV-006",
+          "required": ["path", "type"],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^(/admin|/admin/(?!api/).+)$",
+              "description": "REG-INV-005: Ruta de la UI Admin. Puede ser /admin exactamente o /admin/ seguido de algo que NO empiece con api/"
+            },
+            "type": {
+              "type": "string",
+              "const": "island",
+              "description": "REG-INV-006: Tipo de ruta. Solo puede ser 'island' para UIs Admin"
+            }
+          }
+        },
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "REG-INV-008: Versión del UI Admin Schema que valida esta UI Admin"
+        },
+        "schemaValidation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Resultado de validación contra UI Admin Schema v1. Protege REG-INV-003",
+          "required": ["validated", "errors"],
+          "properties": {
+            "validated": {
+              "type": "boolean",
+              "description": "Si la UI Admin ha sido validada contra el schema"
+            },
+            "validatedAt": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Fecha de última validación (ISO 8601) o null si nunca se validó"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "message"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Ruta del error en el schema (JSON Pointer)"
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "Mensaje de error"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Código de error (opcional)"
+                  }
+                }
+              },
+              "description": "Errores de validación encontrados (vacío si válida)"
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(CTX|OBS|ACT|AUT|NAV|LAY|THM|SEC|AUD|DIA|EDI)-\\d{3}$",
+            "description": "REG-INV-007: ID de capacidad válido (formato PREFIJO-NNN). Solo [CORE] y [READY]"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "REG-INV-007: Capacidades declaradas por la UI Admin"
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Flags de activación. Controla visibilidad y accesibilidad según contexto",
+          "required": ["featureFlags", "permissions", "systemModes"],
+          "properties": {
+            "featureFlags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Feature flags requeridos para activación"
+            },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "description": "Permisos requeridos para acceso"
+            },
+            "systemModes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["NORMAL", "DEGRADED", "BROKEN"]
+              },
+              "minItems": 1,
+              "description": "Modos del sistema permitidos"
+            }
+          }
+        },
+        "sidebar": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuración de visibilidad en sidebar",
+          "required": ["visible"],
+          "properties": {
+            "visible": {
+              "type": "boolean",
+              "description": "Si aparece en el sidebar"
+            },
+            "section": {
+              "type": ["string", "null"],
+              "description": "Sección del sidebar (opcional)"
+            },
+            "subsection": {
+              "type": ["string", "null"],
+              "description": "Subsección del sidebar (opcional)"
+            },
+            "order": {
+              "type": ["number", "null"],
+              "description": "Orden dentro de la sección/subsección (opcional)"
+            }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Metadata extensible. Protege REG-INV-004, REG-INV-009",
+          "properties": {
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Etiquetas para categorización"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Propietario/responsable de la UI Admin"
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Fecha de creación (ISO 8601)"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Fecha de última actualización (ISO 8601)"
+            },
+            "deprecatedAt": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Fecha de deprecación (ISO 8601) o null"
+            },
+            "deprecatedReason": {
+              "type": ["string", "null"],
+              "description": "REG-INV-004: Razón de deprecación (requerido si status='deprecated')"
+            }
+          }
+        },
+        "screenDef": {
+          "type": "object",
+          "description": "Definición completa de la UI Admin según UI Admin Schema v1. Opcional en draft, recomendado en active. Se valida por separado contra UI_ADMIN_SCHEMA_V1.json."
+        }
+      },
+      "allOf": [
+        {
+          "description": "REG-INV-003: Validación obligatoria para active",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "schemaValidation": {
+                "properties": {
+                  "validated": {
+                    "const": true,
+                    "description": "REG-INV-003: status='active' requiere validated=true"
+                  },
+                  "errors": {
+                    "maxItems": 0,
+                    "description": "REG-INV-003: status='active' requiere errors=[]"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "REG-INV-004: Deprecation con razón",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "deprecated"
+              }
+            }
+          },
+          "then": {
+            "required": ["metadata"],
+            "properties": {
+              "metadata": {
+                "required": ["deprecatedReason"],
+                "properties": {
+                  "deprecatedReason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "REG-INV-004: status='deprecated' requiere deprecatedReason"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "REG-INV-009: Metadata consistente - deprecatedAt requerido si deprecated",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "deprecated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "properties": {
+                  "deprecatedAt": {
+                    "type": "string",
+                    "description": "REG-INV-009: status='deprecated' requiere deprecatedAt"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "REG-INV-009: Metadata consistente - updatedAt requerido si active",
+          "if": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "properties": {
+                  "updatedAt": {
+                    "type": "string",
+                    "description": "REG-INV-009: status='active' requiere updatedAt"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "description": "REG-INV-001: IDs únicos en el registry",
+      "properties": {
+        "entries": {
+          "items": {
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+

@@ -46,6 +46,12 @@ export const ADMIN_ROUTES = [
     method: 'GET'
   },
   {
+    key: 'api-acs-runtime-report',
+    path: '/admin/api/acs/runtime-report',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'api-navigation',
     path: '/admin/api/navigation',
     type: 'api'
@@ -285,6 +291,50 @@ export const ADMIN_ROUTES = [
     path: '/admin/api/tecnicas-limpieza',
     type: 'api'
   },
+  // Transmutaciones Energéticas API
+  {
+    key: 'api-transmutaciones-energeticas',
+    path: '/admin/api/transmutaciones/energeticas',
+    type: 'api',
+    method: 'GET'
+  },
+  // Transmutaciones Proyectos API
+  {
+    key: 'api-transmutaciones-proyectos-list',
+    path: '/admin/api/transmutaciones/proyectos',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-transmutaciones-proyectos-create',
+    path: '/admin/api/transmutaciones/proyectos',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-transmutaciones-proyectos-limpiar',
+    path: '/admin/api/transmutaciones/proyectos/:id/limpiar',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-transmutaciones-proyectos-limpiar-todos',
+    path: '/admin/api/transmutaciones/proyectos/limpiar-todos',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-transmutaciones-proyectos-limpiar-seleccionados',
+    path: '/admin/api/transmutaciones/proyectos/limpiar-seleccionados',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-transmutaciones-proyectos-recurrencia',
+    path: '/admin/api/transmutaciones/proyectos/:id/recurrencia',
+    type: 'api',
+    method: 'PATCH'
+  },
   {
     key: 'api-system-diagnostics',
     path: '/admin/api/system/diagnostics',
@@ -296,11 +346,6 @@ export const ADMIN_ROUTES = [
     path: '/admin/api/system/robustness-report',
     type: 'api',
     method: 'GET'
-  },
-  {
-    key: 'system-diagnostics-page',
-    path: '/admin/system/diagnostics',
-    type: 'island'
   },
   // ============================================
   // ASSEMBLY CHECK SYSTEM (ACS) v1.0
@@ -558,9 +603,7 @@ export const ADMIN_ROUTES = [
   {
     key: 'modo-maestro',
     path: '/admin/modo-maestro',
-    type: 'legacy',
-    disabled: true,
-    disabledReason: 'LEGACY_NOT_MIGRATED'
+    type: 'island'
   },
   {
     key: 'comunicacion-directa',
@@ -600,9 +643,7 @@ export const ADMIN_ROUTES = [
   {
     key: 'transmutaciones-proyectos',
     path: '/admin/transmutaciones/proyectos',
-    type: 'legacy',
-    disabled: true,
-    disabledReason: 'LEGACY_NOT_MIGRATED'
+    type: 'island'
   },
   {
     key: 'transmutaciones-energeticas',
@@ -933,6 +974,103 @@ export const ADMIN_ROUTES = [
     key: 'test-html',
     path: '/admin/test-html',
     type: 'legacy'
+  },
+  // ============================================
+  // STUDENT SOT v1 - APIs Admin
+  // ============================================
+  {
+    key: 'api-students-list',
+    path: '/admin/api/students/search',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-students-detail',
+    path: '/admin/api/students/:id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-students-domain-items',
+    path: '/admin/api/students/:id/domains/:domain_key/items',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-students-domain-clean',
+    path: '/admin/api/students/:id/domains/:domain_key/items/:item_id/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-students-domain-bulk-clean',
+    path: '/admin/api/students/:id/domains/:domain_key/items/bulk-clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-students-domain-policy',
+    path: '/admin/api/students/:id/domains/:domain_key/policy',
+    type: 'api',
+    method: 'PATCH'
+  },
+  {
+    key: 'api-students-domain-recurrence',
+    path: '/admin/api/students/:id/domains/:domain_key/items/:item_id/recurrence',
+    type: 'api',
+    method: 'PATCH'
+  },
+  // Student Domain Integration v1 - Admin endpoints
+  {
+    key: 'api-students-domains-transmutation',
+    path: '/admin/api/students/:id/domains/transmutation',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-students-domains-transmutation-clean',
+    path: '/admin/api/students/:id/domains/transmutation/items/:item_ref/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-students-domains-projects',
+    path: '/admin/api/students/:id/domains/projects',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'api-students-domains-projects-activate',
+    path: '/admin/api/students/:id/domains/projects/items/:item_ref/activate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-students-domains-projects-clean',
+    path: '/admin/api/students/:id/domains/projects/items/:item_ref/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'api-students-domains-projects-update',
+    path: '/admin/api/students/:id/domains/projects/items/:item_ref',
+    type: 'api',
+    method: 'PATCH'
+  },
+  // Transmutations aggregated view (by item)
+  {
+    key: 'api-transmutations-item-students',
+    path: '/admin/api/transmutations/:item_ref/students',
+    type: 'api',
+    method: 'GET'
+  },
+  // ============================================
+  // STUDENT SOT v1 - UI Admin
+  // ============================================
+  {
+    key: 'admin-students-detail',
+    path: '/admin/students/:id',
+    type: 'island'
   }
 ];
 

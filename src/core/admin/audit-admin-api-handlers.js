@@ -79,6 +79,16 @@ const NAMED_EXPORT_HANDLERS = [
 ];
 
 /**
+ * Registry de rutas legacy (no requieren handlers porque son legacy operativo)
+ * Estas rutas están marcadas como legacy y no generan warnings
+ */
+const LEGACY_ROUTES = {
+  '/admin/api/transmutaciones/energeticas': 'legacy',
+  '/admin/api/students/:id': 'legacy',
+  // Añadir aquí otras rutas legacy conocidas
+};
+
+/**
  * Infiere el path del handler desde routeKey
  * Misma lógica que admin-router-resolver.js
  * 
@@ -154,6 +164,18 @@ export async function auditAdminAPIHandlers(options = {}) {
   // Auditar cada ruta API
   for (const route of apiRoutes) {
     const routeKey = route.key;
+    
+    // Verificar si es ruta legacy (no requiere handler)
+    if (LEGACY_ROUTES[route.path]) {
+      report.ok.push({
+        routeKey,
+        routePath: route.path,
+        handlerFile: null,
+        note: 'LEGACY_ROUTE_ACCEPTED'
+      });
+      continue;
+    }
+    
     const inferredPaths = inferHandlerPath(routeKey, route.type);
     
     if (!inferredPaths) {

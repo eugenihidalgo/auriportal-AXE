@@ -60,16 +60,21 @@ export function validateEnvironmentVariables(env) {
     warnings.push('Cloudflare no está configurado (opcional para DNS/CDN)');
   }
 
-  // Zoom Workplace (opcional)
+  // Zoom Workplace (opcional) - NO genera warnings, solo INFO
   if (env.ZOOM_ACCOUNT_ID && env.ZOOM_CLIENT_ID && env.ZOOM_CLIENT_SECRET) {
     config.zoom.configured = true;
     config.zoom.accountId = env.ZOOM_ACCOUNT_ID.substring(0, 8) + '***';
     config.zoom.clientId = env.ZOOM_CLIENT_ID.substring(0, 8) + '***';
   } else {
+    // Zoom es opcional, no genera warning (solo se registra como INFO en logs)
+    // No añadir a warnings array
+    config.zoom.configured = false;
     if (env.ZOOM_ACCOUNT_ID || env.ZOOM_CLIENT_ID || env.ZOOM_CLIENT_SECRET) {
-      warnings.push('Zoom no está completamente configurado (requiere ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID y ZOOM_CLIENT_SECRET)');
+      // Configuración parcial - solo INFO, no warning
+      console.log('[OPTIONAL_INTEGRATIONS] Zoom parcialmente configurado (requiere ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID y ZOOM_CLIENT_SECRET)');
     } else {
-      warnings.push('Zoom no está configurado (opcional para gestión de reuniones/webinars)');
+      // No configurado - solo INFO, no warning
+      console.log('[OPTIONAL_INTEGRATIONS] Zoom no configurado (opcional para gestión de reuniones/webinars)');
     }
   }
 

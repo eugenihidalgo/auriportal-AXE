@@ -7,6 +7,8 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { validateAdminSession } from '../modules/admin-auth.js';
+import { getRequestId } from '../core/observability/request-context.js';
+import { logInfo, logError } from '../core/observability/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -97,8 +99,10 @@ function replace(html, placeholders) {
 
 /**
  * Renderiza la pantalla de login de admin
+ * @param {string} errorMessage - Mensaje de error opcional
+ * @param {string} redirect - URL de redirect opcional (se pasa como hidden field)
  */
-function renderAdminLogin(errorMessage = '') {
+function renderAdminLogin(errorMessage = '', redirect = null) {
   const errorHtml = errorMessage 
     ? `<div class="rounded-md bg-red-50 p-4 mb-4">
          <div class="flex">
@@ -109,9 +113,19 @@ function renderAdminLogin(errorMessage = '') {
        </div>`
     : '';
   
-  const html = replace(loginTemplate, {
+  // Añadir campo hidden para redirect si existe
+  const redirectField = redirect 
+    ? `<input type="hidden" name="redirect" value="${redirect.replace(/"/g, '&quot;')}">`
+    : '';
+  
+  let html = replace(loginTemplate, {
     ERROR_MESSAGE: errorHtml
   });
+  
+  // Insertar redirect field antes del cierre del form (si existe)
+  if (redirectField) {
+    html = html.replace('</form>', `${redirectField}</form>`);
+  }
   
   return renderHtml(html);
 }
@@ -141,14 +155,34 @@ function getAbsoluteUrl(request, path) {
  */
 export default async function adminLoginHandler(request, env, ctx) {
   const url = new URL(request.url);
+  const traceId = (await import('../core/observability/request-context.js')).getRequestId() || `admin-login-${Date.now()}`;
   
-  // Si ya está autenticado, redirigir a /admin
+  // Obtener redirect de query string o body
+  const redirectParam = url.searchParams.get('redirect') || null;
+  const defaultRedirect = '/admin';
+  
+  // FASE 3: REDIRECT SEGURO - Nunca permitir redirect a /admin/login
+  let finalRedirect = redirectParam || defaultRedirect;
+  
+  // Validar que redirect sea relativo (seguridad)
+  if (redirectParam && (redirectParam.startsWith('http://') || redirectParam.startsWith('https://'))) {
+    console.warn(`[AUTH][ADMIN][LOGIN] Redirect absoluto rechazado por seguridad: ${redirectParam}`);
+    return renderAdminLogin('Redirect inválido');
+  }
+  
+  // Validar que redirect no apunte a login (prevenir loops)
+  if (finalRedirect === '/admin/login' || finalRedirect.startsWith('/admin/login?')) {
+    console.warn(`[AUTH][ADMIN][LOGIN] Redirect a login detectado, usando fallback: ${finalRedirect}`);
+    finalRedirect = '/admin'; // Fallback seguro
+  }
+  
+  // Si ya está autenticado, redirigir al destino
   if (validateAdminSession(request)) {
-    console.log('[admin-login] Usuario ya autenticado, redirigiendo a /admin');
+    logInfo('AUTH', 'ADMIN LOGIN ya autenticado', { redirect: finalRedirect, traceId });
     return new Response(null, {
       status: 302,
       headers: {
-        'Location': getAbsoluteUrl(request, '/admin')
+        'Location': getAbsoluteUrl(request, finalRedirect)
       }
     });
   }
@@ -160,41 +194,75 @@ export default async function adminLoginHandler(request, env, ctx) {
       const username = formData.get('username')?.trim() || '';
       const password = formData.get('password') || '';
       const rememberMe = formData.get('remember_me') === 'on';
+      const bodyRedirect = formData.get('redirect') || null;
       
-      console.log(`[admin-login] Intento de login - Usuario: ${username}, RememberMe: ${rememberMe}`);
+      // Usar redirect del body si existe, sino del query string
+      let postRedirect = bodyRedirect || redirectParam || defaultRedirect;
+      
+      // Validar que redirect sea relativo (seguridad)
+      if (postRedirect && (postRedirect.startsWith('http://') || postRedirect.startsWith('https://'))) {
+        console.warn(`[AUTH][ADMIN][LOGIN] Redirect absoluto rechazado por seguridad: ${postRedirect}`);
+        return renderAdminLogin('Redirect inválido', redirectParam);
+      }
+      
+      // FASE 3: REDIRECT SEGURO - Nunca permitir redirect a /admin/login
+      if (postRedirect === '/admin/login' || postRedirect.startsWith('/admin/login?')) {
+        console.warn(`[AUTH][ADMIN][LOGIN] Redirect a login detectado en POST, usando fallback: ${postRedirect}`);
+        postRedirect = '/admin'; // Fallback seguro
+      }
+      
+      logInfo('AUTH', 'ADMIN LOGIN intento', { 
+        username, 
+        rememberMe, 
+        redirect: postRedirect,
+        traceId 
+      });
       
       // Validar credenciales
       const isValid = await validateAdminCredentials(username, password);
       
       if (!isValid) {
-        console.log(`[admin-login] Credenciales inválidas para usuario: ${username}`);
-        return renderAdminLogin('Usuario o contraseña incorrectos');
+        logError('AUTH', 'ADMIN LOGIN credenciales inválidas', { username, traceId });
+        return renderAdminLogin('Usuario o contraseña incorrectos', postRedirect);
       }
       
       // Crear sesión
       const { token } = createAdminSession(rememberMe);
       const cookieString = createAdminSessionCookie(token, request, rememberMe);
       
-      console.log(`[admin-login] Login exitoso - Usuario: ${username}, RememberMe: ${rememberMe}`);
+      logInfo('AUTH', 'ADMIN LOGIN exitoso', { 
+        username, 
+        rememberMe, 
+        redirect: postRedirect,
+        traceId 
+      });
       
-      // Redirigir a /admin con cookie de sesión
+      // Redirigir al destino con cookie de sesión
       return new Response(null, {
         status: 302,
         headers: {
-          'Location': getAbsoluteUrl(request, '/admin'),
+          'Location': getAbsoluteUrl(request, postRedirect),
           'Set-Cookie': cookieString
         }
       });
       
     } catch (error) {
-      console.error('[admin-login] Error procesando login:', error);
-      return renderAdminLogin('Error interno. Por favor, intenta de nuevo.');
+      logError('AUTH', 'ADMIN LOGIN error', {
+        error: error.message,
+        stack: error.stack,
+        traceId
+      });
+      return renderAdminLogin('Error interno. Por favor, intenta de nuevo.', redirectParam);
     }
   }
   
-  // GET: Mostrar formulario de login
-  return renderAdminLogin();
+  // GET: Mostrar formulario de login (pasar redirect al template si existe)
+  return renderAdminLogin('', redirectParam);
 }
+
+
+
+
 
 
 

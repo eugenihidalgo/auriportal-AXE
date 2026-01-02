@@ -153,7 +153,35 @@ export async function renderMasterPage(options = {}) {
   try {
     const registryContent = readFileSync(registryPath, 'utf-8');
     const registry = JSON.parse(registryContent);
-    requiredScripts = registry.required_scripts || [];
+    const rawScripts = registry.required_scripts || [];
+    
+    // Normalizar: convertir strings a objetos si es necesario (compatibilidad backward)
+    requiredScripts = rawScripts.map(script => {
+      if (typeof script === 'string') {
+        // String legacy: convertir a objeto
+        const path = script;
+        const id = path.split('/').pop().replace('.js', '');
+        return {
+          id,
+          path,
+          type: 'module',
+          required: true,
+          critical: false,
+          phase: 'ui',
+          name: id
+        };
+      }
+      // Ya es objeto, asegurar campos requeridos
+      return {
+        id: script.id || script.path?.split('/').pop().replace('.js', ''),
+        path: script.path || script.src,
+        type: script.type || 'module',
+        required: script.required !== false,
+        critical: script.critical === true,
+        phase: script.phase || 'ui',
+        name: script.name || script.id || script.path?.split('/').pop().replace('.js', '')
+      };
+    });
   } catch (error) {
     logError('MasterPageRenderer', 'Error cargando required_scripts del contrato', {
       error: error.message,
@@ -189,6 +217,23 @@ export async function renderMasterPage(options = {}) {
   // CONTRATO: Domain Context Contract v1
   // El contexto se determina en render (backend) y se expone como window.__AP_CONTEXT__
   html = html.replace(/\{\{DOMAIN_CONTEXT\}\}/g, 'MASTER');
+  
+  // Inyectar APP_VERSION y BUILD_ID para Asset Registry
+  const appVersion = process.env.APP_VERSION || 'unknown';
+  const buildId = process.env.BUILD_ID || 'unknown';
+  html = html.replace(/\{\{APP_VERSION\}\}/g, appVersion);
+  html = html.replace(/\{\{BUILD_ID\}\}/g, buildId);
+  
+  // ASSET VERSIONING v1: Inyectar APP_VERSION y BUILD_ID para versionado de assets
+  // Estas variables son requeridas por withAssetVersion() en el frontend
+  const assetVersioningScript = `
+<script>
+  // ASSET VERSIONING CANÓNICO v1 - Inyectado por renderMasterPage()
+  window.__AP_APP_VERSION__ = ${JSON.stringify(appVersion)};
+  window.__AP_BUILD_ID__ = ${JSON.stringify(buildId)};
+</script>
+`;
+  html = html.replace('</head>', assetVersioningScript + '\n</head>');
   
   // Añadir scripts adicionales (sin HTML en strings - usar marcador seguro)
   if (extraScripts.length > 0) {

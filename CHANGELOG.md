@@ -9,6 +9,188 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.47.1] - 2024-12-30
+
+### Fixed
+- **Frontend SyntaxError**: Reemplazado template literal con interpolación de datos sin escapar en `admin-assembly-check-ui.js` por DOM API seguro. Los datos ahora se renderizan usando `renderChecksTable()` que crea elementos DOM directamente, evitando SyntaxError por caracteres especiales en `ui_key`, `route_path`, etc.
+- **Endpoint 500 `/admin/api/transmutaciones/energeticas`**: Creado handler faltante `admin-api-transmutaciones-energeticas.js` que lista todas las listas activas de transmutaciones energéticas. Añadido al Admin Route Registry y al router resolver.
+- **Endpoint 500 `/admin/api/transmutaciones/proyectos`**: Actualizado `getProyectosHandler` para usar `toSuccessResponse` y `toErrorResponse` del error contract canónico, mejorando el manejo de errores y consistencia con otros endpoints.
+
+### Changed
+- `src/endpoints/admin-assembly-check-ui.js`: Tabla de checks ahora se renderiza usando DOM API en lugar de template literals con interpolación, eliminando riesgo de SyntaxError.
+- `src/endpoints/admin-transmutaciones-proyectos-api.js`: Migrado a usar error contract canónico (`toSuccessResponse`/`toErrorResponse`).
+
+### Added
+- `src/endpoints/admin-api-transmutaciones-energeticas.js`: Nuevo handler API para GET `/admin/api/transmutaciones/energeticas`.
+- Ruta `api-transmutaciones-energeticas` en `admin-route-registry.js`.
+- Handler mapping en `admin-router-resolver.js` para `api-transmutaciones-energeticas`.
+
+---
+
+## [5.47.0] - 2025-01-XX
+
+### Added
+- **ACS-R (Assembly Check Runtime Frontend) v1**: Sistema de validación que se ejecuta en el navegador al cargar UIs admin
+  - **Runtime Guard**: `src/core/admin/runtime/acs-runtime-guard.js` - Guard que valida runtime frontend antes de permitir interacción
+  - **Build Stamp Validation**: Valida coherencia entre BUILD_ID del HTML y del servidor (vía `/__version`)
+  - **SyntaxError Detection**: Detecta y bloquea UI si hay errores de parseo JS en el navegador
+  - **Missing Handler Detection**: Valida que funciones/handlers requeridos estén presentes en runtime
+  - **Endpoint Health Check**: Valida que endpoints críticos respondan correctamente (opcional)
+  - **Diagnostic Panel**: Panel overlay visible que bloquea UI y muestra diagnóstico cuando falla
+  - **Screen Runtime Contract**: Contrato por pantalla que declara `ui_key`, `required_globals`, `required_endpoints`, `strict_mode`
+  - **Endpoint de reporte**: `POST /admin/api/acs/runtime-report` - Recibe reportes de errores desde el navegador (opcional)
+  - **Integración en 3 pantallas**: `/admin/system/assembly`, `/admin/pde/transmutaciones-energeticas`, `/admin/pde/transmutaciones-proyectos`
+  - **Documentación completa**:
+    - `docs/FRONTEND_ROBUSTNESS_INVENTORY.md` - Inventario de mecanismos de robustez existentes
+    - `docs/ACS_RUNTIME_FRONTEND_V1.md` - Especificación completa de ACS-R v1
+    - `docs/ACS_RUNTIME_FRONTEND_V1_TESTS.md` - Checklist de pruebas obligatorias
+
+### Changed
+- **admin-page-renderer.js**: 
+  - Añade `window.__BUILD__` con `buildId` y `appVersion` para ACS-R
+  - Añade script `acs-runtime-guard.js` automáticamente en todas las pantallas admin
+  - Soporte para `acsRuntimeContract` en opciones de `renderAdminPage()`
+- **Build stamp**: Ahora se expone en `data-build-id` y `data-app-version` en `<body>`, además de `window.__BUILD__`
+
+### Technical Details
+- ACS-R se ejecuta en el navegador (no en servidor)
+- Valida parseo JS real del navegador (no solo sintaxis Node.js)
+- FAIL-HARD visible: Si JS crítico falla, muestra diagnóstico y bloquea UI
+- Prohibido `innerHTML` dinámico (DOM API obligatoria)
+- Prohibido JSON embebido en `<script>` (usa `application/json` o inline object seguro)
+- Integrado con ACS Backend existente (complementario, no reemplazo)
+
+---
+
+## [5.46.0] - 2025-01-XX
+
+### Added
+- **Student Domain UI Integration Closure**: Cierre completo de integración UI-Dominio
+  - **Función canónica `resolveTemporalState`**: Resuelve estado temporal (limpio/pendiente/crítico) basado en `last_cleaned_at` y `recurrence_days`
+  - **Helper `formatDaysAgo`**: Formatea "Hace X días" de forma humana
+  - **Endpoint agregado**: `GET /admin/api/transmutations/:item_ref/students` - Lista todos los alumnos con su estado respecto a un ítem
+  - **Modal transmutaciones mejorado**: 
+    - Botón ❌ funcional
+    - Se cierra con ESC
+    - Se cierra al hacer click fuera (backdrop)
+    - Conectado al nuevo endpoint canónico
+    - Muestra alumnos agrupados por estado temporal
+  - **UI Proyectos mejorada**:
+    - Columna "Hace X días" añadida
+    - Columna "Estado" con badge temporal (limpio/pendiente/crítico)
+    - Botón "Editar" en acciones
+    - Modal de edición completo (name, description, assigned_person_name, recurrencia)
+    - Modal cerrable (ESC, click fuera, botón ❌)
+
+### Changed
+- **Modal transmutaciones**: Conectado al nuevo endpoint canónico `/admin/api/transmutations/:item_ref/students`
+- **UI Proyectos**: Usa `resolveTemporalState` y `formatDaysAgo` para mostrar estados y fechas
+- **Handler proyectos**: Integrado con nuevo sistema cuando está disponible, fallback a legacy
+
+### Technical Details
+- `resolveTemporalState` es función única y canónica, no duplicada
+- Estados temporales calculados en servidor (no en UI)
+- Modales mejorados con UX funcional (cerrables, no bloquean)
+- Integración gradual: nuevo sistema cuando disponible, legacy como fallback
+
+---
+
+## [5.45.0] - 2025-01-XX
+
+### Added
+- **Student Domain Integration v1**: Integración canónica de dominios (Transmutaciones, Proyectos) con Student SOT v1
+  - **Migración v5.45.0**: Ajusta `student_item_state` para soportar `product_key`, `domain_type`, `item_ref`, `active_state`, `clean_state`, `per_item_config`
+  - **Student Domain Integration Service**: Servicio canónico para gestionar dominios
+    - `listTransmutations()`: Lista transmutaciones del alumno
+    - `cleanTransmutation()`: Limpia transmutación (siempre permitido, incluso PAUSED)
+    - `listProjects()`: Lista proyectos del alumno
+    - `activateProject()`: Activa proyecto (enforce: solo 1 activo)
+    - `cleanProject()`: Limpia proyecto
+    - `updateProjectMetadata()`: Actualiza metadatos (name, description, assigned_person_name)
+  - **Endpoints Alumno** (`/api/me/domains/*`):
+    - `GET /api/me/domains/transmutation`: Lista transmutaciones
+    - `POST /api/me/domains/transmutation/items/:item_ref/clean`: Limpia transmutación
+    - `GET /api/me/domains/projects`: Lista proyectos
+    - `POST /api/me/domains/projects/items/:item_ref/activate`: Activa proyecto
+    - `POST /api/me/domains/projects/items/:item_ref/clean`: Limpia proyecto
+    - `PATCH /api/me/domains/projects/items/:item_ref`: Actualiza metadatos
+  - **Endpoints Admin** (`/admin/api/students/:id/domains/*`):
+    - `GET /admin/api/students/:id/domains/transmutation`: Lista transmutaciones (Master)
+    - `POST /admin/api/students/:id/domains/transmutation/items/:item_ref/clean`: Limpia transmutación (Master)
+    - `GET /admin/api/students/:id/domains/projects`: Lista proyectos (Master)
+    - `POST /admin/api/students/:id/domains/projects/items/:item_ref/activate`: Activa proyecto (Master)
+    - `POST /admin/api/students/:id/domains/projects/items/:item_ref/clean`: Limpia proyecto (Master)
+    - `PATCH /admin/api/students/:id/domains/projects/items/:item_ref`: Actualiza metadatos (Master, incluye assigned_person_name)
+  - **Capabilities nuevas**:
+    - `can_clean_domain_items`: Siempre `true` (incluso en PAUSED)
+    - `can_activate_project`: Permite activar proyectos (con enforcement)
+    - `can_edit_project_metadata`: Permite editar metadatos de proyectos
+  - **Señales nuevas**:
+    - `student.domain.item.metadata_updated`: Al actualizar metadatos
+    - `student.project.active_changed`: Al cambiar proyecto activo
+  - **Backfill script**: `scripts/backfill-student-domain-items-v1.js` para inicializar `student_item_state`
+  - **Documentación**: `docs/STUDENT_DOMAIN_INTEGRATION_V1.md`
+
+### Changed
+- **Student Capability Resolver**: Actualizado para permitir `can_clean_domain_items` siempre (incluso en PAUSED)
+- **Student Capability Registry**: Añadidas 3 nuevas capabilities para operaciones de dominio
+
+### Technical Details
+- Migración `v5.45.0-student-domain-integration-v1.sql`: Añade campos flexibles a `student_item_state`
+- Constraint UNIQUE actualizado: `(student_id, product_key, domain_type, item_ref)`
+- Índices GIN para `per_item_config` (búsquedas en JSONB)
+- Transacciones atómicas en servicio
+- Auditoría automática en todas las mutaciones
+- Emisión de señales registradas
+
+---
+
+## [5.44.0] - 2025-01-XX
+
+### Added
+- **Student SOT v1 Robustness Layers**: Capas canónicas de robustez para Student SOT v1
+  - **Student Capability Registry v1**: Registry formal y versionado de todas las capabilities del sistema
+    - `src/core/student/capabilities/student-capability-registry.js`: Registry canónico
+    - `src/core/student/capabilities/student-capability-resolver.js`: Resolver que calcula capabilities desde contexto
+    - `docs/STUDENT_CAPABILITY_REGISTRY_V1.md`: Documentación completa
+  - **Student Signal Registry v1**: Registry de señales semánticas del dominio Alumno
+    - `src/core/student/signals/student-signal-registry.js`: Registry canónico
+    - `src/core/student/signals/student-signal-emitter.js`: Emitter wrapper
+    - `docs/STUDENT_SIGNAL_REGISTRY_V1.md`: Documentación completa
+  - **Student Coherence Checker v1**: Verificador de invariantes y clasificación de coherencia
+    - `src/core/student/coherence/student-coherence-checker.js`: Checker con 8+ invariantes
+    - `docs/STUDENT_COHERENCE_CHECKER_V1.md`: Documentación de invariantes
+  - **Student Context Contract v1**: Contrato estable para consumo por Contextos/Automatizaciones/UI
+    - `docs/STUDENT_CONTEXT_CONTRACT_V1.md`: Shape estable del contexto
+  - **Student Extension Slots v1**: Slots extensibles (meta, feature_flags, experiments)
+    - Migración `v5.44.0-student-extension-slots.sql`: Añade columnas JSONB a `students`
+    - Métodos en `student-ontological-repo`: `getMeta/setMeta`, `getFeatureFlags/setFeatureFlags`, `getExperiments/setExperiments`
+    - `docs/STUDENT_EXTENSION_SLOTS_V1.md`: Documentación
+  - **Student Lifecycle Map v1**: Estados y transiciones del ciclo de vida
+    - `src/core/student/lifecycle/student-lifecycle.js`: Constantes y enums
+    - `docs/STUDENT_LIFECYCLE_MAP_V1.md`: Documentación de estados y transiciones
+  - **Student Projection Plan v1**: Diseño de proyecciones futuras (solo diseño, no implementación)
+    - `docs/STUDENT_PROJECTION_PLAN_V1.md`: Plan de proyecciones (summary, streaks, domain_summary)
+  - **Student SOT v1 Cursor Rules**: Reglas constitucionales para Cursor
+    - `docs/STUDENT_SOT_V1_CURSOR_RULES.md`: 6 nuevas reglas constitucionales
+
+### Changed
+- **Student Context Builder**: Integración completa de nuevas capas
+  - Usa `resolveStudentCapabilities()` del Capability Resolver
+  - Usa `checkStudentCoherence()` del Coherence Checker
+  - Añade `contract_version: 'v1'` al contexto
+  - Añade `coherence.issues` al contexto
+  - Formato de fechas ISO en todos los campos de fecha
+  - Shape del contexto alineado con Student Context Contract v1
+
+### Technical Details
+- Migración `v5.44.0-student-extension-slots.sql`: Añade `meta`, `feature_flags`, `experiments` (JSONB) a `students`
+- Índices GIN para búsquedas eficientes en JSONB
+- Repos actualizados: `student-ontological-repo` con métodos de extension slots
+- Integración fail-open consciente: contexto siempre se devuelve, incluso con DEGRADED/BROKEN
+
+---
+
 ## [5.16.0] - 2025-01-XX
 
 ### Added

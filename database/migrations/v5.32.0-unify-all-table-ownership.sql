@@ -250,3 +250,7 @@ ALTER TABLE IF EXISTS public.whisper_transcripciones OWNER TO aurelinportal;
 
 
 
+
+
+
+

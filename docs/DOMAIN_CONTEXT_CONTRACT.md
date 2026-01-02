@@ -95,3 +95,4 @@ if (window.__AP_CONTEXT__ === 'MASTER') {
 - Usar data-attributes para contexto
 - Reutilizar lógica entre dominios sin contrato
 
+

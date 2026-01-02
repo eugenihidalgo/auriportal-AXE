@@ -86,6 +86,123 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
 
 **Bugbot activado para todo el servidor AuriPortal**
 
+---
+
+# =========================================
+# CONSTITUCIÓN MASTER SIDEBAR v1
+# =========================================
+
+## Sidebar MASTER: Registry-Driven + DOM API (OBLIGATORIO)
+
+El Sidebar MASTER debe seguir este patrón canónico:
+
+### Registry como Source of Truth
+- **ÚNICO registry**: `src/core/master/registry/master-sidebar-registry.js`
+- **Función canónica**: `getMasterSidebarData(universeId, activePath)` retorna JSON puro
+- **PROHIBIDO**: Hardcode de items del sidebar en handlers o templates
+- **PROHIBIDO**: Duplicar lógica de filtrado/agrupación fuera del registry
+
+### Cliente JavaScript Canónico
+- **ÚNICO cliente**: `public/js/master/master-sidebar-client.js`
+- **PROHIBIDO**: Crear archivos duplicados en `src/core/master/sidebar/` o cualquier otro lugar
+- **OBLIGATORIO**: DOM API únicamente (document.createElement, classList.add, textContent, appendChild)
+- **PROHIBIDO**: innerHTML, template literals con HTML, concatenación de strings HTML
+- **OBLIGATORIO**: Bootstrap autoejecutable (IIFE) con guards de contexto MASTER
+
+### Integración con Asset Loader v1
+- Sidebar debe estar declarado en `master-layout-registry.v1.json` como `required_script`
+- Script marcado como `critical: true` y `phase: "core"`
+- NO debe depender de eventos externos (AP_MASTER_SCRIPTS_READY), debe ser autoejecutable
+
+### Render y Datos
+- Datos del sidebar se pasan vía `data-sidebar-data` attribute en el contenedor
+- El cliente parsea JSON y renderiza dinámicamente
+- El contenedor inicial está vacío (el JS lo llena)
+- PROHIBIDO: HTML estático del sidebar en templates
+
+### Features "De Lujo" (colapsables, bookmarks, búsqueda)
+- Deben usar DOM API únicamente
+- Persistencia en localStorage con claves canónicas:
+  - `ap_master_sidebar_collapsed_v1` (secciones colapsadas)
+  - `ap_master_sidebar_bookmarks_v1` (bookmarks)
+- Deben ser deterministas, auditables y sin innerHTML
+- NO usar timeouts/polling
+
+### Layout y Contenedor
+- Contenedor canónico: `#master-sidebar-container` en `master-layout-v1.html`
+- Sidebar siempre presente en layout MASTER
+- IDs y clases estables (no cambiar sin migración)
+
+### Logs Estructurados
+- Prefijos canónicos: `[MasterSidebar]` y `[SIDEBAR][MASTER]`
+- Logs deben incluir: contexto, path, universe, registry length, active item detectado
+
+### Verificación
+- Al crear/modificar sidebar, ejecutar: `npm run check:master-ui` y `npm run check:assets-master`
+- Verificar en navegador: `/master`, `/master/systema`, `/master/templo-luz/alquimia-general`
+
+### CSS Variables Theme-Ready (v1.1+)
+- **OBLIGATORIO**: Usar variables CSS canónicas para todos los valores visuales
+- **PROHIBIDO**: Hardcodear colores, espaciados, tamaños directamente en reglas
+- **Variables canónicas**: Prefijo `--master-sidebar-*` en `:root`
+- **Fallbacks**: Variables deben tener valores por defecto seguros
+- **Documentación**: Ver `docs/MASTER_SIDEBAR_V1_1_THEME_READY.md`
+
+### Fold/Unfold Sidebar (v1.1+)
+- **Persistencia**: `localStorage` key `ap_master_sidebar_folded_v1` (boolean)
+- **Estado**: Clase CSS `folded` en `.master-sidebar-container`
+- **Anchos**: `--master-sidebar-width` (normal) y `--master-sidebar-width-folded` (plegado)
+- **Tooltips**: Usar `data-tooltip` attribute para labels cuando está plegado
+- **Botón**: Toggle en header del sidebar (◀/▶)
+
+### Selección de Nodo Soberano (v1.4.1+)
+- **OBLIGATORIO**: Seleccionar siempre el nodo flex soberano `<aside class="master-sidebar-container">`
+- **PROHIBIDO**: Usar `getElementById('master-sidebar-container')` (selecciona el `<nav>` interno)
+- **OBLIGATORIO**: Usar `querySelector('.master-sidebar-container')` para seleccionar el flex-item
+- **PROHIBIDO**: Usar `closest('.master-sidebar-container')` o `parentElement` como corrección
+- **CONTRATO**: El layout flex se gobierna SOLO desde el `<aside>`, nunca desde el `<nav>` interno
+- **Regla**: Si necesitas el nodo flex soberano, selecciónalo directamente, no como corrección posterior
+
+### Aislamiento Absoluto de inject_main.js en MASTER (v1.4.3+)
+- **OBLIGATORIO**: `inject_main.js` DEBE tener guard dura que verifique `window.__AP_CONTEXT__ === 'MASTER'`
+- **PROHIBIDO**: Ejecutar `inject_main.js` en dominio MASTER bajo ninguna circunstancia
+- **OBLIGATORIO**: Usar IIFE con return temprano para abortar ejecución en MASTER
+- **PROHIBIDO**: Usar `return;` a nivel de módulo (no funciona en ES6 modules)
+- **CONTRATO**: MASTER es dominio soberano con su propio entry gate (`inject_master.js`)
+- **Regla**: El guard DEBE ejecutarse ANTES de cualquier otra lógica en `inject_main.js`
+
+# =========================================
+# CONSTITUCIÓN ASSET VERSIONING v1
+# =========================================
+
+## Asset Versioning Canónico v1 (OBLIGATORIO)
+
+### Regla Absoluta: Versionado Determinista
+- **TODO asset JS/CSS** debe servirse SIEMPRE con versionado determinista.
+- **PROHIBIDO**: Cargar assets sin versionado (elimina problemas de caché).
+- **OBLIGATORIO**: Usar `APP_VERSION` + `BUILD_ID` como versión canónica.
+
+### Helper Canónico
+- **ÚNICO helper**: `src/core/assets/asset-versioning.js`
+- **Función canónica**: `withAssetVersion(path)` → `${path}?v=${APP_VERSION}.${BUILD_ID}`
+- **Source of Truth**: `window.__AP_APP_VERSION__` y `window.__AP_BUILD_ID__` (inyectados en HTML)
+- **PROHIBIDO**: Hardcodear versiones o usar timestamps aleatorios
+- **OBLIGATORIO**: Lanzar error visible si faltan APP_VERSION o BUILD_ID
+
+### Aplicación Obligatoria
+- **master-script-loader.js**: TODOS los scripts cargados deben usar `withAssetVersion()`
+- **Cualquier CSS/JS MASTER**: Debe ir versionado
+- **Regla**: "URL distinta = asset distinto" (garantiza cache busting)
+
+### Headers Cache-Control
+- **HTML MASTER**: `Cache-Control: no-store` (siempre fresco)
+- **Assets versionados**: `Cache-Control: public, max-age=31536000, immutable` (caché agresivo con versión)
+
+### Verificación
+- Cambio trivial en asset → recarga normal → cambio visible inmediatamente
+- Network muestra URLs con `?v=APP_VERSION.BUILD_ID`
+- Sin problemas de caché en modo incógnito o hard reloads
+
 
 
 

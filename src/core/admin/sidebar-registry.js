@@ -1024,15 +1024,6 @@ export const sidebarRegistry = [
     order: 5
   },
   {
-    id: 'system-diagnostics',
-    label: 'Diagnostics',
-    icon: '🔍',
-    route: '/admin/system/diagnostics',
-    section: '⚙️ System / Configuración',
-    visible: true,
-    order: 6
-  },
-  {
     id: 'assembly-check',
     label: 'Assembly Check',
     icon: '🔧',

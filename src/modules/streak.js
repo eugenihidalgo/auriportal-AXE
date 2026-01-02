@@ -5,7 +5,8 @@ import { CLICKUP } from "../config/config.js";
 import { puedePracticarHoy } from "./suscripcion.js";
 import { clickup } from "../services/clickup.js";
 import { sincronizarListaPrincipalAurelin } from "../services/clickup-sync-listas.js";
-import { getDatabase, students } from "../../database/db.js";
+// SQLite eliminado - PostgreSQL es el único Source of Truth
+// Este módulo está deshabilitado (legacy)
 
 /* -------------------------------------------------------------------------- */
 /*                               FUNCIONES BASE                               */

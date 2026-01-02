@@ -42,7 +42,24 @@ export default async function adminInteractiveResourcesApiHandler(request, env, 
     if (method === 'POST' && normalizedPath === '/') {
       const body = await request.json();
       
-      const resource = await interactiveResourceService.createResource(body);
+      // OBJETIVO 2: Manejar error si tabla no existe
+      let resource;
+      try {
+        resource = await interactiveResourceService.createResource(body);
+      } catch (dbError) {
+        if (dbError.code === 'FEATURE_NOT_INITIALIZED') {
+          return new Response(JSON.stringify({
+            ok: false,
+            error: dbError.message,
+            code: dbError.code,
+            details: dbError.details
+          }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        }
+        throw dbError;
+      }
       
       return new Response(JSON.stringify({
         ok: true,

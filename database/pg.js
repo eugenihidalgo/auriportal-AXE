@@ -59,19 +59,32 @@ export function initPostgreSQL() {
       }
     });
 
-    // Crear tablas si no existen (async, no bloquea)
-    createTables().then(() => {
-      // Ejecutar migración de estandarización de columnas
-      standardizeLimpiezaColumns().catch(err => {
-        console.error('⚠️  Error ejecutando migración de columnas (se reintentará al usar):', err.message);
+    // PROHIBIDO: Crear tablas en runtime PROD
+    // Las tablas deben crearse mediante migraciones SQL explícitas
+    // Solo permitir en DEV o cuando AP_ALLOW_CREATE_TABLES=true
+    const allowCreateTables = process.env.NODE_ENV !== 'production' || 
+                              process.env.AP_ALLOW_CREATE_TABLES === 'true';
+    
+    if (allowCreateTables) {
+      // Crear tablas si no existen (async, no bloquea) - SOLO EN DEV
+      createTables().then(() => {
+        // Ejecutar migración de estandarización de columnas
+        standardizeLimpiezaColumns().catch(err => {
+          console.error('⚠️  Error ejecutando migración de columnas (se reintentará al usar):', err.message);
+        });
+        // Ejecutar migraciones pendientes
+        runMigrations().catch(err => {
+          console.error('⚠️  Error ejecutando migraciones (se reintentará al usar):', err.message);
+        });
+      }).catch(err => {
+        console.error('⚠️  Error creando tablas (se reintentará al usar):', err.message);
       });
-      // Ejecutar migraciones pendientes
+    } else {
+      // En PROD, solo ejecutar migraciones (no crear tablas)
       runMigrations().catch(err => {
         console.error('⚠️  Error ejecutando migraciones (se reintentará al usar):', err.message);
       });
-    }).catch(err => {
-      console.error('⚠️  Error creando tablas (se reintentará al usar):', err.message);
-    });
+    }
     
     return pool;
   } catch (error) {
@@ -3773,6 +3786,82 @@ export async function runMigrations() {
           }
         } else {
           console.warn('⚠️  Error ejecutando migración v5.33.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.34.0: Transmutaciones Energéticas - Alineación al Patrón Canónico SOT
+    const migration534Path = join(__dirname, 'migrations', 'v5.34.0-transmutaciones-energeticas-sot-canonical.sql');
+    try {
+      const migrationSQL = readFileSync(migration534Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.34.0 ejecutada: Transmutaciones Energéticas SOT canónico');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.34.0 ya aplicada (objetos existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.34.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.35.0: Transmutaciones Energéticas - Student State
+    const migration535Path = join(__dirname, 'migrations', 'v5.35.0-transmutaciones-energeticas-student-state.sql');
+    try {
+      const migrationSQL = readFileSync(migration535Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.35.0 ejecutada: Transmutaciones Energéticas Student State');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.35.0 ya aplicada (objetos existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.35.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.46.0: Master Alquimia General - Preparación Canónica
+    const migration546Path = join(__dirname, 'migrations', 'v5.46.0-master-alquimia-general.sql');
+    try {
+      const migrationSQL = readFileSync(migration546Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.46.0 ejecutada: Master Alquimia General');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.46.0 ya aplicada (objetos existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.46.0:', error.message);
+        }
+      }
+    }
+    
+    // Migración v5.47.0: Master Alquimia General v1.1 - Priority + Classifications
+    const migration547Path = join(__dirname, 'migrations', 'v5.47.0-master-alquimia-priority-classifications.sql');
+    try {
+      const migrationSQL = readFileSync(migration547Path, 'utf-8');
+      await pool.query(migrationSQL);
+      console.log('✅ Migración v5.47.0 ejecutada: Master Alquimia General v1.1 (Priority + Classifications)');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        if (error.message && (
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate')
+        )) {
+          console.log('ℹ️  Migración v5.47.0 ya aplicada (objetos existentes)');
+        } else {
+          console.warn('⚠️  Error ejecutando migración v5.47.0:', error.message);
         }
       }
     }

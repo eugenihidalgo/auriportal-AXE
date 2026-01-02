@@ -12,6 +12,7 @@ import { getOrCreateTraceId, attachTrace } from './observability/with-trace.js';
 import { logErrorCanonical } from './observability/logger.js';
 import { pushError } from './observability/error-buffer.js';
 import { toErrorResponse } from './observability/error-contract.js';
+import { resolveAdminRoute } from './admin/admin-router-resolver.js';
 
 /**
  * Formato canónico de respuesta JSON para errores
@@ -394,7 +395,16 @@ export function withRuntimeGuard(handler) {
       }
 
       // Si es texto plano o HTML, normalizar a JSON (solo para APIs)
-      if (isTextOrHtmlResponse(responseWithTrace)) {
+      // OBJETIVO 4: Ignorar rutas island, solo activar en /admin/api/**
+      if (isTextOrHtmlResponse(responseWithTrace) && path.startsWith('/admin/api/')) {
+        // Verificar que NO es una ruta island (islands pueden devolver HTML)
+        const resolved = await resolveAdminRoute(path, method).catch(() => null);
+        if (resolved && resolved.type === 'island') {
+          // Es una ruta island, no normalizar (puede devolver HTML legítimamente)
+          return responseWithTrace;
+        }
+        
+        // Es una API, debe devolver JSON
         logErrorCanonical('router_warn', {
           path,
           method,

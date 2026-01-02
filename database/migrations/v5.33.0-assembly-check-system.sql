@@ -244,3 +244,7 @@ COMMENT ON COLUMN assembly_check_results.details IS 'Detalles adicionales del re
 
 
 
+
+
+
+

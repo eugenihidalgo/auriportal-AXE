@@ -8,6 +8,91 @@
   <title>{{TITLE}} - AuriPortal Master</title>
   <link href="/css/tailwind.css" rel="stylesheet">
   <style>
+    /* ═══════════════════════════════════════════════════════════════════════════════
+     * MASTER SIDEBAR CSS VARIABLES v1.1 - Theme-Ready
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * CONTRATO: Variables CSS canónicas para sidebar MASTER
+     * - Permiten Theme Editor futuro
+     * - Fallbacks seguros para compatibilidad
+     * - NO hardcodear colores directamente en reglas de componentes
+     */
+    :root {
+      /* Sidebar Container */
+      --master-sidebar-width: 280px;
+      --master-sidebar-width-folded: 72px;
+      --master-sidebar-width-collapsed: 72px; /* Alias para folded (v1.4) */
+      --master-sidebar-width-min: 220px; /* Ancho mínimo al redimensionar (v1.4) */
+      --master-sidebar-width-max: 420px; /* Ancho máximo al redimensionar (v1.4) */
+      --master-sidebar-resize-handle-width: 4px; /* Ancho del handle de resize (v1.4) */
+      --master-sidebar-bg: #1e293b; /* slate-800 */
+      --master-sidebar-border: #334155; /* slate-700 */
+      --master-sidebar-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15);
+      
+      /* Text Colors */
+      --master-sidebar-text: #cbd5e1; /* slate-300 */
+      --master-sidebar-text-muted: #94a3b8; /* slate-400 */
+      --master-sidebar-text-bright: #f8fafc; /* slate-50 */
+      --master-sidebar-text-hover: #f1f5f9; /* slate-100 */
+      
+      /* Item States */
+      --master-sidebar-item-hover-bg: #334155; /* slate-700 */
+      --master-sidebar-item-active-bg-start: #4f46e5; /* indigo-600 */
+      --master-sidebar-item-active-bg-end: #6366f1; /* indigo-500 */
+      --master-sidebar-item-active-shadow: rgba(79, 70, 229, 0.3);
+      --master-sidebar-item-active-indicator: #fbbf24; /* amber-400 */
+      
+      /* Section Titles */
+      --master-sidebar-section-title-color: #94a3b8; /* slate-400 */
+      --master-sidebar-section-title-size: 0.6875rem; /* Más pequeño */
+      --master-sidebar-section-title-weight: 700;
+      --master-sidebar-section-title-spacing: 0.1em;
+      --master-sidebar-section-title-hover-bg: #334155; /* slate-700 */
+      
+      /* Spacing */
+      --master-sidebar-padding-x: 0.875rem;
+      --master-sidebar-padding-y: 1.25rem;
+      --master-sidebar-item-padding-x: 1rem;
+      --master-sidebar-item-padding-y: 0.8125rem;
+      --master-sidebar-section-gap: 1.5rem;
+      --master-sidebar-item-gap: 0.375rem;
+      
+      /* Border Radius */
+      --master-sidebar-radius: 0.5rem;
+      --master-sidebar-radius-sm: 0.375rem;
+      
+      /* Chevron */
+      --master-sidebar-chevron-color: #64748b; /* slate-500 */
+      --master-sidebar-chevron-size: 0.75rem;
+      
+      /* Header */
+      --master-sidebar-header-border: 2px solid var(--master-sidebar-border);
+      --master-sidebar-header-title-size: 1.625rem;
+      --master-sidebar-header-subtitle-size: 0.8125rem;
+      
+      
+      /* Search */
+      --master-sidebar-search-bg: #334155; /* slate-700 */
+      --master-sidebar-search-border: #475569; /* slate-600 */
+      --master-sidebar-search-focus-border: #6366f1; /* indigo-500 */
+      --master-sidebar-search-focus-shadow: rgba(99, 102, 241, 0.1);
+      
+      /* ═══════════════════════════════════════════════════════════════════════════════
+       * MASTER SIDEBAR CSS VARIABLES v1.3 - Luminosidad Arcana
+       * ═══════════════════════════════════════════════════════════════════════════════
+       * Variables para estética luminosa y arcana (tema oscuro con sensación sagrada)
+       * - Gradientes sutiles y transparencias
+       * - Nada saturado ni chillón
+       * - Sensación de "templo", no "dashboard"
+       */
+      --master-sidebar-glow: rgba(139, 92, 246, 0.08); /* violet-500 con opacidad muy baja */
+      --master-sidebar-accent: rgba(167, 139, 250, 0.15); /* violet-300 suave */
+      --master-sidebar-accent-soft: rgba(196, 181, 253, 0.08); /* violet-200 muy suave */
+      --master-sidebar-divider: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.2) 50%, transparent);
+      --master-sidebar-icon-glow: rgba(196, 181, 253, 0.12); /* glow sutil en iconos */
+      --master-sidebar-section-glow: rgba(139, 92, 246, 0.06); /* glow muy sutil en secciones */
+      --master-sidebar-hover-glow: rgba(167, 139, 250, 0.1); /* glow al hover */
+    }
+    
     /* MASTER RULE: no inline JS, no HTML in JS strings (constitutional) */
     body { 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -23,69 +108,410 @@
       min-height: 100vh;
     }
     
-    /* Sidebar */
+    /* Sidebar Container - Theme-Ready
+     * CONTRATO CANÓNICO v1.4: Layout Flex
+     * El sidebar DEBE usar flex-basis para que el layout flex respete el ancho.
+     * PROHIBIDO: width: auto, clases tailwind w-*, basis-*, flex-auto
+     */
     .master-sidebar-container {
-      width: 280px;
-      background-color: #1e293b; /* slate-800 */
-      border-right: 1px solid #334155; /* slate-700 */
+      /* Flex contract: 0 grow, 0 shrink, basis = width variable */
+      flex: 0 0 var(--master-sidebar-width);
+      width: var(--master-sidebar-width);
+      min-width: var(--master-sidebar-width-min);
+      max-width: var(--master-sidebar-width-max);
+      background-color: var(--master-sidebar-bg);
+      border-right: 1px solid var(--master-sidebar-border);
+      box-shadow: var(--master-sidebar-shadow), 0 0 40px var(--master-sidebar-glow);
       overflow-y: auto;
-      flex-shrink: 0;
+      position: relative;
+      transition: flex-basis 0.3s ease, width 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    /* Sidebar Folded State */
+    .master-sidebar-container.folded {
+      flex: 0 0 var(--master-sidebar-width-collapsed);
+      width: var(--master-sidebar-width-collapsed);
+      min-width: var(--master-sidebar-width-collapsed);
+      max-width: var(--master-sidebar-width-collapsed);
+    }
+    
+    /* Resize Handle - v1.4 */
+    .master-sidebar-resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: var(--master-sidebar-resize-handle-width);
+      height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      background: transparent;
+      user-select: none;
+      touch-action: none;
+    }
+    
+    .master-sidebar-resize-handle:hover {
+      background: var(--master-sidebar-accent-soft);
+    }
+    
+    .master-sidebar-resize-handle.active {
+      background: var(--master-sidebar-accent);
+    }
+    
+    /* Ocultar resize handle cuando está plegado */
+    .master-sidebar-container.folded .master-sidebar-resize-handle {
+      display: none;
+    }
+    
+    /* Desactivar transición durante resize para mejor UX */
+    .master-sidebar-container.resizing {
+      transition: none;
+    }
+    
+    /* PROHIBIDO: Clases tailwind que interfieren con el contrato flex */
+    .master-sidebar-container.w-auto,
+    .master-sidebar-container.w-\[.*\],
+    .master-sidebar-container.basis-\[.*\],
+    .master-sidebar-container.flex-auto {
+      /* Estas clases NO deben aplicarse - el sizing es gobernado por variables CSS */
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-label,
+    .master-sidebar-container.folded .master-sidebar-header-subtitle,
+    .master-sidebar-container.folded .master-sidebar-section-title,
+    .master-sidebar-container.folded .master-sidebar-search-input {
+      display: none;
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-header-title {
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-item {
+      justify-content: center;
+      padding: 0.75rem 0.5rem;
+    }
+    
+    /* Tooltip para items cuando está plegado */
+    .master-sidebar-container.folded .master-sidebar-item {
+      position: relative;
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-item::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      margin-left: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background-color: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-item:hover::after {
+      opacity: 1;
+    }
+    
+    /* Responsivo: sidebar colapsable en pantallas estrechas */
+    @media (max-width: 768px) {
+      .master-sidebar-container {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 100;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      .master-sidebar-container.open {
+        transform: translateX(0);
+      }
+      
+      .master-main {
+        margin-left: 0;
+      }
     }
     
     .master-sidebar {
-      padding: 1rem;
+      padding: var(--master-sidebar-padding-y) var(--master-sidebar-padding-x);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    
+    /* Header canónico del Sidebar - "El Templo de Ankhar" */
+    .master-sidebar-header {
+      padding: 1.75rem 0.75rem 1.5rem;
+      margin-bottom: 1.75rem;
+      border-bottom: var(--master-sidebar-header-border);
+      text-align: center;
+      position: relative;
+    }
+    
+    /* Botón Fold/Unfold en header */
+    .master-sidebar-fold-toggle {
+      position: absolute;
+      top: 1rem;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      color: var(--master-sidebar-text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0.25rem;
+      border-radius: var(--master-sidebar-radius-sm);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+    }
+    
+    .master-sidebar-fold-toggle:hover {
+      background-color: var(--master-sidebar-item-hover-bg);
+      color: var(--master-sidebar-text-hover);
+    }
+    
+    .master-sidebar-container.folded .master-sidebar-fold-toggle {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+    }
+    
+    /* Línea decorativa sutil bajo el header
+     * CONTRATO: content: '' es decorativo (línea visual), NO inyecta texto
+     * v1.3: Luminosidad arcana - gradiente con glow sutil
+     */
+    .master-sidebar-header::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 20%;
+      right: 20%;
+      height: 1px;
+      background: var(--master-sidebar-divider);
+      box-shadow: 0 0 8px var(--master-sidebar-accent-soft);
+      transition: opacity 0.3s ease;
+    }
+    
+    .master-sidebar-header-title {
+      font-size: var(--master-sidebar-header-title-size);
+      font-weight: 700;
+      color: var(--master-sidebar-text-bright);
+      margin: 0 0 0.625rem 0;
+      letter-spacing: 0.03em;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 12px var(--master-sidebar-icon-glow);
+      line-height: 1.3;
+      transition: text-shadow 0.3s ease;
+    }
+    
+    .master-sidebar-header-subtitle {
+      font-size: var(--master-sidebar-header-subtitle-size);
+      color: var(--master-sidebar-text-muted);
+      margin: 0;
+      font-style: italic;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      opacity: 0.85;
+    }
+    
+    /* Contenedor de items */
+    .master-sidebar-item-container {
+      margin-bottom: var(--master-sidebar-item-gap);
     }
     
     .master-sidebar-item {
       display: flex;
       align-items: center;
-      padding: 0.75rem 1rem;
-      color: #cbd5e1; /* slate-300 */
+      padding: var(--master-sidebar-item-padding-y) var(--master-sidebar-item-padding-x);
+      color: var(--master-sidebar-text);
       text-decoration: none;
-      border-radius: 0.5rem;
-      margin-bottom: 0.25rem;
-      transition: background-color 0.2s;
+      border-radius: var(--master-sidebar-radius);
+      transition: all 0.25s ease, opacity 0.2s ease, transform 0.2s ease;
+      font-size: 0.9375rem;
+      line-height: 1.4;
+      position: relative;
+      opacity: 0.95;
     }
     
     .master-sidebar-item:hover {
-      background-color: #334155; /* slate-700 */
+      background-color: var(--master-sidebar-item-hover-bg);
+      background-image: linear-gradient(90deg, var(--master-sidebar-accent-soft), transparent);
+      color: var(--master-sidebar-text-hover);
+      transform: translateX(2px);
+      box-shadow: 0 0 12px var(--master-sidebar-hover-glow);
+      opacity: 1;
     }
     
     .master-sidebar-item.active {
-      background-color: #4f46e5; /* indigo-600 */
-      color: white;
+      background: linear-gradient(135deg, var(--master-sidebar-item-active-bg-start) 0%, var(--master-sidebar-item-active-bg-end) 100%);
+      color: #ffffff;
+      font-weight: 500;
+      box-shadow: 0 2px 8px var(--master-sidebar-item-active-shadow), 0 0 16px var(--master-sidebar-accent);
     }
     
+    /* Barra lateral dorada para items activos
+     * CONTRATO: content: '' es decorativo (barra visual), NO inyecta texto
+     */
+    .master-sidebar-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60%;
+      background: var(--master-sidebar-item-active-indicator);
+      border-radius: 0 2px 2px 0;
+    }
+    
+    /* CONTRATO CSS: Icon solo renderiza contenido explícito del DOM
+     * PROHIBIDO: CSS NO inyecta texto desde data-attributes
+     * PROHIBIDO: CSS NO usa content: attr() para iconos
+     * OBLIGATORIO: Icon solo muestra texto si JS lo crea explícitamente
+     * v1.3: Luminosidad arcana - glow sutil en iconos
+     */
     .master-sidebar-icon {
-      margin-right: 0.75rem;
-      width: 1.25rem;
+      margin-right: 0.875rem;
+      width: 1.375rem;
       text-align: center;
+      font-size: 1.125rem;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 4px var(--master-sidebar-icon-glow));
+      transition: filter 0.25s ease, transform 0.2s ease;
+    }
+    
+    .master-sidebar-item:hover .master-sidebar-icon {
+      filter: drop-shadow(0 0 6px var(--master-sidebar-icon-glow));
+      transform: scale(1.05);
+    }
+    
+    /* Asegurar que iconos ocultos NO se muestren */
+    .master-sidebar-icon[style*="display: none"],
+    .master-sidebar-icon[style*="display:none"] {
+      display: none !important;
+    }
+    
+    /* PROHIBIDO: CSS NO inyecta contenido textual en iconos */
+    .master-sidebar-icon::before,
+    .master-sidebar-icon::after {
+      content: none !important;
+    }
+    
+    /* PROHIBIDO: CSS NO lee data-attributes para renderizar texto */
+    .master-sidebar-icon[data-icon-id]::before,
+    .master-sidebar-icon[data-icon-id]::after {
+      content: none !important;
     }
     
     .master-sidebar-label {
       flex: 1;
+      font-weight: 400;
     }
     
+    /* Botón de bookmark */
+    .master-sidebar-bookmark-btn {
+      transition: all 0.2s ease;
+    }
+    
+    .master-sidebar-bookmark-btn:hover {
+      transform: scale(1.15);
+    }
+    
+    /* Secciones - Más pequeñas y elegantes
+     * v1.3: Luminosidad arcana - separación ritual con glow sutil
+     */
     .master-sidebar-section {
-      margin-top: 1.5rem;
+      margin-top: var(--master-sidebar-section-gap);
+      position: relative;
+    }
+    
+    .master-sidebar-section:first-of-type {
+      margin-top: 1rem;
+    }
+    
+    .master-sidebar-section::before {
+      content: '';
+      position: absolute;
+      top: -0.75rem;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: var(--master-sidebar-divider);
+      opacity: 0.4;
+      transition: opacity 0.3s ease;
+    }
+    
+    .master-sidebar-section-title-container {
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border-radius: var(--master-sidebar-radius-sm);
+      transition: all 0.25s ease, background-color 0.2s ease;
+      cursor: pointer;
+    }
+    
+    .master-sidebar-section-title-container:hover {
+      background-color: var(--master-sidebar-section-title-hover-bg);
+      background-image: linear-gradient(90deg, var(--master-sidebar-section-glow), transparent);
+    }
+    
+    .master-sidebar-section-chevron {
+      transition: transform 0.25s ease;
+      color: var(--master-sidebar-chevron-color);
+      font-size: var(--master-sidebar-chevron-size);
     }
     
     .master-sidebar-section-title {
-      padding: 0.5rem 1rem;
-      font-size: 0.75rem;
-      font-weight: 600;
+      font-size: var(--master-sidebar-section-title-size);
+      font-weight: var(--master-sidebar-section-title-weight);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #94a3b8; /* slate-400 */
-      margin-bottom: 0.5rem;
+      letter-spacing: var(--master-sidebar-section-title-spacing);
+      color: var(--master-sidebar-section-title-color);
+      margin: 0;
+      transition: color 0.25s ease, opacity 0.2s ease;
     }
     
+    .master-sidebar-section-title-container:hover .master-sidebar-section-title {
+      color: var(--master-sidebar-text);
+      opacity: 0.9;
+    }
+    
+    .master-sidebar-section-items {
+      padding-left: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    
+    .master-sidebar-section.collapsed .master-sidebar-section-items {
+      display: none;
+    }
+    
+    /* Footer */
     .master-sidebar-footer {
       margin-top: auto;
-      padding-top: 1.5rem;
+      padding-top: 1.75rem;
+      padding-bottom: 1rem;
       border-top: 1px solid #334155;
     }
     
+    .master-sidebar-footer .master-sidebar-section-title {
+      margin-bottom: 0.75rem;
+    }
+    
+    /* Búsqueda global */
     .master-sidebar-global {
       margin-top: 1.5rem;
       padding-top: 1.5rem;
@@ -93,39 +519,58 @@
     }
     
     .master-sidebar-search {
-      margin-bottom: 1rem;
+      margin-bottom: 0;
     }
     
     .master-sidebar-search-input {
       width: 100%;
-      padding: 0.5rem;
-      background-color: #334155;
-      border: 1px solid #475569;
-      border-radius: 0.375rem;
-      color: #f1f5f9;
+      padding: 0.625rem 0.875rem;
+      background-color: var(--master-sidebar-search-bg);
+      border: 1px solid var(--master-sidebar-search-border);
+      border-radius: var(--master-sidebar-radius);
+      color: var(--master-sidebar-text-hover);
       font-size: 0.875rem;
+      transition: all 0.2s ease;
+    }
+    
+    .master-sidebar-search-input:focus {
+      outline: none;
+      border-color: var(--master-sidebar-search-focus-border);
+      background-color: var(--master-sidebar-search-border);
+      box-shadow: 0 0 0 3px var(--master-sidebar-search-focus-shadow);
     }
     
     .master-sidebar-search-input::placeholder {
-      color: #94a3b8;
+      color: var(--master-sidebar-text-muted);
+      opacity: 0.7;
     }
     
-    .master-sidebar-bookmarks {
-      min-height: 2rem;
-    }
-    
-    /* Main content */
+    /* Main content
+     * CONTRATO CANÓNICO v1.4: Layout Flex
+     * El main DEBE usar flex: 1 1 auto para ocupar espacio restante.
+     * min-width: 0 permite que el contenido se comprima correctamente.
+     */
     .master-main {
-      flex: 1;
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      min-width: 0; /* Permite que el contenido se comprima */
     }
     
     .master-content {
       flex: 1;
       padding: 2rem;
       overflow-y: auto;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    
+    /* Responsivo: padding menor en pantallas pequeñas */
+    @media (max-width: 768px) {
+      .master-content {
+        padding: 1rem;
+      }
     }
     
     /* Notes panel */
@@ -207,9 +652,18 @@
 <body data-universe-id="{{UNIVERSE_ID}}">
   <div class="master-layout">
     <!-- SLOT: sidebar -->
+    <!-- CONTRATO CANÓNICO: El sidebar MASTER se renderiza SOLO en cliente -->
+    <!-- PROHIBIDO: Cualquier HTML del sidebar renderizado en servidor -->
+    <!-- PROHIBIDO: Texto plano (alchemy, work, etc.) en este contenedor -->
+    <!-- PROHIBIDO: Loops, includes o templates legacy del sidebar -->
+    <!-- PROHIBIDO: Icon ids, labels o cualquier markup del sidebar -->
+    <!-- OBLIGATORIO: Contenedor completamente vacío, solo data-attribute con JSON -->
     <aside class="master-sidebar-container">
       <nav id="master-sidebar-container" class="master-sidebar" data-sidebar-data="{{SIDEBAR_DATA}}">
-        <!-- Sidebar se renderiza vía DOM API en master-sidebar-client.js -->
+        <!-- Este contenedor debe estar COMPLETAMENTE VACÍO -->
+        <!-- El sidebar se renderiza EXCLUSIVAMENTE vía DOM API en master-sidebar-client.js -->
+        <!-- CONTRATO: Este contenedor es el único válido para render del sidebar Master -->
+        <!-- PROHIBIDO: Cualquier otro script que intente renderizar sidebar en contexto MASTER -->
       </nav>
     </aside>
     
@@ -242,6 +696,8 @@
   <script>
     // MASTER RULE: No inline JS - pero este es el único caso permitido (inyección de contexto)
     window.__AP_CONTEXT__ = '{{DOMAIN_CONTEXT}}';
+    window.__AP_APP_VERSION__ = '{{APP_VERSION}}';
+    window.__AP_BUILD_ID__ = '{{BUILD_ID}}';
   </script>
   
   <!-- CONTRATO CANÓNICO: Inyectar required_scripts desde master-layout-registry.v1.json -->

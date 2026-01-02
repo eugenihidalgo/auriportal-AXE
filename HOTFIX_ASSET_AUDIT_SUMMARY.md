@@ -180,3 +180,7 @@ pm2 restart aurelinportal --update-env
 - ✅ Sin errores de sintaxis (`node --check` pasa)
 - ✅ Sin errores de linter
 
+
+
+
+

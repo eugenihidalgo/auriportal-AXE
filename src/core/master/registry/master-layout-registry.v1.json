@@ -1,0 +1,143 @@
+{
+  "schema": "auri.master.layout_registry.v1",
+  "version": "1.0.0",
+  "generated_at": "2025-01-XX",
+  "universes": [
+    {
+      "id": "u_limpiezas",
+      "name": "Limpiezas Energéticas",
+      "status": "active",
+      "owner_role": "master",
+      "layout_id": "layout_limpiezas_v1",
+      "sidebar_id": "sidebar_limpiezas_v1",
+      "entry_route_key": "master.limpiezas.home",
+      "theme_scope": "universe",
+      "notes_enabled": true,
+      "diagnostics_enabled": true
+    },
+    {
+      "id": "u_alumnos",
+      "name": "Alumnos",
+      "status": "active",
+      "owner_role": "master",
+      "layout_id": "layout_alumnos_v1",
+      "sidebar_id": "sidebar_alumnos_v1",
+      "entry_route_key": "master.alumnos.home",
+      "theme_scope": "universe",
+      "notes_enabled": true,
+      "diagnostics_enabled": true
+    },
+    {
+      "id": "u_systema",
+      "name": "Systema",
+      "status": "active",
+      "owner_role": "system",
+      "layout_id": "layout_systema_v1",
+      "sidebar_id": "sidebar_systema_v1",
+      "entry_route_key": "master.systema.home",
+      "theme_scope": "universe",
+      "notes_enabled": true,
+      "diagnostics_enabled": true
+    },
+    {
+      "id": "u_templo_luz",
+      "name": "Templo de Luz",
+      "status": "active",
+      "owner_role": "master",
+      "layout_id": "layout_templo_luz_v1",
+      "sidebar_id": "sidebar_templo_luz_v1",
+      "entry_route_key": "master.templo-luz.alquimia-general",
+      "theme_scope": "universe",
+      "notes_enabled": true,
+      "diagnostics_enabled": true
+    }
+  ],
+  "layouts": [
+    {
+      "id": "layout_limpiezas_v1",
+      "name": "Layout Limpiezas v1",
+      "slots": ["sidebar", "main", "notes_panel", "diagnostics_panel", "overlays"],
+      "supports": ["theme_resolver", "acs_runtime_guard", "focus_mode", "widgets", "notes_panel"],
+      "constraints": ["no_inline_js", "no_dynamic_innerHTML", "no_html_in_js_strings", "no_base_html_reuse", "no_admin_reuse"]
+    },
+    {
+      "id": "layout_alumnos_v1",
+      "name": "Layout Alumnos v1",
+      "slots": ["sidebar", "main", "notes_panel", "diagnostics_panel", "overlays"],
+      "supports": ["theme_resolver", "acs_runtime_guard", "focus_mode", "widgets", "notes_panel"],
+      "constraints": ["no_inline_js", "no_dynamic_innerHTML", "no_html_in_js_strings", "no_base_html_reuse", "no_admin_reuse"]
+    },
+    {
+      "id": "layout_systema_v1",
+      "name": "Layout Systema v1",
+      "slots": ["sidebar", "main", "notes_panel", "diagnostics_panel", "overlays"],
+      "supports": ["theme_resolver", "acs_runtime_guard", "focus_mode", "widgets", "notes_panel"],
+      "constraints": ["no_inline_js", "no_dynamic_innerHTML", "no_html_in_js_strings", "no_base_html_reuse", "no_admin_reuse"]
+    },
+    {
+      "id": "layout_templo_luz_v1",
+      "name": "Layout Templo de Luz v1",
+      "slots": ["sidebar", "main", "notes_panel", "diagnostics_panel", "overlays"],
+      "supports": ["theme_resolver", "acs_runtime_guard", "focus_mode", "widgets", "notes_panel"],
+      "constraints": ["no_inline_js", "no_dynamic_innerHTML", "no_html_in_js_strings", "no_base_html_reuse", "no_admin_reuse"]
+    }
+  ],
+  "sidebars": [
+    { "id": "sidebar_limpiezas_v1", "universe_id": "u_limpiezas", "features": ["bookmarks", "global_search"], "sections": [] },
+    { "id": "sidebar_alumnos_v1", "universe_id": "u_alumnos", "features": ["bookmarks", "global_search"], "sections": [] },
+    { "id": "sidebar_systema_v1", "universe_id": "u_systema", "features": ["bookmarks", "global_search"], "sections": [] },
+    { "id": "sidebar_templo_luz_v1", "universe_id": "u_templo_luz", "features": ["bookmarks", "global_search"], "sections": [] }
+  ],
+  "routes": [
+    { "route_key": "master.limpiezas.home", "path_hint": "/master/limpiezas", "universe_id": "u_limpiezas", "layout_id": "layout_limpiezas_v1" },
+    { "route_key": "master.alumnos.home", "path_hint": "/master/alumnos", "universe_id": "u_alumnos", "layout_id": "layout_alumnos_v1" },
+    { "route_key": "master.systema.home", "path_hint": "/master/systema", "universe_id": "u_systema", "layout_id": "layout_systema_v1" },
+    { "route_key": "master.templo-luz.alquimia-general", "path_hint": "/master/templo-luz/alquimia-general", "universe_id": "u_templo_luz", "layout_id": "layout_templo_luz_v1" }
+  ],
+  "invariants": [
+    "Router never chooses layout; it resolves handlers and delegates layout/sidebar to LayoutRegistry.",
+    "No universe exists without layout_id and sidebar_id.",
+    "No inline JS in templates. No dynamic innerHTML. No HTML in JS strings.",
+    "Global Bookmarks + Global Search are always available in every universe sidebar.",
+    "ACS-R must run on every master page rendered through the canonical pipeline.",
+    "Master routes start with /master, never /admin."
+  ],
+  "diagnostics": {
+    "required_slots": ["sidebar", "main", "notes_panel", "diagnostics_panel"],
+    "required_features": ["theme_resolver", "acs_runtime_guard", "notes_panel", "global_search", "bookmarks"],
+    "forbidden": ["inline_js", "dynamic_innerHTML", "html_in_js_strings", "base_html_reuse", "admin_reuse"]
+  },
+  "required_scripts": [
+    {
+      "id": "master-sidebar-client",
+      "guard_id": "SIDEBAR_CLIENT",
+      "path": "/js/master/master-sidebar-client.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Master Sidebar Client"
+    },
+    {
+      "id": "master-theme-resolver",
+      "guard_id": "THEME_RESOLVER",
+      "path": "/js/master/master-theme-resolver.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Master Theme Resolver"
+    },
+    {
+      "id": "master-alquimia-general-client",
+      "guard_id": "ALQUIMIA_GENERAL_CLIENT",
+      "path": "/js/master/master-alquimia-general-client.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Master Alquimia General Client"
+    }
+  ]
+}
+

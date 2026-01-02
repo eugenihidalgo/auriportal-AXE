@@ -11,11 +11,36 @@
  * - Validar método HTTP si está especificado
  * - Resolver handler según tipo (api | island | legacy)
  * - Devolver null si la ruta no existe
+ * 
+ * ═══════════════════════════════════════════════════════════════
+ * TODO FUTURO: Sistema Canónico de Creación de UI Admin
+ * ═══════════════════════════════════════════════════════════════
+ * 
+ * Toda nueva UI Admin deberá crearse mediante un Sistema Canónico
+ * de Creación de UI que incluirá:
+ * 
+ * - renderAdminPage() obligatorio para UIs (ya implementado)
+ * - Declaración de capabilities (preparado)
+ * - Integración con Theme Studio (preparado)
+ * - Validación automática de contratos (assembly check implementado)
+ * - Generación automática de handlers (futuro)
+ * - Tests automáticos de integración (futuro)
+ * 
+ * Este sistema se diseñará en una fase futura.
+ * 
+ * Por ahora, seguir el protocolo establecido en:
+ * - docs/ADMIN_UI_CREATION_PROTOCOL_V1.md
+ * - docs/ADMIN_ROUTER_CANONICAL_RULES.md
+ * 
+ * ⚠️ NO crear nuevas UIs sin seguir el protocolo canónico.
+ * ⚠️ NO implementar el sistema canónico completo aún (solo preparado).
+ * ═══════════════════════════════════════════════════════════════
  */
 
 import { ADMIN_ROUTES } from './admin-route-registry.js';
 import { getRequestId } from '../observability/request-context.js';
 import { wrapAdminHandler } from './admin-handler-guard.js';
+import { logInfo, logWarn, logError } from '../observability/logger.js';
 
 /**
  * Mapa de keys del registry a handlers
@@ -28,6 +53,7 @@ const HANDLER_MAP = {
   'api-energy-clean': () => import('../../endpoints/admin-energy-api.js').then(m => ({ default: m.handleEnergyClean })),
   'api-energy-illuminate': () => import('../../endpoints/admin-energy-api.js').then(m => ({ default: m.handleEnergyIlluminate })),
   'api-registry': () => import('../../endpoints/admin-registry.js'),
+  'api-acs-runtime-report': () => import('../../endpoints/admin-api-acs-runtime-report.js'),
   'api-navigation': () => import('../../endpoints/admin-navigation-api.js'),
   'api-recorridos': () => import('../../endpoints/admin-recorridos-api.js'),
   'api-themes-v3': () => import('../../endpoints/admin-themes-v3-api.js'),
@@ -59,6 +85,13 @@ const HANDLER_MAP = {
   'api-actions-catalog': () => import('../../endpoints/admin-actions-catalog-api.js'),
   'api-transmutaciones-classification': () => import('../../endpoints/admin-transmutaciones-api.js'),
   'api-transmutaciones-lists-classification': () => import('../../endpoints/admin-transmutaciones-api.js'),
+  'api-transmutaciones-energeticas': () => import('../../endpoints/admin-api-transmutaciones-energeticas.js'),
+  'api-transmutaciones-proyectos-list': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.getProyectosHandler })),
+  'api-transmutaciones-proyectos-create': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.crearProyectoHandler })),
+  'api-transmutaciones-proyectos-limpiar': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.limpiarProyectoHandler })),
+  'api-transmutaciones-proyectos-limpiar-todos': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.limpiarTodosProyectosHandler })),
+  'api-transmutaciones-proyectos-limpiar-seleccionados': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.limpiarSeleccionadosHandler })),
+  'api-transmutaciones-proyectos-recurrencia': () => import('../../endpoints/admin-transmutaciones-proyectos-api.js').then(m => ({ default: m.actualizarRecurrenciaHandler })),
   'api-context-mappings': () => import('../../endpoints/admin-context-mappings-api.js'),
   'api-interactive-resources': () => import('../../endpoints/admin-interactive-resources-api.js'),
   'api-tecnicas-limpieza': () => import('../../endpoints/admin-tecnicas-limpieza-api.js'),
@@ -82,6 +115,23 @@ const HANDLER_MAP = {
   'api-feature-flags-enable': () => import('../../endpoints/admin-feature-flags-enable-api.js'),
   'api-feature-flags-disable': () => import('../../endpoints/admin-feature-flags-disable-api.js'),
   'api-feature-flags-reset': () => import('../../endpoints/admin-feature-flags-reset-api.js'),
+  // Student SOT v1 - Modo Master APIs
+  'api-students-list': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.searchStudentsHandler })),
+  'api-students-search': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.searchStudentsHandler })),
+  'api-students-detail': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.getStudentUniverseHandler })),
+  'api-students-domain-items': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.getStudentUniverseHandler })),
+  'api-students-domain-clean': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.cleanItemHandler })),
+  'api-students-domain-bulk-clean': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.cleanItemHandler })),
+  'api-students-domain-policy': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.createOverrideHandler })),
+  'api-students-domain-recurrence': () => import('../../endpoints/admin-api-students.js').then(m => ({ default: m.cleanItemHandler })),
+  // Student Domain Integration v1 - Admin handlers
+  'api-students-domains-transmutation': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.listTransmutationsAdminHandler })),
+  'api-students-domains-transmutation-clean': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.cleanTransmutationAdminHandler })),
+  'api-students-domains-projects': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.listProjectsAdminHandler })),
+  'api-students-domains-projects-activate': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.activateProjectAdminHandler })),
+  'api-students-domains-projects-clean': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.cleanProjectAdminHandler })),
+  'api-students-domains-projects-update': () => import('../../endpoints/admin-api-student-domains.js').then(m => ({ default: m.updateProjectMetadataAdminHandler })),
+  'api-transmutations-item-students': () => import('../../endpoints/admin-api-transmutations-item-students.js').then(m => ({ default: m.getTransmutationItemStudentsHandler })),
   
   // Island Handlers (páginas con handlers específicos)
   'admin-login': () => import('../../endpoints/admin-login.js'),
@@ -103,12 +153,14 @@ const HANDLER_MAP = {
   'navigation-new': () => import('../../endpoints/admin-navigation-pages.js'),
   'catalog-registry': () => import('../../endpoints/admin-catalog-registry.js'),
   'transmutaciones-energeticas': () => import('../../endpoints/admin-transmutaciones-energeticas.js'),
+  'transmutaciones-proyectos': () => import('../../endpoints/admin-transmutaciones-proyectos.js'),
   'theme-preview-canonical': () => import('../../endpoints/admin-themes.js'),
   'recorridos-preview': () => import('../../endpoints/admin-recorridos-preview-ui.js'),
   'recorridos': () => import('../../endpoints/admin-recorridos.js'),
   'screen-templates': () => import('../../endpoints/admin-screen-templates.js'),
   'tecnicas-limpieza': () => import('../../endpoints/admin-tecnicas-limpieza-ui.js'),
   'themes': () => import('../../endpoints/admin-themes.js'),
+  'modo-maestro': () => import('../../endpoints/admin-panel-modo-maestro.js'),
   'automation-runs-list': () => import('../../endpoints/admin-automation-runs-ui.js'),
   'automation-runs-detail': () => import('../../endpoints/admin-automation-runs-ui.js'),
   'automation-definitions-list': () => import('../../endpoints/admin-automation-definitions-ui.js'),
@@ -136,8 +188,16 @@ const HANDLER_MAP = {
 export async function resolveAdminRoute(path, method = 'GET') {
   const traceId = getRequestId() || `admin-resolver-${Date.now()}`;
   
+  // ═══════════════════════════════════════════════════════════════
+  // NORMALIZACIÓN HEAD → GET (SOLO PARA ROUTING)
+  // ═══════════════════════════════════════════════════════════════
+  // HEAD se trata como GET únicamente para matching de rutas,
+  // pero el método original se preserva para el handler y logs.
+  // Esto permite health-checks ACS-R sin romper invariantes.
+  const effectiveMethod = method === 'HEAD' ? 'GET' : method;
+  
   // LOG: Inicio de resolución
-  console.error(`[ADMIN_ROUTER] resolving path=${path} method=${method} trace_id=${traceId}`);
+  console.error(`[ADMIN_ROUTER] resolving path=${path} method=${method} effectiveMethod=${effectiveMethod} trace_id=${traceId}`);
   
   // Normalizar path
   const normalizedPath = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
@@ -148,8 +208,8 @@ export async function resolveAdminRoute(path, method = 'GET') {
     
     // Coincidencia exacta
     if (routePath === normalizedPath) {
-      // Si tiene method especificado, validarlo
-      if (r.method && r.method !== method) {
+      // Si tiene method especificado, validarlo usando effectiveMethod
+      if (r.method && r.method !== effectiveMethod) {
         return false;
       }
       return true;
@@ -158,30 +218,92 @@ export async function resolveAdminRoute(path, method = 'GET') {
     return false;
   });
   
-  // Si no se encuentra ruta exacta, buscar por startsWith (para rutas con prefijos)
-  // IMPORTANTE: Ordenar por longitud DESCENDENTE (más específico primero)
-  // para evitar que /admin coincida antes que /admin/pde/transmutaciones-energeticas
+  // ═══════════════════════════════════════════════════════════════
+  // ORDEN DE MATCHING CANÓNICO (CONSTITUCIONAL - NO MODIFICAR)
+  // ═══════════════════════════════════════════════════════════════
+  // 
+  // PRINCIPIO FUNDAMENTAL:
+  // El matching semántico (parámetros dinámicos) tiene PRIORIDAD ABSOLUTA
+  // sobre el matching por prefijo (startsWith).
+  // 
+  // ORDEN OBLIGATORIO:
+  // 1. Coincidencia exacta (ya evaluada arriba)
+  // 2. Rutas con parámetros dinámicos (:id, :key, :slug, etc.)
+  // 3. Rutas sin parámetros con startsWith (ordenadas por longitud DESC)
+  // 
+  // RAZÓN CONSTITUCIONAL:
+  // Este orden previene el bug histórico API_ROUTE_AS_ISLAND donde:
+  // - /admin/api/theme-studio-canon/theme/dark-classic
+  // - se resolvía incorrectamente como /admin (admin-dashboard, type=island)
+  // - en lugar de /admin/api/theme-studio-canon/theme/:id (type=api)
+  // 
+  // ⚠️ ADVERTENCIA ARQUITECTÓNICA:
+  // Modificar este orden requiere una decisión arquitectónica explícita
+  // y puede romper la separación API/UI que es fundamental del sistema.
+  // 
+  // HISTORIAL:
+  // - 2025-01-XX: Fix aplicado para resolver ROUTER_ERROR
+  //   (trace_id: req_1767017995397_qpvhnn)
+  // ═══════════════════════════════════════════════════════════════
   if (!route) {
-    // Ordenar por longitud de path (más específico primero)
-    const sortedRoutes = [...ADMIN_ROUTES].sort((a, b) => b.path.length - a.path.length);
+    // Separar rutas con y sin parámetros dinámicos
+    // Esto garantiza que las rutas semánticas se evalúan ANTES que las genéricas
+    const routesWithParams = ADMIN_ROUTES.filter(r => r.path.includes(':'));
+    const routesWithoutParams = ADMIN_ROUTES.filter(r => !r.path.includes(':'));
     
-    route = sortedRoutes.find(r => {
+    // ─────────────────────────────────────────────────────────────
+    // PASO 2: MATCHING DE PARÁMETROS DINÁMICOS (PRIORIDAD ABSOLUTA)
+    // ─────────────────────────────────────────────────────────────
+    // Evaluar rutas con parámetros dinámicos ANTES de cualquier startsWith
+    // Ordenadas por longitud DESC para priorizar rutas más específicas
+    const sortedRoutesWithParams = routesWithParams.sort((a, b) => b.path.length - a.path.length);
+    route = sortedRoutesWithParams.find(r => {
       const routePath = r.path.endsWith('/') && r.path !== '/' ? r.path.slice(0, -1) : r.path;
       
-      // Solo para rutas que no tienen method específico o coinciden con el method
-      if (r.method && r.method !== method) {
+      // Validar método HTTP si está especificado (usando effectiveMethod para routing)
+      if (r.method && r.method !== effectiveMethod) {
         return false;
       }
       
-      // Coincidencia con startsWith - pero solo si el path normalizado empieza con routePath + '/'
-      // o si es exactamente igual (ya se verificó arriba)
-      // Esto evita que /admin coincida con /admin/pde/transmutaciones-energeticas
-      if (normalizedPath === routePath || normalizedPath.startsWith(routePath + '/')) {
-        return true;
+      // Matching de parámetros dinámicos usando regex
+      // Ejemplo: /admin/api/theme/:id -> /admin/api/theme/([^/]+)
+      // Coincide con: /admin/api/theme/dark-classic
+      if (routePath.includes(':')) {
+        const paramPattern = routePath.replace(/:[^/]+/g, '([^/]+)');
+        const regex = new RegExp(`^${paramPattern}$`);
+        if (regex.test(normalizedPath)) {
+          return true;
+        }
       }
       
       return false;
     });
+    
+    // ─────────────────────────────────────────────────────────────
+    // PASO 3: MATCHING POR PREFIJO (SOLO SI NO HAY PARÁMETROS)
+    // ─────────────────────────────────────────────────────────────
+    // Si no se encontró con parámetros dinámicos, buscar por startsWith
+    // Ordenadas por longitud DESC para evitar que /admin coincida antes que /admin/pde/...
+    if (!route) {
+      const sortedRoutesWithoutParams = routesWithoutParams.sort((a, b) => b.path.length - a.path.length);
+      route = sortedRoutesWithoutParams.find(r => {
+        const routePath = r.path.endsWith('/') && r.path !== '/' ? r.path.slice(0, -1) : r.path;
+        
+        // Validar método HTTP si está especificado (usando effectiveMethod para routing)
+        if (r.method && r.method !== effectiveMethod) {
+          return false;
+        }
+        
+        // Coincidencia con startsWith - solo si el path empieza con routePath + '/'
+        // o es exactamente igual (ya se verificó en coincidencia exacta)
+        // Esto evita que /admin coincida con /admin/pde/transmutaciones-energeticas
+        if (normalizedPath === routePath || normalizedPath.startsWith(routePath + '/')) {
+          return true;
+        }
+        
+        return false;
+      });
+    }
   }
   
   if (!route) {
@@ -205,20 +327,83 @@ export async function resolveAdminRoute(path, method = 'GET') {
   // LOG: Ruta encontrada
   console.error(`[ADMIN_ROUTER] matched routeKey=${route.key} path=${route.path} type=${route.type} trace_id=${traceId}`);
   
-  // OBJETIVO 1: BLOQUEAR HTML EN /admin/api/**
-  // Cualquier ruta que empiece por /admin/api/ NUNCA debe resolverse como island
+  // ═══════════════════════════════════════════════════════════════
+  // INVARIANTE ESTRUCTURAL 1: SEPARACIÓN API/UI (CONSTITUCIONAL)
+  // ═══════════════════════════════════════════════════════════════
+  // 
+  // REGLA DURA (NO NEGOCIABLE):
+  // Cualquier ruta /admin/api/**:
+  //   - SOLO puede resolverse como type=api
+  //   - JAMÁS puede caer en renderAdminPage
+  //   - JAMÁS puede resolverse como island UI
+  // 
+  // RAZÓN:
+  // Las APIs y las UIs son capas diferentes del sistema:
+  // - APIs: Devuelven JSON, no HTML
+  // - UIs: Usan renderAdminPage(), devuelven HTML
+  // 
+  // Si una ruta /admin/api/* se resuelve como island:
+  //   → El handler intentará usar renderAdminPage()
+  //   → Se generará HTML en lugar de JSON
+  //   → Se rompe el contrato API
+  //   → Se rompe la separación de responsabilidades
+  // 
+  // HISTORIAL:
+  // - Bug histórico: /admin/api/theme-studio-canon/theme/dark-classic
+  //   se resolvía como /admin (admin-dashboard, type=island)
+  // - Fix aplicado: Orden de matching canónico (ver arriba)
+  // - Blindaje: Esta verificación previene regresiones
+  // ═══════════════════════════════════════════════════════════════
   if (path.startsWith('/admin/api/') && route.type === 'island') {
     const error = new Error(`API route resolved as island: ${method} ${path}`);
-    error.code = 'API_ROUTE_AS_ISLAND';
+    error.code = 'API_ROUTE_AS_ISLAND_PREVENTED';
     error.details = {
       path,
       method,
       routeKey: route.key,
+      routePath: route.path,
       routeType: route.type,
       traceId,
-      message: 'Ruta API no puede resolverse como island. Verificar registry.'
+      message: 'INVARIANTE ROTA: Ruta API no puede resolverse como island. Verificar registry y orden de matching.'
     };
-    console.error(`[ADMIN_ROUTER] ❌ ERROR ESTRUCTURAL: ${error.code} path=${path} method=${method} trace_id=${traceId}`);
+    
+    // Log estructurado para diagnóstico forense
+    console.error(`[ADMIN_ROUTER] ❌ INVARIANTE ROTA: ${error.code} path=${path} method=${method} trace_id=${traceId}`);
+    console.error(`[ADMIN_ROUTER] ❌ Ruta encontrada: routeKey=${route.key} routePath=${route.path} routeType=${route.type}`);
+    console.error(`[ADMIN_ROUTER] ❌ Esto indica un bug en el orden de matching o en el registry`);
+    
+    throw error;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // INVARIANTE ESTRUCTURAL 2: RUTAS API SIEMPRE DEVUELVEN JSON
+  // ═══════════════════════════════════════════════════════════════
+  // 
+  // REGLA DURA (NO NEGOCIABLE):
+  // Si una ruta empieza por /admin/api/:
+  //   - Debe tener type=api en el registry
+  //   - Su handler debe devolver JSON (no HTML)
+  //   - Nunca debe usar renderAdminPage()
+  //   - Nunca debe devolver HTML como fallback
+  // 
+  // Esta verificación se hace aquí para fail-fast.
+  // La validación de respuesta JSON se hace en admin-handler-guard.js
+  // ═══════════════════════════════════════════════════════════════
+  if (path.startsWith('/admin/api/') && route.type !== 'api') {
+    const error = new Error(`API route has invalid type: ${method} ${path} (type=${route.type})`);
+    error.code = 'API_ROUTE_INVALID_TYPE';
+    error.details = {
+      path,
+      method,
+      routeKey: route.key,
+      routePath: route.path,
+      routeType: route.type,
+      expectedType: 'api',
+      traceId,
+      message: 'Ruta /admin/api/* debe tener type=api en el registry'
+    };
+    
+    console.error(`[ADMIN_ROUTER] ❌ INVARIANTE ROTA: ${error.code} path=${path} method=${method} trace_id=${traceId}`);
     throw error;
   }
   
@@ -374,9 +559,67 @@ export async function resolveAdminRoute(path, method = 'GET') {
     traceId
   } : null;
   
+  // ═══════════════════════════════════════════════════════════════
+  // UI ADMIN FACTORY v1: Integración opcional (shadow mode)
+  // ═══════════════════════════════════════════════════════════════
+  // Si la ruta está en el UI Admin Registry Runtime, validar con Factory
+  // En shadow mode: valida y registra warnings, pero no bloquea
+  // En enforced mode: valida y bloquea si no cumple contratos
+  let factoryWrappedHandler = handler;
+  if (route.type === 'island') {
+    try {
+      const { findEntryByRouteKey } = await import('./ui-factory/ui-admin-registry.runtime.js');
+      const { validateRegistryEntry, getFactoryMode } = await import('./ui-factory/admin-ui-factory.js');
+      const entry = findEntryByRouteKey(route.key);
+      
+      if (entry) {
+        const mode = getFactoryMode();
+        logInfo('UIAdminFactory', 'Entrada encontrada en registry, validando', {
+          routeKey: route.key,
+          entryId: entry.id,
+          mode
+        });
+        
+        // Validar entry (shadow mode: solo warnings, enforced: bloquea)
+        const validation = validateRegistryEntry(entry);
+        if (!validation.valid) {
+          const currentTraceId = getRequestId() || traceId;
+          if (mode === 'enforced') {
+            logError('UIAdminFactory', 'Registry Entry inválida (enforced)', {
+              code: 'REGISTRY_ENTRY_INVALID',
+              trace_id: currentTraceId,
+              routeKey: route.key,
+              screen_id: entry.id,
+              errors: validation.errors
+            });
+            throw new Error(`Registry Entry inválida: ${validation.errors.map(e => e.message).join(', ')}`);
+          } else {
+            logWarn('UIAdminFactory', 'Registry Entry inválida (shadow)', {
+              code: 'SHADOW_WARNING',
+              trace_id: currentTraceId,
+              routeKey: route.key,
+              screen_id: entry.id,
+              errors: validation.errors
+            });
+          }
+        }
+        
+        // En shadow mode, solo validamos y continuamos con handler original
+        // En enforced mode, si falla validación ya se lanzó error arriba
+        // Por ahora, no envolvemos el handler (se puede hacer en fase futura)
+      }
+    } catch (factoryImportError) {
+      // Fail-open: si falla importar Factory, usar handler original
+      logWarn('UIAdminFactory', 'Error importando Factory (fail-open)', {
+        routeKey: route.key,
+        error: factoryImportError.message
+      });
+    }
+  }
+  
   // ENVOLVER HANDLER CON GUARD: Asegurar trace_id, validar returns, manejar errores
   // El guard establecerá y limpiará el contexto para renderAdminPage
-  const guardedHandler = wrapAdminHandler(route.key, handler, routeContext);
+  const guardedHandler = wrapAdminHandler(route.key, factoryWrappedHandler, routeContext);
   
   // ASSERT EN DESARROLLO: Detectar rutas admin que no usan renderAdminPage()
   // Solo para rutas que renderizan HTML (island y legacy, no API)
