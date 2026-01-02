@@ -50,7 +50,9 @@
       categories: [],
       subtypes: [],
       tags: []
-    }
+    },
+    // Tags disponibles (TAG SOT GLOBAL v1)
+    tagsAvailable: [] // Array de { id, value, normalized, status }
   };
 
   // Debounce helper
@@ -223,10 +225,10 @@
     // 3. Cargar items
     await loadItems(lista.id);
 
-    // 4. Re-renderizar tabs (para marcar activa)
+    // 5. Re-renderizar tabs (para marcar activa)
     renderTabsListas();
 
-    // 5. Renderizar contenido (ÚNICO punto de render)
+    // 6. Renderizar contenido (ÚNICO punto de render)
     renderListaContent();
   }
 
@@ -498,6 +500,8 @@
           if (state.classificationsAvailable.categories.length === 0) {
             await loadClassificationsAvailable();
           }
+          // Cargar tags disponibles (TAG SOT GLOBAL v1)
+          await loadTagsAvailable();
           
           console.log('[MASTER][AlquimiaGeneral] Lista cargada:', {
             listId,
@@ -1143,6 +1147,23 @@
   }
 
   /**
+   * Carga tags disponibles desde TAG SOT GLOBAL v1
+   */
+  async function loadTagsAvailable() {
+    try {
+      const data = await apiFetch('/master/api/tags?status=active');
+      if (data.tags && Array.isArray(data.tags)) {
+        state.tagsAvailable = data.tags;
+      } else {
+        state.tagsAvailable = [];
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando tags disponibles:', error);
+      state.tagsAvailable = [];
+    }
+  }
+
+  /**
    * Renderiza el editor de clasificaciones
    */
   function renderClasificacionesEditor(container) {
@@ -1204,34 +1225,89 @@
     subtypeGroup.appendChild(subtypeSelect);
     container.appendChild(subtypeGroup);
 
-    // Tags
-    const tagsGroup = createElement('div', 'mb-3');
-    const tagsLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Tags');
-    const tagsContainer = createElement('div', 'flex flex-wrap gap-2');
-    tagsContainer.id = 'editor-classification-tags';
-    
+    // Tags (TAG SOT GLOBAL v1) - Sección separada
+    const tagsSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+    const tagsTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'TAGS');
+    tagsSection.appendChild(tagsTitle);
+
+    // Chips de tags actuales
+    const tagsChipsContainer = createElement('div', 'flex flex-wrap gap-2 mb-3');
+    tagsChipsContainer.id = 'editor-tags-chips';
     const currentTags = classification.tags || [];
-    state.classificationsAvailable.tags.forEach(tag => {
-      const tagLabel = createElement('label', 'flex items-center gap-2 cursor-pointer');
-      const checkbox = createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = tag.tag_key;
-      checkbox.className = 'w-4 h-4';
-      if (currentTags.includes(tag.tag_key)) {
-        checkbox.checked = true;
+    
+    currentTags.forEach(tagValue => {
+      const chip = createElement('div', 'inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded');
+      const chipText = createElement('span', '', tagValue);
+      const chipRemove = createElement('button', 'text-white hover:text-red-300 transition-colors', '❌');
+      chipRemove.type = 'button';
+      chipRemove.addEventListener('click', async () => {
+        await removeTagFromLista(tagValue);
+      });
+      
+      chip.appendChild(chipText);
+      chip.appendChild(chipRemove);
+      tagsChipsContainer.appendChild(chip);
+    });
+
+    // Input con autocomplete para añadir tags
+    const tagsInputGroup = createElement('div', 'relative');
+    const tagsInputLabel = createElement('label', 'block text-xs text-slate-400 mb-1', 'Añadir tag');
+    const tagsInputWrapper = createElement('div', 'relative');
+    const tagsInput = createElement('input');
+    tagsInput.type = 'text';
+    tagsInput.id = 'editor-tags-input';
+    tagsInput.className = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm';
+    tagsInput.placeholder = 'Escribe para buscar o crear tag...';
+    
+    // Dropdown de autocomplete
+    const tagsDropdown = createElement('div', 'absolute z-10 w-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto hidden');
+    tagsDropdown.id = 'editor-tags-dropdown';
+    
+    let searchTimeout;
+    tagsInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      const searchTerm = e.target.value.trim().toLowerCase();
+      
+      if (searchTerm.length === 0) {
+        tagsDropdown.classList.add('hidden');
+        return;
       }
       
-      const tagText = createElement('span', 'text-white text-sm');
-      tagText.textContent = tag.label || tag.tag_key;
-      
-      tagLabel.appendChild(checkbox);
-      tagLabel.appendChild(tagText);
-      tagsContainer.appendChild(tagLabel);
+      searchTimeout = setTimeout(() => {
+        filterAndShowTagsDropdown(searchTerm, tagsDropdown, tagsInput);
+      }, 200);
     });
+
+    tagsInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = tagsInput.value.trim();
+        if (value) {
+          await addTagToLista(value);
+          tagsInput.value = '';
+          tagsDropdown.classList.add('hidden');
+        }
+      } else if (e.key === 'Escape') {
+        tagsDropdown.classList.add('hidden');
+      }
+    });
+
+    // Cerrar dropdown al hacer click fuera
+    document.addEventListener('click', (e) => {
+      if (!tagsInputWrapper.contains(e.target)) {
+        tagsDropdown.classList.add('hidden');
+      }
+    });
+
+    tagsInputWrapper.appendChild(tagsInput);
+    tagsInputWrapper.appendChild(tagsDropdown);
     
-    tagsGroup.appendChild(tagsLabel);
-    tagsGroup.appendChild(tagsContainer);
-    container.appendChild(tagsGroup);
+    tagsInputGroup.appendChild(tagsInputLabel);
+    tagsInputGroup.appendChild(tagsInputWrapper);
+    
+    tagsSection.appendChild(tagsChipsContainer);
+    tagsSection.appendChild(tagsInputGroup);
+    container.appendChild(tagsSection);
   }
 
   /**
@@ -1292,19 +1368,21 @@
       infoDiv.appendChild(subtypeDiv);
     }
     
+    // Tags (TAG SOT GLOBAL v1) - Sección separada con chips
     if (classification.tags && classification.tags.length > 0) {
-      const tagsDiv = createElement('div', 'text-sm');
-      const tagsLabel = createElement('span', 'text-slate-400', 'Tags: ');
-      tagsDiv.appendChild(tagsLabel);
+      const tagsSection = createElement('div', 'mt-4 border-t border-slate-700 pt-4');
+      const tagsTitle = createElement('h3', 'text-sm font-semibold text-white mb-3', 'TAGS');
+      tagsSection.appendChild(tagsTitle);
       
-      const tagsList = createElement('span', 'text-white');
-      const tagLabels = classification.tags.map(tagKey => {
-        const tag = state.classificationsAvailable.tags.find(t => t.tag_key === tagKey);
-        return tag ? tag.label : tagKey;
+      const tagsChipsContainer = createElement('div', 'flex flex-wrap gap-2');
+      classification.tags.forEach(tagValue => {
+        const chip = createElement('div', 'inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded');
+        chip.textContent = tagValue;
+        tagsChipsContainer.appendChild(chip);
       });
-      tagsList.textContent = tagLabels.join(', ');
-      tagsDiv.appendChild(tagsList);
-      infoDiv.appendChild(tagsDiv);
+      
+      tagsSection.appendChild(tagsChipsContainer);
+      container.appendChild(tagsSection);
     }
     
     container.appendChild(infoDiv);
