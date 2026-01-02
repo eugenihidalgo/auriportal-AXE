@@ -56,6 +56,11 @@ const MASTER_HANDLER_MAP = {
   'master-api-tags-id': () => import('../../../endpoints/master-api-tags.js'),
   'master-api-tags-id-deprecate': () => import('../../../endpoints/master-api-tags.js'),
   
+  // Classifications API Handlers (CLASSIFICATION SOT GLOBAL v1)
+  'master-api-classifications': () => import('../../../endpoints/master-api-classifications.js'),
+  'master-api-classifications-id': () => import('../../../endpoints/master-api-classifications.js'),
+  'master-api-classifications-id-deprecate': () => import('../../../endpoints/master-api-classifications.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),

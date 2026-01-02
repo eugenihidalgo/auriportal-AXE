@@ -149,6 +149,28 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API CLASSIFICATIONS (CLASSIFICATION SOT GLOBAL v1)
+  // ============================================
+  {
+    key: 'master-api-classifications',
+    path: '/master/api/classifications',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-classifications-id',
+    path: '/master/api/classifications/:id',
+    type: 'api',
+    method: 'PATCH'
+  },
+  {
+    key: 'master-api-classifications-id-deprecate',
+    path: '/master/api/classifications/:id/deprecate',
+    type: 'api',
+    method: 'POST'
+  },
+  
+  // ============================================
   // RUTAS UI (Island)
   // ============================================
   {
