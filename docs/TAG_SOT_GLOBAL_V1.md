@@ -19,6 +19,34 @@ Formalizar `pde_classification_terms` (tipo `'tag'`) como **TAG SOT GLOBAL v1**,
 3. **Tags nunca se borran** (solo se marcan como deprecated)
 4. **Toda relación de tag puede emitir señales**
 5. **Tags se normalizan automáticamente** (lowercase + sin acentos)
+6. **Creación inline desde UI es un derecho constitucional** del usuario MASTER
+
+---
+
+## 🔧 Helper Canónico: ensureClassificationTerm
+
+**Archivo**: `src/core/classification/ensure-classification-term.js`
+
+Este helper es el **ÚNICO punto de creación** de classification terms en el sistema.
+
+**Reglas:**
+- Usa `ensure_classification_term()` de PostgreSQL (idempotente)
+- Acepta creación inline desde texto (UI)
+- Normalización automática
+- Respeta status (active / deprecated)
+- Logging estructurado con trace_id
+
+**Uso:**
+```javascript
+import { ensureClassificationTerm } from '../core/classification/ensure-classification-term.js';
+
+const term = await ensureClassificationTerm(
+  { type: 'tag', value: 'mi-tag' },
+  { traceId: 'req_xxx' }
+);
+```
+
+**Regla constitucional**: Cualquier endpoint que cree tags/classifications DEBE usar este helper.
 
 ---
 
