@@ -131,7 +131,8 @@ export function requireEntryContext(request) {
     const error = new Error(`Host no reconocido: ${host}`);
     error.code = 'UNRECOGNIZED_HOST';
     error.host = host;
-    logError('EntryGate', 'Host no reconocido', { host, error: error.message });
+    // FASE 4: No loguear como ERROR - ya se logueó como INFO en resolveEntryContext
+    // Solo lanzar error si es requerido explícitamente (requireEntryContext)
     throw error;
   }
   

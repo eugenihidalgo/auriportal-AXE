@@ -54,7 +54,7 @@ class LayerRegistry {
     }
 
     if (this.registry.has(definition.layerType)) {
-      logWarn('layer_registry', `Layer type ya registrado: ${definition.layerType}`, {
+      logWarn('FORENSIC', `Layer type ya registrado: ${definition.layerType}`, {
         layerType: definition.layerType,
         requestId: getRequestId()
       });
@@ -90,7 +90,7 @@ class LayerRegistry {
       }
     });
 
-    logWarn('layer_registry', `Layer type registrado: ${definition.layerType}`, {
+    logWarn('FORENSIC', `Layer type registrado: ${definition.layerType}`, {
       layerType: definition.layerType,
       requestId: getRequestId()
     });

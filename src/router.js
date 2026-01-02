@@ -216,7 +216,8 @@ async function routerFunction(request, env, ctx) {
     if (!isRecognized || !entryContext) {
       const { getRequestId } = await import('./core/observability/request-context.js');
       const traceId = getRequestId() || `router-${Date.now()}`;
-      console.error(`[EntryGate] ❌ Host no reconocido: ${host}`);
+      // FASE 4: Entry Gate - Hosts desconocidos ya se loguean en resolveEntryContext como INFO
+      // No duplicar log aquí
       return new Response(JSON.stringify({
         ok: false,
         error: `Host no reconocido: ${host}`,
