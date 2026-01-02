@@ -428,23 +428,42 @@ export async function updateListClassification(listId, classification) {
     // PASO 2: Actualizar tabla de relación transmutacion_lista_classifications
     // ═══════════════════════════════════════════════════════════════
     
-    // Primero, eliminar relaciones existentes para esta lista (solo de type 'key' y 'subkey')
-    // NOTA: Los tags se manejan de forma diferente (pueden ser múltiples)
-    await query(
-      `DELETE FROM transmutacion_lista_classifications tlc
-       USING pde_classification_terms ct
-       WHERE tlc.lista_id = $1
-         AND tlc.classification_term_id = ct.id
-         AND ct.type IN ('key', 'subkey')`,
-      [listId]
-    );
+    // FIX v5.50.3: Eliminar solo el tipo específico que se está actualizando
+    // Para permitir que category y subtype coexistan independientemente
     
-    logInfo('UpdateListClassification', 'Relaciones category/subtype eliminadas', {
-      lista_id: listId,
-      traceId
-    });
+    // Eliminar relación de category (type='key') SOLO si se está actualizando
+    if (category_key !== undefined) {
+      await query(
+        `DELETE FROM transmutacion_lista_classifications tlc
+         USING pde_classification_terms ct
+         WHERE tlc.lista_id = $1
+           AND tlc.classification_term_id = ct.id
+           AND ct.type = 'key'`,
+        [listId]
+      );
+      logInfo('UpdateListClassification', 'Relaciones category (type=key) eliminadas', {
+        lista_id: listId,
+        traceId
+      });
+    }
     
-    // Insertar nueva relación para category (si existe)
+    // Eliminar relación de subtype (type='subkey') SOLO si se está actualizando
+    if (subtype_key !== undefined) {
+      await query(
+        `DELETE FROM transmutacion_lista_classifications tlc
+         USING pde_classification_terms ct
+         WHERE tlc.lista_id = $1
+           AND tlc.classification_term_id = ct.id
+           AND ct.type = 'subkey'`,
+        [listId]
+      );
+      logInfo('UpdateListClassification', 'Relaciones subtype (type=subkey) eliminadas', {
+        lista_id: listId,
+        traceId
+      });
+    }
+    
+    // Insertar nueva relación para category (si existe y se está actualizando)
     if (termIds.category) {
       await query(
         `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
@@ -461,7 +480,7 @@ export async function updateListClassification(listId, classification) {
       });
     }
     
-    // Insertar nueva relación para subtype (si existe)
+    // Insertar nueva relación para subtype (si existe y se está actualizando)
     if (termIds.subtype) {
       await query(
         `INSERT INTO transmutacion_lista_classifications (lista_id, classification_term_id, created_at)
