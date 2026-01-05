@@ -2,7 +2,8 @@
 
 **Fecha de verificación:** 2026-01-05  
 **Base de datos:** `aurelinportal`  
-**Migración:** `v5.55.0-projects-system-v1.sql`
+**Migración:** `v5.55.0-projects-system-v1.sql`  
+**Fix aplicado:** `v5.55.1-fix-calculate-days-since-clean-timestamptz.sql`
 
 ---
 
