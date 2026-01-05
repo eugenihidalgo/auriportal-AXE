@@ -17,6 +17,17 @@
 (function() {
   'use strict';
 
+  // BUILD_STAMP FORENSE (OBLIGATORIO)
+  const APP_VERSION = window.__AP_APP_VERSION__ || 'unknown';
+  const BUILD_ID = window.__AP_BUILD_ID__ || 'unknown';
+  const BUILD_TIMESTAMP = '2026-01-05T00:00:00Z';
+  
+  window.__AP_MASTER_LUGARES_STAMP__ = `MASTER_LUGARES@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=places-v1+tab1-order-pipeline+tab2-expanded+tab3-categories`;
+  
+  // Log STAMP siempre visible
+  console.log('%c[MASTER][LUGARES][STAMP]', 'color: #00ff99; background: #001122; padding: 2px 4px; font-weight: bold;', 
+    window.__AP_MASTER_LUGARES_STAMP__);
+
   // BOOT LOG único y global
   console.log('[BOOT][MASTER][Lugares] JS cargado', {
     time: Date.now(),
@@ -36,12 +47,23 @@
     return;
   }
 
+  // Debug mode
+  const DEBUG = window.__AP_MASTER_DEBUG_LOGS__ || new URLSearchParams(window.location.search).get('debug') === '1';
+
   // Estado global
   const state = {
     tabActivo: 'activos', // 'activos' | 'config-alumno' | 'clasificaciones'
     lugaresActivos: [],
     selectedPlaces: [],
-    currentStudent: null
+    currentStudent: null,
+    studentPlaces: [],
+    categories: [],
+    orderBy: [
+      { key: 'health_status', direction: 'asc' },
+      { key: 'category_name', direction: 'asc' },
+      { key: 'last_cleaned_at', direction: 'desc' }
+    ],
+    students: []
   };
 
   // Elementos DOM
@@ -55,18 +77,61 @@
   const studentSearch = document.getElementById('student-search');
   const studentResults = document.getElementById('student-results');
   const studentConfigContainer = document.getElementById('student-config-container');
+  const clasificacionesContainer = document.getElementById('clasificaciones-container');
+  const btnCrearCategoria = document.getElementById('btn-crear-categoria');
+
+  /**
+   * Helper: Muestra mensaje pequeño sin spam
+   */
+  function showMessage(text, type = 'info') {
+    const msg = document.createElement('div');
+    msg.textContent = text;
+    msg.style.cssText = `position: fixed; top: 1rem; right: 1rem; padding: 0.75rem 1rem; background: ${
+      type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6'
+    }; color: white; border-radius: 0.375rem; z-index: 10000; font-size: 0.875rem; max-width: 300px;`;
+    
+    document.body.appendChild(msg);
+    setTimeout(() => {
+      if (msg.parentNode) {
+        msg.parentNode.removeChild(msg);
+      }
+    }, 3000);
+  }
+
+  /**
+   * Helper: apiFetch canónico
+   */
+  async function apiFetch(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+    
+    const result = await response.json();
+    if (!result.ok) {
+      throw new Error(result.error || 'Error desconocido');
+    }
+    return result;
+  }
 
   /**
    * Inicialización
    */
   async function init() {
-    console.log('[MasterLugares] Inicializando...');
+    if (DEBUG) console.log('[MASTER][LUGARES][INIT] Inicializando...');
     
     // Renderizar tabs principales
     renderMainTabs();
     
-    // Cargar lugares activos
-    await loadLugaresActivos();
+    // Cargar datos iniciales según tab activo
+    if (state.tabActivo === 'activos') {
+      await loadLugaresActivos();
+    } else if (state.tabActivo === 'clasificaciones') {
+      await loadCategories();
+    }
     
     // Event listeners
     if (btnCleanSelected) {
@@ -77,6 +142,9 @@
     }
     if (studentSearch) {
       studentSearch.addEventListener('input', handleStudentSearch);
+    }
+    if (btnCrearCategoria) {
+      btnCrearCategoria.addEventListener('click', handleCrearCategoria);
     }
   }
 
@@ -100,17 +168,24 @@
     tabs.forEach(tab => {
       const tabButton = document.createElement('button');
       tabButton.textContent = tab.label;
-      tabButton.style.cssText = 'background: transparent; border: none; color: #94a3b8; border-bottom: 2px solid transparent; cursor: pointer; padding: 0.75rem 1rem; margin-right: 1rem;';
+      tabButton.style.cssText = 'background: transparent; border: none; color: #94a3b8; border-bottom: 2px solid transparent; cursor: pointer; padding: 0.75rem 1rem; margin-right: 1rem; transition: all 0.2s;';
       
       if (state.tabActivo === tab.id) {
         tabButton.style.color = '#6366f1';
         tabButton.style.borderBottomColor = '#6366f1';
       }
       
-      tabButton.addEventListener('click', () => {
+      tabButton.addEventListener('click', async () => {
         state.tabActivo = tab.id;
         renderMainTabs();
         showTab(tab.id);
+        
+        // Cargar datos del tab
+        if (tab.id === 'activos') {
+          await loadLugaresActivos();
+        } else if (tab.id === 'clasificaciones') {
+          await loadCategories();
+        }
       });
       
       mainTabsContainer.appendChild(tabButton);
@@ -144,20 +219,104 @@
    */
   async function loadLugaresActivos() {
     try {
-      console.log('[MasterLugares] Cargando lugares activos...');
+      if (DEBUG) console.log('[MASTER][LUGARES][TAB1] Cargando lugares activos...');
       
-      const response = await fetch('/master/api/places/active');
-      const result = await response.json();
-      
-      if (!result.ok) {
-        console.error('[MasterLugares] Error cargando lugares activos:', result.error);
-        return;
-      }
-      
+      const result = await apiFetch('/master/api/places/active');
       state.lugaresActivos = result.places || [];
+      
+      // Aplicar ordenación jerárquica
+      sortPlacesHierarchical();
+      
       renderLugaresActivos();
+      
+      if (DEBUG) console.log('[MASTER][LUGARES][TAB1_RENDER_ACTIVE] Tab 1 renderizado');
     } catch (error) {
       console.error('[MasterLugares] Error cargando lugares activos:', error);
+      showMessage('Error cargando lugares activos: ' + error.message, 'error');
+    }
+  }
+
+  /**
+   * Ordenación jerárquica por prioridades (Order Pipeline Contract)
+   */
+  function sortPlacesHierarchical() {
+    if (state.orderBy.length === 0) return;
+    
+    if (DEBUG) console.log('[MASTER][LUGARES][ORDER_PIPELINE_ACTIVE] Ordenando con', state.orderBy);
+    
+    state.lugaresActivos.sort((a, b) => {
+      for (const order of state.orderBy) {
+        let aVal, bVal;
+        
+        switch (order.key) {
+          case 'health_status':
+            // Mapeo: red=0, yellow=1, green=2
+            const healthMap = { red: 0, yellow: 1, green: 2 };
+            aVal = healthMap[a.health_status] ?? 999;
+            bVal = healthMap[b.health_status] ?? 999;
+            break;
+          case 'category_name':
+            aVal = a.category_name || '';
+            bVal = b.category_name || '';
+            break;
+          case 'last_cleaned_at':
+            aVal = a.last_cleaned_at ? new Date(a.last_cleaned_at).getTime() : 0;
+            bVal = b.last_cleaned_at ? new Date(b.last_cleaned_at).getTime() : 0;
+            break;
+          case 'days_since_clean':
+            aVal = a.days_since_clean ?? 999;
+            bVal = b.days_since_clean ?? 999;
+            break;
+          case 'name':
+            aVal = (a.custom_name || a.base_name || '').toLowerCase();
+            bVal = (b.custom_name || b.base_name || '').toLowerCase();
+            break;
+          default:
+            return 0;
+        }
+        
+        if (aVal !== bVal) {
+          const mult = order.direction === 'asc' ? 1 : -1;
+          return aVal < bVal ? -1 * mult : 1 * mult;
+        }
+      }
+      return 0;
+    });
+  }
+
+  /**
+   * Maneja click en header de columna (Order Pipeline)
+   */
+  function handleColumnSort(key) {
+    // Buscar si ya existe en orderBy
+    const existingIndex = state.orderBy.findIndex(o => o.key === key);
+    
+    if (existingIndex === 0) {
+      // Ya es prioridad 1: toggle dirección
+      state.orderBy[0].direction = state.orderBy[0].direction === 'asc' ? 'desc' : 'asc';
+    } else if (existingIndex > 0) {
+      // Existe en lista: mover a prioridad 1 manteniendo dirección
+      const existing = state.orderBy[existingIndex];
+      state.orderBy.splice(existingIndex, 1);
+      state.orderBy.unshift(existing);
+    } else {
+      // Nueva: insertar como prioridad 1
+      state.orderBy.unshift({ key, direction: 'asc' });
+      // Truncar a máximo 3
+      if (state.orderBy.length > 3) {
+        state.orderBy = state.orderBy.slice(0, 3);
+      }
+    }
+    
+    // Reordenar y renderizar
+    sortPlacesHierarchical();
+    renderLugaresActivos();
+    
+    // Persistir en localStorage
+    try {
+      localStorage.setItem('ap_master_places_orderBy_v1', JSON.stringify(state.orderBy));
+    } catch (e) {
+      // Ignorar errores de localStorage
     }
   }
 
@@ -189,11 +348,48 @@
     const headerRow = document.createElement('tr');
     headerRow.style.cssText = 'background: #334155; border-bottom: 2px solid #475569;';
     
-    const headers = ['ID', 'Lugar', 'Alumno', 'Estado', 'Acciones'];
-    headers.forEach(headerText => {
+    const columns = [
+      { key: 'checkbox', label: '', sortable: false },
+      { key: 'student_email', label: 'Alumno', sortable: false, clickable: true },
+      { key: 'category_name', label: 'Categoría', sortable: true },
+      { key: 'name', label: 'Nombre', sortable: true, editable: true },
+      { key: 'description', label: 'Descripción', sortable: false, editable: true },
+      { key: 'health_status', label: 'Salud', sortable: true },
+      { key: 'days_since_clean', label: 'Días desde limpieza', sortable: true },
+      { key: 'recurrence_days', label: 'Recurrencia', sortable: false, editable: true },
+      { key: 'actions', label: 'Acciones', sortable: false }
+    ];
+    
+    columns.forEach(col => {
       const th = document.createElement('th');
-      th.textContent = headerText;
-      th.style.cssText = 'padding: 0.75rem; text-align: left; font-weight: 600;';
+      th.style.cssText = 'padding: 0.75rem; text-align: left; font-weight: 600; cursor: default;';
+      
+      if (col.sortable) {
+        th.style.cursor = 'pointer';
+        th.style.userSelect = 'none';
+        
+        // Indicador de prioridad
+        const existingIndex = state.orderBy.findIndex(o => o.key === col.key);
+        if (existingIndex >= 0) {
+          const order = state.orderBy[existingIndex];
+          const indicator = document.createElement('span');
+          indicator.textContent = `${existingIndex + 1}${order.direction === 'asc' ? '↑' : '↓'}`;
+          indicator.style.cssText = `margin-left: 0.5rem; color: ${
+            existingIndex === 0 ? '#60a5fa' : existingIndex === 1 ? '#94a3b8' : '#64748b'
+          }; font-size: 0.75rem;`;
+          th.appendChild(document.createTextNode(col.label + ' '));
+          th.appendChild(indicator);
+        } else {
+          th.textContent = col.label;
+        }
+        
+        th.addEventListener('click', () => handleColumnSort(col.key));
+      } else if (col.clickable) {
+        th.textContent = col.label;
+      } else {
+        th.textContent = col.label;
+      }
+      
       headerRow.appendChild(th);
     });
     
@@ -206,42 +402,115 @@
     state.lugaresActivos.forEach(place => {
       const row = document.createElement('tr');
       row.style.cssText = 'border-bottom: 1px solid #334155;';
-      row.dataset.placeId = place.id;
+      row.dataset.placeStateId = place.id;
+      row.dataset.studentId = place.student_id;
+      row.dataset.placeId = place.place_id;
       
-      // ID
-      const tdId = document.createElement('td');
-      tdId.textContent = place.id || '-';
-      tdId.style.cssText = 'padding: 0.75rem;';
-      row.appendChild(tdId);
+      // Checkbox
+      const tdCheckbox = document.createElement('td');
+      tdCheckbox.style.cssText = 'padding: 0.75rem;';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.style.cssText = 'cursor: pointer;';
+      checkbox.checked = state.selectedPlaces.includes(place.id);
+      checkbox.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          if (!state.selectedPlaces.includes(place.id)) {
+            state.selectedPlaces.push(place.id);
+          }
+        } else {
+          state.selectedPlaces = state.selectedPlaces.filter(id => id !== place.id);
+        }
+        updateCleanSelectedButton();
+      });
+      tdCheckbox.appendChild(checkbox);
+      row.appendChild(tdCheckbox);
       
-      // Lugar
-      const tdPlace = document.createElement('td');
-      tdPlace.textContent = place.place_name || place.catalog_name || '-';
-      tdPlace.style.cssText = 'padding: 0.75rem;';
-      row.appendChild(tdPlace);
-      
-      // Alumno
+      // Alumno (clickable → Tab 2)
       const tdStudent = document.createElement('td');
-      tdStudent.textContent = place.student_email || '-';
-      tdStudent.style.cssText = 'padding: 0.75rem;';
+      tdStudent.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
+      tdStudent.textContent = place.student_email || place.student_apodo || '-';
+      tdStudent.addEventListener('click', () => {
+        state.tabActivo = 'config-alumno';
+        renderMainTabs();
+        showTab('config-alumno');
+        // Buscar y seleccionar alumno
+        if (place.student_id) {
+          loadStudentById(place.student_id);
+        }
+      });
       row.appendChild(tdStudent);
       
-      // Estado
-      const tdStatus = document.createElement('td');
-      tdStatus.textContent = place.status || 'active';
-      tdStatus.style.cssText = 'padding: 0.75rem;';
-      row.appendChild(tdStatus);
+      // Categoría
+      const tdCategory = document.createElement('td');
+      tdCategory.textContent = place.category_name || '-';
+      tdCategory.style.cssText = 'padding: 0.75rem;';
+      row.appendChild(tdCategory);
+      
+      // Nombre (editable)
+      const tdName = document.createElement('td');
+      tdName.style.cssText = 'padding: 0.75rem;';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = place.custom_name || place.base_name || '';
+      nameInput.style.cssText = 'width: 100%; padding: 0.25rem 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9;';
+      nameInput.addEventListener('blur', () => {
+        updatePlaceState(place.id, { custom_name: nameInput.value || null });
+      });
+      tdName.appendChild(nameInput);
+      row.appendChild(tdName);
+      
+      // Descripción (editable)
+      const tdDesc = document.createElement('td');
+      tdDesc.style.cssText = 'padding: 0.75rem;';
+      const descInput = document.createElement('input');
+      descInput.type = 'text';
+      descInput.value = place.description || '';
+      descInput.style.cssText = 'width: 100%; padding: 0.25rem 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9;';
+      descInput.addEventListener('blur', () => {
+        updatePlaceState(place.id, { description: descInput.value || null });
+      });
+      tdDesc.appendChild(descInput);
+      row.appendChild(tdDesc);
+      
+      // Salud (badge)
+      const tdHealth = document.createElement('td');
+      tdHealth.style.cssText = 'padding: 0.75rem;';
+      const healthBadge = document.createElement('span');
+      const healthColor = place.health_status === 'green' ? '#10b981' : place.health_status === 'yellow' ? '#f59e0b' : '#ef4444';
+      healthBadge.textContent = place.health_status || 'green';
+      healthBadge.style.cssText = `padding: 0.25rem 0.5rem; background: ${healthColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; text-transform: uppercase;`;
+      tdHealth.appendChild(healthBadge);
+      row.appendChild(tdHealth);
+      
+      // Días desde limpieza
+      const tdDays = document.createElement('td');
+      tdDays.textContent = place.days_since_clean !== undefined ? `${place.days_since_clean} días` : '-';
+      tdDays.style.cssText = 'padding: 0.75rem;';
+      row.appendChild(tdDays);
+      
+      // Recurrencia (editable solo Master)
+      const tdRecurrence = document.createElement('td');
+      tdRecurrence.style.cssText = 'padding: 0.75rem;';
+      const recInput = document.createElement('input');
+      recInput.type = 'number';
+      recInput.value = place.recurrence_days || 30;
+      recInput.min = '1';
+      recInput.style.cssText = 'width: 80px; padding: 0.25rem 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9;';
+      recInput.addEventListener('blur', () => {
+        updatePlaceState(place.id, { recurrence_days: parseInt(recInput.value, 10) || 30 });
+      });
+      tdRecurrence.appendChild(recInput);
+      row.appendChild(tdRecurrence);
       
       // Acciones
       const tdActions = document.createElement('td');
       tdActions.style.cssText = 'padding: 0.75rem;';
-      
       const cleanBtn = document.createElement('button');
       cleanBtn.textContent = 'Limpiar';
       cleanBtn.style.cssText = 'padding: 0.5rem 1rem; background: #4f46e5; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-      cleanBtn.addEventListener('click', () => handleCleanPlace(place.id, place.student_id));
+      cleanBtn.addEventListener('click', () => handleCleanPlace(place.student_id, place.place_id));
       tdActions.appendChild(cleanBtn);
-      
       row.appendChild(tdActions);
       
       tbody.appendChild(row);
@@ -249,37 +518,52 @@
     
     table.appendChild(tbody);
     activosTableContainer.appendChild(table);
+    
+    updateCleanSelectedButton();
+  }
+
+  /**
+   * Actualiza botón "Limpiar Seleccionados"
+   */
+  function updateCleanSelectedButton() {
+    if (btnCleanSelected) {
+      btnCleanSelected.disabled = state.selectedPlaces.length === 0;
+    }
+  }
+
+  /**
+   * Actualiza estado de lugar
+   */
+  async function updatePlaceState(placeStateId, fields) {
+    try {
+      await apiFetch(`/master/api/places/state/${placeStateId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fields)
+      });
+      
+      // Refetch
+      await loadLugaresActivos();
+    } catch (error) {
+      console.error('[MasterLugares] Error actualizando estado:', error);
+      showMessage('Error actualizando: ' + error.message, 'error');
+    }
   }
 
   /**
    * Maneja la limpieza de un lugar
    */
-  async function handleCleanPlace(placeId, studentId) {
+  async function handleCleanPlace(studentId, placeId) {
     try {
-      const response = await fetch('/master/api/places/clean', {
+      await apiFetch('/master/api/places/clean', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          place_id: placeId,
-          student_id: studentId
-        })
+        body: JSON.stringify({ student_id: studentId, place_id: placeId })
       });
       
-      const result = await response.json();
-      
-      if (!result.ok) {
-        console.error('[MasterLugares] Error limpiando lugar:', result.error);
-        alert('Error limpiando lugar: ' + (result.error || 'Error desconocido'));
-        return;
-      }
-      
-      // Refetch lugares activos
+      showMessage('Lugar limpiado correctamente', 'success');
       await loadLugaresActivos();
     } catch (error) {
       console.error('[MasterLugares] Error limpiando lugar:', error);
-      alert('Error limpiando lugar: ' + error.message);
+      showMessage('Error limpiando lugar: ' + error.message, 'error');
     }
   }
 
@@ -288,12 +572,23 @@
    */
   async function handleCleanSelected() {
     if (state.selectedPlaces.length === 0) {
-      alert('No hay lugares seleccionados');
+      showMessage('No hay lugares seleccionados', 'error');
       return;
     }
     
-    console.log('[MasterLugares] Limpiar seleccionados (pendiente implementar)');
-    // TODO: Implementar limpieza masiva
+    try {
+      await apiFetch('/master/api/places/clean-bulk', {
+        method: 'POST',
+        body: JSON.stringify({ place_state_ids: state.selectedPlaces })
+      });
+      
+      showMessage(`${state.selectedPlaces.length} lugares limpiados`, 'success');
+      state.selectedPlaces = [];
+      await loadLugaresActivos();
+    } catch (error) {
+      console.error('[MasterLugares] Error limpiando seleccionados:', error);
+      showMessage('Error limpiando lugares: ' + error.message, 'error');
+    }
   }
 
   /**
@@ -305,23 +600,29 @@
     }
     
     try {
-      const response = await fetch('/master/api/places/clean-all', {
+      await apiFetch('/master/api/places/clean-all', {
         method: 'POST'
       });
       
-      const result = await response.json();
-      
-      if (!result.ok) {
-        console.error('[MasterLugares] Error limpiando todos:', result.error);
-        alert('Error limpiando todos los lugares: ' + (result.error || 'Error desconocido'));
-        return;
-      }
-      
-      // Refetch lugares activos
+      showMessage('Todos los lugares limpiados', 'success');
       await loadLugaresActivos();
     } catch (error) {
       console.error('[MasterLugares] Error limpiando todos:', error);
-      alert('Error limpiando todos los lugares: ' + error.message);
+      showMessage('Error limpiando todos: ' + error.message, 'error');
+    }
+  }
+
+  /**
+   * Carga alumnos para búsqueda
+   */
+  async function loadStudents() {
+    try {
+      const timestamp = Date.now();
+      const result = await apiFetch(`/master/api/students?limit=1000&_t=${timestamp}`);
+      state.students = result.data?.items || [];
+    } catch (error) {
+      console.error('[MasterLugares] Error cargando alumnos:', error);
+      state.students = [];
     }
   }
 
@@ -338,18 +639,33 @@
       return;
     }
     
+    // Cargar alumnos si no están cargados
+    if (state.students.length === 0) {
+      await loadStudents();
+    }
+    
+    // Filtrar localmente
+    const filtered = state.students.filter(s => 
+      (s.email && s.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.apodo && s.apodo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.nombre_completo && s.nombre_completo.toLowerCase().includes(searchTerm.toLowerCase()))
+    ).slice(0, 10);
+    
+    renderStudentResults(filtered);
+  }
+
+  /**
+   * Carga alumno por ID
+   */
+  async function loadStudentById(studentId) {
     try {
-      const response = await fetch(`/master/api/students?search=${encodeURIComponent(searchTerm)}&limit=10`);
-      const result = await response.json();
-      
-      if (!result.ok) {
-        return;
-      }
-      
-      const students = result.data?.items || [];
-      renderStudentResults(students);
+      const result = await apiFetch(`/master/api/places/student/${studentId}`);
+      state.currentStudent = state.students.find(s => s.id === studentId) || { id: studentId };
+      state.studentPlaces = result.places || [];
+      renderStudentConfig(result);
     } catch (error) {
-      console.error('[MasterLugares] Error buscando alumnos:', error);
+      console.error('[MasterLugares] Error cargando alumno:', error);
+      showMessage('Error cargando alumno: ' + error.message, 'error');
     }
   }
 
@@ -373,14 +689,21 @@
     
     students.forEach(student => {
       const div = document.createElement('div');
-      div.style.cssText = 'padding: 0.75rem; cursor: pointer; border-bottom: 1px solid #334155;';
+      div.style.cssText = 'padding: 0.75rem; cursor: pointer; border-bottom: 1px solid #334155; hover:background: #475569;';
       div.textContent = `${student.nombre_completo || student.apodo || student.email} (${student.email})`;
+      
+      div.addEventListener('mouseenter', () => {
+        div.style.background = '#475569';
+      });
+      div.addEventListener('mouseleave', () => {
+        div.style.background = 'transparent';
+      });
       
       div.addEventListener('click', () => {
         state.currentStudent = student;
-        studentSearch.value = student.email;
+        if (studentSearch) studentSearch.value = student.email;
         studentResults.style.display = 'none';
-        loadStudentConfig(student.id);
+        loadStudentById(student.id);
       });
       
       studentResults.appendChild(div);
@@ -388,26 +711,7 @@
   }
 
   /**
-   * Carga la configuración de un alumno
-   */
-  async function loadStudentConfig(studentId) {
-    try {
-      const response = await fetch(`/master/api/places/student/${studentId}`);
-      const result = await response.json();
-      
-      if (!result.ok) {
-        console.error('[MasterLugares] Error cargando configuración:', result.error);
-        return;
-      }
-      
-      renderStudentConfig(result);
-    } catch (error) {
-      console.error('[MasterLugares] Error cargando configuración:', error);
-    }
-  }
-
-  /**
-   * Renderiza la configuración del alumno
+   * Renderiza la configuración del alumno (Tab 2 completo)
    */
   function renderStudentConfig(data) {
     if (!studentConfigContainer) return;
@@ -419,16 +723,354 @@
     
     studentConfigContainer.style.display = 'block';
     
+    // Título
     const title = document.createElement('h3');
-    title.textContent = `Configuración de ${state.currentStudent?.nombre_completo || state.currentStudent?.email}`;
+    title.textContent = `Configuración de ${state.currentStudent?.nombre_completo || state.currentStudent?.apodo || state.currentStudent?.email || 'Alumno'}`;
     title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;';
     studentConfigContainer.appendChild(title);
     
-    // TODO: Renderizar lugares del alumno
-    const info = document.createElement('p');
-    info.textContent = 'Configuración de lugares del alumno (pendiente implementar)';
-    info.style.cssText = 'color: #94a3b8;';
-    studentConfigContainer.appendChild(info);
+    // Límite de activación
+    const limitSection = document.createElement('div');
+    limitSection.style.cssText = 'margin-bottom: 2rem; padding: 1rem; background: #1e293b; border-radius: 0.5rem;';
+    
+    const limitLabel = document.createElement('label');
+    limitLabel.textContent = 'Límite de activación: ';
+    limitLabel.style.cssText = 'color: #f1f5f9; font-weight: 500; margin-right: 0.5rem;';
+    
+    const limitSelect = document.createElement('select');
+    limitSelect.style.cssText = 'padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-right: 0.5rem;';
+    const limitOptions = [1, 2, 3, 4, 5].map(n => {
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      return opt;
+    });
+    const optInf = document.createElement('option');
+    optInf.value = 'infinity';
+    optInf.textContent = '∞ (Ilimitado)';
+    limitOptions.push(optInf);
+    limitOptions.forEach(opt => limitSelect.appendChild(opt));
+    
+    const currentLimit = data.activation_limit === null ? 'infinity' : (data.activation_limit || 1);
+    limitSelect.value = currentLimit === Infinity || currentLimit === null ? 'infinity' : currentLimit;
+    
+    limitSelect.addEventListener('change', async () => {
+      const value = limitSelect.value === 'infinity' ? null : parseInt(limitSelect.value, 10);
+      try {
+        await apiFetch('/master/api/places/limit', {
+          method: 'POST',
+          body: JSON.stringify({
+            student_id: state.currentStudent.id,
+            domain: 'places',
+            activation_limit: value,
+            source: 'master'
+          })
+        });
+        showMessage('Límite actualizado', 'success');
+      } catch (error) {
+        showMessage('Error actualizando límite: ' + error.message, 'error');
+      }
+    });
+    
+    limitSection.appendChild(limitLabel);
+    limitSection.appendChild(limitSelect);
+    
+    const limitSource = document.createElement('span');
+    limitSource.textContent = `(Origen: ${data.limit_source || 'default'})`;
+    limitSource.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    limitSection.appendChild(limitSource);
+    
+    studentConfigContainer.appendChild(limitSection);
+    
+    // Lista de lugares
+    if (data.places && data.places.length > 0) {
+      const placesGrid = document.createElement('div');
+      placesGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1rem;';
+      
+      data.places.forEach(place => {
+        const placeCard = document.createElement('div');
+        placeCard.style.cssText = 'padding: 1rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem;';
+        
+        // Nombre (editable)
+        const nameLabel = document.createElement('label');
+        nameLabel.textContent = 'Nombre:';
+        nameLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = place.custom_name || place.base_name || '';
+        nameInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.75rem;';
+        nameInput.addEventListener('blur', () => {
+          updatePlaceState(place.id, { custom_name: nameInput.value || null });
+        });
+        
+        // Descripción (editable)
+        const descLabel = document.createElement('label');
+        descLabel.textContent = 'Descripción / Dirección:';
+        descLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+        const descTextarea = document.createElement('textarea');
+        descTextarea.value = place.description || '';
+        descTextarea.rows = 2;
+        descTextarea.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.75rem; resize: vertical;';
+        descTextarea.addEventListener('blur', () => {
+          updatePlaceState(place.id, { description: descTextarea.value || null });
+        });
+        
+        // Tipo (read-only)
+        const typeLabel = document.createElement('div');
+        typeLabel.textContent = `Tipo: ${place.category_name || '-'}`;
+        typeLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+        
+        // Salud (badge)
+        const healthLabel = document.createElement('div');
+        healthLabel.style.cssText = 'margin-bottom: 0.5rem;';
+        const healthBadge = document.createElement('span');
+        const healthColor = place.health_status === 'green' ? '#10b981' : place.health_status === 'yellow' ? '#f59e0b' : '#ef4444';
+        healthBadge.textContent = `Salud: ${place.health_status || 'green'}`;
+        healthBadge.style.cssText = `padding: 0.25rem 0.5rem; background: ${healthColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; text-transform: uppercase;`;
+        healthLabel.appendChild(healthBadge);
+        
+        // Última limpieza
+        const lastCleanLabel = document.createElement('div');
+        if (place.last_cleaned_at) {
+          const date = new Date(place.last_cleaned_at);
+          lastCleanLabel.textContent = `Última limpieza: ${date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+        } else {
+          lastCleanLabel.textContent = 'Última limpieza: Nunca';
+        }
+        lastCleanLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+        
+        // Días desde limpieza
+        const daysLabel = document.createElement('div');
+        daysLabel.textContent = `Días desde limpieza: ${place.days_since_clean !== undefined ? `${place.days_since_clean} días` : '-'}`;
+        daysLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+        
+        // Estado activo/inactivo
+        const statusLabel = document.createElement('div');
+        statusLabel.style.cssText = 'margin-bottom: 0.5rem;';
+        const statusBadge = document.createElement('span');
+        statusBadge.textContent = place.is_active ? 'Activo' : 'Inactivo';
+        statusBadge.style.cssText = `padding: 0.25rem 0.5rem; background: ${place.is_active ? '#10b981' : '#64748b'}; color: white; border-radius: 0.25rem; font-size: 0.75rem;`;
+        statusLabel.appendChild(statusBadge);
+        
+        // Botones de acción
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 0.75rem;';
+        
+        if (place.is_active) {
+          const cleanBtn = document.createElement('button');
+          cleanBtn.textContent = '✓ Limpiar';
+          cleanBtn.style.cssText = 'padding: 0.5rem 1rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
+          cleanBtn.addEventListener('click', () => handleCleanPlace(place.student_id, place.place_id));
+          actionsDiv.appendChild(cleanBtn);
+        }
+        
+        const toggleBtn = document.createElement('button');
+        toggleBtn.textContent = place.is_active ? 'Desactivar' : 'Activar';
+        toggleBtn.style.cssText = `padding: 0.5rem 1rem; background: ${place.is_active ? '#f59e0b' : '#3b82f6'}; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+        toggleBtn.addEventListener('click', async () => {
+          try {
+            if (place.is_active) {
+              await apiFetch('/master/api/places/deactivate', {
+                method: 'POST',
+                body: JSON.stringify({ student_id: place.student_id, place_id: place.place_id })
+              });
+            } else {
+              await apiFetch('/master/api/places/activate', {
+                method: 'POST',
+                body: JSON.stringify({ student_id: place.student_id, place_id: place.place_id })
+              });
+            }
+            showMessage(place.is_active ? 'Lugar desactivado' : 'Lugar activado', 'success');
+            await loadStudentById(place.student_id);
+          } catch (error) {
+            showMessage('Error: ' + error.message, 'error');
+          }
+        });
+        actionsDiv.appendChild(toggleBtn);
+        
+        placeCard.appendChild(nameLabel);
+        placeCard.appendChild(nameInput);
+        placeCard.appendChild(descLabel);
+        placeCard.appendChild(descTextarea);
+        placeCard.appendChild(typeLabel);
+        placeCard.appendChild(healthLabel);
+        placeCard.appendChild(lastCleanLabel);
+        placeCard.appendChild(daysLabel);
+        placeCard.appendChild(statusLabel);
+        placeCard.appendChild(actionsDiv);
+        
+        placesGrid.appendChild(placeCard);
+      });
+      
+      studentConfigContainer.appendChild(placesGrid);
+    } else {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.textContent = 'Este alumno no tiene lugares configurados';
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; padding: 2rem; text-align: center;';
+      studentConfigContainer.appendChild(emptyMsg);
+    }
+    
+    if (DEBUG) console.log('[MASTER][LUGARES][TAB2_EXPANDED_RENDER_ACTIVE] Tab 2 renderizado');
+  }
+
+  /**
+   * Carga categorías
+   */
+  async function loadCategories() {
+    try {
+      const result = await apiFetch('/master/api/place-categories');
+      state.categories = result.categories || [];
+      renderCategories();
+    } catch (error) {
+      console.error('[MasterLugares] Error cargando categorías:', error);
+      showMessage('Error cargando categorías: ' + error.message, 'error');
+    }
+  }
+
+  /**
+   * Renderiza categorías (Tab 3)
+   */
+  function renderCategories() {
+    if (!clasificacionesContainer) return;
+    
+    // Limpiar
+    while (clasificacionesContainer.firstChild) {
+      clasificacionesContainer.removeChild(clasificacionesContainer.firstChild);
+    }
+    
+    if (state.categories.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.textContent = 'No hay categorías';
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
+      clasificacionesContainer.appendChild(emptyMsg);
+      return;
+    }
+    
+    // Ordenar por sort_order
+    const sorted = [...state.categories].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    
+    sorted.forEach(cat => {
+      const card = document.createElement('div');
+      card.style.cssText = 'padding: 1rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 1rem;';
+      
+      // Nombre (editable)
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = cat.name || '';
+      nameInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.5rem;';
+      nameInput.addEventListener('blur', () => {
+        updateCategory(cat.id, { name: nameInput.value });
+      });
+      
+      // Recurrencia (editable)
+      const recLabel = document.createElement('label');
+      recLabel.textContent = 'Recurrencia por defecto:';
+      recLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+      const recInput = document.createElement('input');
+      recInput.type = 'number';
+      recInput.value = cat.default_recurrence_days || 30;
+      recInput.min = '1';
+      recInput.style.cssText = 'width: 100px; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.5rem;';
+      recInput.addEventListener('blur', () => {
+        updateCategory(cat.id, { default_recurrence_days: parseInt(recInput.value, 10) || 30 });
+      });
+      
+      // Orden (editable)
+      const orderLabel = document.createElement('label');
+      orderLabel.textContent = 'Orden:';
+      orderLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+      const orderInput = document.createElement('input');
+      orderInput.type = 'number';
+      orderInput.value = cat.sort_order || 0;
+      orderInput.style.cssText = 'width: 100px; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.5rem;';
+      orderInput.addEventListener('blur', () => {
+        updateCategory(cat.id, { sort_order: parseInt(orderInput.value, 10) || 0 });
+      });
+      
+      // Activar/Desactivar
+      const activeLabel = document.createElement('label');
+      activeLabel.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;';
+      const activeCheckbox = document.createElement('input');
+      activeCheckbox.type = 'checkbox';
+      activeCheckbox.checked = cat.is_active !== false;
+      activeCheckbox.style.cssText = 'cursor: pointer;';
+      activeCheckbox.addEventListener('change', () => {
+        updateCategory(cat.id, { is_active: activeCheckbox.checked });
+      });
+      const activeText = document.createElement('span');
+      activeText.textContent = 'Activa';
+      activeText.style.cssText = 'color: #f1f5f9;';
+      activeLabel.appendChild(activeCheckbox);
+      activeLabel.appendChild(activeText);
+      
+      card.appendChild(nameInput);
+      card.appendChild(recLabel);
+      card.appendChild(recInput);
+      card.appendChild(orderLabel);
+      card.appendChild(orderInput);
+      card.appendChild(activeLabel);
+      
+      clasificacionesContainer.appendChild(card);
+    });
+  }
+
+  /**
+   * Actualiza categoría
+   */
+  async function updateCategory(categoryId, fields) {
+    try {
+      await apiFetch(`/master/api/place-categories/${categoryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fields)
+      });
+      
+      showMessage('Categoría actualizada', 'success');
+      await loadCategories();
+    } catch (error) {
+      console.error('[MasterLugares] Error actualizando categoría:', error);
+      showMessage('Error actualizando categoría: ' + error.message, 'error');
+    }
+  }
+
+  /**
+   * Maneja crear categoría
+   */
+  async function handleCrearCategoria() {
+    const name = prompt('Nombre de la categoría:');
+    if (!name) return;
+    
+    const recurrence = prompt('Días de recurrencia por defecto (30):', '30');
+    const recurrenceDays = parseInt(recurrence, 10) || 30;
+    
+    const order = prompt('Orden (0):', '0');
+    const sortOrder = parseInt(order, 10) || 0;
+    
+    try {
+      await apiFetch('/master/api/place-categories', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          default_recurrence_days: recurrenceDays,
+          sort_order: sortOrder
+        })
+      });
+      
+      showMessage('Categoría creada', 'success');
+      await loadCategories();
+    } catch (error) {
+      console.error('[MasterLugares] Error creando categoría:', error);
+      showMessage('Error creando categoría: ' + error.message, 'error');
+    }
+  }
+
+  // Cargar orden desde localStorage
+  try {
+    const saved = localStorage.getItem('ap_master_places_orderBy_v1');
+    if (saved) {
+      state.orderBy = JSON.parse(saved);
+    }
+  } catch (e) {
+    // Ignorar errores
   }
 
   // Inicializar cuando el DOM esté listo
