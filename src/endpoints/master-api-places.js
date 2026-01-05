@@ -233,10 +233,16 @@ export default async function masterApiPlacesHandler(request, env, ctx) {
         const limit = await activationLimitRepo.getByStudentAndDomain(studentId, 'places');
         const defaultLimit = activationLimitRepo.getDefaultLimit('places');
 
+        // REGLA CANÓNICA: Si hay fila en BD, devolver el valor REAL (null = infinito)
+        // Si NO hay fila, devolver default (1)
+        const activationLimit = limit !== null && limit !== undefined
+          ? limit.activation_limit  // Puede ser null (infinito) o número
+          : defaultLimit;  // Solo si NO existe fila
+
         return jsonSuccess({
           places,
           active_places: activePlaces,
-          activation_limit: limit?.activation_limit ?? defaultLimit,
+          activation_limit: activationLimit,
           limit_source: limit?.source ?? 'default'
         }, traceId);
       } catch (error) {
@@ -314,18 +320,30 @@ export default async function masterApiPlacesHandler(request, env, ctx) {
           return jsonError('student_id es requerido', 'VALIDATION_ERROR', 400, traceId);
         }
 
+        // Validar domain
+        if (domain !== 'places' && domain !== 'projects') {
+          return jsonError('domain debe ser "places" o "projects"', 'VALIDATION_ERROR', 400, traceId);
+        }
+
         const limit = await updateActivationLimit(student_id, domain, activation_limit, source, {
           traceId,
           authCtx
         });
 
-        return jsonSuccess({ limit }, traceId);
+        return jsonSuccess({
+          data: {
+            student_id: limit.student_id,
+            domain: limit.domain,
+            activation_limit: limit.activation_limit,  // null o número
+            source: limit.source
+          }
+        }, traceId);
       } catch (error) {
         logError('MasterApiPlaces', 'Error actualizando límite', {
           error: error.message,
           traceId
         });
-        return jsonError('Error actualizando límite', 'LIMIT_ERROR', 500, traceId);
+        return jsonError('Error actualizando límite: ' + error.message, 'LIMIT_ERROR', 500, traceId);
       }
     }
 

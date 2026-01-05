@@ -271,12 +271,27 @@
             aVal = (a.custom_name || a.base_name || '').toLowerCase();
             bVal = (b.custom_name || b.base_name || '').toLowerCase();
             break;
+          case 'student_apodo':
+            // Normalizar string: trim + lowercase, null-safe
+            aVal = (a.student_apodo || '').trim().toLowerCase();
+            bVal = (b.student_apodo || '').trim().toLowerCase();
+            break;
+          case 'student_email':
+            // Normalizar string: trim + lowercase, null-safe
+            aVal = (a.student_email || '').trim().toLowerCase();
+            bVal = (b.student_email || '').trim().toLowerCase();
+            break;
           default:
             return 0;
         }
         
         if (aVal !== bVal) {
           const mult = order.direction === 'asc' ? 1 : -1;
+          // Para strings, usar localeCompare para manejar acentos correctamente
+          if (typeof aVal === 'string' && typeof bVal === 'string') {
+            return aVal.localeCompare(bVal, 'es', { sensitivity: 'base' }) * mult;
+          }
+          // Para números
           return aVal < bVal ? -1 * mult : 1 * mult;
         }
       }
@@ -350,8 +365,8 @@
     
     const columns = [
       { key: 'checkbox', label: '', sortable: false },
-      { key: 'student_apodo', label: 'Apodo', sortable: false, clickable: true },
-      { key: 'student_email', label: 'Email', sortable: false, clickable: true },
+      { key: 'student_apodo', label: 'Apodo', sortable: true, clickable: true },
+      { key: 'student_email', label: 'Email', sortable: true, clickable: true },
       { key: 'category_name', label: 'Categoría', sortable: true },
       { key: 'name', label: 'Nombre', sortable: true, editable: true },
       { key: 'description', label: 'Descripción', sortable: false, editable: true },
@@ -428,7 +443,7 @@
       tdCheckbox.appendChild(checkbox);
       row.appendChild(tdCheckbox);
       
-      // Apodo (clickable → Tab 2)
+      // Apodo (clickable → Tab 2, header es sorteable)
       const tdApodo = document.createElement('td');
       tdApodo.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
       tdApodo.textContent = place.student_apodo || '-';
@@ -443,7 +458,7 @@
       });
       row.appendChild(tdApodo);
       
-      // Email (clickable → Tab 2)
+      // Email (clickable → Tab 2, header es sorteable)
       const tdEmail = document.createElement('td');
       tdEmail.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
       tdEmail.textContent = place.student_email || '-';
@@ -780,24 +795,47 @@
     limitOptions.push(optInf);
     limitOptions.forEach(opt => limitSelect.appendChild(opt));
     
-    const currentLimit = data.activation_limit === null ? 'infinity' : (data.activation_limit || 1);
-    limitSelect.value = currentLimit === Infinity || currentLimit === null ? 'infinity' : currentLimit;
+    // REGLA CANÓNICA: null = infinito, number = límite numérico
+    // Si no hay fila en BD, backend devuelve 1 (default)
+    const currentLimit = data.activation_limit === null || data.activation_limit === undefined
+      ? 'infinity'  // null = infinito
+      : (typeof data.activation_limit === 'number' ? data.activation_limit : 1);
+    
+    limitSelect.value = currentLimit === 'infinity' || currentLimit === null ? 'infinity' : currentLimit;
     
     limitSelect.addEventListener('change', async () => {
-      const value = limitSelect.value === 'infinity' ? null : parseInt(limitSelect.value, 10);
+      const selectedValue = limitSelect.value;
+      const value = selectedValue === 'infinity' ? null : parseInt(selectedValue, 10);
+      
+      // Validar en cliente
+      if (selectedValue !== 'infinity' && (isNaN(value) || value < 1)) {
+        showMessage('Límite inválido', 'error');
+        return;
+      }
+      
       try {
-        await apiFetch('/master/api/places/limit', {
+        const result = await apiFetch('/master/api/places/limit', {
           method: 'POST',
           body: JSON.stringify({
             student_id: state.currentStudent.id,
             domain: 'places',
-            activation_limit: value,
+            activation_limit: value,  // null o número
             source: 'master'
           })
         });
+        
         showMessage('Límite actualizado', 'success');
+        
+        // Actualizar state local para reflejar cambio inmediato
+        if (data) {
+          data.activation_limit = result.data?.activation_limit ?? value;
+          data.limit_source = result.data?.source ?? 'master';
+        }
       } catch (error) {
+        console.error('[MasterLugares] Error actualizando límite:', error);
         showMessage('Error actualizando límite: ' + error.message, 'error');
+        // Restaurar valor previo en select
+        limitSelect.value = currentLimit === 'infinity' || currentLimit === null ? 'infinity' : currentLimit;
       }
     });
     

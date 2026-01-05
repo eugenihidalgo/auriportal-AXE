@@ -472,10 +472,42 @@ export async function updateActivationLimit(studentId, domain, value, source, op
   const { traceId = null, authCtx = {} } = options;
   const finalTraceId = traceId || getRequestId();
 
+  // Normalizar value
+  let normalizedValue = value;
+  
+  // Si es string "∞" o "" → convertir a null
+  if (value === '∞' || value === '' || value === 'infinity') {
+    normalizedValue = null;
+  }
+  // Si es string numérico → convertir a número
+  else if (typeof value === 'string' && /^\d+$/.test(value)) {
+    normalizedValue = parseInt(value, 10);
+  }
+  // Si es número → validar rango
+  else if (typeof value === 'number') {
+    if (value < 1) {
+      throw new Error('activation_limit debe ser >= 1 o null (infinito)');
+    }
+    normalizedValue = value;
+  }
+  // Si es null → OK (infinito)
+  else if (value === null || value === undefined) {
+    normalizedValue = null;
+  }
+  else {
+    throw new Error(`activation_limit inválido: ${value} (debe ser número >= 1 o null)`);
+  }
+
+  // Validar domain
+  if (domain !== 'places' && domain !== 'projects') {
+    throw new Error(`domain inválido: ${domain} (debe ser 'places' o 'projects')`);
+  }
+
   logInfo('PlaceService', '[PLACE][LIMIT] Actualizando límite de activación', {
     student_id: studentId,
     domain,
-    value,
+    value_original: value,
+    value_normalized: normalizedValue,
     source,
     traceId: finalTraceId
   });
@@ -484,7 +516,7 @@ export async function updateActivationLimit(studentId, domain, value, source, op
     const limit = await activationLimitRepo.upsert({
       student_id: studentId,
       domain,
-      activation_limit: value,
+      activation_limit: normalizedValue,
       source
     });
 
@@ -507,7 +539,8 @@ export async function updateActivationLimit(studentId, domain, value, source, op
     logInfo('PlaceService', '[PLACE][LIMIT] Límite actualizado', {
       student_id: studentId,
       domain,
-      value,
+      activation_limit: normalizedValue,
+      source,
       traceId: finalTraceId
     });
 
