@@ -184,7 +184,8 @@ export async function listStudentsHandler(request, env, ctx) {
           student_id: s.id, // Alias para compatibilidad
           email: s.email,
           name: s.apodo || s.email,
-          apodo: s.apodo || null
+          apodo: s.apodo || null,
+          nombre_completo: s.nombre_completo || null
         })),
         total,
         limit,
