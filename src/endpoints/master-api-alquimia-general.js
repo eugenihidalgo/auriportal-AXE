@@ -11,7 +11,7 @@ import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
-  getStudentsForItem, markCleanStudent, markCleanAll, incrementAll, adjustRemaining
+  getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining
 } from '../services/alquimia-general-service.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
@@ -804,6 +804,34 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       return jsonSuccess({ state }, traceId);
     }
 
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (recurrente)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-pde-clean-all$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all');
+      const itemRef = params.item_ref;
+      const productKey = url.searchParams.get('product_key') || 'pde';
+      
+      // Obtener actor_id del contexto si existe
+      const ctx = {
+        actor_id: authCtx?.adminId || null
+      };
+
+      try {
+        const result = await markPdeCleanAll(itemRef, productKey, ctx);
+        return jsonSuccess({
+          data: result
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en markPdeCleanAll', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack,
+          itemRef
+        });
+        return jsonError(`Error en limpieza PDE: ${error.message}`, 'PDE_CLEAN_ERROR', 500, traceId);
+      }
+    }
+
     // POST /master/api/alquimia-general/items/:item_ref/master/increment-all (una_vez)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/increment-all$/) && method === 'POST') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/increment-all');
@@ -812,6 +840,34 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
       const result = await incrementAll(itemRef, productKey);
       return jsonSuccess(result, traceId);
+    }
+
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (recurrente)
+    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-pde-clean-all$/) && method === 'POST') {
+      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all');
+      const itemRef = params.item_ref;
+      const productKey = url.searchParams.get('product_key') || 'pde';
+      
+      // Obtener actor_id del contexto si existe
+      const ctx = {
+        actor_id: authCtx?.adminId || null
+      };
+
+      try {
+        const result = await markPdeCleanAll(itemRef, productKey, ctx);
+        return jsonSuccess({
+          data: result
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en markPdeCleanAll', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack,
+          itemRef
+        });
+        return jsonError(`Error en limpieza PDE: ${error.message}`, 'PDE_CLEAN_ERROR', 500, traceId);
+      }
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/adjust-remaining (una_vez)

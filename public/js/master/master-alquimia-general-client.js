@@ -332,12 +332,23 @@
     
     listaContent.style.display = 'block';
     
-    // Título
+    // Header con título y botón configurar
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;';
+    
     const title = document.createElement('h2');
-    // FIX: La tabla usa 'nombre', no 'list_name'
     title.textContent = state.listaActiva.nombre || state.listaActiva.list_name || 'Lista sin nombre';
-    title.className = 'text-2xl font-bold text-white mb-4';
-    listaContent.appendChild(title);
+    title.style.cssText = 'color: #f1f5f9; font-size: 1.5rem; font-weight: 700; margin: 0;';
+    header.appendChild(title);
+    
+    // Botón Configurar lista
+    const btnConfig = document.createElement('button');
+    btnConfig.textContent = '⚙ Configurar lista';
+    btnConfig.style.cssText = 'padding: 0.5rem 1rem; background: #64748b; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+    btnConfig.addEventListener('click', () => handleConfigurarLista());
+    header.appendChild(btnConfig);
+    
+    listaContent.appendChild(header);
 
     // Clasificaciones (category, subtype, tags)
     const classificationSection = document.createElement('div');
@@ -403,21 +414,17 @@
     const itemsList = document.createElement('div');
     itemsList.className = 'space-y-2';
     
-    // Botón "➕ Nuevo Item"
-    const btnNuevoItem = document.createElement('button');
-    btnNuevoItem.textContent = '➕ Nuevo Item';
-    btnNuevoItem.className = 'px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded transition-colors mb-3';
-    btnNuevoItem.style.cssText = 'padding: 0.5rem 1rem; background: #4f46e5; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; margin-bottom: 0.75rem;';
-    btnNuevoItem.addEventListener('click', () => handleCrearItem(state.listaActiva.id));
-    itemsList.appendChild(btnNuevoItem);
+    // Línea de creación inline (primera fila sticky)
+    const createRow = createItemCreationRow();
+    itemsList.appendChild(createRow);
     
+    // Items existentes
     state.items.forEach(item => {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'p-3 bg-slate-800 rounded border border-slate-700';
       itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;';
       
       const itemName = document.createElement('div');
-      // FIX: La tabla usa 'nombre', no 'name'
       itemName.textContent = item.nombre || item.name || 'Item sin nombre';
       itemName.style.cssText = 'color: #f1f5f9; font-weight: 500; flex: 1;';
       itemDiv.appendChild(itemName);
@@ -440,7 +447,21 @@
         btnLimpiar.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnLimpiar.addEventListener('click', () => handleLimpiarItem(item));
         actionsDiv.appendChild(btnLimpiar);
+        
+        // Botón PDE (solo para recurrentes)
+        const btnPde = document.createElement('button');
+        btnPde.textContent = 'PDE';
+        btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnPde.addEventListener('click', () => handlePdeCleanItem(item));
+        actionsDiv.appendChild(btnPde);
       }
+      
+      // Botón ELIMINAR (siempre visible)
+      const btnEliminar = document.createElement('button');
+      btnEliminar.textContent = '🗑';
+      btnEliminar.style.cssText = 'padding: 0.375rem 0.5rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+      btnEliminar.addEventListener('click', () => handleEliminarItem(item));
+      actionsDiv.appendChild(btnEliminar);
       
       itemDiv.appendChild(actionsDiv);
       itemsList.appendChild(itemDiv);
@@ -946,6 +967,383 @@
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       alert(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Crea la fila de creación inline de items
+   */
+  function createItemCreationRow() {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding: 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 0.5rem; margin-bottom: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;';
+    
+    // Nivel
+    const nivelLabel = document.createElement('label');
+    nivelLabel.textContent = 'Nivel:';
+    nivelLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
+    row.appendChild(nivelLabel);
+    
+    const nivelInput = document.createElement('input');
+    nivelInput.type = 'number';
+    nivelInput.min = '1';
+    nivelInput.max = '9';
+    nivelInput.value = '9';
+    nivelInput.style.cssText = 'width: 60px; padding: 0.375rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    row.appendChild(nivelInput);
+    
+    // Nombre (requerido)
+    const nombreLabel = document.createElement('label');
+    nombreLabel.textContent = 'Nombre:';
+    nombreLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; margin-left: 0.5rem;';
+    row.appendChild(nombreLabel);
+    
+    const nombreInput = document.createElement('input');
+    nombreInput.type = 'text';
+    nombreInput.placeholder = 'Nombre del item';
+    nombreInput.style.cssText = 'flex: 1; min-width: 200px; padding: 0.375rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    row.appendChild(nombreInput);
+    
+    // Descripción
+    const descInput = document.createElement('input');
+    descInput.type = 'text';
+    descInput.placeholder = 'Descripción (opcional)';
+    descInput.style.cssText = 'flex: 1; min-width: 200px; padding: 0.375rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    row.appendChild(descInput);
+    
+    // Recurrencia o veces (según tipo)
+    if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+      const diasLabel = document.createElement('label');
+      diasLabel.textContent = 'Días:';
+      diasLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; margin-left: 0.5rem;';
+      row.appendChild(diasLabel);
+      
+      const diasInput = document.createElement('input');
+      diasInput.type = 'number';
+      diasInput.min = '1';
+      diasInput.value = '7';
+      diasInput.placeholder = '7';
+      diasInput.style.cssText = 'width: 80px; padding: 0.375rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+      row.appendChild(diasInput);
+      
+      // Enter en cualquier campo crea el item
+      const createOnEnter = (e) => {
+        if (e.key === 'Enter' && nombreInput.value.trim()) {
+          handleCrearItemInline(nombreInput, descInput, nivelInput, diasInput, null);
+        }
+      };
+      nombreInput.addEventListener('keydown', createOnEnter);
+      descInput.addEventListener('keydown', createOnEnter);
+      nivelInput.addEventListener('keydown', createOnEnter);
+      diasInput.addEventListener('keydown', createOnEnter);
+    } else {
+      // una_vez
+      const vecesLabel = document.createElement('label');
+      vecesLabel.textContent = 'Veces:';
+      vecesLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; margin-left: 0.5rem;';
+      row.appendChild(vecesLabel);
+      
+      const vecesInput = document.createElement('input');
+      vecesInput.type = 'number';
+      vecesInput.min = '1';
+      vecesInput.value = '1';
+      vecesInput.style.cssText = 'width: 80px; padding: 0.375rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+      row.appendChild(vecesInput);
+      
+      const createOnEnter = (e) => {
+        if (e.key === 'Enter' && nombreInput.value.trim()) {
+          handleCrearItemInline(nombreInput, descInput, nivelInput, null, vecesInput);
+        }
+      };
+      nombreInput.addEventListener('keydown', createOnEnter);
+      descInput.addEventListener('keydown', createOnEnter);
+      nivelInput.addEventListener('keydown', createOnEnter);
+      vecesInput.addEventListener('keydown', createOnEnter);
+    }
+    
+    return row;
+  }
+
+  /**
+   * Maneja la creación inline de item (Enter-to-create)
+   */
+  async function handleCrearItemInline(nombreInput, descInput, nivelInput, diasInput, vecesInput) {
+    const nombre = nombreInput.value.trim();
+    if (!nombre) {
+      showWarning('El nombre es requerido');
+      return;
+    }
+
+    try {
+      const body = {
+        lista_id: state.listaActiva.id,
+        nombre,
+        descripcion: descInput.value.trim() || null,
+        nivel: parseInt(nivelInput.value) || 9
+      };
+
+      if (state.listaActiva.tipo === 'recurrente') {
+        body.frecuencia_dias = diasInput ? (parseInt(diasInput.value) || 7) : 7;
+      } else {
+        body.veces_limpiar = vecesInput ? (parseInt(vecesInput.value) || 1) : 1;
+      }
+
+      const response = await fetch('/master/api/alquimia-general/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error creando item');
+      }
+
+      // Limpiar inputs
+      nombreInput.value = '';
+      descInput.value = '';
+      nivelInput.value = '9';
+      if (diasInput) diasInput.value = '7';
+      if (vecesInput) vecesInput.value = '1';
+
+      // Refetch items
+      await loadItems(state.listaActiva.id);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error creando item inline:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Muestra warning visible (amarillo)
+   */
+  function showWarning(message) {
+    const warningBox = document.createElement('div');
+    warningBox.style.cssText = 'background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.5); border-radius: 0.375rem; padding: 0.75rem; margin: 0.5rem 0; color: #fde047; font-size: 0.875rem;';
+    warningBox.textContent = `⚠️ ${message}`;
+    const root = document.getElementById('master-alquimia-general-root');
+    if (root) {
+      root.appendChild(warningBox);
+      setTimeout(() => warningBox.remove(), 5000);
+    }
+  }
+
+  /**
+   * Maneja el click en botón PDE (limpieza PDE diaria)
+   */
+  async function handlePdeCleanItem(item) {
+    if (!item || !item.item_ref) {
+      console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      return;
+    }
+
+    if (!confirm('¿Registrar Limpieza PDE de hoy para todos los alumnos?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error en limpieza PDE');
+      }
+
+      const data = result.data || result;
+      const message = `PDE registrado: ${data.logged || 0} alumnos (fecha ${data.cleaned_date || 'hoy'})`;
+      showWarning(message);
+      
+      // Refetch items y flotante si está abierto
+      await loadItems(state.listaActiva.id);
+      // Si hay flotante abierto, recargarlo
+      const flotante = document.getElementById('flotante-ver-alquimia');
+      if (flotante) {
+        await handleVerItem(item);
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón Eliminar (soft delete)
+   */
+  async function handleEliminarItem(item) {
+    if (!item || !item.id) {
+      console.error('[MasterAlquimiaGeneral] Item sin id:', item);
+      return;
+    }
+
+    if (!confirm(`¿Eliminar el item "${item.nombre || item.name}"? (se archivará)`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.id}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error eliminando item');
+      }
+
+      // Refetch items
+      await loadItems(state.listaActiva.id);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error eliminando item:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón Configurar lista
+   */
+  function handleConfigurarLista() {
+    if (!state.listaActiva) return;
+
+    // Eliminar modal existente si hay
+    const existingModal = document.getElementById('modal-config-lista');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Crear overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-config-lista';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 2rem;';
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+
+    // Crear modal
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto;';
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 1rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;';
+    
+    const title = document.createElement('h3');
+    title.textContent = 'Configurar Lista';
+    title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin: 0;';
+    header.appendChild(title);
+
+    const btnCerrar = document.createElement('button');
+    btnCerrar.textContent = '❌';
+    btnCerrar.style.cssText = 'background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem;';
+    btnCerrar.addEventListener('click', () => overlay.remove());
+    header.appendChild(btnCerrar);
+
+    modal.appendChild(header);
+
+    // Contenido
+    const content = document.createElement('div');
+    content.style.cssText = 'padding: 1rem;';
+
+    // Nombre
+    const nombreLabel = document.createElement('label');
+    nombreLabel.textContent = 'Nombre:';
+    nombreLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    content.appendChild(nombreLabel);
+
+    const nombreInput = document.createElement('input');
+    nombreInput.type = 'text';
+    nombreInput.value = state.listaActiva.nombre || '';
+    nombreInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #f1f5f9; font-size: 0.875rem; margin-bottom: 1rem;';
+    
+    let nombreDebounceTimer;
+    nombreInput.addEventListener('input', () => {
+      clearTimeout(nombreDebounceTimer);
+      nombreDebounceTimer = setTimeout(() => {
+        updateListaMeta({ nombre: nombreInput.value.trim() });
+      }, 800);
+    });
+    content.appendChild(nombreInput);
+
+    // Descripción
+    const descLabel = document.createElement('label');
+    descLabel.textContent = 'Descripción:';
+    descLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    content.appendChild(descLabel);
+
+    const descTextarea = document.createElement('textarea');
+    descTextarea.value = state.listaActiva.descripcion || '';
+    descTextarea.rows = 3;
+    descTextarea.style.cssText = 'width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #f1f5f9; font-size: 0.875rem; margin-bottom: 1rem; resize: vertical;';
+    
+    let descDebounceTimer;
+    descTextarea.addEventListener('input', () => {
+      clearTimeout(descDebounceTimer);
+      descDebounceTimer = setTimeout(() => {
+        updateListaMeta({ descripcion: descTextarea.value.trim() });
+      }, 800);
+    });
+    content.appendChild(descTextarea);
+
+    // Clasificación (simplificada por ahora - TODO: implementar selectores editables completos)
+    const classLabel = document.createElement('label');
+    classLabel.textContent = 'Clasificación:';
+    classLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem; margin-top: 1rem;';
+    content.appendChild(classLabel);
+
+    const classInfo = document.createElement('div');
+    classInfo.style.cssText = 'padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #94a3b8; font-size: 0.875rem;';
+    classInfo.textContent = `Categoría: ${state.listaActiva.classification?.category_key || 'Sin categoría'} | Subclasificación: ${state.listaActiva.classification?.subtype_key || 'Sin subclasificación'} | Tags: ${(state.listaActiva.classification?.tags || []).join(', ') || 'Sin tags'}`;
+    content.appendChild(classInfo);
+
+    const classNote = document.createElement('div');
+    classNote.style.cssText = 'margin-top: 0.5rem; color: #64748b; font-size: 0.75rem; font-style: italic;';
+    classNote.textContent = 'Nota: Edición completa de clasificación pendiente (selectores editables con create-on-enter)';
+    content.appendChild(classNote);
+
+    modal.appendChild(content);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Cerrar con ESC
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  }
+
+  /**
+   * Actualiza metadata de lista (nombre/descripción)
+   */
+  async function updateListaMeta(patch) {
+    if (!state.listaActiva || !state.listaActiva.id) return;
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error actualizando lista');
+      }
+
+      // Refetch lista para obtener datos frescos
+      await loadLista(state.listaActiva.id);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error actualizando lista:', error);
+      showWarning(`Error: ${error.message}`);
     }
   }
 

@@ -9,6 +9,7 @@
 
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getDefaultMasterStudentTransmutationReadRepo } from '../infra/repos/master-student-transmutation-read-repo-pg.js';
+import { getDefaultPdeDailyCleanLogRepo } from '../infra/repos/pde-daily-clean-log-repo-pg.js';
 
 /**
  * Lista listas de transmutaciones según filtros
@@ -684,6 +685,139 @@ export async function adjustRemaining(studentId, itemRef, remaining, productKey 
       error: error.message,
       itemRef,
       studentId
+    });
+    throw error;
+  }
+}
+
+/**
+ * Marca limpieza PDE diaria para todos los alumnos (recurrente)
+ * Diferente de markCleanAll: registra en pde_daily_item_clean_log (append-only SOT)
+ * 
+ * @param {string} itemRef - item_ref del item
+ * @param {string} [productKey='pde'] - Clave del producto
+ * @param {Object} [ctx] - Contexto con actor_id (opcional)
+ * @returns {Promise<Object>} Objeto con { updated_students, logged, skipped, cleaned_date }
+ */
+export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
+  if (!itemRef) return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
+  
+  const traceId = getRequestId();
+  
+  try {
+    // Resolver itemRef → item_id
+    const item = await getItemByRef(itemRef);
+    if (!item || !item.id) {
+      logError('AlquimiaGeneralService', 'Item no encontrado para markPdeCleanAll', {
+        traceId,
+        itemRef
+      });
+      return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
+    }
+    
+    // Verificar que es recurrente (PDE solo para recurrentes)
+    const lista = await getListaById(item.lista_id);
+    if (!lista || lista.tipo !== 'recurrente') {
+      logWarn('AlquimiaGeneralService', 'markPdeCleanAll solo soportado para recurrentes', {
+        traceId,
+        itemRef,
+        tipo: lista?.tipo
+      });
+      return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
+    }
+    
+    const itemId = item.id;
+    
+    // Obtener todos los alumnos (misma selección que markCleanAll)
+    const domainKey = 'transmutaciones_energeticas';
+    const studentRepo = getDefaultMasterStudentTransmutationReadRepo();
+    
+    // Obtener lista de alumnos (query directa)
+    const { query } = await import('../../database/pg.js');
+    const alumnosResult = await query('SELECT id FROM alumnos', []);
+    const studentIds = alumnosResult.rows.map(row => row.id);
+    
+    if (studentIds.length === 0) {
+      return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
+    }
+    
+    // 1) Actualizar student_item_state (igual que markCleanAll con GREATEST)
+    const stateResult = await studentRepo.markCleanAll(itemId, productKey, domainKey);
+    const updatedStudents = stateResult?.updated || 0;
+    
+    // 2) Insertar logs en pde_daily_item_clean_log
+    const cleanedDate = new Date();
+    // Normalizar a fecha en timezone Europe/Madrid
+    const cleanedDateStr = cleanedDate.toISOString().split('T')[0];
+    
+    const logRepo = getDefaultPdeDailyCleanLogRepo();
+    const logResult = await logRepo.insertManyDailyLogs({
+      cleaned_date: cleanedDateStr,
+      item_ref: itemRef,
+      student_ids: studentIds,
+      actor_type: 'master',
+      actor_id: ctx.actor_id || null,
+      trace_id: traceId,
+      meta: {
+        item_id: itemId,
+        lista_id: item.lista_id,
+        product_key: productKey
+      }
+    });
+    
+    const logged = logResult.inserted || 0;
+    const skipped = logResult.skipped || 0;
+    
+    // 3) Emitir señales (fail-open)
+    try {
+      const { emitSignal } = await import('./pde-signal-emitter.js');
+      
+      await emitSignal('clean.executed', {
+        signal: 'clean.executed',
+        scope: 'pde_daily',
+        student_id: null,
+        item_id: itemId,
+        item_ref: itemRef,
+        domain: 'transmutation',
+        product_key: productKey,
+        source: 'master',
+        executed_at: cleanedDate.toISOString(),
+        cleaned_date: cleanedDateStr
+      }, {}, {}, {
+        trace_id: traceId,
+        source: 'alquimia-general-service',
+        action: 'markPdeCleanAll'
+      });
+    } catch (signalError) {
+      logError('AlquimiaGeneralService', 'Error emitiendo señales en markPdeCleanAll', {
+        traceId,
+        error: signalError.message,
+        itemRef
+      });
+    }
+    
+    logInfo('AlquimiaGeneralService', 'markPdeCleanAll completado', {
+      traceId,
+      itemRef,
+      updated_students: updatedStudents,
+      logged,
+      skipped,
+      cleaned_date: cleanedDateStr
+    });
+    
+    return {
+      updated_students: updatedStudents,
+      logged,
+      skipped,
+      cleaned_date: cleanedDateStr
+    };
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en markPdeCleanAll', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      itemRef
     });
     throw error;
   }

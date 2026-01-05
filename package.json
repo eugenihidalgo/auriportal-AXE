@@ -1,6 +1,6 @@
 {
   "name": "auriportal-server",
-  "version": "5.30.1-master-alquimia-fix-ver-students-payload",
+  "version": "5.31.0-master-alquimia-quick-create-list-config-pde-clean",
   "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
   "main": "server.js",
   "type": "module",
