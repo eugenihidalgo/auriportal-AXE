@@ -414,14 +414,35 @@
     state.items.forEach(item => {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'p-3 bg-slate-800 rounded border border-slate-700';
-      itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem;';
+      itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;';
       
       const itemName = document.createElement('div');
       // FIX: La tabla usa 'nombre', no 'name'
       itemName.textContent = item.nombre || item.name || 'Item sin nombre';
-      itemName.style.cssText = 'color: #f1f5f9; font-weight: 500;';
+      itemName.style.cssText = 'color: #f1f5f9; font-weight: 500; flex: 1;';
       itemDiv.appendChild(itemName);
       
+      // Botones de acción
+      const actionsDiv = document.createElement('div');
+      actionsDiv.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+      
+      // Botón VER (siempre visible)
+      const btnVer = document.createElement('button');
+      btnVer.textContent = 'VER';
+      btnVer.style.cssText = 'padding: 0.375rem 0.75rem; background: #3b82f6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+      btnVer.addEventListener('click', () => handleVerItem(item));
+      actionsDiv.appendChild(btnVer);
+      
+      // Botón LIMPIAR (solo para recurrentes)
+      if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+        const btnLimpiar = document.createElement('button');
+        btnLimpiar.textContent = '🟢 Limpiar';
+        btnLimpiar.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnLimpiar.addEventListener('click', () => handleLimpiarItem(item));
+        actionsDiv.appendChild(btnLimpiar);
+      }
+      
+      itemDiv.appendChild(actionsDiv);
       itemsList.appendChild(itemDiv);
     });
     
@@ -510,6 +531,308 @@
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando item:', error);
       alert(`Error creando item: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón VER (abre flotante)
+   */
+  async function handleVerItem(item) {
+    if (!item || !item.item_ref) {
+      console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      return;
+    }
+
+    try {
+      // Cargar estudiantes para este item
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students`);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error cargando estudiantes');
+      }
+
+      // Mostrar flotante
+      showFlotanteVer(item, result.data);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error abriendo flotante:', error);
+      alert(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón LIMPIAR (limpieza global)
+   */
+  async function handleLimpiarItem(item) {
+    if (!item || !item.item_ref) {
+      console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      return;
+    }
+
+    if (!confirm(`¿Limpiar este item para TODOS los alumnos?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error limpiando item');
+      }
+
+      console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', result);
+      alert(`Item limpiado para ${result.updated || 0} alumnos`);
+      
+      // Recargar items para refrescar estado
+      if (state.listaActiva && state.listaActiva.id) {
+        await loadItems(state.listaActiva.id);
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
+      alert(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Muestra el flotante VER con estudiantes agrupados por estado
+   */
+  function showFlotanteVer(item, data) {
+    // Eliminar flotante existente si hay
+    const existingFlotante = document.getElementById('flotante-ver-alquimia');
+    if (existingFlotante) {
+      existingFlotante.remove();
+    }
+
+    // Crear overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'flotante-ver-alquimia';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 2rem;';
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+
+    // Crear modal
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; max-width: 90vw; max-height: 80vh; width: 1000px; display: flex; flex-direction: column; overflow: hidden;';
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 1rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;';
+    
+    const title = document.createElement('h3');
+    title.textContent = item.nombre || item.name || 'Item sin nombre';
+    title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin: 0;';
+    header.appendChild(title);
+
+    const btnCerrar = document.createElement('button');
+    btnCerrar.textContent = '❌';
+    btnCerrar.style.cssText = 'background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem;';
+    btnCerrar.addEventListener('click', () => overlay.remove());
+    header.appendChild(btnCerrar);
+
+    modal.appendChild(header);
+
+    // Contenido (scrollable)
+    const content = document.createElement('div');
+    content.style.cssText = 'padding: 1rem; overflow-y: auto; flex: 1;';
+    
+    // Agrupar estudiantes por estado
+    const studentsByState = {
+      reviewed: [],
+      pending: [],
+      important: [],
+      never: []
+    };
+
+    if (data.students) {
+      data.students.forEach(student => {
+        const state = student.state || 'never';
+        if (studentsByState[state]) {
+          studentsByState[state].push(student);
+        }
+      });
+    }
+
+    // Renderizar columnas por estado
+    const columnsContainer = document.createElement('div');
+    columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
+
+    // 🟢 REVISADO
+    const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, data);
+    columnsContainer.appendChild(colReviewed);
+
+    // 🟡 PENDIENTE
+    const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, data);
+    columnsContainer.appendChild(colPending);
+
+    // 🔴 IMPORTANTE REVISAR
+    const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, data);
+    columnsContainer.appendChild(colImportant);
+
+    // ⚪ NUNCA (colapsable)
+    const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, data, true);
+    columnsContainer.appendChild(colNever);
+
+    content.appendChild(columnsContainer);
+    modal.appendChild(content);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Cerrar con ESC
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  }
+
+  /**
+   * Crea una columna de estado con estudiantes
+   */
+  function createStateColumn(title, students, stateKey, item, data, collapsable = false) {
+    const column = document.createElement('div');
+    column.style.cssText = 'display: flex; flex-direction: column;';
+
+    // Header de columna
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.875rem; cursor: pointer;';
+    
+    // Color según estado
+    if (stateKey === 'reviewed') {
+      header.style.cssText += 'background: rgba(34, 197, 94, 0.3); color: #86efac;';
+    } else if (stateKey === 'pending') {
+      header.style.cssText += 'background: rgba(234, 179, 8, 0.3); color: #fde047;';
+    } else if (stateKey === 'important') {
+      header.style.cssText += 'background: rgba(239, 68, 68, 0.3); color: #fca5a5;';
+    } else {
+      header.style.cssText += 'background: rgba(148, 163, 184, 0.3); color: #cbd5e1;';
+    }
+
+    const titleText = document.createElement('span');
+    titleText.textContent = `${title} (${students.length})`;
+    header.appendChild(titleText);
+
+    // Botón colapsar (solo para NUNCA)
+    if (collapsable) {
+      const collapseIcon = document.createElement('span');
+      collapseIcon.textContent = ' ▼';
+      collapseIcon.style.cssText = 'float: right;';
+      header.appendChild(collapseIcon);
+      
+      let isCollapsed = true; // Colapsado por defecto
+      const studentsContainer = document.createElement('div');
+      studentsContainer.style.cssText = 'display: none;'; // Oculto por defecto
+      
+      header.addEventListener('click', () => {
+        isCollapsed = !isCollapsed;
+        collapseIcon.textContent = isCollapsed ? ' ▼' : ' ▲';
+        studentsContainer.style.display = isCollapsed ? 'none' : 'block';
+      });
+
+      column.appendChild(header);
+      column.appendChild(studentsContainer);
+      
+      // Renderizar estudiantes
+      students.forEach(student => {
+        const studentDiv = createStudentRow(student, stateKey, item, data);
+        studentsContainer.appendChild(studentDiv);
+      });
+    } else {
+      column.appendChild(header);
+      
+      // Renderizar estudiantes
+      students.forEach(student => {
+        const studentDiv = createStudentRow(student, stateKey, item, data);
+        column.appendChild(studentDiv);
+      });
+    }
+
+    return column;
+  }
+
+  /**
+   * Crea una fila de estudiante
+   */
+  function createStudentRow(student, stateKey, item, data) {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center;';
+    
+    // Color de fondo según estado
+    if (stateKey === 'reviewed') {
+      row.style.cssText += 'background: rgba(34, 197, 94, 0.1);';
+    } else if (stateKey === 'pending') {
+      row.style.cssText += 'background: rgba(234, 179, 8, 0.1);';
+    } else if (stateKey === 'important') {
+      row.style.cssText += 'background: rgba(239, 68, 68, 0.1);';
+    } else {
+      row.style.cssText += 'background: rgba(148, 163, 184, 0.1);';
+    }
+
+    const nameDiv = document.createElement('div');
+    nameDiv.textContent = student.display_name || student.student_name || student.student_email || 'Sin nombre';
+    nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem; flex: 1;';
+    row.appendChild(nameDiv);
+
+    // Botón ✓ para limpiar individual (excepto REVISADO)
+    if (stateKey !== 'reviewed') {
+      const btnClean = document.createElement('button');
+      btnClean.textContent = '✓';
+      btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
+      btnClean.addEventListener('click', async () => {
+        await handleLimpiarEstudiante(student, item);
+      });
+      row.appendChild(btnClean);
+    }
+
+    return row;
+  }
+
+  /**
+   * Maneja la limpieza individual de un estudiante
+   */
+  async function handleLimpiarEstudiante(student, item) {
+    if (!item || !item.item_ref || !student || !student.student_id) {
+      console.error('[MasterAlquimiaGeneral] Datos incompletos para limpiar:', { item, student });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          student_id: student.student_id
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error limpiando estudiante');
+      }
+
+      console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
+      
+      // Recargar flotante
+      await handleVerItem(item);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
+      alert(`Error: ${error.message}`);
     }
   }
 

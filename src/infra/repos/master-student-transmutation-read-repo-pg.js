@@ -180,8 +180,11 @@ export class MasterStudentTransmutationReadRepoPg {
        DO UPDATE SET
          item_id = $4,
          domain_key = $3,
-         last_cleaned_at = NOW(),
-         clean_count = student_item_state.clean_count + 1,
+         last_cleaned_at = GREATEST(student_item_state.last_cleaned_at, NOW()),
+         clean_count = CASE 
+           WHEN student_item_state.last_cleaned_at < NOW() THEN student_item_state.clean_count + 1
+           ELSE student_item_state.clean_count
+         END,
          recommended_recurrence_days = $6,
          is_active = true,
          updated_at = NOW()
@@ -240,8 +243,11 @@ export class MasterStudentTransmutationReadRepoPg {
          DO UPDATE SET
            item_id = $4,
            domain_key = $3,
-           last_cleaned_at = NOW(),
-           clean_count = student_item_state.clean_count + 1,
+           last_cleaned_at = GREATEST(student_item_state.last_cleaned_at, NOW()),
+           clean_count = CASE 
+             WHEN student_item_state.last_cleaned_at < NOW() THEN student_item_state.clean_count + 1
+             ELSE student_item_state.clean_count
+           END,
            recommended_recurrence_days = $6,
            is_active = true,
            updated_at = NOW()

@@ -319,8 +319,8 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         
         let state;
         if (daysSince === null) {
-          // Nunca limpiado → PENDIENTE
-          state = 'pending';
+          // Nunca limpiado → NUNCA (sección colapsable)
+          state = 'never';
         } else if (daysSince < thresholdDays) {
           // Última ejecución < threshold_days → REVISADO
           state = 'reviewed';
@@ -344,7 +344,8 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       const counts = {
         reviewed: students.filter(s => s.state === 'reviewed').length,
         pending: students.filter(s => s.state === 'pending').length,
-        important: students.filter(s => s.state === 'important').length
+        important: students.filter(s => s.state === 'important').length,
+        never: students.filter(s => s.state === 'never').length
       };
 
       return {
