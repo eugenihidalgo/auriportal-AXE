@@ -13,7 +13,7 @@ export default async function masterTemploLuzAlquimiaGeneralHandler(request, env
   
   // Contenedor HTML mínimo - el cliente JS construye todo con DOM API
   const contentHtml = `
-    <div class="p-6">
+    <div id="master-alquimia-general-root" class="p-6">
       <div class="mb-6">
         <h1 class="text-3xl font-bold text-white mb-2">🔮 Alquimia General</h1>
         <p class="text-slate-400">Source of Truth canónico - Biblioteca Maestra para gestión de transmutaciones.</p>
@@ -53,5 +53,3 @@ export default async function masterTemploLuzAlquimiaGeneralHandler(request, env
     universeId: 'templo_luz'
   });
 }
-
-

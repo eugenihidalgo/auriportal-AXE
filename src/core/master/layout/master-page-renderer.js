@@ -153,35 +153,7 @@ export async function renderMasterPage(options = {}) {
   try {
     const registryContent = readFileSync(registryPath, 'utf-8');
     const registry = JSON.parse(registryContent);
-    const rawScripts = registry.required_scripts || [];
-    
-    // Normalizar: convertir strings a objetos si es necesario (compatibilidad backward)
-    requiredScripts = rawScripts.map(script => {
-      if (typeof script === 'string') {
-        // String legacy: convertir a objeto
-        const path = script;
-        const id = path.split('/').pop().replace('.js', '');
-        return {
-          id,
-          path,
-          type: 'module',
-          required: true,
-          critical: false,
-          phase: 'ui',
-          name: id
-        };
-      }
-      // Ya es objeto, asegurar campos requeridos
-      return {
-        id: script.id || script.path?.split('/').pop().replace('.js', ''),
-        path: script.path || script.src,
-        type: script.type || 'module',
-        required: script.required !== false,
-        critical: script.critical === true,
-        phase: script.phase || 'ui',
-        name: script.name || script.id || script.path?.split('/').pop().replace('.js', '')
-      };
-    });
+    requiredScripts = registry.required_scripts || [];
   } catch (error) {
     logError('MasterPageRenderer', 'Error cargando required_scripts del contrato', {
       error: error.message,
@@ -268,4 +240,3 @@ export async function renderMasterPage(options = {}) {
   
   return renderHtml(html);
 }
-

@@ -137,7 +137,26 @@
       "critical": false,
       "phase": "ui",
       "name": "Master Alquimia General Client"
+    },
+    {
+      "id": "master-alumnos-client",
+      "guard_id": "ALUMNOS_CLIENT",
+      "path": "/js/master/master-alumnos-client.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Master Alumnos Client"
+    },
+    {
+      "id": "master-lugares-client",
+      "guard_id": "LUGARES_CLIENT",
+      "path": "/js/master/master-lugares-client.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Master Lugares Client"
     }
   ]
 }
-
