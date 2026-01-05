@@ -373,6 +373,152 @@ export const STUDENT_SIGNAL_REGISTRY = {
       source: 'Origen del límite (default, master, automation)',
       trace_id: 'ID de traza'
     }
+  },
+
+  // ============================================
+  // PROJECT SIGNALS (Sistema de Proyectos v1)
+  // ============================================
+  'project.activated': {
+    key: 'project.activated',
+    description: 'Se emite cuando se activa un proyecto para un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      project_id: 'ID del proyecto',
+      project_state_id: 'ID del estado alumno-proyecto',
+      actor_type: 'Tipo de actor (master, student, system)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.deactivated': {
+    key: 'project.deactivated',
+    description: 'Se emite cuando se desactiva un proyecto para un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      project_id: 'ID del proyecto',
+      project_state_id: 'ID del estado alumno-proyecto',
+      actor_type: 'Tipo de actor',
+      reason: 'Razón de desactivación (opcional)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.cleaned': {
+    key: 'project.cleaned',
+    description: 'Se emite cuando se limpia/revisa un proyecto',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      project_id: 'ID del proyecto',
+      project_state_id: 'ID del estado alumno-proyecto',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.cleaned.bulk': {
+    key: 'project.cleaned.bulk',
+    description: 'Se emite cuando se limpian múltiples proyectos seleccionados',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      project_state_ids: 'Array de IDs de estados limpiados',
+      items_count: 'Número de proyectos limpiados',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.cleaned.all': {
+    key: 'project.cleaned.all',
+    description: 'Se emite cuando se limpian TODOS los proyectos activos',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      items_count: 'Número de proyectos limpiados',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.deactivated.all': {
+    key: 'project.deactivated.all',
+    description: 'Se emite cuando se desactivan todos los proyectos (p.ej., por pausa de suscripción)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      items_count: 'Número de proyectos desactivados',
+      reason: 'Razón de desactivación masiva',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.category.created': {
+    key: 'project.category.created',
+    description: 'Se emite cuando se crea una categoría de proyecto',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.category.updated': {
+    key: 'project.category.updated',
+    description: 'Se emite cuando se actualiza una categoría de proyecto',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.category.reordered': {
+    key: 'project.category.reordered',
+    description: 'Se emite cuando se reordena el orden de categorías',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_ids: 'Array de IDs en nuevo orden',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.category.deactivated': {
+    key: 'project.category.deactivated',
+    description: 'Se emite cuando se desactiva una categoría de proyecto',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'project.activation_limit.updated': {
+    key: 'project.activation_limit.updated',
+    description: 'Se emite cuando se actualiza el límite de activación de proyectos de un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      domain: 'Dominio (places, projects)',
+      activation_limit: 'Nuevo límite (NULL = ilimitado)',
+      source: 'Origen del límite (default, master, automation)',
+      trace_id: 'ID de traza'
+    }
   }
 };
 

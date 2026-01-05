@@ -102,6 +102,23 @@ const MASTER_HANDLER_MAP = {
   'master-api-places-catalog': () => import('../../../endpoints/master-api-places-catalog.js'),
   'master-api-places-catalog-id': () => import('../../../endpoints/master-api-places-catalog.js'),
   
+  // Projects API Handlers (SISTEMA DE PROYECTOS v1)
+  'master-api-projects-active': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-clean': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-clean-bulk': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-clean-all': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-student': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-activate': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-deactivate': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-limit': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-state-id': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-projects-create-for-student': () => import('../../../endpoints/master-api-projects.js'),
+  'master-api-project-categories': () => import('../../../endpoints/master-api-project-categories.js'),
+  'master-api-project-categories-id': () => import('../../../endpoints/master-api-project-categories.js'),
+  'master-api-project-categories-reorder': () => import('../../../endpoints/master-api-project-categories.js'),
+  'master-api-projects-catalog': () => import('../../../endpoints/master-api-projects-catalog.js'),
+  'master-api-projects-catalog-id': () => import('../../../endpoints/master-api-projects-catalog.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),

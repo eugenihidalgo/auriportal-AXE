@@ -39,9 +39,9 @@ export class StudentActivationLimitRepoPg {
   }
 
   async getDefaultLimit(domain) {
-    // Límite por defecto del sistema: 1 para places
+    // Límite por defecto del sistema: 1 para places y projects
     // NULL = ilimitado (solo para Master)
-    if (domain === 'places') {
+    if (domain === 'places' || domain === 'projects') {
       return 1;
     }
     return null;

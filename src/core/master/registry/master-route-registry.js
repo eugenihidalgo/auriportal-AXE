@@ -376,6 +376,100 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API PROJECTS (Sistema de Proyectos v1)
+  // ============================================
+  {
+    key: 'master-api-projects-active',
+    path: '/master/api/projects/active',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-projects-clean',
+    path: '/master/api/projects/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-clean-bulk',
+    path: '/master/api/projects/clean-bulk',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-clean-all',
+    path: '/master/api/projects/clean-all',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-student',
+    path: '/master/api/projects/student/:student_id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-projects-activate',
+    path: '/master/api/projects/activate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-deactivate',
+    path: '/master/api/projects/deactivate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-limit',
+    path: '/master/api/projects/limit',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-state-id',
+    path: '/master/api/projects/state/:id',
+    type: 'api',
+    method: 'PATCH'
+  },
+  {
+    key: 'master-api-projects-create-for-student',
+    path: '/master/api/projects/create-for-student',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-project-categories',
+    path: '/master/api/project-categories',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-project-categories-id',
+    path: '/master/api/project-categories/:id',
+    type: 'api'
+    // Handler maneja: GET, PATCH, DELETE
+  },
+  {
+    key: 'master-api-project-categories-reorder',
+    path: '/master/api/project-categories/reorder',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-projects-catalog',
+    path: '/master/api/projects-catalog',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-projects-catalog-id',
+    path: '/master/api/projects-catalog/:id',
+    type: 'api'
+    // Handler maneja: GET, PATCH, DELETE
+  },
+  
+  // ============================================
   // RUTAS UI (Island)
   // ============================================
   {

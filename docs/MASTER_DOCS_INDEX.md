@@ -16,6 +16,7 @@
 - ✅ **MASTER Layout/System:** 15+ documentos
 - ✅ **Alquimia General:** 5+ documentos
 - ✅ **Lugares:** 3+ documentos
+- ✅ **Proyectos:** 3 documentos (sistema completo + forensics + diagnóstico histórico)
 - ✅ **Clasificaciones/Tags:** 6+ documentos
 - ✅ **Diagnósticos recientes:** 2 documentos principales
 
@@ -291,6 +292,60 @@
 
 ---
 
+## 📜 SECCIÓN 3.5: PROYECTOS
+
+### 3.5.1 Documentación Principal
+
+#### `docs/master/MASTER_PROJECTS_SYSTEM_V1.md`
+- **Tipo:** Sistema canónico completo
+- **Fecha:** 2026-01-05
+- **Estado:** ✅ CERRADO Y FUNCIONAL
+- **Contenido:**
+  - Sistema canónico para gestión de proyectos asociados a alumnos
+  - Modelo de datos (tablas: `project_categories`, `projects_catalog`, `student_project_state`, `student_activation_limits`)
+  - Servicios canónicos (`activateProject`, `deactivateProject`, `cleanProject`, `cleanSelectedProjects`, `cleanAllActiveProjects`, `handleSubscriptionPauseProjects`, `updateActivationLimit`, `createProjectForStudent`)
+  - Señales registradas (`project.activated`, `project.deactivated`, `project.cleaned`, etc.)
+  - Endpoints API MASTER (`/master/api/projects/*`, `/master/api/projects-catalog/*`, `/master/api/project-categories/*`)
+  - UI MASTER (`/master/templo-luz/proyectos`) con 3 tabs:
+    - TAB 1: Proyectos Activos (ordenación jerárquica por prioridades)
+    - TAB 2: Configuración por Alumno (gestión individual + crear proyecto)
+    - TAB 3: Clasificaciones (CRUD de categorías)
+  - Reglas canónicas (límites de activación, salud y limpieza, suscripción pausada)
+  - Casos límite documentados
+  - Checklist de validación
+  - Order Pipeline Contract (ordenación jerárquica)
+  - Verificación de ejecución real (BUILD_STAMP)
+- **Referencias:** `src/services/project-service.js`, `src/endpoints/master-api-projects.js`, `public/js/master/master-proyectos-client.js`
+
+#### `docs/master/MASTER_PROJECTS_ASSET_EXECUTION_FORENSICS.md`
+- **Tipo:** Forensics de ejecución de assets
+- **Fecha:** 2026-01-05
+- **Contenido:**
+  - Verificación forense de que el código de `master-proyectos-client.js` se ejecuta realmente en producción
+  - BUILD_STAMP inequívoco (`window.__AP_MASTER_PROYECTOS_STAMP__`)
+  - Procedimiento de verificación
+  - Debug mode
+- **Referencias:** `public/js/master/master-proyectos-client.js`
+
+### 3.5.2 Diagnóstico (Histórico)
+
+#### `docs/master/MASTER_PROJECTS_DIAGNOSTIC.md`
+- **Tipo:** Diagnóstico exhaustivo (histórico)
+- **Fecha:** 2026-01-05
+- **Estado:** ✅ COMPLETADO (mantener como histórico)
+- **Contenido:**
+  - Resumen ejecutivo: No existe sistema canónico de Proyectos en MASTER
+  - Qué EXISTE: Ruta placeholder, soporte en `student_activation_limits`, referencias legacy
+  - Qué NO EXISTE: Tablas canónicas, repositorios, servicio, endpoints, señales, UI, documentación
+  - Estado de base de datos (tablas existentes vs requeridas)
+  - Comparación: Lugares vs Proyectos
+  - Recomendación: Crear sistema canónico nuevo espejo de Lugares
+  - Checklist de verificación post-implementación
+  - Notas técnicas (reutilización de código, aislamiento de legacy)
+- **Referencias:** `src/endpoints/master-templo-luz-proyectos.js`, `docs/master/MASTER_PLACES_SYSTEM_V1.md`
+
+---
+
 ## 🏷️ SECCIÓN 4: CLASIFICACIONES Y TAGS
 
 ### 4.1 Clasificaciones (Categories/Subtypes)
@@ -518,6 +573,7 @@
 
 - ✅ **MASTER Layout/System:** Completamente documentado (15+ documentos)
 - ✅ **Lugares:** Completamente documentado (3 documentos principales)
+- ✅ **Proyectos:** Sistema canónico completo implementado (espejo de Lugares)
 - ✅ **Clasificaciones/Tags:** Completamente documentado (6+ documentos)
 - ⚠️ **Alquimia General:** Bien documentado pero con algunos huecos (5+ documentos)
 
