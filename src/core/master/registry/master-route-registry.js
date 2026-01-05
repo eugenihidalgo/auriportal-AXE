@@ -125,6 +125,22 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API ALQUIMIA POR ALUMNO
+  // ============================================
+  {
+    key: 'master-api-alquimia-alumno',
+    path: '/master/api/alquimia/alumno/:student_id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-alquimia-clean',
+    path: '/master/api/alquimia/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  
+  // ============================================
   // RUTAS API TAGS (TAG SOT GLOBAL v1)
   // ============================================
   // Las rutas /master/api/** deben declararse explícitamente como api.
@@ -171,6 +187,177 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API STUDENTS (Diagnóstico v1)
+  // ============================================
+  {
+    key: 'master-api-students',
+    path: '/master/api/students',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-students-id',
+    path: '/master/api/students/:id',
+    type: 'api',
+    method: 'GET'
+  },
+  
+  // ============================================
+  // RUTAS API UTE (UTE CORE v1)
+  // ============================================
+  {
+    key: 'master-api-ute-definitions',
+    path: '/master/api/ute/definitions',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-ute-states',
+    path: '/master/api/ute/:ute_id/states',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-ute-execute',
+    path: '/master/api/ute/:ute_id/execute',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-ute-execute-global',
+    path: '/master/api/ute/:ute_id/execute_global',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-ute-recompute',
+    path: '/master/api/ute/:ute_id/recompute',
+    type: 'api',
+    method: 'POST'
+  },
+  // ============================================
+  // RUTAS API ORIGIN CONTRACT v1
+  // ============================================
+  {
+    key: 'master-api-origins',
+    path: '/master/api/origins',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-origin-detail',
+    path: '/master/api/origins/:origin_key',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-origin-update',
+    path: '/master/api/origins/:origin_key',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-origin-archive',
+    path: '/master/api/origins/:origin_key/archive',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-origin-delete',
+    path: '/master/api/origins/:origin_key/delete',
+    type: 'api',
+    method: 'POST'
+  },
+  
+  // ============================================
+  // RUTAS API PLACES (Sistema de Lugares v1)
+  // ============================================
+  {
+    key: 'master-api-places-active',
+    path: '/master/api/places/active',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-places-clean',
+    path: '/master/api/places/clean',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-clean-bulk',
+    path: '/master/api/places/clean-bulk',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-clean-all',
+    path: '/master/api/places/clean-all',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-student',
+    path: '/master/api/places/student/:student_id',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-places-activate',
+    path: '/master/api/places/activate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-deactivate',
+    path: '/master/api/places/deactivate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-limit',
+    path: '/master/api/places/limit',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-state-id',
+    path: '/master/api/places/state/:id',
+    type: 'api',
+    method: 'PATCH'
+  },
+  {
+    key: 'master-api-place-categories',
+    path: '/master/api/place-categories',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-place-categories-id',
+    path: '/master/api/place-categories/:id',
+    type: 'api'
+    // Handler maneja: GET, PATCH, DELETE
+  },
+  {
+    key: 'master-api-place-categories-reorder',
+    path: '/master/api/place-categories/reorder',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-places-catalog',
+    path: '/master/api/places-catalog',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-places-catalog-id',
+    path: '/master/api/places-catalog/:id',
+    type: 'api'
+    // Handler maneja: GET, PATCH, DELETE
+  },
+  
+  // ============================================
   // RUTAS UI (Island)
   // ============================================
   {
@@ -191,6 +378,21 @@ export const MASTER_ROUTES = [
   {
     key: 'master-alumnos',
     path: '/master/alumnos',
+    type: 'island'
+  },
+  {
+    key: 'master-alumnos-postgresql',
+    path: '/master/alumnos/postgresql',
+    type: 'island'
+  },
+  {
+    key: 'master-alumnos-alumnos',
+    path: '/master/alumnos/alumnos',
+    type: 'island'
+  },
+  {
+    key: 'master-alumnos-info',
+    path: '/master/alumnos/info',
     type: 'island'
   },
   {
@@ -292,10 +494,25 @@ export function validateMasterRouteRegistry() {
       errors.push(`Ruta API ${route.key} no empieza con /master/api/: ${route.path}`);
     }
     
-    // Validar que no hay duplicados
-    const duplicates = MASTER_ROUTES.filter(r => r.path === route.path && r.key !== route.key);
+    // Validar que no hay duplicados (considerando método HTTP si está presente)
+    const duplicates = MASTER_ROUTES.filter(r => {
+      // Misma ruta (mismo path y diferente key)
+      if (r.path !== route.path || r.key === route.key) {
+        return false;
+      }
+      // Si ambas rutas tienen método especificado, son duplicados solo si el método es igual
+      if (route.method && r.method) {
+        return route.method === r.method;
+      }
+      // Si una tiene método y otra no, NO son duplicados (una es específica, otra genérica)
+      if (route.method || r.method) {
+        return false;
+      }
+      // Si ninguna tiene método, son duplicados (ambas son genéricas)
+      return true;
+    });
     if (duplicates.length > 0) {
-      errors.push(`Ruta duplicada: ${route.path} (keys: ${route.key}, ${duplicates.map(d => d.key).join(', ')})`);
+      errors.push(`Ruta duplicada: ${route.path}${route.method ? ` (${route.method})` : ''} (keys: ${route.key}, ${duplicates.map(d => `${d.key}${d.method ? ` (${d.method})` : ''}`).join(', ')})`);
     }
     
     // Validar que tiene key

@@ -498,9 +498,10 @@ export async function updateListClassification(listId, classification) {
     }
     
     // Para tags: SOLO eliminar/reinsertar si tags está explícitamente definido
-    // FIX v5.52.0: Si tags es undefined, NO tocar los tags existentes
+    // FIX v5.52.0 + v5.53.1: Si tags es undefined o null, NO tocar los tags existentes
     // Esto permite que updateListaTags() gestione los tags sin interferencia
-    if (tags !== undefined) {
+    // IMPORTANTE: tags debe ser explícitamente un array (no undefined, no null) para reemplazar
+    if (tags !== undefined && tags !== null) {
       // Eliminar todos los tags existentes y reinsertar
       await query(
         `DELETE FROM transmutacion_lista_classifications tlc

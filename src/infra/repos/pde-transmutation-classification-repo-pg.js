@@ -447,6 +447,13 @@ export class PdeTransmutationClassificationRepoPg extends PdeTransmutationClassi
       }
     }
     
+    // FIX v5.52.0: Log de lectura de tags para debugging
+    // console.log('[CLASSIFICATION][TAG][READ]', {
+    //   lista_id: listId,
+    //   tags_count: tagsArray.length,
+    //   tags: tagsArray
+    // });
+    
     return {
       id: row.id,
       nombre: row.nombre,

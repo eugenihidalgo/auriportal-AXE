@@ -42,13 +42,16 @@ export class MasterStudentTransmutationReadRepoPg {
     const { limit, offset = 0 } = options;
     const queryFn = client ? client.query.bind(client) : query;
 
-    // Obtener TODOS los alumnos activos, con su estado si existe
+    // Obtener TODOS los alumnos, con su estado si existe
     // LEFT JOIN para incluir alumnos sin estado aún
+    // NO filtrar por status - datos RAW
     let sql = `
       SELECT 
         a.id as student_id,
         COALESCE(a.nombre_completo, a.apodo, a.email) as student_name,
         a.email as student_email,
+        a.apodo,
+        a.nombre_completo,
         s.last_cleaned_at,
         s.clean_count,
         s.recommended_recurrence_days,
@@ -62,8 +65,7 @@ export class MasterStudentTransmutationReadRepoPg {
         AND s.product_key = $1
         AND s.domain_type = 'transmutation'
         AND s.item_ref = $2
-        AND s.status = 'active'
-      WHERE a.status = 'active'
+        AND s.is_active = true
       ORDER BY a.nombre_completo ASC, a.email ASC
     `;
 
@@ -93,6 +95,8 @@ export class MasterStudentTransmutationReadRepoPg {
           student_id: row.student_id,
           student_name: row.student_name || row.student_email || 'Sin nombre',
           student_email: row.student_email,
+          apodo: row.apodo,
+          nombre_completo: row.nombre_completo,
           days_since_last_clean: daysSinceLastClean,
           last_cleaned_at: row.last_cleaned_at,
           clean_count: row.clean_count || 0,
@@ -115,6 +119,8 @@ export class MasterStudentTransmutationReadRepoPg {
           student_id: row.student_id,
           student_name: row.student_name || row.student_email || 'Sin nombre',
           student_email: row.student_email,
+          apodo: row.apodo,
+          nombre_completo: row.nombre_completo,
           remaining,
           completed,
           is_complete: isComplete
@@ -123,8 +129,9 @@ export class MasterStudentTransmutationReadRepoPg {
     }
 
     // Obtener total (sin limit/offset)
+    // NO filtrar por status - datos RAW
     const totalResult = await queryFn(
-      'SELECT COUNT(*) as total FROM alumnos WHERE status = \'active\'',
+      'SELECT COUNT(*) as total FROM alumnos',
       []
     );
     const total = parseInt(totalResult.rows[0]?.total || '0', 10);
@@ -134,16 +141,21 @@ export class MasterStudentTransmutationReadRepoPg {
 
   /**
    * Marca limpio un alumno específico (recurrente)
+   * @param {number} studentId - ID del alumno
+   * @param {number} itemId - ID numérico del item (PK de items_transmutaciones)
+   * @param {string} productKey - Clave del producto
+   * @param {string} domainKey - Clave del dominio
+   * @param {Object} client - Cliente de transacción (opcional)
    */
-  async markCleanStudent(studentId, itemRef, productKey = 'pde', client = null) {
-    if (!studentId || !itemRef) return null;
+  async markCleanStudent(studentId, itemId, productKey = 'pde', domainKey = 'transmutaciones_energeticas', client = null) {
+    if (!studentId || !itemId) return null;
 
     const queryFn = client ? client.query.bind(client) : query;
 
-    // Obtener item para conocer frecuencia_dias
+    // Obtener item para conocer frecuencia_dias y item_ref
     const itemResult = await queryFn(
-      'SELECT frecuencia_dias FROM items_transmutaciones WHERE item_ref = $1',
-      [itemRef]
+      'SELECT id, frecuencia_dias, item_ref FROM items_transmutaciones WHERE id = $1',
+      [itemId]
     );
 
     if (itemResult.rows.length === 0) {
@@ -151,23 +163,30 @@ export class MasterStudentTransmutationReadRepoPg {
     }
 
     const frecuenciaDias = itemResult.rows[0].frecuencia_dias || 30;
+    const itemRef = itemResult.rows[0].item_ref;
 
-    // UPSERT en student_item_state
+    // UPSERT en student_item_state (item_id es NOT NULL, obligatorio)
+    // Constraint UNIQUE actual: (student_id, product_key, domain_type, item_ref)
+    // Pero item_id también es NOT NULL, así que lo incluimos
+    // Placeholders SQL estrictamente secuenciales: $1, $2, $3, $4, $5, $6
     const result = await queryFn(
       `INSERT INTO student_item_state 
-       (student_id, product_key, domain_type, item_ref, last_cleaned_at, clean_count, recommended_recurrence_days, status)
-       VALUES ($1, $2, 'transmutation', $3, NOW(), COALESCE(
+       (student_id, product_key, domain_key, domain_type, item_id, item_ref, last_cleaned_at, clean_count, recommended_recurrence_days, is_active)
+       VALUES ($1, $2, $3, 'transmutation', $4, $5, NOW(), COALESCE(
          (SELECT clean_count FROM student_item_state 
-          WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_ref = $3), 0
-       ) + 1, $4, 'active')
+          WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_id = $4), 0
+       ) + 1, $6, true)
        ON CONFLICT (student_id, product_key, domain_type, item_ref)
        DO UPDATE SET
+         item_id = $4,
+         domain_key = $3,
          last_cleaned_at = NOW(),
          clean_count = student_item_state.clean_count + 1,
-         recommended_recurrence_days = $4,
+         recommended_recurrence_days = $6,
+         is_active = true,
          updated_at = NOW()
        RETURNING *`,
-      [studentId, productKey, itemRef, frecuenciaDias]
+      [studentId, productKey, domainKey, itemId, itemRef, frecuenciaDias]
     );
 
     return result.rows[0] || null;
@@ -175,16 +194,20 @@ export class MasterStudentTransmutationReadRepoPg {
 
   /**
    * Marca limpio todos los alumnos (recurrente)
+   * @param {number} itemId - ID numérico del item (PK de items_transmutaciones)
+   * @param {string} productKey - Clave del producto
+   * @param {string} domainKey - Clave del dominio
+   * @param {Object} client - Cliente de transacción (opcional)
    */
-  async markCleanAll(itemRef, productKey = 'pde', client = null) {
-    if (!itemRef) return { updated: 0 };
+  async markCleanAll(itemId, productKey = 'pde', domainKey = 'transmutaciones_energeticas', client = null) {
+    if (!itemId) return { updated: 0 };
 
     const queryFn = client ? client.query.bind(client) : query;
 
-    // Obtener item para conocer frecuencia_dias
+    // Obtener item para conocer frecuencia_dias y item_ref
     const itemResult = await queryFn(
-      'SELECT frecuencia_dias FROM items_transmutaciones WHERE item_ref = $1',
-      [itemRef]
+      'SELECT id, frecuencia_dias, item_ref FROM items_transmutaciones WHERE id = $1',
+      [itemId]
     );
 
     if (itemResult.rows.length === 0) {
@@ -192,32 +215,38 @@ export class MasterStudentTransmutationReadRepoPg {
     }
 
     const frecuenciaDias = itemResult.rows[0].frecuencia_dias || 30;
+    const itemRef = itemResult.rows[0].item_ref;
 
-    // Obtener todos los alumnos activos
+    // Obtener todos los alumnos (no filtrar por status - el dominio decide estados)
     const alumnosResult = await queryFn(
-      'SELECT id FROM alumnos WHERE status = \'active\'',
+      'SELECT id FROM alumnos',
       []
     );
 
     let updated = 0;
 
-    // UPSERT para cada alumno
+    // UPSERT para cada alumno (item_id es NOT NULL, obligatorio)
+    // Constraint UNIQUE actual: (student_id, product_key, domain_type, item_ref)
+    // Placeholders SQL estrictamente secuenciales: $1, $2, $3, $4, $5, $6
     for (const alumno of alumnosResult.rows) {
       const result = await queryFn(
         `INSERT INTO student_item_state 
-         (student_id, product_key, domain_type, item_ref, last_cleaned_at, clean_count, recommended_recurrence_days, status)
-         VALUES ($1, $2, 'transmutation', $3, NOW(), COALESCE(
+         (student_id, product_key, domain_key, domain_type, item_id, item_ref, last_cleaned_at, clean_count, recommended_recurrence_days, is_active)
+         VALUES ($1, $2, $3, 'transmutation', $4, $5, NOW(), COALESCE(
            (SELECT clean_count FROM student_item_state 
-            WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_ref = $3), 0
-         ) + 1, $4, 'active')
+            WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_id = $4), 0
+         ) + 1, $6, true)
          ON CONFLICT (student_id, product_key, domain_type, item_ref)
          DO UPDATE SET
+           item_id = $4,
+           domain_key = $3,
            last_cleaned_at = NOW(),
            clean_count = student_item_state.clean_count + 1,
-           recommended_recurrence_days = $4,
+           recommended_recurrence_days = $6,
+           is_active = true,
            updated_at = NOW()
          RETURNING *`,
-        [alumno.id, productKey, itemRef, frecuenciaDias]
+        [alumno.id, productKey, domainKey, itemId, itemRef, frecuenciaDias]
       );
 
       if (result.rows.length > 0) {
@@ -230,42 +259,63 @@ export class MasterStudentTransmutationReadRepoPg {
 
   /**
    * Incrementa +1 todos los alumnos (una_vez)
+   * @param {number} itemId - ID numérico del item (PK de items_transmutaciones)
+   * @param {string} productKey - Clave del producto
+   * @param {string} domainKey - Clave del dominio
+   * @param {Object} client - Cliente de transacción (opcional)
    */
-  async incrementAll(itemRef, productKey = 'pde', client = null) {
-    if (!itemRef) return { updated: 0 };
+  async incrementAll(itemId, productKey = 'pde', domainKey = 'transmutaciones_energeticas', client = null) {
+    if (!itemId) return { updated: 0 };
 
     const queryFn = client ? client.query.bind(client) : query;
 
-    // Obtener todos los alumnos activos
+    // Obtener item_ref del item
+    const itemResult = await queryFn(
+      'SELECT item_ref FROM items_transmutaciones WHERE id = $1',
+      [itemId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      return { updated: 0 };
+    }
+
+    const itemRef = itemResult.rows[0].item_ref;
+
+    // Obtener todos los alumnos (no filtrar por status - el dominio decide estados)
     const alumnosResult = await queryFn(
-      'SELECT id FROM alumnos WHERE status = \'active\'',
+      'SELECT id FROM alumnos',
       []
     );
 
     let updated = 0;
 
-    // UPSERT para cada alumno: decrementar remaining, incrementar completed
+    // UPSERT para cada alumno: decrementar remaining, incrementar completed (item_id es NOT NULL, obligatorio)
+    // Constraint UNIQUE actual: (student_id, product_key, domain_type, item_ref)
+    // Placeholders SQL estrictamente secuenciales: $1, $2, $3, $4, $5
     for (const alumno of alumnosResult.rows) {
       const result = await queryFn(
         `INSERT INTO student_item_state 
-         (student_id, product_key, domain_type, item_ref, remaining, completed, status)
-         VALUES ($1, $2, 'transmutation', $3, 
+         (student_id, product_key, domain_key, domain_type, item_id, item_ref, remaining, completed, is_active)
+         VALUES ($1, $2, $3, 'transmutation', $4, $5, 
            GREATEST(0, COALESCE(
              (SELECT remaining FROM student_item_state 
-              WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_ref = $3), 0
+              WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_id = $4), 0
            ) - 1),
            COALESCE(
              (SELECT completed FROM student_item_state 
-              WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_ref = $3), 0
+              WHERE student_id = $1 AND product_key = $2 AND domain_type = 'transmutation' AND item_id = $4), 0
            ) + 1,
-           'active')
+           true)
          ON CONFLICT (student_id, product_key, domain_type, item_ref)
          DO UPDATE SET
+           item_id = $4,
+           domain_key = $3,
            remaining = GREATEST(0, student_item_state.remaining - 1),
            completed = student_item_state.completed + 1,
+           is_active = true,
            updated_at = NOW()
          RETURNING *`,
-        [alumno.id, productKey, itemRef]
+        [alumno.id, productKey, domainKey, itemId, itemRef]
       );
 
       if (result.rows.length > 0) {
@@ -278,23 +328,46 @@ export class MasterStudentTransmutationReadRepoPg {
 
   /**
    * Ajusta remaining manualmente para un alumno (una_vez)
+   * @param {number} studentId - ID del alumno
+   * @param {number} itemId - ID numérico del item (PK de items_transmutaciones)
+   * @param {number} remaining - Nuevo valor de remaining
+   * @param {string} productKey - Clave del producto
+   * @param {string} domainKey - Clave del dominio
+   * @param {Object} client - Cliente de transacción (opcional)
    */
-  async adjustRemaining(studentId, itemRef, remaining, productKey = 'pde', client = null) {
-    if (!studentId || !itemRef || remaining === undefined) return null;
+  async adjustRemaining(studentId, itemId, remaining, productKey = 'pde', domainKey = 'transmutaciones_energeticas', client = null) {
+    if (!studentId || !itemId || remaining === undefined) return null;
 
     const queryFn = client ? client.query.bind(client) : query;
 
-    // UPSERT en student_item_state
+    // Obtener item_ref del item
+    const itemResult = await queryFn(
+      'SELECT item_ref FROM items_transmutaciones WHERE id = $1',
+      [itemId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      return null;
+    }
+
+    const itemRef = itemResult.rows[0].item_ref;
+
+    // UPSERT en student_item_state (item_id es NOT NULL, obligatorio)
+    // Constraint UNIQUE actual: (student_id, product_key, domain_type, item_ref)
+    // Placeholders SQL estrictamente secuenciales: $1, $2, $3, $4, $5, $6
     const result = await queryFn(
       `INSERT INTO student_item_state 
-       (student_id, product_key, domain_type, item_ref, remaining, status)
-       VALUES ($1, $2, 'transmutation', $3, $4, 'active')
+       (student_id, product_key, domain_key, domain_type, item_id, item_ref, remaining, is_active)
+       VALUES ($1, $2, $3, 'transmutation', $4, $5, $6, true)
        ON CONFLICT (student_id, product_key, domain_type, item_ref)
        DO UPDATE SET
-         remaining = $4,
+         item_id = $4,
+         domain_key = $3,
+         remaining = $6,
+         is_active = true,
          updated_at = NOW()
        RETURNING *`,
-      [studentId, productKey, itemRef, remaining]
+      [studentId, productKey, domainKey, itemId, itemRef, remaining]
     );
 
     return result.rows[0] || null;

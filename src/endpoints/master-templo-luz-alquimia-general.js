@@ -11,9 +11,20 @@ export default async function masterTemploLuzAlquimiaGeneralHandler(request, env
   const url = new URL(request.url);
   const activePath = url.pathname;
   
+  // SERVER SENTINEL: Visible siempre para confirmar que este handler se ejecutó
+  const appVersion = process.env.APP_VERSION || 'unknown';
+  const buildId = process.env.BUILD_ID || 'unknown';
+  const timestamp = new Date().toISOString();
+  const serverSentinel = `SERVER_SENTINEL: alquimia-general | ${appVersion}/${buildId} | ${timestamp}`;
+  
   // Contenedor HTML mínimo - el cliente JS construye todo con DOM API
   const contentHtml = `
+    <!-- ${serverSentinel} -->
     <div id="master-alquimia-general-root" class="p-6">
+      <!-- SERVER SENTINEL: Visible siempre para confirmar que este handler se ejecutó -->
+      <div id="ap-sentinel" style="background: #fbbf24; color: #000; padding: 0.25rem 0.5rem; font-size: 0.75rem; font-family: monospace; margin-bottom: 0.5rem; border-radius: 0.25rem;">
+        ${serverSentinel}
+      </div>
       <div class="mb-6">
         <h1 class="text-3xl font-bold text-white mb-2">🔮 Alquimia General</h1>
         <p class="text-slate-400">Source of Truth canónico - Biblioteca Maestra para gestión de transmutaciones.</p>

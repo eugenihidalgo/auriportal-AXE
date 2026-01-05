@@ -325,10 +325,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           }
           
           // Actualizar category_key y subtype_key (sistema legacy)
+          // FIX v5.53.1: Asegurar que tags siempre se preserve cuando se actualiza category/subtype
+          // Si no se pasaron tags explícitamente, NO tocar los tags existentes
           await updateListClassification(id, {
             category_key: classification.category_key,
             subtype_key: classification.subtype_key,
-            tags: undefined // Ya se actualizó arriba
+            tags: classification.tags !== undefined ? classification.tags : undefined
+            // Si tags está undefined, updateListClassification NO los tocará (fix v5.52.0)
           });
           
           // Recargar lista con clasificaciones actualizadas

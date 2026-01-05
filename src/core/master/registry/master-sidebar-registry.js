@@ -47,6 +47,7 @@ export const MASTER_SECTION_ORDER = {
   'Transmutaciones Energéticas': 1,
   'Investigación': 2,
   'Comunicaciones': 3,
+  'PostgreSQL Alumnos': 4,
   // Legacy sections (mantener para compatibilidad)
   'Dashboard': 10,
   'Limpiezas Energéticas': 11,
@@ -56,8 +57,35 @@ export const MASTER_SECTION_ORDER = {
 };
 
 /**
- * Header canónico del Sidebar Master - "El Templo de Ankhar"
+ * Headers canónicos del Sidebar Master por universo
  * Este header es identidad, no navegación (no clicable)
+ */
+export function getMasterSidebarHeader(universe) {
+  const headers = {
+    'templo_luz': {
+      title: 'El Templo de Ankhar',
+      subtitle: 'Donde los milagros suceden'
+    },
+    'alumnos': {
+      title: 'Alumnos',
+      subtitle: 'Gestión de estudiantes'
+    },
+    'limpiezas': {
+      title: 'Limpiezas Energéticas',
+      subtitle: 'Sistema de limpiezas'
+    },
+    'systema': {
+      title: 'Systema',
+      subtitle: 'Sistema y diagnóstico'
+    }
+  };
+  
+  return headers[universe] || headers['templo_luz'];
+}
+
+/**
+ * @deprecated Usar getMasterSidebarHeader() en su lugar
+ * Mantener para compatibilidad
  */
 export const MASTER_SIDEBAR_HEADER = {
   title: 'El Templo de Ankhar',
@@ -99,15 +127,45 @@ export const masterSidebarRegistry = [
     universe: 'limpiezas'
   },
   
-  // Alumnos
+  // ============================================
+  // ALUMNOS - PostgreSQL Alumnos (Tabla Técnica)
+  // ============================================
   {
-    id: 'master-alumnos',
+    id: 'master-alumnos-postgresql',
+    label: 'PostgreSQL Alumnos',
+    icon: 'database',
+    route: '/master/alumnos/postgresql',
+    section: 'PostgreSQL Alumnos',
+    visible: true,
+    order: 1,
+    universe: 'alumnos'
+  },
+  
+  // ============================================
+  // ALUMNOS - Alumnos (Placeholder)
+  // ============================================
+  {
+    id: 'master-alumnos-alumnos',
     label: 'Alumnos',
     icon: 'students',
-    route: '/master/alumnos',
+    route: '/master/alumnos/alumnos',
     section: 'Alumnos',
     visible: true,
     order: 1,
+    universe: 'alumnos'
+  },
+  
+  // ============================================
+  // ALUMNOS - Información espiritual del alumno
+  // ============================================
+  {
+    id: 'master-alumnos-info',
+    label: 'Información espiritual del alumno',
+    icon: 'info',
+    route: '/master/alumnos/info',
+    section: 'Alumnos',
+    visible: true,
+    order: 2,
     universe: 'alumnos'
   },
   
@@ -269,6 +327,53 @@ export const masterSidebarRegistry = [
 ];
 
 /**
+ * Obtiene items del footer "Otras layouts" según el universo actual
+ * @param {string} universe - Universo actual
+ * @returns {Array} Array de items para el footer
+ */
+function getOtherLayoutsItems(universe) {
+  const items = [];
+  
+  // Si estamos en Templo, mostrar ALUMNOS
+  if (universe === 'templo_luz') {
+    items.push({
+      id: 'master-alumnos',
+      label: 'Alumnos',
+      icon: 'students',
+      route: '/master/alumnos'
+    });
+  }
+  
+  // Si estamos en Alumnos, mostrar TEMPLO DE ANKHAR
+  if (universe === 'alumnos') {
+    items.push({
+      id: 'master-templo',
+      label: 'Templo de Ankhar',
+      icon: 'templo',
+      route: '/master/templo-luz/alquimia-general'
+    });
+  }
+  
+  // Si estamos en otro universo, mostrar ambos
+  if (universe !== 'templo_luz' && universe !== 'alumnos') {
+    items.push({
+      id: 'master-templo',
+      label: 'Templo de Ankhar',
+      icon: 'templo',
+      route: '/master/templo-luz/alquimia-general'
+    });
+    items.push({
+      id: 'master-alumnos',
+      label: 'Alumnos',
+      icon: 'students',
+      route: '/master/alumnos'
+    });
+  }
+  
+  return items;
+}
+
+/**
  * MASTER RULE: no HTML in JS strings (constitutional)
  * 
  * Esta función devuelve datos JSON puros para renderizado en cliente.
@@ -277,25 +382,35 @@ export const masterSidebarRegistry = [
 
 /**
  * Obtiene datos del sidebar Master según el layout activo
- * @param {string} universeId - ID del universo (solo para logs, NO gobierna el sidebar)
+ * @param {string} universeId - ID del universo (u_alumnos, u_templo_luz, etc.)
  * @param {string} activePath - Ruta actual para marcar item activo
  * @returns {Object} Datos estructurados del sidebar (sin HTML)
  */
 export function getMasterSidebarData(universeId, activePath) {
-  // CONTRATO: El sidebar está ligado al layout activo (layout_templo_luz_v1),
-  // NO depende del universeId. El universeId solo se usa para logs si existe.
-  // El sidebar del Templo de Ankhar SIEMPRE muestra todas las secciones:
-  // - Transmutaciones Energéticas
-  // - Investigación
-  // - Comunicaciones
+  // CONTRATO: El sidebar está ligado al universo activo.
+  // Cada universo tiene su propio sidebar con sus secciones específicas.
+  
+  // Mapeo de universeId a universe en registry
+  const universeMap = {
+    'u_alumnos': 'alumnos',
+    'u_templo_luz': 'templo_luz',
+    'u_limpiezas': 'limpiezas',
+    'u_systema': 'systema',
+    // Compatibilidad: si viene sin prefijo u_, usar directamente
+    'alumnos': 'alumnos',
+    'templo_luz': 'templo_luz',
+    'limpiezas': 'limpiezas',
+    'systema': 'systema'
+  };
+  
+  const universe = universeMap[universeId] || universeId || 'templo_luz';
+  
+  // Filtrar entradas por universo
   const templateEntries = masterSidebarRegistry.filter(entry => 
-    entry.visible && entry.universe === 'templo_luz'
+    entry.visible && entry.universe === universe
   );
   
-  // Log si universeId existe (solo para contexto, no afecta resultado)
-  if (universeId) {
-    console.log(`[MasterSidebar] universeId recibido: ${universeId} (solo para logs, sidebar muestra siempre Templo)`);
-  }
+  console.log(`[MasterSidebar] universeId: ${universeId} → universe: ${universe}, entries: ${templateEntries.length}`);
   
   // Agrupar por sección
   const sections = {};
@@ -329,22 +444,15 @@ export function getMasterSidebarData(universeId, activePath) {
   };
   
   return {
-    header: MASTER_SIDEBAR_HEADER,
+    header: getMasterSidebarHeader(universe),
     noSection: noSection.sort((a, b) => a.order - b.order).map(processEntry),
     sections: sortedSections.map(sectionName => ({
       name: sectionName,
       entries: sections[sectionName].sort((a, b) => a.order - b.order).map(processEntry)
     })),
     footer: {
-      title: 'Otros Layouts',
-      items: [
-        {
-          id: 'admin-legacy',
-          label: 'Admin (Legacy)',
-          icon: 'admin',
-          route: '/admin'
-        }
-      ]
+      title: 'Otras layouts',
+      items: getOtherLayoutsItems(universe)
     }
   };
 }

@@ -196,17 +196,6 @@ export async function renderMasterPage(options = {}) {
   html = html.replace(/\{\{APP_VERSION\}\}/g, appVersion);
   html = html.replace(/\{\{BUILD_ID\}\}/g, buildId);
   
-  // ASSET VERSIONING v1: Inyectar APP_VERSION y BUILD_ID para versionado de assets
-  // Estas variables son requeridas por withAssetVersion() en el frontend
-  const assetVersioningScript = `
-<script>
-  // ASSET VERSIONING CANÓNICO v1 - Inyectado por renderMasterPage()
-  window.__AP_APP_VERSION__ = ${JSON.stringify(appVersion)};
-  window.__AP_BUILD_ID__ = ${JSON.stringify(buildId)};
-</script>
-`;
-  html = html.replace('</head>', assetVersioningScript + '\n</head>');
-  
   // Añadir scripts adicionales (sin HTML en strings - usar marcador seguro)
   if (extraScripts.length > 0) {
     // Construir scripts de forma segura sin template literals HTML

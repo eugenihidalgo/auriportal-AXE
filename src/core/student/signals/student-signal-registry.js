@@ -227,6 +227,152 @@ export const STUDENT_SIGNAL_REGISTRY = {
       backfill_type: 'Tipo de backfill aplicado',
       trace_id: 'ID de traza'
     }
+  },
+
+  // ============================================
+  // PLACE SIGNALS (Sistema de Lugares v1)
+  // ============================================
+  'place.activated': {
+    key: 'place.activated',
+    description: 'Se emite cuando se activa un lugar para un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      place_id: 'ID del lugar',
+      place_state_id: 'ID del estado alumno-lugar',
+      actor_type: 'Tipo de actor (master, student, system)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.deactivated': {
+    key: 'place.deactivated',
+    description: 'Se emite cuando se desactiva un lugar para un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      place_id: 'ID del lugar',
+      place_state_id: 'ID del estado alumno-lugar',
+      actor_type: 'Tipo de actor',
+      reason: 'Razón de desactivación (opcional)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.cleaned': {
+    key: 'place.cleaned',
+    description: 'Se emite cuando se limpia/revisa un lugar',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      place_id: 'ID del lugar',
+      place_state_id: 'ID del estado alumno-lugar',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.cleaned.bulk': {
+    key: 'place.cleaned.bulk',
+    description: 'Se emite cuando se limpian múltiples lugares seleccionados',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      place_state_ids: 'Array de IDs de estados limpiados',
+      items_count: 'Número de lugares limpiados',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.cleaned.all': {
+    key: 'place.cleaned.all',
+    description: 'Se emite cuando se limpian TODOS los lugares activos',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      items_count: 'Número de lugares limpiados',
+      actor_type: 'Tipo de actor',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.deactivated.all': {
+    key: 'place.deactivated.all',
+    description: 'Se emite cuando se desactivan todos los lugares (p.ej., por pausa de suscripción)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      items_count: 'Número de lugares desactivados',
+      reason: 'Razón de desactivación masiva',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.category.created': {
+    key: 'place.category.created',
+    description: 'Se emite cuando se crea una categoría de lugar',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.category.updated': {
+    key: 'place.category.updated',
+    description: 'Se emite cuando se actualiza una categoría de lugar',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.category.reordered': {
+    key: 'place.category.reordered',
+    description: 'Se emite cuando se reordena el orden de categorías',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_ids: 'Array de IDs en nuevo orden',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.category.deactivated': {
+    key: 'place.category.deactivated',
+    description: 'Se emite cuando se desactiva una categoría de lugar',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      category_id: 'ID de la categoría',
+      category_key: 'Clave de la categoría',
+      trace_id: 'ID de traza'
+    }
+  },
+  'place.activation_limit.updated': {
+    key: 'place.activation_limit.updated',
+    description: 'Se emite cuando se actualiza el límite de activación de un alumno',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID del alumno',
+      domain: 'Dominio (places, projects)',
+      activation_limit: 'Nuevo límite (NULL = ilimitado)',
+      source: 'Origen del límite (default, master, automation)',
+      trace_id: 'ID de traza'
+    }
   }
 };
 

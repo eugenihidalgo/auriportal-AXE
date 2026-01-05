@@ -149,6 +149,16 @@
       "name": "Master Alumnos Client"
     },
     {
+      "id": "master-alquimia-alumno-client",
+      "guard_id": "ALQUIMIA_ALUMNO_CLIENT",
+      "path": "/js/master/master-alquimia-alumno-client.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Master Alquimia Alumno Client"
+    },
+    {
       "id": "master-lugares-client",
       "guard_id": "LUGARES_CLIENT",
       "path": "/js/master/master-lugares-client.js",

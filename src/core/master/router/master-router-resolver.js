@@ -51,6 +51,10 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   
+  // Alquimia por Alumno API Handlers
+  'master-api-alquimia-alumno': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-alquimia-clean': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  
   // Tags API Handlers (TAG SOT GLOBAL v1)
   'master-api-tags': () => import('../../../endpoints/master-api-tags.js'),
   'master-api-tags-id': () => import('../../../endpoints/master-api-tags.js'),
@@ -61,11 +65,48 @@ const MASTER_HANDLER_MAP = {
   'master-api-classifications-id': () => import('../../../endpoints/master-api-classifications.js'),
   'master-api-classifications-id-deprecate': () => import('../../../endpoints/master-api-classifications.js'),
   
+  // Students API Handlers (Diagnóstico v1)
+  'master-api-students': () => import('../../../endpoints/master-api-students.js'),
+  'master-api-students-id': () => import('../../../endpoints/master-api-students.js'),
+  
+  // UTE API Handlers (UTE CORE v1)
+  'master-api-ute-definitions': () => import('../../../endpoints/master-api-ute.js'),
+  'master-api-ute-states': () => import('../../../endpoints/master-api-ute.js'),
+  'master-api-ute-execute': () => import('../../../endpoints/master-api-ute.js'),
+  'master-api-ute-execute-global': () => import('../../../endpoints/master-api-ute.js'),
+  'master-api-ute-recompute': () => import('../../../endpoints/master-api-ute.js'),
+  
+  // Origin API Handlers (ORIGIN CONTRACT v1)
+  'master-api-origins': () => import('../../../endpoints/master-api-origin.js'),
+  'master-api-origin-detail': () => import('../../../endpoints/master-api-origin.js'),
+  'master-api-origin-update': () => import('../../../endpoints/master-api-origin.js'),
+  'master-api-origin-archive': () => import('../../../endpoints/master-api-origin.js'),
+  'master-api-origin-delete': () => import('../../../endpoints/master-api-origin.js'),
+  
+  // Places API Handlers (SISTEMA DE LUGARES v1)
+  'master-api-places-active': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-clean': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-clean-bulk': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-clean-all': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-student': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-activate': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-deactivate': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-limit': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-state-id': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-place-categories': () => import('../../../endpoints/master-api-place-categories.js'),
+  'master-api-place-categories-id': () => import('../../../endpoints/master-api-place-categories.js'),
+  'master-api-place-categories-reorder': () => import('../../../endpoints/master-api-place-categories.js'),
+  'master-api-places-catalog': () => import('../../../endpoints/master-api-places-catalog.js'),
+  'master-api-places-catalog-id': () => import('../../../endpoints/master-api-places-catalog.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),
   'master-limpiezas': () => import('../../../endpoints/master-limpiezas.js'),
   'master-alumnos': () => import('../../../endpoints/master-alumnos.js'),
+  'master-alumnos-postgresql': () => import('../../../endpoints/master-alumnos-postgresql.js'),
+  'master-alumnos-alumnos': () => import('../../../endpoints/master-alumnos-alumnos.js'),
+  'master-alumnos-info': () => import('../../../endpoints/master-alumnos-info.js'),
   'master-systema': () => import('../../../endpoints/master-systema.js'),
   
   // Templo de Luz Handlers
