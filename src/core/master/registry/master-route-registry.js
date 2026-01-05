@@ -123,6 +123,18 @@ export const MASTER_ROUTES = [
     type: 'api',
     method: 'GET'
   },
+  {
+    key: 'master-api-alquimia-item-groups',
+    path: '/master/api/alquimia-general/item-groups',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-alquimia-lista-classification',
+    path: '/master/api/alquimia-general/listas/:id/classification',
+    type: 'api'
+    // Handler maneja: GET, PUT
+  },
   
   // ============================================
   // RUTAS API ALQUIMIA POR ALUMNO

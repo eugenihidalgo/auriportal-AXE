@@ -426,12 +426,16 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
       logWarn('AlquimiaCatalogRepo', 'Days NaN corregido a 20 en createItem', { traceId });
     }
     
-    // INSERT con item_ref (generado en service)
+    // INSERT con item_ref (generado en service) y grupo
+    const grupoValue = itemData.grupo && typeof itemData.grupo === 'string' && itemData.grupo.trim() !== '' 
+      ? itemData.grupo.trim() 
+      : null;
+    
     const result = await queryFn(
       `INSERT INTO items_transmutaciones (
         lista_id, nombre, descripcion, nivel, priority,
-        frecuencia_dias, veces_limpiar, status, item_ref
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        frecuencia_dias, veces_limpiar, status, item_ref, grupo
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         itemData.lista_id,
@@ -442,7 +446,8 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
         daysValue,
         vecesValue,
         itemData.status || 'active',
-        itemData.item_ref // item_ref generado en service
+        itemData.item_ref, // item_ref generado en service
+        grupoValue
       ]
     );
 
@@ -476,7 +481,7 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
     // Campos permitidos para actualización
     const allowedFields = [
       'nombre', 'descripcion', 'nivel', 'prioridad',
-      'frecuencia_dias', 'veces_limpiar', 'status'
+      'frecuencia_dias', 'veces_limpiar', 'status', 'grupo'
     ];
 
     for (const field of allowedFields) {

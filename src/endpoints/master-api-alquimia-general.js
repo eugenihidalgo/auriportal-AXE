@@ -469,7 +469,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           stack: error.stack,
           body
         });
-        throw error;
+        // NUNCA hacer throw: devolver JSON con error controlado
+        return jsonError(
+          `Error actualizando clasificación: ${error.message}`,
+          'CLASSIFICATION_UPDATE_ERROR',
+          200, // HTTP 200 con ok:false (fail-soft)
+          traceId,
+          { details: error.message }
+        );
       }
     }
 
@@ -599,6 +606,32 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           'X-Trace-Id': traceId
         }
       });
+    }
+
+    // GET /master/api/alquimia-general/item-groups
+    if (path === '/master/api/alquimia-general/item-groups' && method === 'GET') {
+      try {
+        const groups = await listItemGroups();
+        return jsonSuccess({
+          data: {
+            items: groups
+          }
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en GET item-groups (fail-open)', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        // Fail-open: devolver array vacío con warnings
+        return jsonSuccess({
+          data: {
+            items: []
+          },
+          warnings: [`Error al cargar grupos: ${error.message}`]
+        }, traceId);
+      }
     }
 
     // GET /master/api/alquimia-general/items/:id
