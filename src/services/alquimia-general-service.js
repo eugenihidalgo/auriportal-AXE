@@ -10,6 +10,7 @@
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getDefaultMasterStudentTransmutationReadRepo } from '../infra/repos/master-student-transmutation-read-repo-pg.js';
 import { getDefaultPdeDailyCleanLogRepo } from '../infra/repos/pde-daily-clean-log-repo-pg.js';
+import { getDefaultPdeTransmutationItemGroupsRepo } from '../infra/repos/pde-transmutation-item-groups-repo-pg.js';
 
 /**
  * Lista listas de transmutaciones según filtros
@@ -218,13 +219,33 @@ export async function createItem(itemData) {
       throw new Error('item_ref debe ser un string no vacío');
     }
     
+    // Manejar grupo: asegurar que existe en SOT
+    if (itemData.grupo && typeof itemData.grupo === 'string' && itemData.grupo.trim() !== '') {
+      const groupsRepo = getDefaultPdeTransmutationItemGroupsRepo();
+      await groupsRepo.ensureGroup(itemData.grupo.trim());
+      itemData.grupo = itemData.grupo.trim();
+    } else {
+      itemData.grupo = null;
+    }
+    
+    // Default frecuencia_dias = 20 para recurrentes (solo en create si viene null o undefined)
+    // Obtener tipo de lista para saber si aplicar default
+    const lista = await getListaById(itemData.lista_id);
+    if (lista && lista.tipo === 'recurrente') {
+      if (itemData.frecuencia_dias === null || itemData.frecuencia_dias === undefined) {
+        itemData.frecuencia_dias = 20;
+        logInfo('AlquimiaGeneralService', 'Default frecuencia_dias=20 aplicado', { traceId, lista_id: itemData.lista_id });
+      }
+    }
+    
     const repo = getDefaultAlquimiaCatalogRepo();
     const result = await repo.createItem(itemData);
     
     logInfo('AlquimiaGeneralService', 'createItem completado', { 
       traceId, 
       item_id: result?.id,
-      item_ref: result?.item_ref
+      item_ref: result?.item_ref,
+      grupo: result?.grupo
     });
     
     return result;
@@ -250,8 +271,77 @@ export async function createItem(itemData) {
 export async function updateItem(id, patch) {
   if (!id) return null;
   
-  const repo = getDefaultAlquimiaCatalogRepo();
-  return await repo.updateItem(id, patch);
+  const traceId = getRequestId();
+  
+  try {
+    // Manejar grupo: asegurar que existe en SOT si viene en patch
+    if ('grupo' in patch) {
+      if (patch.grupo && typeof patch.grupo === 'string' && patch.grupo.trim() !== '') {
+        const groupsRepo = getDefaultPdeTransmutationItemGroupsRepo();
+        await groupsRepo.ensureGroup(patch.grupo.trim());
+        patch.grupo = patch.grupo.trim();
+      } else {
+        // '' o null => null
+        patch.grupo = null;
+      }
+    }
+    
+    // Normalizar frecuencia_dias: '' => null (permitir null, pero UI mostrará 20 por defecto)
+    if ('frecuencia_dias' in patch) {
+      if (patch.frecuencia_dias === '' || patch.frecuencia_dias === null) {
+        patch.frecuencia_dias = null;
+      } else if (typeof patch.frecuencia_dias === 'string') {
+        const parsed = parseInt(patch.frecuencia_dias, 10);
+        patch.frecuencia_dias = Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+      }
+    }
+    
+    const repo = getDefaultAlquimiaCatalogRepo();
+    const result = await repo.updateItem(id, patch);
+    
+    logInfo('AlquimiaGeneralService', 'updateItem completado', {
+      traceId,
+      item_id: id,
+      grupo: patch.grupo
+    });
+    
+    return result;
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en updateItem', {
+      traceId,
+      error: error.message,
+      item_id: id
+    });
+    throw error;
+  }
+}
+
+/**
+ * Lista grupos activos de items
+ * 
+ * @returns {Promise<Array<{value: string}>>} Array de grupos activos
+ */
+export async function listItemGroups() {
+  const traceId = getRequestId();
+  
+  try {
+    const groupsRepo = getDefaultPdeTransmutationItemGroupsRepo();
+    const groups = await groupsRepo.listActiveGroups();
+    
+    logInfo('AlquimiaGeneralService', 'listItemGroups completado', {
+      traceId,
+      count: groups.length
+    });
+    
+    return groups;
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en listItemGroups', {
+      traceId,
+      error: error.message
+    });
+    // Fail-open: devolver array vacío
+    return [];
+  }
 }
 
 /**

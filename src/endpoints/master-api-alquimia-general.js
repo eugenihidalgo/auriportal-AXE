@@ -11,7 +11,8 @@ import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
-  getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining
+  getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
+  listItemGroups
 } from '../services/alquimia-general-service.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
@@ -580,11 +581,16 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         veces_limpiar,
         status: body.status || 'active'
       };
+      
+      // Añadir grupo si viene en body
+      if (body.grupo && typeof body.grupo === 'string' && body.grupo.trim() !== '') {
+        itemData.grupo = body.grupo.trim();
+      }
 
       const item = await createItem(itemData);
       return new Response(JSON.stringify({
         ok: true,
-        item,
+        data: { item },
         trace_id: traceId
       }), {
         status: 201,
@@ -615,19 +621,45 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const body = await request.json();
 
       const patch = {};
-      if (body.nombre !== undefined) patch.nombre = body.nombre.trim();
+      if (body.nombre !== undefined) {
+        const nombreTrimmed = body.nombre.trim();
+        if (nombreTrimmed === '') {
+          return jsonError('nombre no puede estar vacío', 'INVALID_NOMBRE', 400, traceId);
+        }
+        patch.nombre = nombreTrimmed;
+      }
       if (body.descripcion !== undefined) patch.descripcion = body.descripcion?.trim() || null;
-      if (body.nivel !== undefined) patch.nivel = body.nivel !== null ? parseInt(body.nivel) : null;
+      if (body.nivel !== undefined) {
+        const nivelParsed = body.nivel !== null ? parseInt(body.nivel) : null;
+        if (nivelParsed !== null && (!Number.isFinite(nivelParsed) || nivelParsed < 1 || nivelParsed > 9)) {
+          return jsonError('nivel debe ser un número entre 1 y 9', 'INVALID_NIVEL', 400, traceId);
+        }
+        patch.nivel = nivelParsed;
+      }
       if (body.prioridad !== undefined) patch.prioridad = body.prioridad;
-      if (body.frecuencia_dias !== undefined) patch.frecuencia_dias = body.frecuencia_dias !== null ? parseInt(body.frecuencia_dias) : null;
+      if (body.frecuencia_dias !== undefined) {
+        // Permitir null, '' o número
+        if (body.frecuencia_dias === '' || body.frecuencia_dias === null) {
+          patch.frecuencia_dias = null;
+        } else {
+          const parsed = parseInt(body.frecuencia_dias);
+          patch.frecuencia_dias = Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+        }
+      }
       if (body.veces_limpiar !== undefined) patch.veces_limpiar = body.veces_limpiar !== null ? parseInt(body.veces_limpiar) : null;
+      if (body.grupo !== undefined) {
+        // '' => null, valor => string trim
+        patch.grupo = body.grupo && typeof body.grupo === 'string' && body.grupo.trim() !== '' ? body.grupo.trim() : null;
+      }
 
       const updated = await updateItem(id, patch);
       if (!updated) {
         return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
       }
 
-      return jsonSuccess({ item: updated }, traceId);
+      return jsonSuccess({ 
+        data: { item: updated }
+      }, traceId);
     }
 
     // DELETE /master/api/alquimia-general/items/:id (soft delete)

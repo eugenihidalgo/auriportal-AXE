@@ -62,11 +62,21 @@
     listaActiva: null,
     listas: [],
     items: [],
+    itemsSortPipeline: [], // [{key, dir}] para order pipeline
+    groups: [], // Grupos de items
     classifications: {
       categories: [],
       subtypes: [],
       tags: []
-    }
+    },
+    newItemDraft: {
+      nivel: 9,
+      grupo: '',
+      frecuencia_dias: 20,
+      nombre: '',
+      descripcion: ''
+    },
+    debounceTimers: {} // Map de item_id -> timer para autosave
   };
 
   // Elementos DOM
@@ -81,8 +91,11 @@
   async function init() {
     console.log('[MasterAlquimiaGeneral] Inicializando...');
     
-    // Cargar classifications disponibles
-    await loadClassifications();
+    // Cargar datasets necesarios
+    await Promise.all([
+      loadClassifications(),
+      loadItemGroups()
+    ]);
     
     // Renderizar tabs de tipo
     renderTabsTipo();
@@ -93,6 +106,27 @@
     // Event listeners
     if (btnCrearLista) {
       btnCrearLista.addEventListener('click', handleCrearLista);
+    }
+  }
+
+  /**
+   * Carga grupos de items disponibles
+   */
+  async function loadItemGroups() {
+    try {
+      const response = await fetch('/master/api/alquimia-general/item-groups');
+      const result = await response.json();
+      
+      if (result.ok && result.data && Array.isArray(result.data.items)) {
+        state.groups = result.data.items.map(g => g.value);
+        console.log('[MasterAlquimiaGeneral] Grupos cargados:', state.groups.length);
+      } else {
+        state.groups = [];
+        console.warn('[MasterAlquimiaGeneral] No se pudieron cargar grupos');
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando grupos:', error);
+      state.groups = [];
     }
   }
 
@@ -402,72 +436,98 @@
     classificationSection.appendChild(classificationRow);
     listaContent.appendChild(classificationSection);
     
-    // Items
-    if (state.items.length === 0) {
-      const emptyMsg = document.createElement('p');
-      emptyMsg.textContent = 'No hay items en esta lista';
-      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic;';
-      listaContent.appendChild(emptyMsg);
-      return;
+    // Tabla editable de items
+    const itemsTableContainer = document.createElement('div');
+    itemsTableContainer.style.cssText = 'overflow-x: auto; margin-top: 1rem;';
+    
+    const itemsTable = document.createElement('table');
+    itemsTable.style.cssText = 'width: 100%; border-collapse: collapse; background: #0f172a;';
+    
+    // Cargar sort pipeline desde localStorage
+    loadItemsSortPipeline();
+    
+    // Aplicar sort antes de renderizar
+    const sortedItems = applyItemsSort(state.items);
+    
+    // Headers (clicables para order pipeline)
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.style.cssText = 'background: #1e293b; border-bottom: 2px solid #334155;';
+    
+    const headers = [
+      { key: 'nivel', label: 'NIVEL' },
+      { key: 'nombre', label: 'NOMBRE' },
+      { key: 'descripcion', label: 'DESCRIPCIÓN' },
+      { key: 'grupo', label: 'GRUPO' }
+    ];
+    
+    if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+      headers.push({ key: 'frecuencia_dias', label: 'DÍAS RECURRENCIA' });
     }
-
-    const itemsList = document.createElement('div');
-    itemsList.className = 'space-y-2';
     
-    // Línea de creación inline (primera fila sticky)
-    const createRow = createItemCreationRow();
-    itemsList.appendChild(createRow);
+    headers.push({ key: 'actions', label: 'ACCIONES' });
     
-    // Items existentes
-    state.items.forEach(item => {
-      const itemDiv = document.createElement('div');
-      itemDiv.className = 'p-3 bg-slate-800 rounded border border-slate-700';
-      itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;';
+    headers.forEach(header => {
+      const th = document.createElement('th');
+      th.style.cssText = 'padding: 0.75rem; text-align: left; color: #cbd5e1; font-size: 0.875rem; font-weight: 600; cursor: pointer; user-select: none;';
       
-      const itemName = document.createElement('div');
-      itemName.textContent = item.nombre || item.name || 'Item sin nombre';
-      itemName.style.cssText = 'color: #f1f5f9; font-weight: 500; flex: 1;';
-      itemDiv.appendChild(itemName);
+      const headerContent = document.createElement('div');
+      headerContent.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
       
-      // Botones de acción
-      const actionsDiv = document.createElement('div');
-      actionsDiv.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+      const headerText = document.createElement('span');
+      headerText.textContent = header.label;
+      headerContent.appendChild(headerText);
       
-      // Botón VER (siempre visible)
-      const btnVer = document.createElement('button');
-      btnVer.textContent = 'VER';
-      btnVer.style.cssText = 'padding: 0.375rem 0.75rem; background: #3b82f6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-      btnVer.addEventListener('click', () => handleVerItem(item));
-      actionsDiv.appendChild(btnVer);
-      
-      // Botón LIMPIAR (solo para recurrentes)
-      if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
-        const btnLimpiar = document.createElement('button');
-        btnLimpiar.textContent = '🟢 Limpiar';
-        btnLimpiar.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnLimpiar.addEventListener('click', () => handleLimpiarItem(item));
-        actionsDiv.appendChild(btnLimpiar);
+      // Badge de prioridad si está en pipeline
+      if (header.key !== 'actions') {
+        const priority = getSortPriority(header.key);
+        if (priority > 0) {
+          const badge = document.createElement('span');
+          badge.textContent = `${priority}`;
+          badge.style.cssText = 'background: #4f46e5; color: #fff; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;';
+          headerContent.appendChild(badge);
+          
+          const arrow = document.createElement('span');
+          const dir = getSortDirection(header.key);
+          arrow.textContent = dir === 'asc' ? '↑' : '↓';
+          arrow.style.cssText = 'color: #86efac; font-size: 0.75rem;';
+          headerContent.appendChild(arrow);
+        }
         
-        // Botón PDE (solo para recurrentes)
-        const btnPde = document.createElement('button');
-        btnPde.textContent = 'PDE';
-        btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnPde.addEventListener('click', () => handlePdeCleanItem(item));
-        actionsDiv.appendChild(btnPde);
+        // Click handlers para order pipeline
+        th.addEventListener('click', (e) => {
+          if (e.shiftKey) {
+            toggleSortPriority(header.key, 'add');
+          } else {
+            toggleSortPriority(header.key, 'toggle');
+          }
+          renderListaContent(); // Re-render con nuevo sort
+        });
       }
       
-      // Botón ELIMINAR (siempre visible)
-      const btnEliminar = document.createElement('button');
-      btnEliminar.textContent = '🗑';
-      btnEliminar.style.cssText = 'padding: 0.375rem 0.5rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-      btnEliminar.addEventListener('click', () => handleEliminarItem(item));
-      actionsDiv.appendChild(btnEliminar);
-      
-      itemDiv.appendChild(actionsDiv);
-      itemsList.appendChild(itemDiv);
+      th.appendChild(headerContent);
+      headerRow.appendChild(th);
     });
     
-    listaContent.appendChild(itemsList);
+    thead.appendChild(headerRow);
+    itemsTable.appendChild(thead);
+    
+    // Body
+    const tbody = document.createElement('tbody');
+    
+    // Fila sticky de creación (primera fila)
+    const createRow = createItemTableRow(null, true);
+    tbody.appendChild(createRow);
+    
+    // Filas de items editables
+    sortedItems.forEach(item => {
+      const itemRow = createItemTableRow(item, false);
+      tbody.appendChild(itemRow);
+    });
+    
+    itemsTable.appendChild(tbody);
+    itemsTableContainer.appendChild(itemsTable);
+    listaContent.appendChild(itemsTableContainer);
   }
 
   /**
@@ -971,7 +1031,492 @@
   }
 
   /**
-   * Crea la fila de creación inline de items
+   * Carga sort pipeline desde localStorage
+   */
+  function loadItemsSortPipeline() {
+    if (!state.listaActiva || !state.listaActiva.id) {
+      state.itemsSortPipeline = [];
+      return;
+    }
+    
+    try {
+      const stored = localStorage.getItem(`ap_alquimia_items_sort_pipeline_${state.listaActiva.id}`);
+      if (stored) {
+        state.itemsSortPipeline = JSON.parse(stored);
+      } else {
+        state.itemsSortPipeline = [];
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando sort pipeline:', error);
+      state.itemsSortPipeline = [];
+    }
+  }
+
+  /**
+   * Guarda sort pipeline en localStorage
+   */
+  function saveItemsSortPipeline() {
+    if (!state.listaActiva || !state.listaActiva.id) return;
+    
+    try {
+      localStorage.setItem(`ap_alquimia_items_sort_pipeline_${state.listaActiva.id}`, JSON.stringify(state.itemsSortPipeline));
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error guardando sort pipeline:', error);
+    }
+  }
+
+  /**
+   * Obtiene prioridad de sort para una columna
+   */
+  function getSortPriority(key) {
+    const entry = state.itemsSortPipeline.find(e => e.key === key);
+    return entry ? entry.priority : 0;
+  }
+
+  /**
+   * Obtiene dirección de sort para una columna
+   */
+  function getSortDirection(key) {
+    const entry = state.itemsSortPipeline.find(e => e.key === key);
+    return entry ? entry.dir : 'asc';
+  }
+
+  /**
+   * Toggle/añade prioridad de sort
+   */
+  function toggleSortPriority(key, mode) {
+    const existing = state.itemsSortPipeline.findIndex(e => e.key === key);
+    
+    if (mode === 'add') {
+      // Shift+click: añadir como siguiente prioridad
+      if (existing >= 0) {
+        // Ya existe, cambiar dirección
+        state.itemsSortPipeline[existing].dir = state.itemsSortPipeline[existing].dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        // Añadir con siguiente prioridad
+        const maxPriority = state.itemsSortPipeline.length > 0 
+          ? Math.max(...state.itemsSortPipeline.map(e => e.priority))
+          : 0;
+        state.itemsSortPipeline.push({ key, dir: 'asc', priority: maxPriority + 1 });
+      }
+    } else {
+      // Click normal: toggle/remove prioridad 1
+      if (existing >= 0 && state.itemsSortPipeline[existing].priority === 1) {
+        // Es prioridad 1, cambiar dirección o remover
+        if (state.itemsSortPipeline[existing].dir === 'asc') {
+          state.itemsSortPipeline[existing].dir = 'desc';
+        } else {
+          // Remover
+          state.itemsSortPipeline.splice(existing, 1);
+          // Reordenar prioridades
+          state.itemsSortPipeline.forEach(e => {
+            if (e.priority > 1) e.priority--;
+          });
+        }
+      } else {
+        // No existe o no es prioridad 1, establecer como prioridad 1
+        if (existing >= 0) {
+          // Ya existe, mover a prioridad 1
+          const oldPriority = state.itemsSortPipeline[existing].priority;
+          state.itemsSortPipeline.forEach(e => {
+            if (e.priority < oldPriority) e.priority++;
+          });
+          state.itemsSortPipeline[existing].priority = 1;
+          state.itemsSortPipeline[existing].dir = 'asc';
+        } else {
+          // No existe, añadir como prioridad 1
+          state.itemsSortPipeline.forEach(e => e.priority++);
+          state.itemsSortPipeline.push({ key, dir: 'asc', priority: 1 });
+        }
+      }
+    }
+    
+    saveItemsSortPipeline();
+  }
+
+  /**
+   * Aplica sort pipeline a items
+   */
+  function applyItemsSort(items) {
+    if (!state.itemsSortPipeline || state.itemsSortPipeline.length === 0) {
+      return [...items];
+    }
+    
+    const sorted = [...items];
+    
+    // Ordenar por pipeline (prioridad 1, 2, 3...)
+    const sortedPipeline = [...state.itemsSortPipeline].sort((a, b) => a.priority - b.priority);
+    
+    sorted.sort((a, b) => {
+      for (const sort of sortedPipeline) {
+        let aVal = a[sort.key];
+        let bVal = b[sort.key];
+        
+        // Normalizar valores
+        if (aVal === null || aVal === undefined) aVal = '';
+        if (bVal === null || bVal === undefined) bVal = '';
+        
+        // Comparar
+        let cmp = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          cmp = aVal - bVal;
+        } else {
+          cmp = String(aVal).localeCompare(String(bVal));
+        }
+        
+        if (cmp !== 0) {
+          return sort.dir === 'asc' ? cmp : -cmp;
+        }
+      }
+      return 0;
+    });
+    
+    return sorted;
+  }
+
+  /**
+   * Crea una fila de tabla (editable o create row)
+   */
+  function createItemTableRow(item, isCreateRow) {
+    const tr = document.createElement('tr');
+    tr.style.cssText = 'border-bottom: 1px solid #334155;';
+    if (!isCreateRow) {
+      tr.style.cssText += 'background: #1e293b;';
+    } else {
+      tr.style.cssText += 'background: #0f172a; position: sticky; top: 0; z-index: 10;';
+    }
+    
+    // NIVEL
+    const tdNivel = document.createElement('td');
+    tdNivel.style.cssText = 'padding: 0.5rem;';
+    const nivelInput = document.createElement('input');
+    nivelInput.type = 'number';
+    nivelInput.min = '1';
+    nivelInput.max = '9';
+    if (isCreateRow) {
+      nivelInput.value = state.newItemDraft.nivel || '9';
+      nivelInput.addEventListener('change', () => {
+        state.newItemDraft.nivel = parseInt(nivelInput.value) || 9;
+      });
+    } else {
+      nivelInput.value = item.nivel || '9';
+      nivelInput.addEventListener('change', () => {
+        debouncedUpdateItem(item.id, { nivel: parseInt(nivelInput.value) || null });
+      });
+    }
+    nivelInput.style.cssText = 'width: 60px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    tdNivel.appendChild(nivelInput);
+    tr.appendChild(tdNivel);
+    
+    // NOMBRE
+    const tdNombre = document.createElement('td');
+    tdNombre.style.cssText = 'padding: 0.5rem;';
+    const nombreInput = document.createElement('input');
+    nombreInput.type = 'text';
+    if (isCreateRow) {
+      nombreInput.placeholder = 'Nombre (requerido)';
+      nombreInput.value = state.newItemDraft.nombre || '';
+      nombreInput.addEventListener('input', () => {
+        state.newItemDraft.nombre = nombreInput.value;
+      });
+      nombreInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && nombreInput.value.trim() && nivelInput.value) {
+          handleCrearItemInlineSticky();
+        }
+      });
+    } else {
+      nombreInput.value = item.nombre || '';
+      nombreInput.addEventListener('change', () => {
+        if (nombreInput.value.trim() === '') {
+          showWarning('El nombre no puede estar vacío');
+          nombreInput.value = item.nombre || '';
+          return;
+        }
+        debouncedUpdateItem(item.id, { nombre: nombreInput.value.trim() });
+      });
+    }
+    nombreInput.style.cssText = 'width: 100%; min-width: 150px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    tdNombre.appendChild(nombreInput);
+    tr.appendChild(tdNombre);
+    
+    // DESCRIPCIÓN
+    const tdDesc = document.createElement('td');
+    tdDesc.style.cssText = 'padding: 0.5rem;';
+    const descInput = document.createElement('input');
+    descInput.type = 'text';
+    if (isCreateRow) {
+      descInput.placeholder = 'Descripción (opcional)';
+      descInput.value = state.newItemDraft.descripcion || '';
+      descInput.addEventListener('input', () => {
+        state.newItemDraft.descripcion = descInput.value;
+      });
+      descInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && nombreInput.value.trim() && nivelInput.value) {
+          handleCrearItemInlineSticky();
+        }
+      });
+    } else {
+      descInput.value = item.descripcion || '';
+      descInput.addEventListener('change', () => {
+        debouncedUpdateItem(item.id, { descripcion: descInput.value.trim() || null });
+      });
+    }
+    descInput.style.cssText = 'width: 100%; min-width: 200px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    tdDesc.appendChild(descInput);
+    tr.appendChild(tdDesc);
+    
+    // GRUPO
+    const tdGrupo = document.createElement('td');
+    tdGrupo.style.cssText = 'padding: 0.5rem;';
+    const grupoInput = document.createElement('input');
+    grupoInput.type = 'text';
+    grupoInput.setAttribute('list', `grupos-datalist-${isCreateRow ? 'create' : item.id}`);
+    
+    // Datalist para autocomplete
+    const datalist = document.createElement('datalist');
+    datalist.id = `grupos-datalist-${isCreateRow ? 'create' : item.id}`;
+    state.groups.forEach(group => {
+      const option = document.createElement('option');
+      option.value = group;
+      datalist.appendChild(option);
+    });
+    document.body.appendChild(datalist);
+    
+    if (isCreateRow) {
+      grupoInput.placeholder = 'Grupo (opcional)';
+      grupoInput.value = state.newItemDraft.grupo || '';
+      grupoInput.addEventListener('input', () => {
+        state.newItemDraft.grupo = grupoInput.value;
+      });
+      grupoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && nombreInput.value.trim() && nivelInput.value) {
+          handleCrearItemInlineSticky();
+        }
+      });
+    } else {
+      grupoInput.value = item.grupo || '';
+      grupoInput.addEventListener('blur', () => {
+        debouncedUpdateItem(item.id, { grupo: grupoInput.value.trim() || null });
+      });
+      grupoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          grupoInput.blur();
+        }
+      });
+    }
+    grupoInput.style.cssText = 'width: 100%; min-width: 120px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+    tdGrupo.appendChild(grupoInput);
+    tr.appendChild(tdGrupo);
+    
+    // DÍAS RECURRENCIA (solo recurrentes)
+    if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+      const tdDias = document.createElement('td');
+      tdDias.style.cssText = 'padding: 0.5rem;';
+      const diasInput = document.createElement('input');
+      diasInput.type = 'number';
+      diasInput.min = '1';
+      if (isCreateRow) {
+        diasInput.value = state.newItemDraft.frecuencia_dias || '20';
+        diasInput.placeholder = '20';
+        diasInput.addEventListener('change', () => {
+          state.newItemDraft.frecuencia_dias = parseInt(diasInput.value) || 20;
+        });
+        diasInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && nombreInput.value.trim() && nivelInput.value) {
+            handleCrearItemInlineSticky();
+          }
+        });
+      } else {
+        diasInput.value = item.frecuencia_dias || '';
+        diasInput.placeholder = '20';
+        diasInput.addEventListener('change', () => {
+          const val = diasInput.value === '' ? null : (parseInt(diasInput.value) || null);
+          debouncedUpdateItem(item.id, { frecuencia_dias: val });
+        });
+      }
+      diasInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+      tdDias.appendChild(diasInput);
+      tr.appendChild(tdDias);
+    }
+    
+    // ACCIONES
+    const tdActions = document.createElement('td');
+    tdActions.style.cssText = 'padding: 0.5rem;';
+    const actionsDiv = document.createElement('div');
+    actionsDiv.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+    
+    if (!isCreateRow) {
+      // Botón VER
+      const btnVer = document.createElement('button');
+      btnVer.textContent = 'VER';
+      btnVer.style.cssText = 'padding: 0.375rem 0.75rem; background: #3b82f6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+      btnVer.addEventListener('click', () => handleVerItem(item));
+      actionsDiv.appendChild(btnVer);
+      
+      // Botón LIMPIAR (solo recurrentes)
+      if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+        const btnLimpiar = document.createElement('button');
+        btnLimpiar.textContent = '🟢 Limpiar';
+        btnLimpiar.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnLimpiar.addEventListener('click', () => handleLimpiarItem(item));
+        actionsDiv.appendChild(btnLimpiar);
+        
+        const btnPde = document.createElement('button');
+        btnPde.textContent = 'PDE';
+        btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnPde.addEventListener('click', () => handlePdeCleanItem(item));
+        actionsDiv.appendChild(btnPde);
+      }
+      
+      // Botón ELIMINAR
+      const btnEliminar = document.createElement('button');
+      btnEliminar.textContent = '🗑';
+      btnEliminar.style.cssText = 'padding: 0.375rem 0.5rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+      btnEliminar.addEventListener('click', () => handleEliminarItem(item));
+      actionsDiv.appendChild(btnEliminar);
+      
+      // Indicador "guardando..." (se actualiza vía debouncedUpdateItem)
+      const savingIndicator = document.createElement('span');
+      savingIndicator.id = `saving-${item.id}`;
+      savingIndicator.style.cssText = 'color: #64748b; font-size: 0.75rem; display: none;';
+      savingIndicator.textContent = 'guardando...';
+      actionsDiv.appendChild(savingIndicator);
+    }
+    
+    tdActions.appendChild(actionsDiv);
+    tr.appendChild(tdActions);
+    
+    return tr;
+  }
+
+  /**
+   * Debounced update de item (autosave)
+   */
+  function debouncedUpdateItem(itemId, patch) {
+    // Cancelar timer anterior si existe
+    if (state.debounceTimers[itemId]) {
+      clearTimeout(state.debounceTimers[itemId]);
+    }
+    
+    // Mostrar "guardando..."
+    const indicator = document.getElementById(`saving-${itemId}`);
+    if (indicator) {
+      indicator.style.display = 'inline';
+    }
+    
+    // Nuevo timer
+    state.debounceTimers[itemId] = setTimeout(async () => {
+      try {
+        const response = await fetch(`/master/api/alquimia-general/items/${itemId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch)
+        });
+        
+        const result = await response.json();
+        
+        if (!result.ok) {
+          throw new Error(result.error || 'Error actualizando item');
+        }
+        
+        // Ocultar "guardando..." y mostrar ✓ brevemente
+        if (indicator) {
+          indicator.textContent = '✓';
+          indicator.style.color = '#10b981';
+          setTimeout(() => {
+            indicator.style.display = 'none';
+            indicator.textContent = 'guardando...';
+            indicator.style.color = '#64748b';
+          }, 1000);
+        }
+        
+        // Refetch items para obtener datos frescos
+        await loadItems(state.listaActiva.id);
+      } catch (error) {
+        console.error('[MasterAlquimiaGeneral] Error actualizando item:', error);
+        if (indicator) {
+          indicator.textContent = '✗';
+          indicator.style.color = '#ef4444';
+          setTimeout(() => {
+            indicator.style.display = 'none';
+            indicator.textContent = 'guardando...';
+            indicator.style.color = '#64748b';
+          }, 2000);
+        }
+        showWarning(`Error: ${error.message}`);
+      }
+    }, 800); // 800ms debounce
+  }
+
+  /**
+   * Maneja creación inline sticky (mantiene nivel/grupo/días)
+   */
+  async function handleCrearItemInlineSticky() {
+    const nombre = state.newItemDraft.nombre.trim();
+    if (!nombre) {
+      showWarning('El nombre es requerido');
+      return;
+    }
+
+    const nivel = state.newItemDraft.nivel || 9;
+    if (!nivel || nivel < 1 || nivel > 9) {
+      showWarning('El nivel debe ser entre 1 y 9');
+      return;
+    }
+
+    try {
+      const body = {
+        lista_id: state.listaActiva.id,
+        nombre,
+        nivel,
+        descripcion: state.newItemDraft.descripcion.trim() || null
+      };
+
+      if (state.listaActiva.tipo === 'recurrente') {
+        body.frecuencia_dias = state.newItemDraft.frecuencia_dias || 20;
+      } else {
+        body.veces_limpiar = 1;
+      }
+      
+      if (state.newItemDraft.grupo && state.newItemDraft.grupo.trim() !== '') {
+        body.grupo = state.newItemDraft.grupo.trim();
+      }
+
+      const response = await fetch('/master/api/alquimia-general/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error creando item');
+      }
+
+      // Sticky: mantener nivel, grupo y frecuencia_dias, limpiar solo nombre/desc
+      state.newItemDraft.nombre = '';
+      state.newItemDraft.descripcion = '';
+      // nivel, grupo y frecuencia_dias se mantienen
+
+      // Refetch items y re-render (mantiene focus en nombre)
+      await loadItems(state.listaActiva.id);
+      
+      // Re-focus en nombre input (en la nueva fila create)
+      setTimeout(() => {
+        const nombreInput = document.querySelector('tbody tr:first-child input[type="text"][placeholder*="Nombre"]');
+        if (nombreInput) {
+          nombreInput.focus();
+        }
+      }, 100);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error creando item inline:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Crea la fila de creación inline de items (legacy, mantener por compatibilidad)
    */
   function createItemCreationRow() {
     const row = document.createElement('div');
@@ -1290,21 +1835,175 @@
     });
     content.appendChild(descTextarea);
 
-    // Clasificación (simplificada por ahora - TODO: implementar selectores editables completos)
+    // Clasificación (selectores editables completos)
     const classLabel = document.createElement('label');
     classLabel.textContent = 'Clasificación:';
-    classLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem; margin-top: 1rem;';
+    classLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem; margin-top: 1rem; font-weight: 600;';
     content.appendChild(classLabel);
 
-    const classInfo = document.createElement('div');
-    classInfo.style.cssText = 'padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #94a3b8; font-size: 0.875rem;';
-    classInfo.textContent = `Categoría: ${state.listaActiva.classification?.category_key || 'Sin categoría'} | Subclasificación: ${state.listaActiva.classification?.subtype_key || 'Sin subclasificación'} | Tags: ${(state.listaActiva.classification?.tags || []).join(', ') || 'Sin tags'}`;
-    content.appendChild(classInfo);
+    // Category (single, editable)
+    const categoryLabel = document.createElement('label');
+    categoryLabel.textContent = 'Categoría:';
+    categoryLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem; margin-top: 0.5rem;';
+    content.appendChild(categoryLabel);
 
-    const classNote = document.createElement('div');
-    classNote.style.cssText = 'margin-top: 0.5rem; color: #64748b; font-size: 0.75rem; font-style: italic;';
-    classNote.textContent = 'Nota: Edición completa de clasificación pendiente (selectores editables con create-on-enter)';
-    content.appendChild(classNote);
+    const categoryInput = document.createElement('input');
+    categoryInput.type = 'text';
+    categoryInput.value = state.listaActiva.classification?.category_key || '';
+    categoryInput.setAttribute('list', 'category-datalist');
+    categoryInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #f1f5f9; font-size: 0.875rem; margin-bottom: 1rem;';
+    
+    const categoryDatalist = document.createElement('datalist');
+    categoryDatalist.id = 'category-datalist';
+    state.classifications.categories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.value || cat.key || cat;
+      categoryDatalist.appendChild(option);
+    });
+    document.body.appendChild(categoryDatalist);
+    
+    categoryInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = categoryInput.value.trim();
+        if (value) {
+          await updateListaClassification({ category_key: value });
+        }
+      }
+    });
+    categoryInput.addEventListener('blur', async () => {
+      const value = categoryInput.value.trim();
+      if (value) {
+        await updateListaClassification({ category_key: value });
+      }
+    });
+    content.appendChild(categoryInput);
+
+    // Subtype (single, editable)
+    const subtypeLabel = document.createElement('label');
+    subtypeLabel.textContent = 'Subclasificación:';
+    subtypeLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    content.appendChild(subtypeLabel);
+
+    const subtypeInput = document.createElement('input');
+    subtypeInput.type = 'text';
+    subtypeInput.value = state.listaActiva.classification?.subtype_key || '';
+    subtypeInput.setAttribute('list', 'subtype-datalist');
+    subtypeInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #f1f5f9; font-size: 0.875rem; margin-bottom: 1rem;';
+    
+    const subtypeDatalist = document.createElement('datalist');
+    subtypeDatalist.id = 'subtype-datalist';
+    state.classifications.subtypes.forEach(sub => {
+      const option = document.createElement('option');
+      option.value = sub.value || sub.key || sub;
+      subtypeDatalist.appendChild(option);
+    });
+    document.body.appendChild(subtypeDatalist);
+    
+    subtypeInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = subtypeInput.value.trim();
+        if (value) {
+          await updateListaClassification({ subtype_key: value });
+        }
+      }
+    });
+    subtypeInput.addEventListener('blur', async () => {
+      const value = subtypeInput.value.trim();
+      if (value) {
+        await updateListaClassification({ subtype_key: value });
+      }
+    });
+    content.appendChild(subtypeInput);
+
+    // Tags (multi, editable con chips)
+    const tagsLabel = document.createElement('label');
+    tagsLabel.textContent = 'Tags:';
+    tagsLabel.style.cssText = 'display: block; color: #cbd5e1; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    content.appendChild(tagsLabel);
+
+    const tagsContainer = document.createElement('div');
+    tagsContainer.style.cssText = 'margin-bottom: 1rem;';
+    
+    // Chips de tags actuales
+    const tagsChipsContainer = document.createElement('div');
+    tagsChipsContainer.id = 'tags-chips-container';
+    tagsChipsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;';
+    
+    const currentTags = state.listaActiva.classification?.tags || [];
+    currentTags.forEach(tag => {
+      const chip = document.createElement('span');
+      chip.textContent = tag;
+      chip.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: #4f46e5; color: #fff; border-radius: 0.375rem; font-size: 0.875rem;';
+      
+      const removeBtn = document.createElement('span');
+      removeBtn.textContent = '×';
+      removeBtn.style.cssText = 'cursor: pointer; font-weight: bold; margin-left: 0.25rem;';
+      removeBtn.addEventListener('click', async () => {
+        const newTags = currentTags.filter(t => t !== tag);
+        await updateListaClassification({ tags: newTags });
+        renderTagsChips(newTags);
+      });
+      chip.appendChild(removeBtn);
+      tagsChipsContainer.appendChild(chip);
+    });
+    tagsContainer.appendChild(tagsChipsContainer);
+    
+    // Input para añadir tags
+    const tagsInput = document.createElement('input');
+    tagsInput.type = 'text';
+    tagsInput.setAttribute('list', 'tags-datalist');
+    tagsInput.placeholder = 'Escribe y presiona Enter para añadir tag';
+    tagsInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; color: #f1f5f9; font-size: 0.875rem;';
+    
+    const tagsDatalist = document.createElement('datalist');
+    tagsDatalist.id = 'tags-datalist';
+    state.classifications.tags.forEach(tag => {
+      const option = document.createElement('option');
+      option.value = tag.value || tag.key || tag;
+      tagsDatalist.appendChild(option);
+    });
+    document.body.appendChild(tagsDatalist);
+    
+    tagsInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = tagsInput.value.trim();
+        if (value && !currentTags.includes(value)) {
+          const newTags = [...currentTags, value];
+          await updateListaClassification({ tags: newTags });
+          tagsInput.value = '';
+          renderTagsChips(newTags);
+        } else if (value) {
+          tagsInput.value = '';
+        }
+      }
+    });
+    
+    // Función helper para re-renderizar chips
+    function renderTagsChips(tags) {
+      tagsChipsContainer.innerHTML = '';
+      tags.forEach(tag => {
+        const chip = document.createElement('span');
+        chip.textContent = tag;
+        chip.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: #4f46e5; color: #fff; border-radius: 0.375rem; font-size: 0.875rem;';
+        
+        const removeBtn = document.createElement('span');
+        removeBtn.textContent = '×';
+        removeBtn.style.cssText = 'cursor: pointer; font-weight: bold; margin-left: 0.25rem;';
+        removeBtn.addEventListener('click', async () => {
+          const newTags = tags.filter(t => t !== tag);
+          await updateListaClassification({ tags: newTags });
+          renderTagsChips(newTags);
+        });
+        chip.appendChild(removeBtn);
+        tagsChipsContainer.appendChild(chip);
+      });
+    }
+    
+    tagsContainer.appendChild(tagsInput);
+    content.appendChild(tagsContainer);
 
     modal.appendChild(content);
     overlay.appendChild(modal);
@@ -1343,6 +2042,47 @@
       await loadLista(state.listaActiva.id);
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error actualizando lista:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualiza clasificación de lista (category/subtype/tags)
+   */
+  async function updateListaClassification(patch) {
+    if (!state.listaActiva || !state.listaActiva.id) return;
+
+    try {
+      const body = {};
+      if (patch.category_key !== undefined) {
+        body.category_key = patch.category_key || null;
+      }
+      if (patch.subtype_key !== undefined) {
+        body.subtype_key = patch.subtype_key || null;
+      }
+      if (patch.tags !== undefined) {
+        body.tags = Array.isArray(patch.tags) ? patch.tags : [];
+      }
+
+      const response = await fetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}/classification`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error actualizando clasificación');
+      }
+
+      // Refetch listas para obtener datos frescos (mantiene lista activa)
+      await loadListas(state.tipoActivo);
+      if (state.listaActiva && state.listaActiva.id) {
+        await loadLista(state.listaActiva.id);
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error actualizando clasificación:', error);
       showWarning(`Error: ${error.message}`);
     }
   }
