@@ -876,16 +876,16 @@
       column.appendChild(studentsContainer);
       
       // Renderizar estudiantes
-      students.forEach(student => {
-        const studentDiv = createStudentRow(student, stateKey, item, data);
+      (students || []).forEach(student => {
+        const studentDiv = createStudentRow(student, stateKey, item, normalized);
         studentsContainer.appendChild(studentDiv);
       });
     } else {
       column.appendChild(header);
       
       // Renderizar estudiantes
-      students.forEach(student => {
-        const studentDiv = createStudentRow(student, stateKey, item, data);
+      (students || []).forEach(student => {
+        const studentDiv = createStudentRow(student, stateKey, item, normalized);
         column.appendChild(studentDiv);
       });
     }

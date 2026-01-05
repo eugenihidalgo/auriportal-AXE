@@ -44,13 +44,13 @@ export class PdeDailyCleanLogRepoPg {
       // Insertar en lote con ON CONFLICT DO NOTHING (idempotente)
       // Usar un solo INSERT con múltiples VALUES para eficiencia
       const values = student_ids.map((studentId, idx) => {
-        const base = idx * 6;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
+        const base = idx * 7; // 7 campos: student_id, item_ref, cleaned_date, actor_type, actor_id, meta, trace_id
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
       }).join(', ');
 
       const params = [];
       student_ids.forEach(studentId => {
-        params.push(studentId, item_ref, cleanedDateStr, actor_type, actor_id, JSON.stringify(meta));
+        params.push(studentId, item_ref, cleanedDateStr, actor_type, actor_id, JSON.stringify(meta), traceId);
       });
 
       const sql = `
@@ -61,30 +61,7 @@ export class PdeDailyCleanLogRepoPg {
         RETURNING id
       `;
 
-      // Añadir trace_id a todos los params
-      const finalParams = [...params, traceId];
-      const finalSql = sql.replace(/ON CONFLICT/, `, trace_id) VALUES ${values}, $${params.length + 1}) ON CONFLICT`);
-
-      // Corregir: trace_id debe ir en cada fila, no al final
-      const correctedValues = student_ids.map((studentId, idx) => {
-        const base = idx * 7; // 7 campos ahora
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
-      }).join(', ');
-
-      const correctedParams = [];
-      student_ids.forEach(studentId => {
-        correctedParams.push(studentId, item_ref, cleanedDateStr, actor_type, actor_id, JSON.stringify(meta), traceId);
-      });
-
-      const correctedSql = `
-        INSERT INTO pde_daily_item_clean_log 
-          (student_id, item_ref, cleaned_date, actor_type, actor_id, meta, trace_id)
-        VALUES ${correctedValues}
-        ON CONFLICT (student_id, item_ref, cleaned_date) DO NOTHING
-        RETURNING id
-      `;
-
-      const result = await query(correctedSql, correctedParams);
+      const result = await query(sql, params);
       const inserted = result.rows.length;
       const skipped = student_ids.length - inserted;
 
