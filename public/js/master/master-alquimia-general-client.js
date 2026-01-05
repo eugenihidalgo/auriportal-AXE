@@ -144,7 +144,8 @@
         throw new Error(result.error || 'Error desconocido en respuesta API');
       }
       
-      state.listas = result.data || [];
+      // FIX: El endpoint devuelve { ok: true, listas: [...] }, no { data: [...] }
+      state.listas = result.listas || result.data || [];
       renderListasTabs();
       
       // Si hay listas, cargar la primera
@@ -174,16 +175,31 @@
     }
     
     if (state.listas.length === 0) {
-      const emptyMsg = document.createElement('span');
-      emptyMsg.textContent = 'No hay listas';
-      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic;';
-      listasTabsContainer.appendChild(emptyMsg);
-        return;
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = 'padding: 1rem; text-align: center; color: #94a3b8; font-style: italic;';
+      
+      const emptyText = document.createElement('p');
+      emptyText.textContent = 'No hay listas todavía';
+      emptyText.style.cssText = 'margin-bottom: 0.5rem;';
+      emptyMsg.appendChild(emptyText);
+      
+      // CTA: Botón "➕ Nueva Lista" si existe endpoint
+      const btnNuevaLista = document.getElementById('btn-crear-lista');
+      if (btnNuevaLista) {
+        const ctaText = document.createElement('p');
+        ctaText.textContent = 'Usa el botón "➕ Nueva Lista" para crear una';
+        ctaText.style.cssText = 'font-size: 0.875rem; color: #cbd5e1;';
+        emptyMsg.appendChild(ctaText);
       }
+      
+      listasTabsContainer.appendChild(emptyMsg);
+      return;
+    }
       
     state.listas.forEach(lista => {
       const tab = document.createElement('button');
-      tab.textContent = lista.list_name || `Lista ${lista.id}`;
+      // FIX: La tabla usa 'nombre', no 'list_name'
+      tab.textContent = lista.nombre || lista.list_name || `Lista ${lista.id}`;
       tab.className = 'px-3 py-1 rounded transition-colors';
       tab.style.cssText = 'background: transparent; border: 1px solid #334155; color: #cbd5e1; cursor: pointer; padding: 0.5rem 1rem; margin-right: 0.5rem; white-space: nowrap;';
       
@@ -216,7 +232,8 @@
         return;
       }
       
-      state.listaActiva = result.data;
+      // FIX: El endpoint devuelve { ok: true, lista: {...} }, no { data: {...} }
+      state.listaActiva = result.lista || result.data;
       
       // Cargar items de la lista
       await loadItems(listaId);
@@ -225,6 +242,12 @@
       renderListasTabs();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando lista:', error);
+      
+      // ERROR HANDLING: Pintar error visible
+      const errorBox = document.createElement('div');
+      errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
+      errorBox.textContent = `⚠️ Error cargando lista: ${error.message || 'Error desconocido'}`;
+      rootContainer.appendChild(errorBox);
     }
   }
 
@@ -241,10 +264,19 @@
       return;
     }
 
-      state.items = result.data || [];
+      // FIX: El endpoint devuelve { ok: true, items: [...] }, no { data: [...] }
+      state.items = result.items || result.data || [];
       renderListaContent();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando items:', error);
+      
+      // ERROR HANDLING: Pintar error visible
+      if (listaContent) {
+        const errorBox = document.createElement('div');
+        errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
+        errorBox.textContent = `⚠️ Error cargando items: ${error.message || 'Error desconocido'}`;
+        listaContent.appendChild(errorBox);
+      }
     }
   }
 
@@ -268,7 +300,8 @@
     
     // Título
     const title = document.createElement('h2');
-    title.textContent = state.listaActiva.list_name || 'Lista sin nombre';
+    // FIX: La tabla usa 'nombre', no 'list_name'
+    title.textContent = state.listaActiva.nombre || state.listaActiva.list_name || 'Lista sin nombre';
     title.className = 'text-2xl font-bold text-white mb-4';
     listaContent.appendChild(title);
     
@@ -290,7 +323,8 @@
       itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem;';
       
       const itemName = document.createElement('div');
-      itemName.textContent = item.name || 'Item sin nombre';
+      // FIX: La tabla usa 'nombre', no 'name'
+      itemName.textContent = item.nombre || item.name || 'Item sin nombre';
       itemName.style.cssText = 'color: #f1f5f9; font-weight: 500;';
       itemDiv.appendChild(itemName);
       
