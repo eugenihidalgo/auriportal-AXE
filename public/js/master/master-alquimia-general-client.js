@@ -535,29 +535,109 @@
   }
 
   /**
+   * Normaliza el payload de estudiantes para evitar crashes
+   * Maneja diferentes shapes posibles del backend
+   */
+  function normalizeStudentsPayload(json) {
+    const traceId = json?.trace_id || json?.data?.trace_id || null;
+    const base = json?.data ?? json ?? {};
+    const data = base?.data ?? base;
+    const students = Array.isArray(data?.students) ? data.students : [];
+    const counts = data?.counts || { reviewed: 0, pending: 0, important: 0, never: 0 };
+    const total = Number.isFinite(data?.total) ? data.total : students.length;
+    const warnings = json?.warnings || data?.warnings || [];
+    const ok = json?.ok === true;
+    
+    return { 
+      ok, 
+      traceId, 
+      students, 
+      counts, 
+      total, 
+      warnings, 
+      raw: json,
+      item_ref: data?.item_ref || json?.item_ref || null,
+      tipo: data?.tipo || json?.tipo || null,
+      threshold_days: data?.threshold_days || null,
+      critical_multiplier: data?.critical_multiplier || 2.0
+    };
+  }
+
+  /**
    * Maneja el click en botón VER (abre flotante)
    */
   async function handleVerItem(item) {
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      // Mostrar error visible en UI
+      const errorBox = document.createElement('div');
+      errorBox.style.cssText = 'background: #ef4444; color: #fff; padding: 0.75rem; margin: 0.5rem 0; border-radius: 0.375rem; font-size: 0.875rem;';
+      errorBox.textContent = '❌ Error: Item sin item_ref. No se puede abrir el flotante.';
+      const root = document.getElementById('master-alquimia-general-root');
+      if (root) {
+        root.appendChild(errorBox);
+        setTimeout(() => errorBox.remove(), 5000);
+      }
       return;
     }
 
     try {
       // Cargar estudiantes para este item
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students`);
+      
+      // Verificar content-type
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        const firstBytes = text.substring(0, 200);
+        console.error('[MasterAlquimiaGeneral] Respuesta no-JSON:', { status: response.status, contentType, firstBytes });
+        throw new Error(`Respuesta no-JSON del servidor (${response.status}). Ver consola para detalles.`);
+      }
+      
       const result = await response.json();
       
-      if (!result.ok) {
-        throw new Error(result.error || 'Error cargando estudiantes');
+      // Log forense
+      console.log('[MasterAlquimiaGeneral] flotante payload', { 
+        itemRef: item.item_ref, 
+        keys: Object.keys(result || {}), 
+        traceId: result?.trace_id,
+        hasData: !!result?.data,
+        hasStudents: !!result?.data?.students
+      });
+
+      // Normalizar payload
+      const normalized = normalizeStudentsPayload(result);
+      
+      // Si no es ok, mostrar warning pero no crash
+      if (!normalized.ok) {
+        console.warn('[MasterAlquimiaGeneral] Respuesta no-ok:', normalized.raw);
+        // Mostrar warning visible pero continuar
+        showWarningInFlotante(normalized.warnings, normalized.raw);
       }
 
-      // Mostrar flotante
-      showFlotanteVer(item, result.data);
+      // Mostrar flotante (siempre, aunque esté vacío)
+      showFlotanteVer(item, normalized);
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error abriendo flotante:', error);
-      alert(`Error: ${error.message}`);
+      
+      // Mostrar error visible en UI (no solo alert)
+      const errorBox = document.createElement('div');
+      errorBox.style.cssText = 'background: #ef4444; color: #fff; padding: 0.75rem; margin: 0.5rem 0; border-radius: 0.375rem; font-size: 0.875rem;';
+      errorBox.textContent = `❌ Error: ${error.message}`;
+      const root = document.getElementById('master-alquimia-general-root');
+      if (root) {
+        root.appendChild(errorBox);
+        setTimeout(() => errorBox.remove(), 5000);
+      }
     }
+  }
+
+  /**
+   * Muestra warning visible en el flotante
+   */
+  function showWarningInFlotante(warnings, raw) {
+    // Se mostrará en el flotante cuando se renderice
+    console.warn('[MasterAlquimiaGeneral] Warnings del payload:', warnings, raw);
   }
 
   /**
@@ -602,8 +682,10 @@
 
   /**
    * Muestra el flotante VER con estudiantes agrupados por estado
+   * @param {Object} item - Item con nombre, item_ref, etc.
+   * @param {Object} normalized - Payload normalizado con students, counts, warnings, etc.
    */
-  function showFlotanteVer(item, data) {
+  function showFlotanteVer(item, normalized) {
     // Eliminar flotante existente si hay
     const existingFlotante = document.getElementById('flotante-ver-alquimia');
     if (existingFlotante) {
@@ -646,6 +728,26 @@
     const content = document.createElement('div');
     content.style.cssText = 'padding: 1rem; overflow-y: auto; flex: 1;';
     
+    // Mostrar warnings si existen (amarillo visible)
+    if (normalized.warnings && normalized.warnings.length > 0) {
+      const warningBox = document.createElement('div');
+      warningBox.style.cssText = 'background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.5); border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 1rem;';
+      
+      const warningTitle = document.createElement('div');
+      warningTitle.textContent = '⚠️ Advertencias:';
+      warningTitle.style.cssText = 'color: #fde047; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;';
+      warningBox.appendChild(warningTitle);
+      
+      normalized.warnings.forEach(warning => {
+        const warningText = document.createElement('div');
+        warningText.textContent = `• ${warning}`;
+        warningText.style.cssText = 'color: #fde047; font-size: 0.875rem; margin-left: 0.5rem;';
+        warningBox.appendChild(warningText);
+      });
+      
+      content.appendChild(warningBox);
+    }
+    
     // Agrupar estudiantes por estado
     const studentsByState = {
       reviewed: [],
@@ -654,8 +756,9 @@
       never: []
     };
 
-    if (data.students) {
-      data.students.forEach(student => {
+    // Usar students del payload normalizado (siempre array)
+    if (normalized.students && Array.isArray(normalized.students)) {
+      normalized.students.forEach(student => {
         const state = student.state || 'never';
         if (studentsByState[state]) {
           studentsByState[state].push(student);
@@ -668,19 +771,19 @@
     columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
 
     // 🟢 REVISADO
-    const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, data);
+    const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, normalized);
     columnsContainer.appendChild(colReviewed);
 
     // 🟡 PENDIENTE
-    const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, data);
+    const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
     columnsContainer.appendChild(colPending);
 
     // 🔴 IMPORTANTE REVISAR
-    const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, data);
+    const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, normalized);
     columnsContainer.appendChild(colImportant);
 
     // ⚪ NUNCA (colapsable)
-    const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, data, true);
+    const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
     columnsContainer.appendChild(colNever);
 
     content.appendChild(columnsContainer);
@@ -701,8 +804,14 @@
 
   /**
    * Crea una columna de estado con estudiantes
+   * @param {string} title - Título de la columna
+   * @param {Array} students - Array de estudiantes para este estado
+   * @param {string} stateKey - Clave del estado (reviewed, pending, important, never)
+   * @param {Object} item - Item con item_ref, nombre, etc.
+   * @param {Object} normalized - Payload normalizado con counts, etc.
+   * @param {boolean} collapsable - Si es colapsable (solo para NUNCA)
    */
-  function createStateColumn(title, students, stateKey, item, data, collapsable = false) {
+  function createStateColumn(title, students, stateKey, item, normalized, collapsable = false) {
     const column = document.createElement('div');
     column.style.cssText = 'display: flex; flex-direction: column;';
 
@@ -765,8 +874,12 @@
 
   /**
    * Crea una fila de estudiante
+   * @param {Object} student - Estudiante con display_name, student_id, etc.
+   * @param {string} stateKey - Clave del estado
+   * @param {Object} item - Item con item_ref, etc.
+   * @param {Object} normalized - Payload normalizado
    */
-  function createStudentRow(student, stateKey, item, data) {
+  function createStudentRow(student, stateKey, item, normalized) {
     const row = document.createElement('div');
     row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center;';
     

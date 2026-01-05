@@ -648,6 +648,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // ============================================================================
 
     // GET /master/api/alquimia-general/items/:item_ref/students (modal)
+    // FAIL-OPEN: Este endpoint NUNCA devuelve 500, siempre ok:true con shape estable
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/students$/) && method === 'GET') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/students');
       const itemRef = params.item_ref;
@@ -655,26 +656,118 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : null;
       const offset = url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset'), 10) : 0;
 
-      // Obtener item para conocer tipo
-      const item = await getItemByRef(itemRef);
-      if (!item) {
-        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      const warnings = [];
+
+      try {
+        // Obtener item para conocer tipo
+        const item = await getItemByRef(itemRef);
+        if (!item) {
+          warnings.push(`Item no encontrado: ${itemRef}`);
+          logWarn('MasterApiAlquimiaGeneral', 'Item no encontrado en GET students', {
+            traceId,
+            itemRef
+          });
+          // Fail-open: devolver shape vacío pero estable
+          return jsonSuccess({
+            data: {
+              item_ref: itemRef,
+              tipo: null,
+              students: [],
+              counts: { reviewed: 0, pending: 0, important: 0, never: 0 },
+              total: 0,
+              threshold_days: null,
+              critical_multiplier: 2.0
+            },
+            warnings
+          }, traceId);
+        }
+
+        // Obtener lista para conocer tipo
+        const lista = await getListaById(item.lista_id);
+        if (!lista) {
+          warnings.push(`Lista no encontrada para item: ${itemRef}`);
+          logWarn('MasterApiAlquimiaGeneral', 'Lista no encontrada en GET students', {
+            traceId,
+            itemRef,
+            lista_id: item.lista_id
+          });
+          // Fail-open: devolver shape vacío pero estable
+          return jsonSuccess({
+            data: {
+              item_ref: itemRef,
+              tipo: null,
+              students: [],
+              counts: { reviewed: 0, pending: 0, important: 0, never: 0 },
+              total: 0,
+              threshold_days: null,
+              critical_multiplier: 2.0
+            },
+            warnings
+          }, traceId);
+        }
+
+        const tipo = lista.tipo;
+        
+        // Llamar servicio con try/catch para fail-open
+        let result;
+        try {
+          result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset });
+        } catch (serviceError) {
+          logError('MasterApiAlquimiaGeneral', 'Error en getStudentsForItem (fail-open)', {
+            traceId,
+            error: serviceError.message,
+            code: serviceError.code,
+            stack: serviceError.stack,
+            itemRef,
+            tipo
+          });
+          warnings.push(`Error al cargar estudiantes: ${serviceError.message}`);
+          // Fail-open: devolver shape vacío pero estable
+          result = {
+            students: [],
+            counts: { reviewed: 0, pending: 0, important: 0, never: 0 },
+            total: 0,
+            threshold_days: tipo === 'recurrente' ? (item.frecuencia_dias || 7) : null,
+            critical_multiplier: 2.0
+          };
+        }
+
+        // Asegurar shape estable con data wrapper
+        return jsonSuccess({
+          data: {
+            item_ref: itemRef,
+            tipo,
+            students: Array.isArray(result.students) ? result.students : [],
+            counts: result.counts || { reviewed: 0, pending: 0, important: 0, never: 0 },
+            total: Number.isFinite(result.total) ? result.total : (Array.isArray(result.students) ? result.students.length : 0),
+            threshold_days: result.threshold_days || (tipo === 'recurrente' ? (item.frecuencia_dias || 7) : null),
+            critical_multiplier: result.critical_multiplier || 2.0
+          },
+          warnings: warnings.length > 0 ? warnings : undefined
+        }, traceId);
+
+      } catch (error) {
+        // Fail-open absoluto: cualquier error no capturado
+        logError('MasterApiAlquimiaGeneral', 'Error crítico en GET students (fail-open)', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack,
+          itemRef
+        });
+        return jsonSuccess({
+          data: {
+            item_ref: itemRef,
+            tipo: null,
+            students: [],
+            counts: { reviewed: 0, pending: 0, important: 0, never: 0 },
+            total: 0,
+            threshold_days: null,
+            critical_multiplier: 2.0
+          },
+          warnings: [`Error crítico: ${error.message}`]
+        }, traceId);
       }
-
-      // Obtener lista para conocer tipo
-      const lista = await getListaById(item.lista_id);
-      if (!lista) {
-        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
-      }
-
-      const tipo = lista.tipo;
-      const result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset });
-
-      return jsonSuccess({
-        item_ref: itemRef,
-        tipo,
-        ...result
-      }, traceId);
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all (recurrente)
