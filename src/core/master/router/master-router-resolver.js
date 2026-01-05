@@ -50,6 +50,8 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-increment-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-item-groups': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-lista-classification': () => import('../../../endpoints/master-api-alquimia-general.js'),
   
   // Alquimia por Alumno API Handlers
   'master-api-alquimia-alumno': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
