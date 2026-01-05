@@ -522,3 +522,138 @@ export async function updateActivationLimit(studentId, domain, value, source, op
     throw error;
   }
 }
+
+/**
+ * Crea un lugar para un alumno (catálogo + estado + activación)
+ * 
+ * Lógica canónica:
+ * 1. Verifica alumno existe
+ * 2. Verifica categoría existe y está activa
+ * 3. Genera place_key único
+ * 4. Crea en places_catalog
+ * 5. Crea student_place_state activo
+ * 6. Respeta límites (si actor != 'master')
+ * 7. Emite señal place.activated
+ */
+export async function createPlaceForStudent({ studentId, name, description, categoryId, actor, options = {} }) {
+  const { traceId = null, authCtx = {} } = options;
+  const finalTraceId = traceId || getRequestId();
+
+  logInfo('PlaceService', '[PLACE][CREATE_FOR_STUDENT] Iniciando creación', {
+    student_id: studentId,
+    name,
+    category_id: categoryId,
+    actor,
+    traceId: finalTraceId
+  });
+
+  try {
+    // 1. Verificar alumno existe
+    const student = await studentRepo.getById(studentId);
+    if (!student) {
+      throw new Error(`Alumno no encontrado: ${studentId}`);
+    }
+
+    // Verificar suscripción NO en pausa
+    if (student.estado_suscripcion === 'pausada') {
+      throw new Error(`Alumno con suscripción pausada no puede crear lugares`);
+    }
+
+    // 2. Verificar categoría existe y está activa
+    const category = await placeCategoryRepo.getById(categoryId);
+    if (!category) {
+      throw new Error(`Categoría no encontrada: ${categoryId}`);
+    }
+    if (!category.is_active) {
+      throw new Error(`Categoría no está activa: ${categoryId}`);
+    }
+
+    // 3. Generar place_key único
+    const timestamp = Date.now();
+    const slug = name.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .substring(0, 50);
+    const placeKey = `${slug}-${timestamp}`;
+
+    // 4. Crear en places_catalog
+    const place = await placeCatalogRepo.create({
+      place_key: placeKey,
+      category_id: categoryId,
+      base_name: name
+    });
+
+    logInfo('PlaceService', '[PLACE][CREATE_FOR_STUDENT] Lugar creado en catálogo', {
+      place_id: place.id,
+      place_key: placeKey,
+      traceId: finalTraceId
+    });
+
+    // 5. Crear student_place_state activo
+    // Si actor='master', no hay límites; si no, aplicar lógica de overflow
+    let placeState;
+    
+    if (actor === 'master') {
+      // Master: crear directamente activo
+      placeState = await placeStateRepo.create({
+        student_id: studentId,
+        place_id: place.id,
+        is_active: true,
+        is_reviewed: false,
+        custom_name: name,
+        description: description || null,
+        recurrence_days: category.default_recurrence_days || 30
+      });
+      
+      // Emitir señal
+      await dispatchSignal({
+        signal_key: 'place.activated',
+        payload: {
+          student_id: studentId,
+          place_id: place.id,
+          place_state_id: placeState.id,
+          actor_type: actor
+        },
+        runtime: {
+          student_id: studentId,
+          trace_id: finalTraceId
+        },
+        context: {}
+      }, { source: { type: 'place_service', id: 'create_for_student' }, traceId: finalTraceId, authCtx });
+    } else {
+      // No-master: usar activatePlace para respetar límites
+      placeState = await activatePlace(studentId, place.id, actor, { traceId: finalTraceId, authCtx });
+      
+      // Actualizar custom_name y description si difieren
+      if (placeState.custom_name !== name || placeState.description !== (description || null)) {
+        placeState = await placeStateRepo.updateById(placeState.id, {
+          custom_name: name,
+          description: description || null
+        });
+      }
+    }
+
+    logInfo('PlaceService', '[PLACE][CREATE_FOR_STUDENT] Lugar creado y activado', {
+      student_id: studentId,
+      place_id: place.id,
+      place_state_id: placeState.id,
+      actor,
+      traceId: finalTraceId
+    });
+
+    return {
+      place_id: place.id,
+      place_state_id: placeState.id,
+      place
+    };
+  } catch (error) {
+    logError('PlaceService', '[PLACE][CREATE_FOR_STUDENT] Error creando lugar', {
+      student_id: studentId,
+      name,
+      category_id: categoryId,
+      error: error.message,
+      traceId: finalTraceId
+    });
+    throw error;
+  }
+}
