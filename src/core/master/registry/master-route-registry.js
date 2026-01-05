@@ -339,6 +339,12 @@ export const MASTER_ROUTES = [
     method: 'PATCH'
   },
   {
+    key: 'master-api-places-create-for-student',
+    path: '/master/api/places/create-for-student',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'master-api-place-categories',
     path: '/master/api/place-categories',
     type: 'api'

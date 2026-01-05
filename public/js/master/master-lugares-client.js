@@ -128,7 +128,7 @@
     
     // Cargar datos iniciales según tab activo
     if (state.tabActivo === 'activos') {
-      await loadLugaresActivos();
+    await loadLugaresActivos();
     } else if (state.tabActivo === 'clasificaciones') {
       await loadCategories();
     }
@@ -350,12 +350,14 @@
     
     const columns = [
       { key: 'checkbox', label: '', sortable: false },
-      { key: 'student_email', label: 'Alumno', sortable: false, clickable: true },
+      { key: 'student_apodo', label: 'Apodo', sortable: false, clickable: true },
+      { key: 'student_email', label: 'Email', sortable: false, clickable: true },
       { key: 'category_name', label: 'Categoría', sortable: true },
       { key: 'name', label: 'Nombre', sortable: true, editable: true },
       { key: 'description', label: 'Descripción', sortable: false, editable: true },
       { key: 'health_status', label: 'Salud', sortable: true },
       { key: 'days_since_clean', label: 'Días desde limpieza', sortable: true },
+      { key: 'last_cleaned_at', label: 'Última limpieza', sortable: true },
       { key: 'recurrence_days', label: 'Recurrencia', sortable: false, editable: true },
       { key: 'actions', label: 'Acciones', sortable: false }
     ];
@@ -426,11 +428,11 @@
       tdCheckbox.appendChild(checkbox);
       row.appendChild(tdCheckbox);
       
-      // Alumno (clickable → Tab 2)
-      const tdStudent = document.createElement('td');
-      tdStudent.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
-      tdStudent.textContent = place.student_email || place.student_apodo || '-';
-      tdStudent.addEventListener('click', () => {
+      // Apodo (clickable → Tab 2)
+      const tdApodo = document.createElement('td');
+      tdApodo.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
+      tdApodo.textContent = place.student_apodo || '-';
+      tdApodo.addEventListener('click', () => {
         state.tabActivo = 'config-alumno';
         renderMainTabs();
         showTab('config-alumno');
@@ -439,7 +441,22 @@
           loadStudentById(place.student_id);
         }
       });
-      row.appendChild(tdStudent);
+      row.appendChild(tdApodo);
+      
+      // Email (clickable → Tab 2)
+      const tdEmail = document.createElement('td');
+      tdEmail.style.cssText = 'padding: 0.75rem; cursor: pointer; color: #60a5fa;';
+      tdEmail.textContent = place.student_email || '-';
+      tdEmail.addEventListener('click', () => {
+        state.tabActivo = 'config-alumno';
+        renderMainTabs();
+        showTab('config-alumno');
+        // Buscar y seleccionar alumno
+        if (place.student_id) {
+          loadStudentById(place.student_id);
+        }
+      });
+      row.appendChild(tdEmail);
       
       // Categoría
       const tdCategory = document.createElement('td');
@@ -488,6 +505,18 @@
       tdDays.textContent = place.days_since_clean !== undefined ? `${place.days_since_clean} días` : '-';
       tdDays.style.cssText = 'padding: 0.75rem;';
       row.appendChild(tdDays);
+      
+      // Última limpieza
+      const tdLastClean = document.createElement('td');
+      if (place.last_cleaned_at) {
+        const date = new Date(place.last_cleaned_at);
+        tdLastClean.textContent = date.toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } else {
+        tdLastClean.textContent = 'Nunca';
+        tdLastClean.style.color = '#94a3b8';
+      }
+      tdLastClean.style.cssText = 'padding: 0.75rem;';
+      row.appendChild(tdLastClean);
       
       // Recurrencia (editable solo Master)
       const tdRecurrence = document.createElement('td');
@@ -781,6 +810,149 @@
     limitSection.appendChild(limitSource);
     
     studentConfigContainer.appendChild(limitSection);
+    
+    // Formulario crear nuevo lugar
+    const createSection = document.createElement('div');
+    createSection.style.cssText = 'margin-bottom: 2rem; padding: 1rem; background: #1e293b; border: 2px dashed #475569; border-radius: 0.5rem;';
+    
+    const createTitle = document.createElement('h4');
+    createTitle.textContent = '➕ Crear nuevo lugar';
+    createTitle.style.cssText = 'color: #f1f5f9; font-size: 1rem; font-weight: 600; margin-bottom: 1rem;';
+    createSection.appendChild(createTitle);
+    
+    // Nombre
+    const nameLabel = document.createElement('label');
+    nameLabel.textContent = 'Nombre:';
+    nameLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.id = 'new-place-name';
+    nameInput.placeholder = 'Ej: Mi casa, Lugar de meditación...';
+    nameInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.75rem;';
+    createSection.appendChild(nameLabel);
+    createSection.appendChild(nameInput);
+    
+    // Descripción
+    const descLabel = document.createElement('label');
+    descLabel.textContent = 'Descripción / Dirección:';
+    descLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+    const descTextarea = document.createElement('textarea');
+    descTextarea.id = 'new-place-description';
+    descTextarea.rows = 2;
+    descTextarea.placeholder = 'Dirección o descripción del lugar...';
+    descTextarea.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.75rem; resize: vertical;';
+    createSection.appendChild(descLabel);
+    createSection.appendChild(descTextarea);
+    
+    // Tipo (categoría)
+    const typeLabel = document.createElement('label');
+    typeLabel.textContent = 'Tipo / Categoría:';
+    typeLabel.style.cssText = 'display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem;';
+    const typeSelect = document.createElement('select');
+    typeSelect.id = 'new-place-category';
+    typeSelect.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 0.75rem;';
+    
+    // Cargar categorías activas
+    (async () => {
+      try {
+        const catResult = await apiFetch('/master/api/place-categories');
+        const activeCategories = (catResult.categories || []).filter(c => c.is_active !== false).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        
+        if (activeCategories.length === 0) {
+          const optEmpty = document.createElement('option');
+          optEmpty.value = '';
+          optEmpty.textContent = 'No hay categorías disponibles';
+          optEmpty.disabled = true;
+          typeSelect.appendChild(optEmpty);
+        } else {
+          activeCategories.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat.id;
+            opt.textContent = cat.name;
+            typeSelect.appendChild(opt);
+          });
+        }
+      } catch (error) {
+        console.error('[MasterLugares] Error cargando categorías:', error);
+        const optError = document.createElement('option');
+        optError.value = '';
+        optError.textContent = 'Error cargando categorías';
+        optError.disabled = true;
+        typeSelect.appendChild(optError);
+      }
+    })();
+    
+    createSection.appendChild(typeLabel);
+    createSection.appendChild(typeSelect);
+    
+    // Botones
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.style.cssText = 'display: flex; gap: 0.5rem;';
+    
+    const createBtn = document.createElement('button');
+    createBtn.textContent = 'Crear y Activar';
+    createBtn.style.cssText = 'padding: 0.5rem 1rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+    createBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const description = descTextarea.value.trim();
+      const categoryId = parseInt(typeSelect.value, 10);
+      
+      if (!name) {
+        showMessage('El nombre es requerido', 'error');
+        return;
+      }
+      
+      if (!categoryId || isNaN(categoryId)) {
+        showMessage('Debes seleccionar un tipo', 'error');
+        return;
+      }
+      
+      try {
+        createBtn.disabled = true;
+        createBtn.textContent = 'Creando...';
+        
+        await apiFetch('/master/api/places/create-for-student', {
+          method: 'POST',
+          body: JSON.stringify({
+            student_id: state.currentStudent.id,
+            name,
+            description: description || null,
+            category_id: categoryId
+          })
+        });
+        
+        showMessage('Lugar creado y activado', 'success');
+        
+        // Limpiar formulario
+        nameInput.value = '';
+        descTextarea.value = '';
+        typeSelect.selectedIndex = 0;
+        
+        // Refetch lugares del alumno
+        await loadStudentById(state.currentStudent.id);
+      } catch (error) {
+        console.error('[MasterLugares] Error creando lugar:', error);
+        showMessage('Error creando lugar: ' + error.message, 'error');
+      } finally {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Crear y Activar';
+      }
+    });
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Limpiar';
+    cancelBtn.style.cssText = 'padding: 0.5rem 1rem; background: #64748b; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
+    cancelBtn.addEventListener('click', () => {
+      nameInput.value = '';
+      descTextarea.value = '';
+      typeSelect.selectedIndex = 0;
+    });
+    
+    buttonsDiv.appendChild(createBtn);
+    buttonsDiv.appendChild(cancelBtn);
+    createSection.appendChild(buttonsDiv);
+    
+    studentConfigContainer.appendChild(createSection);
     
     // Lista de lugares
     if (data.places && data.places.length > 0) {

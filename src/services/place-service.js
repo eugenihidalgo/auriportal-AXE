@@ -16,6 +16,7 @@ import { getDefaultPlaceCatalogRepo } from '../infra/repos/place-catalog-repo-pg
 import { getDefaultStudentPlaceStateRepo } from '../infra/repos/student-place-state-repo-pg.js';
 import { getDefaultStudentActivationLimitRepo } from '../infra/repos/student-activation-limit-repo-pg.js';
 import { getDefaultStudentRepo } from '../infra/repos/student-repo-pg.js';
+import { getDefaultPlaceCategoryRepo } from '../infra/repos/place-category-repo-pg.js';
 import { dispatchSignal } from '../core/signals/signal-dispatcher.js';
 import { logInfo, logWarn, logError } from '../core/observability/logger.js';
 import { getRequestId } from '../core/observability/request-context.js';
@@ -25,6 +26,7 @@ const placeCatalogRepo = getDefaultPlaceCatalogRepo();
 const placeStateRepo = getDefaultStudentPlaceStateRepo();
 const activationLimitRepo = getDefaultStudentActivationLimitRepo();
 const studentRepo = getDefaultStudentRepo();
+const placeCategoryRepo = getDefaultPlaceCategoryRepo();
 
 /**
  * Activa un lugar para un alumno

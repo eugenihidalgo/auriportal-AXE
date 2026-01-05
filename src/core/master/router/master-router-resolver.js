@@ -95,6 +95,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-places-deactivate': () => import('../../../endpoints/master-api-places.js'),
   'master-api-places-limit': () => import('../../../endpoints/master-api-places.js'),
   'master-api-places-state-id': () => import('../../../endpoints/master-api-places.js'),
+  'master-api-places-create-for-student': () => import('../../../endpoints/master-api-places.js'),
   'master-api-place-categories': () => import('../../../endpoints/master-api-place-categories.js'),
   'master-api-place-categories-id': () => import('../../../endpoints/master-api-place-categories.js'),
   'master-api-place-categories-reorder': () => import('../../../endpoints/master-api-place-categories.js'),

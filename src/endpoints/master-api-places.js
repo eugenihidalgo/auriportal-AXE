@@ -14,7 +14,8 @@ import {
   cleanPlace,
   cleanSelectedPlaces,
   cleanAllActivePlaces,
-  updateActivationLimit
+  updateActivationLimit,
+  createPlaceForStudent
 } from '../services/place-service.js';
 import { getDefaultPlaceCatalogRepo } from '../infra/repos/place-catalog-repo-pg.js';
 import { getDefaultStudentPlaceStateRepo } from '../infra/repos/student-place-state-repo-pg.js';
@@ -354,6 +355,45 @@ export default async function masterApiPlacesHandler(request, env, ctx) {
           traceId
         });
         return jsonError('Error actualizando estado de lugar', 'UPDATE_ERROR', 500, traceId);
+      }
+    }
+
+    // ============================================================================
+    // POST /master/api/places/create-for-student - Crea lugar para alumno
+    // ============================================================================
+    if (path === '/master/api/places/create-for-student' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { student_id, name, description, category_id } = body;
+
+        if (!student_id || !name || !category_id) {
+          return jsonError('student_id, name y category_id son requeridos', 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        const result = await createPlaceForStudent({
+          studentId: student_id,
+          name: name.trim(),
+          description: description ? description.trim() : null,
+          categoryId: category_id,
+          actor: 'master',
+          options: {
+            traceId,
+            authCtx
+          }
+        });
+
+        return jsonSuccess({
+          data: {
+            place_id: result.place_id,
+            place_state_id: result.place_state_id
+          }
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiPlaces', 'Error creando lugar para alumno', {
+          error: error.message,
+          traceId
+        });
+        return jsonError('Error creando lugar: ' + error.message, 'CREATE_ERROR', 500, traceId);
       }
     }
 
