@@ -119,6 +119,18 @@ const MASTER_HANDLER_MAP = {
   'master-api-projects-catalog': () => import('../../../endpoints/master-api-projects-catalog.js'),
   'master-api-projects-catalog-id': () => import('../../../endpoints/master-api-projects-catalog.js'),
   
+  // Sponsors API Handlers (SISTEMA DE APADRINADOS v1)
+  'master-api-sponsors': () => import('../../../endpoints/master-api-sponsors.js'),
+  'master-api-sponsors-id': () => import('../../../endpoints/master-api-sponsors.js'),
+  'master-api-sponsors-id-link': () => import('../../../endpoints/master-api-sponsors.js'),
+  'master-api-sponsors-id-unlink': () => import('../../../endpoints/master-api-sponsors.js'),
+  'master-api-sponsors-by-student': () => import('../../../endpoints/master-api-sponsors.js'),
+  'master-api-sponsors-care-queue': () => import('../../../endpoints/master-api-sponsor-care.js'),
+  'master-api-sponsors-id-care': () => import('../../../endpoints/master-api-sponsor-care.js'),
+  'master-api-sponsors-care-id-extend': () => import('../../../endpoints/master-api-sponsor-care.js'),
+  'master-api-sponsors-care-id-end': () => import('../../../endpoints/master-api-sponsor-care.js'),
+  'master-api-sponsors-internal-cleanup-student': () => import('../../../endpoints/master-api-sponsors.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),

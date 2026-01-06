@@ -470,6 +470,70 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API SPONSORS (Sistema de Apadrinados v1)
+  // ============================================
+  {
+    key: 'master-api-sponsors',
+    path: '/master/api/sponsors',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-sponsors-id',
+    path: '/master/api/sponsors/:id',
+    type: 'api'
+    // Handler maneja: GET, PATCH
+  },
+  {
+    key: 'master-api-sponsors-id-link',
+    path: '/master/api/sponsors/:id/link',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-sponsors-id-unlink',
+    path: '/master/api/sponsors/:id/unlink',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-sponsors-by-student',
+    path: '/master/api/sponsors/by-student/:studentId',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-sponsors-care-queue',
+    path: '/master/api/sponsors/care/queue',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-sponsors-id-care',
+    path: '/master/api/sponsors/:id/care',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-sponsors-care-id-extend',
+    path: '/master/api/sponsors/care/:careId/extend',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-sponsors-care-id-end',
+    path: '/master/api/sponsors/care/:careId/end',
+    type: 'api',
+    method: 'POST'
+  },
+  {
+    key: 'master-api-sponsors-internal-cleanup-student',
+    path: '/master/api/sponsors/internal/cleanup-student/:studentId',
+    type: 'api',
+    method: 'POST'
+  },
+  
+  // ============================================
   // RUTAS UI (Island)
   // ============================================
   {

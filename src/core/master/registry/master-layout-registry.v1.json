@@ -177,6 +177,16 @@
       "critical": false,
       "phase": "ui",
       "name": "Master Proyectos Client"
+    },
+    {
+      "id": "master-apadrinados-client",
+      "guard_id": "APADRINADOS_CLIENT",
+      "path": "/js/master/master-apadrinados-client.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Master Apadrinados Client"
     }
   ]
 }

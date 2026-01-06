@@ -199,6 +199,37 @@ node scripts/verify-projects-data.js
 
 ---
 
+## FASE 5 — FIX APLICADO (v5.55.1)
+
+### Problema detectado:
+- **Error:** `function calculate_days_since_clean(timestamp with time zone, integer) does not exist`
+- **Causa:** La columna `last_cleaned_at` en `student_project_state` es `TIMESTAMPTZ`, pero la función SQL esperaba `TIMESTAMP`
+- **Impacto:** Endpoints `GET /master/api/projects/active` y `GET /master/api/projects/student/:id` devolvían 500
+
+### Solución aplicada:
+- **Migración:** `v5.55.1-fix-calculate-days-since-clean-timestamptz.sql`
+- **Cambios:**
+  1. Función `calculate_days_since_clean` actualizada para aceptar `TIMESTAMPTZ`
+  2. Sobrecarga creada para `TIMESTAMP` (compatibilidad con lugares)
+  3. Ambas funciones operativas y verificadas
+
+### Verificación post-fix:
+- ✅ Smoke tests pasados (4/4)
+- ✅ `listAllActive()` funciona correctamente
+- ✅ `listByStudent()` funciona correctamente
+- ✅ Función SQL acepta `TIMESTAMPTZ` y `TIMESTAMP`
+- ✅ Servidor reiniciado sin errores
+
+### Evidencia:
+```bash
+# Smoke tests ejecutados:
+node scripts/smoke-projects-api.js
+# Resultado: ✅ Todos los smoke tests pasaron
+```
+
+---
+
 **Reporte generado:** 2026-01-05  
+**Última actualización:** 2026-01-05 (fix v5.55.1 aplicado)  
 **Verificado por:** Sistema de verificación forense automatizado  
-**Estado:** ✅ APROBADO - Sistema listo para producción
+**Estado:** ✅ APROBADO - Sistema operativo tras fix

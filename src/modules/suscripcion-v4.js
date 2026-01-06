@@ -17,6 +17,7 @@ import { withTransaction } from "../infra/db/tx.js";
 import { getDefaultSubscriptionRepo } from "../infra/repos/subscription-repo-pg.js";
 import { getDefaultAuditRepo } from "../infra/repos/audit-repo-pg.js";
 import { getRequestId } from "../core/observability/request-context.js";
+import { handleStudentPauseOrUnsubscribe } from "../core/master/services/sponsor-service.js";
 
 /**
  * LÓGICA ACTUAL: Verifica y actualiza el estado de pausa de la suscripción en PostgreSQL
@@ -168,6 +169,20 @@ async function pausarSuscripcion(student, env) {
         fecha_inicio: fechaInicio.toISOString()
       }
     });
+
+    // Integración con sponsors: desvincular todos los apadrinados
+    try {
+      await handleStudentPauseOrUnsubscribe(student.id, 'student_pause', {
+        traceId: getRequestId(),
+        authCtx: {}
+      });
+    } catch (sponsorError) {
+      // Fail-safe: no bloquear el flujo principal si falla la limpieza de sponsors
+      logError('suscripcion', 'Error limpiando sponsors al pausar suscripción', {
+        student_id: student.id,
+        error: sponsorError.message
+      });
+    }
   } catch (error) {
     // Error ya logueado por withTransaction
     throw error;

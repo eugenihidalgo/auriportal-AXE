@@ -24,7 +24,8 @@
 import { getDefaultStudentRepo } from '../../infra/repos/student-repo-pg.js';
 import { getDefaultAuditRepo } from '../../infra/repos/audit-repo-pg.js';
 import { getDefaultPracticeRepo } from '../../infra/repos/practice-repo-pg.js';
-import { logInfo, logWarn, extractStudentMeta } from '../observability/logger.js';
+import { logInfo, logWarn, logError, extractStudentMeta } from '../observability/logger.js';
+import { handleStudentPauseOrUnsubscribe } from '../master/services/sponsor-service.js';
 
 /**
  * Normaliza un alumno de PostgreSQL a formato estándar
@@ -412,7 +413,25 @@ export class StudentMutationService {
     // NOTA: No se emite señal aún, solo se prepara el punto
     // signalData está disponible para uso futuro
 
-    // PASO 7: Log de actualización
+    // PASO 7: Integración con sponsors - limpiar vínculos si estado cambia a pausada/cancelada
+    if ((estado === 'pausada' || estado === 'cancelada') && estadoAnterior !== estado) {
+      try {
+        await handleStudentPauseOrUnsubscribe(alumno.id, `estado_cambiado_a_${estado}`, {
+          traceId: null, // TODO: obtener trace_id del contexto si existe
+          authCtx: {}
+        });
+      } catch (sponsorError) {
+        // Fail-safe: no bloquear la operación si falla la limpieza de sponsors
+        logError('student_mutation', 'Error limpiando sponsors al cambiar estado de suscripción', {
+          student_id: alumno.id,
+          estado_anterior: estadoAnterior,
+          estado_nuevo: estado,
+          error: sponsorError.message
+        });
+      }
+    }
+
+    // PASO 8: Log de actualización
     logInfo('student_mutation', 'Estado de suscripción actualizado', {
       ...extractStudentMeta(alumnoNormalizado),
       estado_anterior: estadoAnterior,
@@ -422,7 +441,7 @@ export class StudentMutationService {
       actor_id: actor.id || null
     });
 
-    // PASO 8: Retornar resultado normalizado
+    // PASO 9: Retornar resultado normalizado
     return alumnoNormalizado;
   }
 
