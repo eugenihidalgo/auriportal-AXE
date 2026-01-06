@@ -1,12 +1,13 @@
 /**
- * MASTER TEMPLO DE LUZ - Sistema de Apadrinados (Sponsors) v1
+ * MASTER TEMPLO DE LUZ - Sistema de Apadrinados (Sponsors) v1.1
  * 
  * Pantalla de Apadrinados en el Templo de Luz con 3 tabs:
  * 1) Apadrinados
- * 2) Por alumno
+ * 2) Personas (Por alumno)
  * 3) Cuidados especiales
  * 
  * UI canónica con DOM API only, sin innerHTML.
+ * Diseño Canónico v1.1: Renderer unificado, descripción visible, acciones PDE homogéneas.
  */
 
 import { renderMasterPage } from '../core/master/layout/master-page-renderer.js';
@@ -54,10 +55,10 @@ export default async function masterTemploLuzApadrinadosHandler(request, env, ct
         </div>
       </div>
 
-      <!-- TAB 2: POR ALUMNO -->
+      <!-- TAB 2: PERSONAS -->
       <div id="tab-por-alumno" class="tab-content" style="display: none;">
         <div class="mb-4">
-          <h2 class="text-xl font-semibold text-white mb-4">Por Alumno</h2>
+          <h2 class="text-xl font-semibold text-white mb-4">Personas</h2>
           <div class="mb-4">
             <label class="block text-sm font-medium text-slate-300 mb-2">Seleccionar Alumno</label>
             <div class="flex gap-2">
