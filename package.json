@@ -1,6 +1,6 @@
 {
   "name": "auriportal-server",
-  "version": "5.56.0-master-sponsors-v1-targetref",
+  "version": "5.56.1-master-sponsors-ui-refine",
   "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
   "main": "server.js",
   "type": "module",
