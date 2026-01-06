@@ -51,13 +51,28 @@
   // Debug mode
   const DEBUG = window.__AP_MASTER_DEBUG_LOGS__ || new URLSearchParams(window.location.search).get('debug') === '1';
 
-  // Estado global
+  // ============================================================================
+  // APADRINADOS STATE - Source of Truth ÚNICO y EXPLÍCITO
+  // ============================================================================
+  // Este es el ÚNICO lugar donde se guardan los alumnos para Tab 2
+  // Prohibido: duplicar, shadow state, closures como SOT
+  const ApadrinadosState = {
+    students: [], // SOT ÚNICO para alumnos (Tab 2)
+    studentSponsorsMap: {}, // { student_id: [sponsors...] } - cache de apadrinados por alumno
+    lastLoadedAt: null // Timestamp de última carga
+  };
+
+  // Exponer en window para inspección forense (DEV)
+  if (typeof window !== 'undefined') {
+    window.__APADRINADOS_STATE__ = ApadrinadosState;
+    console.log('[MASTER][APADRINADOS][STATE] ApadrinadosState expuesto en window.__APADRINADOS_STATE__');
+  }
+
+  // Estado global (UI state, no SOT de datos)
   const state = {
     tabActivo: 'apadrinados', // 'apadrinados' | 'alumnos' | 'persona' | 'cuidados'
     sponsors: [],
     selectedSponsor: null, // Para Tab 3 (Persona)
-    students: [], // TODOS los alumnos (SOT único para Tab 2)
-    studentSponsorsMap: {}, // { student_id: [sponsors...] } - cache de apadrinados por alumno
     careQueue: [],
     categories: [], // Categorías PDE para cuidados especiales
     categoryDefaults: {}, // { category_id: { default_days: 30 } }
@@ -355,8 +370,15 @@
     if (state.tabActivo === 'apadrinados') {
       await loadSponsors();
     } else if (state.tabActivo === 'alumnos') {
-      console.log('[MASTER][APADRINADOS][INIT] Tab activo es "alumnos", llamando loadStudents()...');
-      await loadStudents();
+      console.log('[MASTER][APADRINADOS][INIT] Tab activo es "alumnos"');
+      // Tab lifecycle: si ApadrinadosState.students está vacío → loadStudents()
+      if (ApadrinadosState.students.length === 0) {
+        console.log('[MASTER][APADRINADOS][INIT] ApadrinadosState.students vacío, llamando loadStudents()...');
+        await loadStudents();
+      } else {
+        console.log('[MASTER][APADRINADOS][INIT] ApadrinadosState.students tiene', ApadrinadosState.students.length, 'alumnos, solo renderizando...');
+        renderStudents();
+      }
     } else if (state.tabActivo === 'cuidados') {
       await loadCareQueue();
     }
@@ -466,8 +488,15 @@
         if (tab.id === 'apadrinados') {
           await loadSponsors();
         } else if (tab.id === 'alumnos') {
-          console.log('[MASTER][APADRINADOS][TABS] Activando Tab 2 (Alumnos), llamando loadStudents()...');
-          await loadStudents();
+          console.log('[MASTER][APADRINADOS][TABS] Activando Tab 2 (Alumnos)');
+          // Tab lifecycle: si ApadrinadosState.students está vacío → loadStudents()
+          if (ApadrinadosState.students.length === 0) {
+            console.log('[MASTER][APADRINADOS][TABS] ApadrinadosState.students vacío, llamando loadStudents()...');
+            await loadStudents();
+          } else {
+            console.log('[MASTER][APADRINADOS][TABS] ApadrinadosState.students tiene', ApadrinadosState.students.length, 'alumnos, solo renderizando...');
+            renderStudents();
+          }
         } else if (tab.id === 'persona') {
           renderPersonaDetail();
         } else if (tab.id === 'cuidados') {
@@ -1086,11 +1115,11 @@
 
   /**
    * Carga lista de alumnos (Tab 2 - Alumnos)
-   * FIX: Guarda TODOS los alumnos en state.students sin filtrar
+   * SOT: Asigna EXCLUSIVAMENTE a ApadrinadosState.students
    */
   async function loadStudents() {
-    // DIAGNÓSTICO: Log siempre visible
     console.log('[MASTER][APADRINADOS][TAB2][LOAD] Iniciando carga de alumnos...');
+    console.log('[MASTER][APADRINADOS][TAB2][LOAD] ApadrinadosState.students.length ANTES:', ApadrinadosState.students.length);
     
     try {
       const search = studentSearch?.value || '';
@@ -1099,23 +1128,29 @@
       console.log('[MASTER][APADRINADOS][TAB2][LOAD] URL:', url);
       const result = await apiFetch(url);
       
-      // DIAGNÓSTICO: Respuesta cruda
-      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Respuesta API:', {
-        ok: result.ok !== false,
-        itemsCount: result.data?.items?.length || 0,
-        total: result.data?.total || 0,
-        rawResult: result
+      // Validar respuesta
+      if (result.ok === false || !result.data) {
+        console.error('[MASTER][APADRINADOS][TAB2][LOAD] ❌ Respuesta API inválida:', result);
+        ApadrinadosState.students = [];
+        ApadrinadosState.lastLoadedAt = Date.now();
+        renderStudents();
+        return;
+      }
+      
+      // SOT: Asignar EXCLUSIVAMENTE a ApadrinadosState.students
+      const items = result.data.items || [];
+      ApadrinadosState.students = items;
+      ApadrinadosState.lastLoadedAt = Date.now();
+      
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] ✅ Asignado a ApadrinadosState.students:', {
+        itemsCount: items.length,
+        total: result.data.total || 0,
+        stateLength: ApadrinadosState.students.length
       });
-      
-      // FIX: Guardar TODOS los alumnos en state.students (SOT único)
-      state.students = result.data?.items || [];
-      
-      // DIAGNÓSTICO: Estado tras cargar
-      console.log('[MASTER][APADRINADOS][TAB2][LOAD] state.students.length:', state.students.length);
       
       // Cargar apadrinados para cada alumno (en paralelo, fail-soft)
       // Guardar en cache para no recargar en cada render
-      const sponsorsPromises = state.students.map(async (student) => {
+      const sponsorsPromises = ApadrinadosState.students.map(async (student) => {
         try {
           const sponsorsResult = await apiFetch(`/master/api/sponsors/by-student/${student.id}`);
           return {
@@ -1134,46 +1169,47 @@
       
       const sponsorsResults = await Promise.all(sponsorsPromises);
       
-      // Construir mapa de apadrinados por alumno
-      state.studentSponsorsMap = {};
+      // Construir mapa de apadrinados por alumno (en ApadrinadosState)
+      ApadrinadosState.studentSponsorsMap = {};
       sponsorsResults.forEach(result => {
-        state.studentSponsorsMap[result.studentId] = result.sponsors;
+        ApadrinadosState.studentSponsorsMap[result.studentId] = result.sponsors;
       });
       
-      // DIAGNÓSTICO: Antes de renderizar
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] ApadrinadosState.students.length DESPUÉS:', ApadrinadosState.students.length);
       console.log('[MASTER][APADRINADOS][TAB2][LOAD] Llamando renderStudents()...');
       renderStudents();
-      console.log('[MASTER][APADRINADOS][TAB2][LOAD] renderStudents() ejecutado');
-      
-      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Tab 2 completado', {
-        totalStudents: state.students.length,
-        studentsWithSponsors: Object.keys(state.studentSponsorsMap).filter(id => state.studentSponsorsMap[id].length > 0).length
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] ✅ Tab 2 completado', {
+        totalStudents: ApadrinadosState.students.length,
+        studentsWithSponsors: Object.keys(ApadrinadosState.studentSponsorsMap).filter(id => ApadrinadosState.studentSponsorsMap[id].length > 0).length
       });
     } catch (error) {
-      console.error('[MasterApadrinados] Error cargando alumnos:', error);
+      console.error('[MASTER][APADRINADOS][TAB2][LOAD] ❌ Error cargando alumnos:', error);
       showMessage('Error cargando alumnos: ' + error.message, 'error');
-      // FIX: Asegurar que state.students está inicializado incluso si falla
-      state.students = [];
-      state.studentSponsorsMap = {};
+      // SOT: Asegurar que ApadrinadosState.students está inicializado incluso si falla
+      ApadrinadosState.students = [];
+      ApadrinadosState.studentSponsorsMap = {};
+      ApadrinadosState.lastLoadedAt = Date.now();
       renderStudents();
     }
   }
 
   /**
    * Renderiza Tab 2 - Alumnos (lista de alumnos con apadrinados inline)
-   * FIX: Itera SIEMPRE sobre state.students (TODOS los alumnos)
+   * SOT: Lee EXCLUSIVAMENTE desde ApadrinadosState.students
    */
   function renderStudents() {
-    // DIAGNÓSTICO: Log siempre visible
+    // SOT: Leer EXCLUSIVAMENTE desde ApadrinadosState.students
+    const students = ApadrinadosState.students;
+    
     console.log('[MASTER][APADRINADOS][TAB2][RENDER] Iniciando render...', {
-      studentsCount: state.students.length,
+      studentsCount: students.length,
+      source: 'ApadrinadosState.students',
       timestamp: Date.now()
     });
     
-    // FIX: Verificar contenedor con log de warning si no existe
+    // Verificar contenedor
     const root = document.getElementById('master-apadrinados-tab-alumnos');
     
-    // DIAGNÓSTICO: Verificación de contenedor
     if (!root) {
       console.error('[MASTER][APADRINADOS][TAB2][RENDER] ❌ Contenedor master-apadrinados-tab-alumnos NO encontrado');
       console.error('[MASTER][APADRINADOS][TAB2][RENDER] Document readyState:', document.readyState);
@@ -1181,9 +1217,8 @@
       return;
     }
     
-    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Contenedor encontrado:', root);
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Contenedor encontrado');
     
-    // Usar root en lugar de studentsListContainer para garantizar que existe
     const studentsListContainer = root;
     
     // Limpiar
@@ -1191,9 +1226,9 @@
       studentsListContainer.removeChild(studentsListContainer.firstChild);
     }
     
-    // FIX: Empty state SOLO si state.students está vacío (no si no hay apadrinados)
-    if (state.students.length === 0) {
-      console.log('[MASTER][APADRINADOS][TAB2][RENDER] ⚠️ state.students vacío, mostrando empty state');
+    // Empty state SOLO si ApadrinadosState.students está vacío
+    if (students.length === 0) {
+      console.log('[MASTER][APADRINADOS][TAB2][RENDER] ⚠️ ApadrinadosState.students vacío, mostrando empty state');
       const emptyMsg = document.createElement('p');
       emptyMsg.textContent = 'No hay alumnos';
       emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
@@ -1201,13 +1236,13 @@
       return;
     }
     
-    console.log('[MASTER][APADRINADOS][TAB2][RENDER] Renderizando', state.students.length, 'alumnos...');
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] Renderizando', students.length, 'alumnos desde ApadrinadosState.students...');
     
     // Crear lista
     const list = document.createElement('div');
     
-    // FIX: Iterar SIEMPRE sobre state.students (TODOS los alumnos, con o sin apadrinados)
-    state.students.forEach((student, index) => {
+    // SOT: Iterar sobre ApadrinadosState.students (TODOS los alumnos, con o sin apadrinados)
+    students.forEach((student, index) => {
       if (index < 3) {
         console.log('[MASTER][APADRINADOS][TAB2][RENDER] Alumno', index + 1, ':', student.email, student.apodo);
       }
@@ -1220,8 +1255,8 @@
       studentName.textContent = `${student.apodo || student.name || '-'} (${student.email || '-'})`;
       item.appendChild(studentName);
       
-      // Apadrinados inline (obtener desde cache)
-      const sponsors = state.studentSponsorsMap[student.id] || [];
+      // Apadrinados inline (obtener desde ApadrinadosState cache)
+      const sponsors = ApadrinadosState.studentSponsorsMap[student.id] || [];
       
       if (sponsors.length > 0) {
         const sponsorsLabel = document.createElement('div');
@@ -1264,7 +1299,7 @@
     });
     
     studentsListContainer.appendChild(list);
-    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Render completado,', state.students.length, 'alumnos renderizados');
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Render completado,', students.length, 'alumnos renderizados desde ApadrinadosState.students');
   }
 
   /**
@@ -1290,10 +1325,10 @@
       
       showMessage('Apadrinado vinculado', 'success');
       
-      // FIX: Refrescar cache de apadrinados para este alumno
+      // FIX: Refrescar cache de apadrinados para este alumno (en ApadrinadosState)
       try {
         const sponsorsResult = await apiFetch(`/master/api/sponsors/by-student/${studentId}`);
-        state.studentSponsorsMap[studentId] = sponsorsResult.sponsors || [];
+        ApadrinadosState.studentSponsorsMap[studentId] = sponsorsResult.sponsors || [];
       } catch (error) {
         // Si falla, recargar todos los alumnos
         await loadStudents();
