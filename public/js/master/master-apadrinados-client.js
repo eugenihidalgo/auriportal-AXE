@@ -339,7 +339,11 @@
    * Inicialización
    */
   async function init() {
-    if (DEBUG) console.log('[MASTER][APADRINADOS][INIT] Inicializando...');
+    console.log('[MASTER][APADRINADOS][INIT] Inicializando...', {
+      tabActivo: state.tabActivo,
+      readyState: document.readyState,
+      timestamp: Date.now()
+    });
     
     // Cargar categorías PDE para cuidados especiales
     await loadCategories();
@@ -351,6 +355,7 @@
     if (state.tabActivo === 'apadrinados') {
       await loadSponsors();
     } else if (state.tabActivo === 'alumnos') {
+      console.log('[MASTER][APADRINADOS][INIT] Tab activo es "alumnos", llamando loadStudents()...');
       await loadStudents();
     } else if (state.tabActivo === 'cuidados') {
       await loadCareQueue();
@@ -452,6 +457,7 @@
       }
       
       tabButton.addEventListener('click', async () => {
+        console.log('[MASTER][APADRINADOS][TABS] Tab activado:', tab.id);
         state.tabActivo = tab.id;
         renderMainTabs();
         showTab(tab.id);
@@ -460,6 +466,7 @@
         if (tab.id === 'apadrinados') {
           await loadSponsors();
         } else if (tab.id === 'alumnos') {
+          console.log('[MASTER][APADRINADOS][TABS] Activando Tab 2 (Alumnos), llamando loadStudents()...');
           await loadStudents();
         } else if (tab.id === 'persona') {
           renderPersonaDetail();
@@ -742,9 +749,18 @@
 
   /**
    * Renderiza Tab 3 - Persona (vista de foco de UN apadrinado)
+   * FIX: NO hace fetch, solo usa state.selectedSponsor
    */
   function renderPersonaDetail() {
-    if (!personaDetailContainer) return;
+    console.log('[MASTER][APADRINADOS][TAB3][RENDER] Iniciando render Tab 3...', {
+      hasSelectedSponsor: !!state.selectedSponsor,
+      sponsorId: state.selectedSponsor?.id || null
+    });
+    
+    if (!personaDetailContainer) {
+      console.warn('[MASTER][APADRINADOS][TAB3][RENDER] Contenedor persona-detail-container no encontrado');
+      return;
+    }
     
     // Limpiar
     while (personaDetailContainer.firstChild) {
@@ -752,6 +768,7 @@
     }
     
     if (!state.selectedSponsor) {
+      console.log('[MASTER][APADRINADOS][TAB3][RENDER] No hay sponsor seleccionado, mostrando mensaje informativo');
       const emptyMsg = document.createElement('p');
       emptyMsg.textContent = 'Selecciona un apadrinado desde Tab 1 o Tab 2 para ver su detalle';
       emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
@@ -825,6 +842,7 @@
     container.appendChild(actionsContainer);
     
     personaDetailContainer.appendChild(container);
+    console.log('[MASTER][APADRINADOS][TAB3][RENDER] ✅ Render completado para sponsor:', sponsor.id);
   }
 
   /**
@@ -1071,15 +1089,29 @@
    * FIX: Guarda TODOS los alumnos en state.students sin filtrar
    */
   async function loadStudents() {
+    // DIAGNÓSTICO: Log siempre visible
+    console.log('[MASTER][APADRINADOS][TAB2][LOAD] Iniciando carga de alumnos...');
+    
     try {
-      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB2] Cargando alumnos...');
-      
       const search = studentSearch?.value || '';
       const url = `/master/api/students?limit=100${search ? `&search=${encodeURIComponent(search)}` : ''}`;
       
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] URL:', url);
       const result = await apiFetch(url);
+      
+      // DIAGNÓSTICO: Respuesta cruda
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Respuesta API:', {
+        ok: result.ok !== false,
+        itemsCount: result.data?.items?.length || 0,
+        total: result.data?.total || 0,
+        rawResult: result
+      });
+      
       // FIX: Guardar TODOS los alumnos en state.students (SOT único)
       state.students = result.data?.items || [];
+      
+      // DIAGNÓSTICO: Estado tras cargar
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] state.students.length:', state.students.length);
       
       // Cargar apadrinados para cada alumno (en paralelo, fail-soft)
       // Guardar en cache para no recargar en cada render
@@ -1108,9 +1140,12 @@
         state.studentSponsorsMap[result.studentId] = result.sponsors;
       });
       
+      // DIAGNÓSTICO: Antes de renderizar
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Llamando renderStudents()...');
       renderStudents();
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] renderStudents() ejecutado');
       
-      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB2_RENDER] Tab 2 renderizado', {
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Tab 2 completado', {
         totalStudents: state.students.length,
         studentsWithSponsors: Object.keys(state.studentSponsorsMap).filter(id => state.studentSponsorsMap[id].length > 0).length
       });
@@ -1129,12 +1164,24 @@
    * FIX: Itera SIEMPRE sobre state.students (TODOS los alumnos)
    */
   function renderStudents() {
+    // DIAGNÓSTICO: Log siempre visible
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] Iniciando render...', {
+      studentsCount: state.students.length,
+      timestamp: Date.now()
+    });
+    
     // FIX: Verificar contenedor con log de warning si no existe
     const root = document.getElementById('master-apadrinados-tab-alumnos');
+    
+    // DIAGNÓSTICO: Verificación de contenedor
     if (!root) {
-      console.warn('[MasterApadrinados] Contenedor master-apadrinados-tab-alumnos no encontrado');
+      console.error('[MASTER][APADRINADOS][TAB2][RENDER] ❌ Contenedor master-apadrinados-tab-alumnos NO encontrado');
+      console.error('[MASTER][APADRINADOS][TAB2][RENDER] Document readyState:', document.readyState);
+      console.error('[MASTER][APADRINADOS][TAB2][RENDER] Tab alumnos existe?', !!document.getElementById('tab-alumnos'));
       return;
     }
+    
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Contenedor encontrado:', root);
     
     // Usar root en lugar de studentsListContainer para garantizar que existe
     const studentsListContainer = root;
@@ -1146,6 +1193,7 @@
     
     // FIX: Empty state SOLO si state.students está vacío (no si no hay apadrinados)
     if (state.students.length === 0) {
+      console.log('[MASTER][APADRINADOS][TAB2][RENDER] ⚠️ state.students vacío, mostrando empty state');
       const emptyMsg = document.createElement('p');
       emptyMsg.textContent = 'No hay alumnos';
       emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
@@ -1153,11 +1201,16 @@
       return;
     }
     
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] Renderizando', state.students.length, 'alumnos...');
+    
     // Crear lista
     const list = document.createElement('div');
     
     // FIX: Iterar SIEMPRE sobre state.students (TODOS los alumnos, con o sin apadrinados)
-    state.students.forEach(student => {
+    state.students.forEach((student, index) => {
+      if (index < 3) {
+        console.log('[MASTER][APADRINADOS][TAB2][RENDER] Alumno', index + 1, ':', student.email, student.apodo);
+      }
       const item = document.createElement('div');
       item.style.cssText = 'padding: 1rem; background: #334155; border-radius: 0.375rem; margin-bottom: 0.75rem;';
       
@@ -1211,6 +1264,7 @@
     });
     
     studentsListContainer.appendChild(list);
+    console.log('[MASTER][APADRINADOS][TAB2][RENDER] ✅ Render completado,', state.students.length, 'alumnos renderizados');
   }
 
   /**
