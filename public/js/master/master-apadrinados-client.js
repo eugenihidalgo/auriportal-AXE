@@ -79,7 +79,7 @@
   const sponsorSearch = document.getElementById('sponsor-search');
   const btnCrearSponsor = document.getElementById('btn-crear-sponsor');
   const studentSearch = document.getElementById('student-search');
-  const studentsListContainer = document.getElementById('students-list-container');
+  const studentsListContainer = document.getElementById('master-apadrinados-tab-alumnos');
   const personaDetailContainer = document.getElementById('persona-detail-container');
   const careQueueContainer = document.getElementById('care-queue-container');
   const horizonDays = document.getElementById('horizon-days');
@@ -230,7 +230,7 @@
         btnView.style.cssText = 'margin-left: 0.5rem; padding: 0.125rem 0.5rem; background: #6366f1; color: white; border: none; border-radius: 0.125rem; cursor: pointer; font-size: 0.75rem;';
         btnView.addEventListener('click', (e) => {
           e.stopPropagation();
-          handleViewSponsor(sponsor.id);
+          handleViewSponsor(sponsor);
         });
         item.appendChild(btnView);
       }
@@ -291,7 +291,7 @@
       const btnView = document.createElement('button');
       btnView.textContent = 'Ver';
       btnView.style.cssText = 'padding: 0.25rem 0.75rem; background: #6366f1; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
-      btnView.addEventListener('click', () => handleViewSponsor(sponsor.id));
+      btnView.addEventListener('click', () => handleViewSponsor(sponsor));
       container.appendChild(btnView);
     }
 
@@ -721,20 +721,23 @@
 
   /**
    * Maneja ver/seleccionar sponsor (abre Tab 3 - Persona)
+   * FIX: NO hace fetch, solo usa el sponsor ya cargado en estado
    */
-  async function handleViewSponsor(sponsorId) {
-    try {
-      const result = await apiFetch(`/master/api/sponsors/${sponsorId}`);
-      state.selectedSponsor = result.sponsor;
-      
-      // Cambiar a Tab 3
-      state.tabActivo = 'persona';
-      renderMainTabs();
-      showTab('persona');
-      renderPersonaDetail();
-    } catch (error) {
-      showMessage('Error obteniendo apadrinado: ' + error.message, 'error');
+  function handleViewSponsor(sponsor) {
+    // FIX: Recibir sponsor completo, NO hacer fetch
+    if (!sponsor || !sponsor.id) {
+      console.warn('[MasterApadrinados] handleViewSponsor llamado sin sponsor válido');
+      return;
     }
+    
+    // Establecer sponsor seleccionado
+    state.selectedSponsor = sponsor;
+    
+    // Cambiar a Tab 3
+    state.tabActivo = 'persona';
+    renderMainTabs();
+    showTab('persona');
+    renderPersonaDetail();
   }
 
   /**
@@ -850,7 +853,9 @@
       } else if (state.tabActivo === 'alumnos') {
         await loadStudents();
       } else if (state.tabActivo === 'persona') {
-        await handleViewSponsor(sponsor.id);
+        // FIX: Usar sponsor ya actualizado, no hacer fetch
+        state.selectedSponsor = sponsor;
+        renderPersonaDetail();
       }
     } catch (error) {
       showMessage('Error actualizando apadrinado: ' + error.message, 'error');
@@ -1037,7 +1042,9 @@
         } else if (state.tabActivo === 'alumnos') {
           await loadStudents();
         } else if (state.tabActivo === 'persona') {
-          await handleViewSponsor(sponsor.id);
+          // FIX: Usar sponsor ya cargado, no hacer fetch
+          state.selectedSponsor = sponsor;
+          renderPersonaDetail();
         } else if (state.tabActivo === 'cuidados') {
           await loadCareQueue();
         }
@@ -1122,7 +1129,15 @@
    * FIX: Itera SIEMPRE sobre state.students (TODOS los alumnos)
    */
   function renderStudents() {
-    if (!studentsListContainer) return;
+    // FIX: Verificar contenedor con log de warning si no existe
+    const root = document.getElementById('master-apadrinados-tab-alumnos');
+    if (!root) {
+      console.warn('[MasterApadrinados] Contenedor master-apadrinados-tab-alumnos no encontrado');
+      return;
+    }
+    
+    // Usar root en lugar de studentsListContainer para garantizar que existe
+    const studentsListContainer = root;
     
     // Limpiar
     while (studentsListContainer.firstChild) {
@@ -1331,7 +1346,8 @@
       const btnView = document.createElement('button');
       btnView.textContent = 'Ver Apadrinado';
       btnView.style.cssText = 'padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
-      btnView.addEventListener('click', () => handleViewSponsor(care.sponsor_id));
+      // FIX: Usar sponsor ya construido, no hacer fetch
+      btnView.addEventListener('click', () => handleViewSponsor(sponsor));
       actions.appendChild(btnView);
       
       const btnExtend = document.createElement('button');

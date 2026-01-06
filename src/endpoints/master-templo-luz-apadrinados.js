@@ -68,7 +68,7 @@ export default async function masterTemploLuzApadrinadosHandler(request, env, ct
             />
           </div>
         </div>
-        <div id="students-list-container">
+        <div id="master-apadrinados-tab-alumnos">
           <!-- Se llena dinámicamente con DOM API -->
         </div>
       </div>
