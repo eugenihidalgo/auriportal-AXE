@@ -1128,24 +1128,29 @@
       console.log('[MASTER][APADRINADOS][TAB2][LOAD] URL:', url);
       const result = await apiFetch(url);
       
-      // Validar respuesta
-      if (result.ok === false || !result.data) {
-        console.error('[MASTER][APADRINADOS][TAB2][LOAD] ❌ Respuesta API inválida:', result);
-        ApadrinadosState.students = [];
-        ApadrinadosState.lastLoadedAt = Date.now();
-        renderStudents();
-        return;
-      }
+      // DIAGNÓSTICO: Log respuesta cruda
+      console.log('[MASTER][APADRINADOS][TAB2][LOAD] Respuesta apiFetch:', {
+        hasData: !!result.data,
+        hasItems: !!result.items,
+        hasDataItems: !!result.data?.items,
+        keys: Object.keys(result || {})
+      });
+      
+      // CONTRATO: Aceptar ambos formatos
+      // Formato A: { ok: true, data: { items: [...] } } → apiFetch devuelve result.data
+      // Formato B: { items: [...], total, limit, offset } → apiFetch devuelve result
+      // Lógica canónica: result.data?.items ?? result.items ?? []
+      const items = result.data?.items ?? result.items ?? [];
       
       // SOT: Asignar EXCLUSIVAMENTE a ApadrinadosState.students
-      const items = result.data.items || [];
       ApadrinadosState.students = items;
       ApadrinadosState.lastLoadedAt = Date.now();
       
       console.log('[MASTER][APADRINADOS][TAB2][LOAD] ✅ Asignado a ApadrinadosState.students:', {
         itemsCount: items.length,
-        total: result.data.total || 0,
-        stateLength: ApadrinadosState.students.length
+        total: result.data?.total ?? result.total ?? 0,
+        stateLength: ApadrinadosState.students.length,
+        format: result.data?.items ? 'data.items' : result.items ? 'items' : 'empty'
       });
       
       // Cargar apadrinados para cada alumno (en paralelo, fail-soft)
