@@ -1,13 +1,13 @@
 /**
- * MASTER TEMPLO DE LUZ - Sistema de Apadrinados (Sponsors) v1.1
+ * MASTER TEMPLO DE LUZ - Sistema de Apadrinados (Sponsors) v1.2
  * 
- * Pantalla de Apadrinados en el Templo de Luz con 3 tabs:
- * 1) Apadrinados
- * 2) Personas (Por alumno)
- * 3) Cuidados especiales
+ * Pantalla de Apadrinados en el Templo de Luz con 4 tabs (Diseño Canónico):
+ * 1) Apadrinados - Lista global
+ * 2) Alumnos - Lista de alumnos con apadrinados inline
+ * 3) Persona - Vista de foco de UN apadrinado
+ * 4) Cuidados Especiales - Mesa de trabajo
  * 
  * UI canónica con DOM API only, sin innerHTML.
- * Diseño Canónico v1.1: Renderer unificado, descripción visible, acciones PDE homogéneas.
  */
 
 import { renderMasterPage } from '../core/master/layout/master-page-renderer.js';
@@ -55,31 +55,33 @@ export default async function masterTemploLuzApadrinadosHandler(request, env, ct
         </div>
       </div>
 
-      <!-- TAB 2: PERSONAS -->
-      <div id="tab-por-alumno" class="tab-content" style="display: none;">
-        <div class="mb-4">
-          <h2 class="text-xl font-semibold text-white mb-4">Personas</h2>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-slate-300 mb-2">Seleccionar Alumno</label>
-            <div class="flex gap-2">
-              <input 
-                type="text"
-                id="student-search"
-                placeholder="Buscar por email o apodo..."
-                class="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div id="student-results" class="mt-2 max-h-60 overflow-y-auto bg-slate-800 rounded border border-slate-700" style="display: none;">
-              <!-- Se llena dinámicamente con DOM API -->
-            </div>
+      <!-- TAB 2: ALUMNOS -->
+      <div id="tab-alumnos" class="tab-content" style="display: none;">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-xl font-semibold text-white">Alumnos</h2>
+          <div class="flex gap-2">
+            <input 
+              type="text"
+              id="student-search"
+              placeholder="Buscar por email o apodo..."
+              class="px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
           </div>
         </div>
-        <div id="student-sponsors-container" class="hidden">
+        <div id="students-list-container">
           <!-- Se llena dinámicamente con DOM API -->
         </div>
       </div>
 
-      <!-- TAB 3: CUIDADOS ESPECIALES -->
+      <!-- TAB 3: PERSONA -->
+      <div id="tab-persona" class="tab-content" style="display: none;">
+        <div id="persona-detail-container">
+          <!-- Se llena dinámicamente con DOM API cuando se selecciona un apadrinado -->
+          <p class="text-slate-400 text-center py-8">Selecciona un apadrinado desde Tab 1 o Tab 2 para ver su detalle</p>
+        </div>
+      </div>
+
+      <!-- TAB 4: CUIDADOS ESPECIALES -->
       <div id="tab-cuidados" class="tab-content" style="display: none;">
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-xl font-semibold text-white">Cuidados Especiales</h2>

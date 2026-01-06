@@ -1,8 +1,8 @@
 /**
- * MASTER APADRINADOS CLIENT v1.1
+ * MASTER APADRINADOS CLIENT v1.2
  * 
  * Cliente JavaScript canónico para la UI de Sistema de Apadrinados en dominio MASTER.
- * Diseño Canónico v1.1: Renderer unificado, descripción visible, acciones PDE homogéneas.
+ * Diseño Canónico v1.2: 4 tabs (Apadrinados, Alumnos, Persona, Cuidados Especiales)
  * 
  * REGLAS ABSOLUTAS:
  * - Prohibido innerHTML, template literals con HTML, concatenación de strings HTML
@@ -23,7 +23,7 @@
   const BUILD_ID = window.__AP_BUILD_ID__ || 'unknown';
   const BUILD_TIMESTAMP = new Date().toISOString();
   
-  window.__AP_MASTER_APADRINADOS_STAMP__ = `MASTER_APADRINADOS@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=sponsors-v1.1+target-ref+unified-renderer+visible-description+pde-actions+fixed-care-creator`;
+  window.__AP_MASTER_APADRINADOS_STAMP__ = `MASTER_APADRINADOS@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=sponsors-v1.2+4-tabs+alumnos-inline+persona-focus+care-queue-failsoft`;
   
   // Log STAMP siempre visible
   console.log('%c[MASTER][APADRINADOS][STAMP]', 'color: #00ff99; background: #001122; padding: 2px 4px; font-weight: bold;', 
@@ -53,15 +53,14 @@
 
   // Estado global
   const state = {
-    tabActivo: 'apadrinados', // 'apadrinados' | 'por-alumno' | 'cuidados'
+    tabActivo: 'apadrinados', // 'apadrinados' | 'alumnos' | 'persona' | 'cuidados'
     sponsors: [],
-    selectedSponsors: [],
-    currentStudent: null,
-    studentSponsors: [],
-    studentInfo: null,
-    careQueue: [],
+    selectedSponsor: null, // Para Tab 3 (Persona)
     students: [],
+    studentsWithSponsors: [], // Para Tab 2 (Alumnos)
+    careQueue: [],
     categories: [], // Categorías PDE para cuidados especiales
+    categoryDefaults: {}, // { category_id: { default_days: 30 } }
     orderBy: [
       { key: 'display_name', direction: 'asc' }
     ],
@@ -73,14 +72,15 @@
   // Elementos DOM
   const mainTabsContainer = document.getElementById('main-tabs-container');
   const tabApadrinados = document.getElementById('tab-apadrinados');
-  const tabPorAlumno = document.getElementById('tab-por-alumno');
+  const tabAlumnos = document.getElementById('tab-alumnos');
+  const tabPersona = document.getElementById('tab-persona');
   const tabCuidados = document.getElementById('tab-cuidados');
   const sponsorsTableContainer = document.getElementById('sponsors-table-container');
   const sponsorSearch = document.getElementById('sponsor-search');
   const btnCrearSponsor = document.getElementById('btn-crear-sponsor');
   const studentSearch = document.getElementById('student-search');
-  const studentResults = document.getElementById('student-results');
-  const studentSponsorsContainer = document.getElementById('student-sponsors-container');
+  const studentsListContainer = document.getElementById('students-list-container');
+  const personaDetailContainer = document.getElementById('persona-detail-container');
   const careQueueContainer = document.getElementById('care-queue-container');
   const horizonDays = document.getElementById('horizon-days');
   const careCategoryFilter = document.getElementById('care-category-filter');
@@ -139,13 +139,14 @@
   }
 
   /**
-   * RENDERER UNIFICADO DE APADRINADO (Diseño Canónico v1.1)
+   * RENDERER UNIFICADO DE APADRINADO (Diseño Canónico v1.2)
    * 
    * Crea una fila/ítem DOM para un apadrinado con:
    * - Nombre
    * - Descripción visible (siempre)
    * - Estado
    * - Acciones PDE homogéneas (limpiar, revisar, cuidado especial)
+   * - Botón "Ver" para abrir Tab 3 (Persona)
    * 
    * @param {Object} sponsor - Datos del apadrinado
    * @param {Object} options - Opciones de renderizado
@@ -153,9 +154,10 @@
    */
   function renderSponsorRow(sponsor, options = {}) {
     const {
-      context = 'table', // 'table' | 'list' | 'care'
+      context = 'table', // 'table' | 'list' | 'inline' | 'care'
       showActions = true,
-      showLinksCount = true
+      showLinksCount = true,
+      showViewButton = true
     } = options;
 
     if (context === 'table') {
@@ -199,12 +201,41 @@
       if (showActions) {
         const tdActions = document.createElement('td');
         tdActions.style.cssText = 'padding: 0.75rem;';
-        const actionsContainer = createSponsorActions(sponsor);
+        const actionsContainer = createSponsorActions(sponsor, { showViewButton });
         tdActions.appendChild(actionsContainer);
         row.appendChild(tdActions);
       }
 
       return row;
+    } else if (context === 'inline') {
+      // Render inline (para Tab 2 - Alumnos)
+      const item = document.createElement('span');
+      item.style.cssText = 'display: inline-block; margin-right: 0.5rem; margin-bottom: 0.25rem; padding: 0.25rem 0.5rem; background: #334155; border-radius: 0.25rem; font-size: 0.875rem;';
+      item.dataset.sponsorId = sponsor.id;
+      
+      const name = document.createTextNode(sponsor.display_name || '-');
+      item.appendChild(name);
+      
+      if (sponsor.description) {
+        const desc = document.createElement('span');
+        desc.textContent = ` (${sponsor.description})`;
+        desc.style.cssText = 'color: #94a3b8; margin-left: 0.25rem;';
+        item.appendChild(desc);
+      }
+      
+      // Botón Ver para abrir Tab 3
+      if (showViewButton) {
+        const btnView = document.createElement('button');
+        btnView.textContent = 'Ver';
+        btnView.style.cssText = 'margin-left: 0.5rem; padding: 0.125rem 0.5rem; background: #6366f1; color: white; border: none; border-radius: 0.125rem; cursor: pointer; font-size: 0.75rem;';
+        btnView.addEventListener('click', (e) => {
+          e.stopPropagation();
+          handleViewSponsor(sponsor.id);
+        });
+        item.appendChild(btnView);
+      }
+      
+      return item;
     } else {
       // Render como ítem de lista
       const item = document.createElement('div');
@@ -238,7 +269,7 @@
 
       // Acciones
       if (showActions) {
-        const actionsContainer = createSponsorActions(sponsor);
+        const actionsContainer = createSponsorActions(sponsor, { showViewButton });
         actionsContainer.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
         item.appendChild(actionsContainer);
       }
@@ -250,9 +281,19 @@
   /**
    * Crea contenedor de acciones PDE homogéneas para un apadrinado
    */
-  function createSponsorActions(sponsor) {
+  function createSponsorActions(sponsor, options = {}) {
+    const { showViewButton = true } = options;
     const container = document.createElement('div');
     container.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
+
+    // Botón Ver (para Tab 3)
+    if (showViewButton) {
+      const btnView = document.createElement('button');
+      btnView.textContent = 'Ver';
+      btnView.style.cssText = 'padding: 0.25rem 0.75rem; background: #6366f1; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
+      btnView.addEventListener('click', () => handleViewSponsor(sponsor.id));
+      container.appendChild(btnView);
+    }
 
     // Botón Limpiar PDE
     const btnClean = document.createElement('button');
@@ -309,6 +350,8 @@
     // Cargar datos iniciales según tab activo
     if (state.tabActivo === 'apadrinados') {
       await loadSponsors();
+    } else if (state.tabActivo === 'alumnos') {
+      await loadStudents();
     } else if (state.tabActivo === 'cuidados') {
       await loadCareQueue();
     }
@@ -339,7 +382,13 @@
       const result = await apiFetch('/master/api/classifications?type=tag&status=active&limit=100');
       state.categories = result.items || [];
       
-      // Llenar selector de categorías en Tab 3
+      // Extraer días por defecto de categorías (si están en meta)
+      state.categories.forEach(cat => {
+        // Por ahora, default 30 días (se puede configurar después)
+        state.categoryDefaults[cat.id] = { default_days: 30 };
+      });
+      
+      // Llenar selector de categorías en Tab 4
       if (careCategoryFilter) {
         while (careCategoryFilter.children.length > 1) {
           careCategoryFilter.removeChild(careCategoryFilter.lastChild);
@@ -354,6 +403,8 @@
       }
     } catch (error) {
       console.error('[MasterApadrinados] Error cargando categorías:', error);
+      // FAIL-SOFT: Continuar sin categorías
+      state.categories = [];
     }
   }
 
@@ -373,7 +424,7 @@
   }
 
   /**
-   * Renderiza los tabs principales
+   * Renderiza los tabs principales (4 tabs canónicas)
    */
   function renderMainTabs() {
     if (!mainTabsContainer) return;
@@ -385,7 +436,8 @@
     
     const tabs = [
       { id: 'apadrinados', label: 'Apadrinados' },
-      { id: 'por-alumno', label: 'Personas' },
+      { id: 'alumnos', label: 'Alumnos' },
+      { id: 'persona', label: 'Persona' },
       { id: 'cuidados', label: 'Cuidados Especiales' }
     ];
     
@@ -407,6 +459,10 @@
         // Cargar datos del tab
         if (tab.id === 'apadrinados') {
           await loadSponsors();
+        } else if (tab.id === 'alumnos') {
+          await loadStudents();
+        } else if (tab.id === 'persona') {
+          renderPersonaDetail();
         } else if (tab.id === 'cuidados') {
           await loadCareQueue();
         }
@@ -425,21 +481,24 @@
   function showTab(tabId) {
     // Ocultar todos
     if (tabApadrinados) tabApadrinados.style.display = 'none';
-    if (tabPorAlumno) tabPorAlumno.style.display = 'none';
+    if (tabAlumnos) tabAlumnos.style.display = 'none';
+    if (tabPersona) tabPersona.style.display = 'none';
     if (tabCuidados) tabCuidados.style.display = 'none';
     
     // Mostrar el activo
     if (tabId === 'apadrinados' && tabApadrinados) {
       tabApadrinados.style.display = 'block';
-    } else if (tabId === 'por-alumno' && tabPorAlumno) {
-      tabPorAlumno.style.display = 'block';
+    } else if (tabId === 'alumnos' && tabAlumnos) {
+      tabAlumnos.style.display = 'block';
+    } else if (tabId === 'persona' && tabPersona) {
+      tabPersona.style.display = 'block';
     } else if (tabId === 'cuidados' && tabCuidados) {
       tabCuidados.style.display = 'block';
     }
   }
 
   /**
-   * Carga los sponsors
+   * Carga los sponsors (Tab 1)
    */
   async function loadSponsors() {
     try {
@@ -548,7 +607,7 @@
   }
 
   /**
-   * Renderiza la tabla de sponsors usando renderer unificado
+   * Renderiza la tabla de sponsors usando renderer unificado (Tab 1)
    */
   function renderSponsors() {
     if (!sponsorsTableContainer) return;
@@ -619,7 +678,7 @@
     const tbody = document.createElement('tbody');
     
     state.sponsors.forEach(sponsor => {
-      const row = renderSponsorRow(sponsor, { context: 'table', showActions: true, showLinksCount: true });
+      const row = renderSponsorRow(sponsor, { context: 'table', showActions: true, showLinksCount: true, showViewButton: true });
       tbody.appendChild(row);
     });
     
@@ -661,6 +720,111 @@
   }
 
   /**
+   * Maneja ver/seleccionar sponsor (abre Tab 3 - Persona)
+   */
+  async function handleViewSponsor(sponsorId) {
+    try {
+      const result = await apiFetch(`/master/api/sponsors/${sponsorId}`);
+      state.selectedSponsor = result.sponsor;
+      
+      // Cambiar a Tab 3
+      state.tabActivo = 'persona';
+      renderMainTabs();
+      showTab('persona');
+      renderPersonaDetail();
+    } catch (error) {
+      showMessage('Error obteniendo apadrinado: ' + error.message, 'error');
+    }
+  }
+
+  /**
+   * Renderiza Tab 3 - Persona (vista de foco de UN apadrinado)
+   */
+  function renderPersonaDetail() {
+    if (!personaDetailContainer) return;
+    
+    // Limpiar
+    while (personaDetailContainer.firstChild) {
+      personaDetailContainer.removeChild(personaDetailContainer.firstChild);
+    }
+    
+    if (!state.selectedSponsor) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.textContent = 'Selecciona un apadrinado desde Tab 1 o Tab 2 para ver su detalle';
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
+      personaDetailContainer.appendChild(emptyMsg);
+      return;
+    }
+    
+    const sponsor = state.selectedSponsor;
+    
+    // Contenedor principal
+    const container = document.createElement('div');
+    container.style.cssText = 'max-width: 800px;';
+    
+    // Título
+    const title = document.createElement('h2');
+    title.textContent = sponsor.display_name || 'Sin nombre';
+    title.style.cssText = 'text-2xl font-bold text-white mb-4;';
+    container.appendChild(title);
+    
+    // Descripción
+    if (sponsor.description) {
+      const desc = document.createElement('div');
+      desc.textContent = sponsor.description;
+      desc.style.cssText = 'text-lg text-slate-300 mb-4;';
+      container.appendChild(desc);
+    }
+    
+    // Estado
+    const statusDiv = document.createElement('div');
+    statusDiv.style.cssText = 'mb-4;';
+    const statusLabel = document.createElement('span');
+    statusLabel.textContent = 'Estado: ';
+    statusLabel.style.cssText = 'color: #94a3b8;';
+    statusDiv.appendChild(statusLabel);
+    const statusValue = document.createElement('span');
+    statusValue.textContent = sponsor.status === 'active' ? 'Activo' : 'Archivado';
+    statusValue.style.cssText = `color: ${sponsor.status === 'active' ? '#10b981' : '#94a3b8'}; font-weight: 600;`;
+    statusDiv.appendChild(statusValue);
+    container.appendChild(statusDiv);
+    
+    // Padrinos vinculados
+    if (sponsor.links && sponsor.links.length > 0) {
+      const linksTitle = document.createElement('h3');
+      linksTitle.textContent = 'Padrinos vinculados:';
+      linksTitle.style.cssText = 'text-lg font-semibold text-white mt-6 mb-2;';
+      container.appendChild(linksTitle);
+      
+      const linksList = document.createElement('ul');
+      linksList.style.cssText = 'list-style: none; padding: 0;';
+      
+      sponsor.links.forEach(link => {
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 0.5rem; background: #334155; border-radius: 0.25rem; margin-bottom: 0.5rem;';
+        const studentName = link.apodo || link.nombre_completo || link.email || `Alumno #${link.student_id}`;
+        const studentEmail = link.email ? ` (${link.email})` : '';
+        li.textContent = studentName + studentEmail;
+        linksList.appendChild(li);
+      });
+      
+      container.appendChild(linksList);
+    }
+    
+    // Acciones PDE completas
+    const actionsTitle = document.createElement('h3');
+    actionsTitle.textContent = 'Acciones:';
+    actionsTitle.style.cssText = 'text-lg font-semibold text-white mt-6 mb-2;';
+    container.appendChild(actionsTitle);
+    
+    const actionsContainer = createSponsorActions(sponsor, { showViewButton: false });
+    actionsContainer.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
+    container.appendChild(actionsContainer);
+    
+    personaDetailContainer.appendChild(container);
+  }
+
+  /**
    * Maneja editar sponsor
    */
   async function handleEditSponsor(sponsor) {
@@ -679,9 +843,14 @@
       });
       
       showMessage('Apadrinado actualizado', 'success');
-      await loadSponsors();
-      if (state.tabActivo === 'por-alumno' && state.currentStudent) {
-        await loadStudentSponsors(state.currentStudent);
+      
+      // Refrescar según tab activo
+      if (state.tabActivo === 'apadrinados') {
+        await loadSponsors();
+      } else if (state.tabActivo === 'alumnos') {
+        await loadStudents();
+      } else if (state.tabActivo === 'persona') {
+        await handleViewSponsor(sponsor.id);
       }
     } catch (error) {
       showMessage('Error actualizando apadrinado: ' + error.message, 'error');
@@ -701,11 +870,16 @@
       });
       
       showMessage('Apadrinado archivado', 'success');
-      await loadSponsors();
-      if (state.tabActivo === 'por-alumno' && state.currentStudent) {
-        await loadStudentSponsors(state.currentStudent);
-      }
-      if (state.tabActivo === 'cuidados') {
+      
+      // Refrescar según tab activo
+      if (state.tabActivo === 'apadrinados') {
+        await loadSponsors();
+      } else if (state.tabActivo === 'alumnos') {
+        await loadStudents();
+      } else if (state.tabActivo === 'persona') {
+        state.selectedSponsor = null;
+        renderPersonaDetail();
+      } else if (state.tabActivo === 'cuidados') {
         await loadCareQueue();
       }
     } catch (error) {
@@ -740,7 +914,7 @@
   }
 
   /**
-   * Maneja añadir cuidado especial (FIX: Modal funcional con categorías)
+   * Maneja añadir cuidado especial (FIX: Modal funcional con categorías y días por defecto)
    */
   async function handleAddSpecialCare(sponsor) {
     // Crear modal
@@ -777,7 +951,7 @@
     });
     modalContent.appendChild(categorySelect);
     
-    // Días de duración
+    // Días de duración (prellenar con default de categoría)
     const daysLabel = document.createElement('label');
     daysLabel.textContent = 'Días de duración:';
     daysLabel.style.cssText = 'display: block; margin-bottom: 0.5rem; font-weight: 600;';
@@ -788,6 +962,17 @@
     daysInput.value = '30';
     daysInput.min = '1';
     daysInput.style.cssText = 'width: 100%; padding: 0.5rem; background: #334155; border: 1px solid #475569; border-radius: 0.25rem; color: #f1f5f9; margin-bottom: 1rem;';
+    
+    // Actualizar días cuando se selecciona categoría
+    categorySelect.addEventListener('change', () => {
+      const categoryId = categorySelect.value;
+      if (categoryId && state.categoryDefaults[categoryId]) {
+        daysInput.value = state.categoryDefaults[categoryId].default_days || 30;
+      } else {
+        daysInput.value = '30';
+      }
+    });
+    
     modalContent.appendChild(daysInput);
     
     // Notas
@@ -847,12 +1032,14 @@
         document.body.removeChild(modal);
         
         // Refrescar datos
-        await loadSponsors();
-        if (state.tabActivo === 'cuidados') {
+        if (state.tabActivo === 'apadrinados') {
+          await loadSponsors();
+        } else if (state.tabActivo === 'alumnos') {
+          await loadStudents();
+        } else if (state.tabActivo === 'persona') {
+          await handleViewSponsor(sponsor.id);
+        } else if (state.tabActivo === 'cuidados') {
           await loadCareQueue();
-        }
-        if (state.tabActivo === 'por-alumno' && state.currentStudent) {
-          await loadStudentSponsors(state.currentStudent);
         }
       } catch (error) {
         showMessage('Error añadiendo cuidado: ' + error.message, 'error');
@@ -873,189 +1060,131 @@
   }
 
   /**
-   * Maneja búsqueda de estudiantes (FIX: Usar endpoint correcto)
+   * Carga lista de alumnos (Tab 2 - Alumnos)
    */
-  async function handleStudentSearch() {
-    const query = studentSearch?.value || '';
-    if (query.length < 2) {
-      if (studentResults) {
-        studentResults.style.display = 'none';
-      }
-      return;
-    }
-    
+  async function loadStudents() {
     try {
-      // FIX: Usar endpoint correcto /master/api/students
-      const result = await apiFetch(`/master/api/students?search=${encodeURIComponent(query)}&limit=10`);
+      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB2] Cargando alumnos...');
+      
+      const search = studentSearch?.value || '';
+      const url = `/master/api/students?limit=100${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      
+      const result = await apiFetch(url);
       const students = result.data?.items || [];
       
-      if (!studentResults) return;
+      // Para cada alumno, cargar sus apadrinados
+      state.studentsWithSponsors = await Promise.all(
+        students.map(async (student) => {
+          try {
+            const sponsorsResult = await apiFetch(`/master/api/sponsors/by-student/${student.id}`);
+            return {
+              ...student,
+              sponsors: sponsorsResult.sponsors || []
+            };
+          } catch (error) {
+            // FAIL-SOFT: Si falla cargar sponsors, continuar sin ellos
+            console.warn(`[MasterApadrinados] Error cargando sponsors de alumno ${student.id}:`, error.message);
+            return {
+              ...student,
+              sponsors: []
+            };
+          }
+        })
+      );
       
-      // Limpiar
-      while (studentResults.firstChild) {
-        studentResults.removeChild(studentResults.firstChild);
-      }
+      renderStudents();
       
-      if (students.length === 0) {
-        const empty = document.createElement('p');
-        empty.textContent = 'No se encontraron estudiantes';
-        empty.style.cssText = 'padding: 0.75rem; color: #94a3b8; text-align: center;';
-        studentResults.appendChild(empty);
-        studentResults.style.display = 'block';
-        return;
-      }
-      
-      students.forEach(student => {
-        const item = document.createElement('div');
-        item.style.cssText = 'padding: 0.75rem; cursor: pointer; border-bottom: 1px solid #334155; transition: background 0.2s;';
-        item.addEventListener('mouseenter', () => {
-          item.style.background = '#334155';
-        });
-        item.addEventListener('mouseleave', () => {
-          item.style.background = 'transparent';
-        });
-        
-        const text = document.createTextNode(`${student.apodo || student.name || '-'} (${student.email || '-'})`);
-        item.appendChild(text);
-        
-        item.addEventListener('click', () => {
-          loadStudentSponsors(student.id);
-          if (studentSearch) studentSearch.value = '';
-          if (studentResults) studentResults.style.display = 'none';
-        });
-        studentResults.appendChild(item);
-      });
-      
-      studentResults.style.display = 'block';
+      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB2_RENDER] Tab 2 renderizado');
     } catch (error) {
-      console.error('[MasterApadrinados] Error buscando estudiantes:', error);
-      showMessage('Error buscando estudiantes: ' + error.message, 'error');
+      console.error('[MasterApadrinados] Error cargando alumnos:', error);
+      showMessage('Error cargando alumnos: ' + error.message, 'error');
     }
   }
 
   /**
-   * Carga sponsors de un estudiante
+   * Renderiza Tab 2 - Alumnos (lista de alumnos con apadrinados inline)
    */
-  async function loadStudentSponsors(studentId) {
-    try {
-      const result = await apiFetch(`/master/api/sponsors/by-student/${studentId}`);
-      state.studentSponsors = result.sponsors || [];
-      state.currentStudent = studentId;
-      
-      // Obtener info del estudiante
-      try {
-        const studentResult = await apiFetch(`/master/api/students/${studentId}`);
-        state.studentInfo = studentResult.student || { id: studentId };
-      } catch (e) {
-        state.studentInfo = { id: studentId };
-      }
-      
-      renderStudentSponsors();
-      
-      if (studentSponsorsContainer) {
-        studentSponsorsContainer.style.display = 'block';
-      }
-    } catch (error) {
-      showMessage('Error cargando sponsors del estudiante: ' + error.message, 'error');
-    }
-  }
-
-  /**
-   * Renderiza sponsors de un estudiante usando renderer unificado
-   */
-  function renderStudentSponsors() {
-    if (!studentSponsorsContainer) return;
+  function renderStudents() {
+    if (!studentsListContainer) return;
     
     // Limpiar
-    while (studentSponsorsContainer.firstChild) {
-      studentSponsorsContainer.removeChild(studentSponsorsContainer.firstChild);
+    while (studentsListContainer.firstChild) {
+      studentsListContainer.removeChild(studentsListContainer.firstChild);
     }
     
-    // Título con info del estudiante
-    const title = document.createElement('h3');
-    const studentName = state.studentInfo?.apodo || state.studentInfo?.name || state.studentInfo?.email || 'Estudiante';
-    title.textContent = `Apadrinados de ${studentName}`;
-    title.style.cssText = 'text-xl font-semibold text-white mb-2;';
-    studentSponsorsContainer.appendChild(title);
-    
-    const count = document.createElement('p');
-    count.textContent = `${state.studentSponsors.length} apadrinado(s) vinculado(s)`;
-    count.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 1rem;';
-    studentSponsorsContainer.appendChild(count);
-    
-    if (state.studentSponsors.length === 0) {
-      const empty = document.createElement('p');
-      empty.textContent = 'No hay apadrinados vinculados';
-      empty.style.cssText = 'color: #94a3b8; font-style: italic; padding: 2rem; text-align: center;';
-      studentSponsorsContainer.appendChild(empty);
-      
-      // Botón para vincular nuevo
-      const btnLinkNew = document.createElement('button');
-      btnLinkNew.textContent = '➕ Vincular Apadrinado';
-      btnLinkNew.style.cssText = 'margin-top: 1rem; padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-weight: 600;';
-      btnLinkNew.addEventListener('click', () => handleLinkNewSponsor(state.currentStudent));
-      studentSponsorsContainer.appendChild(btnLinkNew);
+    if (state.studentsWithSponsors.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.textContent = 'No hay alumnos';
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
+      studentsListContainer.appendChild(emptyMsg);
       return;
     }
     
+    // Crear lista
     const list = document.createElement('div');
     
-    // Convertir links a formato sponsor para usar renderer unificado
-    state.studentSponsors.forEach(link => {
-      const sponsor = {
-        id: link.sponsor_id,
-        display_name: link.sponsor_name || '-',
-        description: link.description || null,
-        status: 'active',
-        links_count: 1
-      };
+    state.studentsWithSponsors.forEach(student => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding: 1rem; background: #334155; border-radius: 0.375rem; margin-bottom: 0.75rem;';
       
-      const item = renderSponsorRow(sponsor, { context: 'list', showActions: true, showLinksCount: false });
+      // Nombre del alumno
+      const studentName = document.createElement('div');
+      studentName.style.cssText = 'font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;';
+      studentName.textContent = `${student.apodo || student.name || '-'} (${student.email || '-'})`;
+      item.appendChild(studentName);
       
-      // Añadir botón de desvincular
-      const actionsContainer = item.querySelector('div[style*="display: flex"]');
-      if (actionsContainer) {
-        const btnUnlink = document.createElement('button');
-        btnUnlink.textContent = 'Desvincular';
-        btnUnlink.style.cssText = 'padding: 0.25rem 0.75rem; background: #ef4444; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
-        btnUnlink.addEventListener('click', () => handleUnlinkSponsor(link.sponsor_id, state.currentStudent));
-        actionsContainer.appendChild(btnUnlink);
+      // Apadrinados inline
+      if (student.sponsors && student.sponsors.length > 0) {
+        const sponsorsLabel = document.createElement('div');
+        sponsorsLabel.style.cssText = 'font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.5rem;';
+        sponsorsLabel.textContent = `Apadrinados (${student.sponsors.length}):`;
+        item.appendChild(sponsorsLabel);
+        
+        const sponsorsContainer = document.createElement('div');
+        sponsorsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;';
+        
+        student.sponsors.forEach(link => {
+          const sponsor = {
+            id: link.sponsor_id,
+            display_name: link.sponsor_name || '-',
+            description: link.description || null,
+            status: 'active'
+          };
+          
+          const sponsorItem = renderSponsorRow(sponsor, { context: 'inline', showActions: false, showViewButton: true });
+          sponsorsContainer.appendChild(sponsorItem);
+        });
+        
+        item.appendChild(sponsorsContainer);
+      } else {
+        const noSponsors = document.createElement('div');
+        noSponsors.textContent = 'Sin apadrinados vinculados';
+        noSponsors.style.cssText = 'font-size: 0.875rem; color: #64748b; font-style: italic; margin-bottom: 0.5rem;';
+        item.appendChild(noSponsors);
       }
+      
+      // Botón para vincular nuevo apadrinado
+      const btnLink = document.createElement('button');
+      btnLink.textContent = '➕ Vincular Apadrinado';
+      btnLink.style.cssText = 'padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
+      btnLink.addEventListener('click', () => handleLinkNewSponsor(student.id));
+      item.appendChild(btnLink);
       
       list.appendChild(item);
     });
     
-    studentSponsorsContainer.appendChild(list);
-    
-    // Botón para vincular nuevo
-    const btnLinkNew = document.createElement('button');
-    btnLinkNew.textContent = '➕ Vincular Apadrinado';
-    btnLinkNew.style.cssText = 'margin-top: 1rem; padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-weight: 600;';
-    btnLinkNew.addEventListener('click', () => handleLinkNewSponsor(state.currentStudent));
-    studentSponsorsContainer.appendChild(btnLinkNew);
+    studentsListContainer.appendChild(list);
   }
 
   /**
-   * Maneja desvincular sponsor
+   * Maneja búsqueda de estudiantes (Tab 2)
    */
-  async function handleUnlinkSponsor(sponsorId, studentId) {
-    if (!confirm('¿Desvincular este apadrinado del estudiante?')) return;
-    
-    try {
-      await apiFetch(`/master/api/sponsors/${sponsorId}/unlink`, {
-        method: 'POST',
-        body: JSON.stringify({ student_id: studentId })
-      });
-      
-      showMessage('Apadrinado desvinculado', 'success');
-      await loadStudentSponsors(studentId);
-    } catch (error) {
-      showMessage('Error desvinculando: ' + error.message, 'error');
-    }
+  async function handleStudentSearch() {
+    await loadStudents();
   }
 
   /**
-   * Maneja vincular nuevo sponsor
+   * Maneja vincular nuevo sponsor a estudiante
    */
   async function handleLinkNewSponsor(studentId) {
     const sponsorId = prompt('ID del apadrinado a vincular:');
@@ -1068,18 +1197,18 @@
       });
       
       showMessage('Apadrinado vinculado', 'success');
-      await loadStudentSponsors(studentId);
+      await loadStudents();
     } catch (error) {
       showMessage('Error vinculando: ' + error.message, 'error');
     }
   }
 
   /**
-   * Carga cola de cuidados especiales
+   * Carga cola de cuidados especiales (Tab 4)
    */
   async function loadCareQueue() {
     try {
-      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB3] Cargando cola de cuidados...');
+      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB4] Cargando cola de cuidados...');
       
       const horizon = parseInt(horizonDays?.value || '14', 10);
       const categoryId = careCategoryFilter?.value || null;
@@ -1090,7 +1219,7 @@
       
       renderCareQueue();
       
-      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB3_RENDER] Tab 3 renderizado');
+      if (DEBUG) console.log('[MASTER][APADRINADOS][TAB4_RENDER] Tab 4 renderizado');
     } catch (error) {
       console.error('[MasterApadrinados] Error cargando cola de cuidados:', error);
       showMessage('Error cargando cola de cuidados: ' + error.message, 'error');
@@ -1098,7 +1227,7 @@
   }
 
   /**
-   * Renderiza cola de cuidados especiales usando renderer unificado
+   * Renderiza cola de cuidados especiales usando renderer unificado (Tab 4)
    */
   function renderCareQueue() {
     if (!careQueueContainer) return;
@@ -1108,9 +1237,10 @@
       careQueueContainer.removeChild(careQueueContainer.firstChild);
     }
     
-    if (state.careQueue.length === 0) {
+    // FAIL-SOFT: Si no hay datos, mostrar mensaje, no error
+    if (!state.careQueue || state.careQueue.length === 0) {
       const empty = document.createElement('p');
-      empty.textContent = 'No hay cuidados especiales en la cola';
+      empty.textContent = 'No hay cuidados especiales en la cola para el horizonte seleccionado';
       empty.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
       careQueueContainer.appendChild(empty);
       return;
@@ -1127,7 +1257,7 @@
         status: 'active'
       };
       
-      const item = renderSponsorRow(sponsor, { context: 'list', showActions: true, showLinksCount: false });
+      const item = renderSponsorRow(sponsor, { context: 'list', showActions: true, showLinksCount: false, showViewButton: true });
       
       // Añadir info específica de cuidado
       const infoContainer = item.querySelector('div[style*="margin-bottom: 0.75rem"]');
@@ -1145,6 +1275,13 @@
         days.textContent = `Días restantes: ${daysLeft}`;
         days.style.cssText = `font-size: 0.875rem; color: ${daysLeft <= 3 ? '#ef4444' : daysLeft <= 7 ? '#f59e0b' : '#10b981'}; margin-top: 0.25rem;`;
         infoContainer.appendChild(days);
+        
+        if (care.notes) {
+          const notes = document.createElement('div');
+          notes.textContent = `Notas: ${care.notes}`;
+          notes.style.cssText = 'font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem; font-style: italic;';
+          infoContainer.appendChild(notes);
+        }
       }
       
       // Reemplazar acciones con acciones específicas de cuidado
@@ -1155,6 +1292,12 @@
       
       const actions = document.createElement('div');
       actions.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;';
+      
+      const btnView = document.createElement('button');
+      btnView.textContent = 'Ver Apadrinado';
+      btnView.style.cssText = 'padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;';
+      btnView.addEventListener('click', () => handleViewSponsor(care.sponsor_id));
+      actions.appendChild(btnView);
       
       const btnExtend = document.createElement('button');
       btnExtend.textContent = 'Extender';

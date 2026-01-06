@@ -122,8 +122,10 @@ export default async function masterApiSponsorCareHandler(request, env, ctx) {
           traceId
         });
 
-        return jsonSuccess({ queue }, traceId);
+        // FAIL-SOFT: getCareQueue nunca lanza error, siempre devuelve array
+        return jsonSuccess({ queue: queue || [] }, traceId);
       } catch (error) {
+        // Solo errores reales (no de datos vacíos) llegan aquí
         logError('MasterApiSponsorCare', 'Error obteniendo cola de cuidados', {
           error: error.message,
           traceId

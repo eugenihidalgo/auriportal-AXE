@@ -698,6 +698,7 @@ export async function endSpecialCare(data, options = {}) {
 
 /**
  * Obtiene la cola de cuidados especiales
+ * FAIL-SOFT: Nunca lanza error por datos vacíos
  */
 export async function getCareQueue(options = {}) {
   const { horizon_days = 14, category_term_id = null, orderPipeline = null } = options;
@@ -711,26 +712,52 @@ export async function getCareQueue(options = {}) {
       orderPipeline
     });
 
-    // Enriquecer con listas y target_ref
+    // FAIL-SOFT: Si no hay datos, devolver array vacío (no error)
+    if (!queue || queue.length === 0) {
+      logInfo('SponsorService', '[SPONSOR][CARE][QUEUE] Cola vacía', {
+        horizon_days,
+        category_term_id,
+        traceId: finalTraceId
+      });
+      return [];
+    }
+
+    // Enriquecer con listas y target_ref (fail-soft por ítem)
     const enriched = await Promise.all(
       queue.map(async (item) => {
-        const lists = await sponsorCareRepo.getCareLists(item.id);
-        const targetRef = computeTargetRef(item.sponsor_id);
-        return {
-          ...item,
-          target_ref: targetRef,
-          lists
-        };
+        try {
+          const lists = await sponsorCareRepo.getCareLists(item.id).catch(() => []);
+          const targetRef = computeTargetRef(item.sponsor_id);
+          return {
+            ...item,
+            target_ref: targetRef,
+            lists: lists || []
+          };
+        } catch (itemError) {
+          // Si falla el enriquecimiento de un ítem, devolverlo sin enriquecer
+          logWarn('SponsorService', '[SPONSOR][CARE][QUEUE] Error enriqueciendo ítem', {
+            item_id: item.id,
+            error: itemError.message,
+            traceId: finalTraceId
+          });
+          return {
+            ...item,
+            target_ref: computeTargetRef(item.sponsor_id),
+            lists: []
+          };
+        }
       })
     );
 
     return enriched;
   } catch (error) {
-    logError('SponsorService', '[SPONSOR][CARE][QUEUE] Error obteniendo cola', {
+    // FAIL-SOFT: Solo loguear, nunca lanzar error
+    logError('SponsorService', '[SPONSOR][CARE][QUEUE] Error obteniendo cola (fail-soft)', {
       error: error.message,
       traceId: finalTraceId
     });
-    throw error;
+    // Devolver array vacío en lugar de lanzar error
+    return [];
   }
 }
 

@@ -103,13 +103,19 @@ export class SponsorSpecialCareRepoPg {
     const now = new Date();
     const horizon = new Date(now.getTime() + (horizon_days * 24 * 60 * 60 * 1000));
     
+    // FAIL-SOFT: Usar LEFT JOIN para proteger contra referencias rotas
+    // Si no hay datos, devolver array vacío (no error)
     let sql = `
-      SELECT ssc.*, sc.display_name as sponsor_name, pct.term_key, pct.label as category_label
+      SELECT 
+        ssc.*, 
+        sc.display_name as sponsor_name,
+        sc.description as sponsor_description,
+        COALESCE(pct.term_key, 'unknown') as term_key, 
+        COALESCE(pct.label, 'Categoría desconocida') as category_label
       FROM sponsor_special_care ssc
-      JOIN sponsors_catalog sc ON ssc.sponsor_id = sc.id
-      JOIN pde_classification_terms pct ON ssc.category_term_id = pct.id
+      INNER JOIN sponsors_catalog sc ON ssc.sponsor_id = sc.id AND sc.deleted_at IS NULL
+      LEFT JOIN pde_classification_terms pct ON ssc.category_term_id = pct.id AND pct.status = 'active'
       WHERE ssc.deleted_at IS NULL
-        AND sc.deleted_at IS NULL
         AND ssc.ends_at > $1
         AND ssc.ends_at <= $2
     `;
@@ -140,8 +146,14 @@ export class SponsorSpecialCareRepoPg {
       sql += ' ORDER BY ssc.ends_at ASC, ssc.priority DESC';
     }
     
-    const result = await queryFn(sql, params);
-    return result.rows || [];
+    try {
+      const result = await queryFn(sql, params);
+      return result.rows || [];
+    } catch (error) {
+      // FAIL-SOFT: Si hay error SQL, loguear y devolver array vacío
+      console.error('[SponsorSpecialCareRepo] Error en listQueue:', error.message);
+      return [];
+    }
   }
 
   async setCareLists(careId, listIds, client = null) {
@@ -170,16 +182,27 @@ export class SponsorSpecialCareRepoPg {
   async getCareLists(careId, client = null) {
     if (!careId) return [];
     
-    const queryFn = client ? client.query.bind(client) : query;
-    const result = await queryFn(`
-      SELECT scl.transmutation_list_id, lt.nombre, lt.tipo, lt.status
-      FROM sponsor_special_care_lists scl
-      JOIN listas_transmutaciones lt ON scl.transmutation_list_id = lt.id
-      WHERE scl.care_id = $1
-      ORDER BY lt.nombre ASC
-    `, [careId]);
-    
-    return result.rows || [];
+    try {
+      const queryFn = client ? client.query.bind(client) : query;
+      // FAIL-SOFT: LEFT JOIN para proteger contra referencias rotas
+      const result = await queryFn(`
+        SELECT 
+          scl.transmutation_list_id, 
+          COALESCE(lt.nombre, 'Lista desconocida') as nombre, 
+          COALESCE(lt.tipo, 'unknown') as tipo, 
+          COALESCE(lt.status, 'unknown') as status
+        FROM sponsor_special_care_lists scl
+        LEFT JOIN listas_transmutaciones lt ON scl.transmutation_list_id = lt.id
+        WHERE scl.care_id = $1
+        ORDER BY lt.nombre ASC NULLS LAST
+      `, [careId]);
+      
+      return result.rows || [];
+    } catch (error) {
+      // FAIL-SOFT: Si hay error, devolver array vacío
+      console.error('[SponsorSpecialCareRepo] Error en getCareLists:', error.message);
+      return [];
+    }
   }
 
   async getCareById(careId, client = null) {
