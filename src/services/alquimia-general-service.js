@@ -274,6 +274,13 @@ export async function updateItem(id, patch) {
   const traceId = getRequestId();
   
   try {
+    // Obtener item actual para verificar tipo y veces_limpiar anterior
+    const repo = getDefaultAlquimiaCatalogRepo();
+    const itemActual = await repo.getItemById(id);
+    if (!itemActual) {
+      throw new Error(`Item no encontrado: ${id}`);
+    }
+    
     // Manejar grupo: asegurar que existe en SOT si viene en patch
     if ('grupo' in patch) {
       if (patch.grupo && typeof patch.grupo === 'string' && patch.grupo.trim() !== '') {
@@ -296,13 +303,88 @@ export async function updateItem(id, patch) {
       }
     }
     
-    const repo = getDefaultAlquimiaCatalogRepo();
+    // Normalizar veces_limpiar: '' => null, validar >= 1
+    let vecesLimpiarChanged = false;
+    if ('veces_limpiar' in patch) {
+      const oldVeces = itemActual.veces_limpiar;
+      if (patch.veces_limpiar === '' || patch.veces_limpiar === null) {
+        patch.veces_limpiar = null;
+      } else if (typeof patch.veces_limpiar === 'string') {
+        const parsed = parseInt(patch.veces_limpiar, 10);
+        patch.veces_limpiar = Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+      }
+      vecesLimpiarChanged = patch.veces_limpiar !== oldVeces;
+    }
+    
+    // Actualizar item
     const result = await repo.updateItem(id, patch);
+    
+    // Si cambió veces_limpiar y es una lista una_vez, recalcular remaining para todos los estudiantes
+    if (vecesLimpiarChanged && itemActual.item_ref) {
+      const lista = await getListaById(itemActual.lista_id);
+      if (lista && lista.tipo === 'una_vez' && patch.veces_limpiar !== null) {
+        logInfo('AlquimiaGeneralService', 'Recalculando remaining por cambio de veces_limpiar', {
+          traceId,
+          item_id: id,
+          item_ref: itemActual.item_ref,
+          old_veces: itemActual.veces_limpiar,
+          new_veces: patch.veces_limpiar
+        });
+        
+        // Recalcular remaining usando Cleaning Engine
+        // remaining = max(required_count - completed, 0)
+        const { setRemainingShared } = await import('../core/master/services/cleaning-engine-service.js');
+        const { query } = await import('../../database/pg.js');
+        
+        // Obtener todos los estados de cleaning_item_state para este item_ref (solo SHARED, solo activos)
+        const statesResult = await query(
+          `SELECT student_id, shared_completed 
+           FROM cleaning_item_state 
+           WHERE item_ref = $1 AND product_key = 'pde' AND domain_type = 'transmutacion'
+           AND student_id NOT IN (
+             SELECT alumno_id FROM pausas WHERE fin IS NULL
+           )`,
+          [itemActual.item_ref]
+        );
+        
+        // Actualizar remaining para cada estudiante
+        let updated = 0;
+        for (const row of statesResult.rows) {
+          const completed = row.shared_completed || 0;
+          const newRemaining = Math.max(patch.veces_limpiar - completed, 0);
+          
+          await setRemainingShared({
+            student_id: row.student_id,
+            item_ref: itemActual.item_ref,
+            remaining: newRemaining,
+            actor_type: 'automation',
+            actor_ref: 'system',
+            surface_key: 'alquimia_general.update_required_count',
+            product_key: 'pde',
+            trace_id: traceId,
+            meta: {
+              reason: 'required_count_changed',
+              old_required: itemActual.veces_limpiar,
+              new_required: patch.veces_limpiar,
+              completed
+            }
+          });
+          updated++;
+        }
+        
+        logInfo('AlquimiaGeneralService', 'remaining recalculado', {
+          traceId,
+          item_ref: itemActual.item_ref,
+          updated_count: updated
+        });
+      }
+    }
     
     logInfo('AlquimiaGeneralService', 'updateItem completado', {
       traceId,
       item_id: id,
-      grupo: patch.grupo
+      grupo: patch.grupo,
+      veces_limpiar_changed: vecesLimpiarChanged
     });
     
     return result;
@@ -364,10 +446,14 @@ export async function archiveItem(id) {
 /**
  * Obtiene estado de alumnos para un item
  * 
+ * LEE DESDE CLEANING ENGINE v1 cuando se especifica clean_layer
+ * Mantiene compatibilidad con student_item_state cuando no se especifica
+ * 
  * @param {string} itemRef - item_ref del item
  * @param {string} tipo - Tipo del item ('recurrente' o 'una_vez')
  * @param {string} [productKey='pde'] - Clave del producto
- * @param {Object} [options] - Opciones adicionales (limit, offset)
+ * @param {Object} [options] - Opciones adicionales (limit, offset, clean_layer)
+ * @param {string} [options.clean_layer] - Capa de limpieza ('shared' | 'pde'). Si se especifica, lee desde cleaning_item_state
  * @returns {Promise<Object>} Objeto con students, counts, total
  */
 export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', options = {}) {
@@ -376,9 +462,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
   }
   
   const traceId = getRequestId();
+  const { clean_layer, ...otherOptions } = options;
   
   try {
-    // Obtener item completo para threshold_days y critical_multiplier
+    // Obtener item completo para threshold_days, critical_multiplier y nivel
     const item = await getItemByRef(itemRef);
     if (!item) {
       logError('AlquimiaGeneralService', 'Item no encontrado', {
@@ -388,12 +475,61 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       return { students: [], counts: {}, total: 0 };
     }
 
-    // Usar repo MASTER (sin dependencias STUDENT)
-    const repo = getDefaultMasterStudentTransmutationReadRepo();
-    const rawResult = await repo.getStudentsForItemRaw(itemRef, tipo, productKey, options);
-
-    // Importar helper de nombres
+    // Importar helper de nombres y helpers
     const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
+    const { getStudentEffectiveLevel } = await import('../core/master/services/cleaning-engine-service.js');
+    const { getDefaultPausaRepo } = await import('../infra/repos/pausa-repo-pg.js');
+
+    // Si se especifica clean_layer, leer desde Cleaning Engine
+    let rawResult;
+    if (clean_layer) {
+      const repo = getDefaultMasterStudentTransmutationReadRepo();
+      rawResult = await repo.getStudentsForItemFromCleaningEngine(
+        itemRef, 
+        tipo, 
+        clean_layer, 
+        productKey, 
+        otherOptions
+      );
+    } else {
+      // Compatibilidad: leer desde student_item_state (legacy)
+      const repo = getDefaultMasterStudentTransmutationReadRepo();
+      rawResult = await repo.getStudentsForItemRaw(itemRef, tipo, productKey, otherOptions);
+    }
+
+    // Filtrar por nivel efectivo y pausa (si clean_layer está especificado)
+    const studentsFiltered = [];
+    const studentsNoAplica = []; // Alumnos cuyo nivel no aplica
+    
+    for (const student of rawResult.students) {
+      // Verificar pausa (si clean_layer está especificado, ya está filtrado en query, pero verificamos por seguridad)
+      if (clean_layer) {
+        const pausaRepo = getDefaultPausaRepo();
+        const pausaActiva = await pausaRepo.getPausaActiva(student.student_id);
+        if (pausaActiva) {
+          continue; // Saltar alumnos en pausa
+        }
+      }
+      
+      // Verificar nivel efectivo
+      const nivelEfectivo = await getStudentEffectiveLevel(student.student_id);
+      if (item.nivel && item.nivel > nivelEfectivo) {
+        // No aplica por nivel
+        studentsNoAplica.push({
+          ...student,
+          nivel_efectivo: nivelEfectivo,
+          item_nivel: item.nivel,
+          no_aplica: true
+        });
+        continue;
+      }
+      
+      studentsFiltered.push({
+        ...student,
+        nivel_efectivo: nivelEfectivo,
+        item_nivel: item.nivel
+      });
+    }
 
     // Calcular estados y nombres de display
     if (tipo === 'recurrente') {
@@ -403,7 +539,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       const criticalThreshold = thresholdDays * criticalMultiplier;
 
       // Calcular estados y nombres
-      const studentsWithState = await calculateStudentDisplayNames(rawResult.students);
+      const studentsWithState = await calculateStudentDisplayNames(studentsFiltered);
       
       const students = studentsWithState.map(student => {
         const daysSince = student.days_since_last_clean;
@@ -441,19 +577,42 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
 
       return {
         students,
+        students_no_aplica: studentsNoAplica.length > 0 ? studentsNoAplica : undefined,
         counts,
-        total: rawResult.total,
+        total: studentsFiltered.length,
         threshold_days: thresholdDays,
-        critical_multiplier: criticalMultiplier
+        critical_multiplier: criticalMultiplier,
+        clean_layer: clean_layer || 'shared' // Default shared si no se especifica
       };
     } else {
       // una_vez - usar nombres de display
-      const students = await calculateStudentDisplayNames(rawResult.students);
+      const students = await calculateStudentDisplayNames(studentsFiltered);
+      
+      // Calcular estados para una_vez
+      const studentsWithState = students.map(student => {
+        const remaining = student.remaining !== null ? student.remaining : null;
+        const completed = student.completed || 0;
+        const isComplete = remaining !== null && remaining <= 0;
+        
+        return {
+          ...student,
+          state: isComplete ? 'completed' : 'pending',
+          remaining,
+          completed
+        };
+      });
+      
+      const counts = {
+        completed: studentsWithState.filter(s => s.state === 'completed').length,
+        pending: studentsWithState.filter(s => s.state === 'pending').length
+      };
       
       return {
-        students,
-        counts: rawResult.counts,
-        total: rawResult.total
+        students: studentsWithState,
+        students_no_aplica: studentsNoAplica.length > 0 ? studentsNoAplica : undefined,
+        counts,
+        total: studentsFiltered.length,
+        clean_layer: clean_layer || 'shared' // Default shared si no se especifica
       };
     }
 
@@ -464,103 +623,84 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       code: error.code,
       stack: error.stack,
       itemRef,
-      tipo
+      tipo,
+      clean_layer: options.clean_layer
     });
     throw error;
   }
 }
 
 /**
- * Marca limpio un alumno específico (recurrente)
+ * Marca limpio un alumno específico (recurrente o una_vez)
+ * 
+ * DELEGADO AL CLEANING ENGINE v1 (single decider)
  * 
  * @param {number} studentId - ID del alumno
  * @param {string} itemRef - item_ref del item
  * @param {string} [productKey='pde'] - Clave del producto
- * @returns {Promise<Object|null>} Estado actualizado o null si no existe
+ * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
+ * @returns {Promise<Object|null>} Estado actualizado o null si no existe/está pausado
  */
-export async function markCleanStudent(studentId, itemRef, productKey = 'pde') {
+export async function markCleanStudent(studentId, itemRef, productKey = 'pde', cleanLayer = 'shared') {
   if (!studentId || !itemRef) return null;
   
   const traceId = getRequestId();
   
   try {
-    // Resolver itemRef → item_id (obligatorio: student_item_state requiere item_id NOT NULL)
-    const item = await getItemByRef(itemRef);
-    if (!item || !item.id) {
-      logError('AlquimiaGeneralService', 'Item no encontrado para markCleanStudent', {
-        traceId,
-        itemRef,
-        studentId
-      });
-      return null;
-    }
+    // Delegar al Cleaning Engine v1 (single decider)
+    const { markCleanStudent: cleaningMarkClean } = await import('../core/master/services/cleaning-engine-service.js');
     
-    const itemId = item.id;
+    const result = await cleaningMarkClean({
+      student_id: studentId,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      product_key: productKey,
+      domain_type: 'transmutation',
+      actor_type: 'master',
+      surface_key: 'master.alquimia_general',
+      meta: {
+        source: 'alquimia-general-service',
+        legacy_call: true
+      }
+    });
     
-    // Usar repo MASTER (sin dependencias STUDENT)
-    // domain_key canónico para transmutaciones energéticas
-    const domainKey = 'transmutaciones_energeticas';
-    const repo = getDefaultMasterStudentTransmutationReadRepo();
-    const result = await repo.markCleanStudent(studentId, itemId, productKey, domainKey);
-    
+    // Mantener señales legacy para compatibilidad (el Cleaning Engine ya emite señales)
     if (result) {
-      // Emitir señales según Origin Contract v1
       try {
         const { emitSignal } = await import('./pde-signal-emitter.js');
         
-        // clean.executed - Señal canónica de limpieza ejecutada
-        await emitSignal('clean.executed', {
-          signal: 'clean.executed',
-          scope: 'student',
-          student_id: studentId,
-          item_id: itemId,
-          item_ref: itemRef,
-          domain: 'transmutation',
-          product_key: productKey,
-          source: 'master',
-          executed_at: new Date().toISOString()
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanStudent'
-        });
-        
-        // origin.executed - Se ejecutó la limpieza
+        // origin.executed - Se ejecutó la limpieza (backward compat)
         await emitSignal('origin.executed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
           student_id: studentId,
           product_key: productKey,
           execution_mode: 'recurrent',
-          actor: 'master'
+          actor: 'master',
+          clean_layer: cleanLayer
         }, {}, {}, {
           trace_id: traceId,
           source: 'alquimia-general-service',
           action: 'markCleanStudent'
         });
         
-        // origin.completed - Se completó la limpieza (marcado como revisado)
+        // origin.completed - Se completó la limpieza (backward compat)
         await emitSignal('origin.completed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
           student_id: studentId,
           product_key: productKey,
           execution_mode: 'recurrent',
-          actor: 'master'
+          actor: 'master',
+          clean_layer: cleanLayer
         }, {}, {}, {
           trace_id: traceId,
           source: 'alquimia-general-service',
           action: 'markCleanStudent'
         });
-        
-        logInfo('AlquimiaGeneralService', 'Señales emitidas para markCleanStudent', {
-          traceId,
-          itemRef,
-          studentId
-        });
       } catch (signalError) {
         // No fallar si las señales fallan (fail-open)
-        logError('AlquimiaGeneralService', 'Error emitiendo señales en markCleanStudent', {
+        logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
           traceId,
           error: signalError.message,
           itemRef,
@@ -584,62 +724,44 @@ export async function markCleanStudent(studentId, itemRef, productKey = 'pde') {
 }
 
 /**
- * Marca limpio todos los alumnos (recurrente)
+ * Marca limpio todos los alumnos (recurrente o una_vez)
  * Limpieza GLOBAL: Master → Todos los alumnos
+ * 
+ * DELEGADO AL CLEANING ENGINE v1 (single decider)
  * 
  * @param {string} itemRef - item_ref del item
  * @param {string} [productKey='pde'] - Clave del producto
- * @returns {Promise<Object>} Objeto con { updated: number }
+ * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
+ * @returns {Promise<Object>} Objeto con { updated: number, skipped: number, total: number }
  */
-export async function markCleanAll(itemRef, productKey = 'pde') {
-  if (!itemRef) return { updated: 0 };
+export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'shared') {
+  if (!itemRef) return { updated: 0, skipped: 0, total: 0 };
   
   const traceId = getRequestId();
   
   try {
-    // Resolver itemRef → item_id (obligatorio: student_item_state requiere item_id NOT NULL)
-    const item = await getItemByRef(itemRef);
-    if (!item || !item.id) {
-      logError('AlquimiaGeneralService', 'Item no encontrado para markCleanAll', {
-        traceId,
-        itemRef
-      });
-      return { updated: 0 };
-    }
+    // Delegar al Cleaning Engine v1 (single decider)
+    const { markCleanAllStudents: cleaningMarkCleanAll } = await import('../core/master/services/cleaning-engine-service.js');
     
-    const itemId = item.id;
+    const result = await cleaningMarkCleanAll({
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      product_key: productKey,
+      domain_type: 'transmutation',
+      actor_type: 'master',
+      surface_key: 'master.alquimia_general',
+      meta: {
+        source: 'alquimia-general-service',
+        legacy_call: true
+      }
+    });
     
-    // Usar repo MASTER (sin dependencias STUDENT)
-    // domain_key canónico para transmutaciones energéticas
-    const domainKey = 'transmutaciones_energeticas';
-    const repo = getDefaultMasterStudentTransmutationReadRepo();
-    const result = await repo.markCleanAll(itemId, productKey, domainKey);
-    
+    // Mantener señales legacy para compatibilidad (el Cleaning Engine ya emite señales)
     if (result && result.updated > 0) {
-      // Emitir señales según Origin Contract v1
-      // Para limpieza global, emitimos señales por cada alumno actualizado
       try {
         const { emitSignal } = await import('./pde-signal-emitter.js');
         
-        // clean.executed - Señal canónica de limpieza ejecutada (global)
-        await emitSignal('clean.executed', {
-          signal: 'clean.executed',
-          scope: 'all',
-          student_id: null, // null para scope 'all'
-          item_id: itemId,
-          item_ref: itemRef,
-          domain: 'transmutation',
-          product_key: productKey,
-          source: 'master',
-          executed_at: new Date().toISOString()
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanAll'
-        });
-        
-        // Obtener lista de alumnos actualizados para emitir señales individuales
-        // Por ahora, emitimos señal global (puede optimizarse después)
+        // origin.executed - Se ejecutó la limpieza (backward compat)
         await emitSignal('origin.executed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
@@ -647,13 +769,15 @@ export async function markCleanAll(itemRef, productKey = 'pde') {
           execution_mode: 'recurrent',
           actor: 'master',
           scope: 'all',
-          students_updated: result.updated
+          students_updated: result.updated,
+          clean_layer: cleanLayer
         }, {}, {}, {
           trace_id: traceId,
           source: 'alquimia-general-service',
           action: 'markCleanAll'
         });
         
+        // origin.completed - Se completó la limpieza (backward compat)
         await emitSignal('origin.completed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
@@ -661,21 +785,16 @@ export async function markCleanAll(itemRef, productKey = 'pde') {
           execution_mode: 'recurrent',
           actor: 'master',
           scope: 'all',
-          students_updated: result.updated
+          students_updated: result.updated,
+          clean_layer: cleanLayer
         }, {}, {}, {
           trace_id: traceId,
           source: 'alquimia-general-service',
           action: 'markCleanAll'
         });
-        
-        logInfo('AlquimiaGeneralService', 'Señales emitidas para markCleanAll', {
-          traceId,
-          itemRef,
-          updated: result.updated
-        });
       } catch (signalError) {
         // No fallar si las señales fallan (fail-open)
-        logError('AlquimiaGeneralService', 'Error emitiendo señales en markCleanAll', {
+        logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
           traceId,
           error: signalError.message,
           itemRef
@@ -683,7 +802,12 @@ export async function markCleanAll(itemRef, productKey = 'pde') {
       }
     }
     
-    return result;
+    // Normalizar respuesta para compatibilidad (updated vs updated/skipped/total)
+    return {
+      updated: result.updated || 0,
+      skipped: result.skipped || 0,
+      total: result.total || 0
+    };
   } catch (error) {
     logError('AlquimiaGeneralService', 'Error en markCleanAll', {
       traceId,
@@ -699,36 +823,44 @@ export async function markCleanAll(itemRef, productKey = 'pde') {
 /**
  * Incrementa +1 todos los alumnos (una_vez)
  * 
+ * DELEGADO AL CLEANING ENGINE v1 (single decider)
+ * 
  * @param {string} itemRef - item_ref del item
  * @param {string} [productKey='pde'] - Clave del producto
- * @returns {Promise<Object>} Objeto con { updated: number }
+ * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
+ * @returns {Promise<Object>} Objeto con { updated: number, skipped: number, total: number }
  */
-export async function incrementAll(itemRef, productKey = 'pde') {
-  if (!itemRef) return { updated: 0 };
+export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'shared') {
+  if (!itemRef) return { updated: 0, skipped: 0, total: 0 };
   
   const traceId = getRequestId();
   
   try {
-    // Resolver itemRef → item_id (obligatorio: student_item_state requiere item_id NOT NULL)
-    const item = await getItemByRef(itemRef);
-    if (!item || !item.id) {
-      logError('AlquimiaGeneralService', 'Item no encontrado para incrementAll', {
-        traceId: getRequestId(),
-        itemRef
-      });
-      return { updated: 0 };
-    }
+    // Delegar al Cleaning Engine v1 (single decider)
+    const { incrementAllStudents: cleaningIncrementAll } = await import('../core/master/services/cleaning-engine-service.js');
     
-    const itemId = item.id;
+    const result = await cleaningIncrementAll({
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      product_key: productKey,
+      domain_type: 'transmutation',
+      actor_type: 'master',
+      surface_key: 'master.alquimia_general',
+      meta: {
+        source: 'alquimia-general-service',
+        legacy_call: true
+      }
+    });
     
-    // Usar repo MASTER (sin dependencias STUDENT)
-    // domain_key canónico para transmutaciones energéticas
-    const domainKey = 'transmutaciones_energeticas';
-    const repo = getDefaultMasterStudentTransmutationReadRepo();
-    return await repo.incrementAll(itemId, productKey, domainKey);
+    // Normalizar respuesta para compatibilidad
+    return {
+      updated: result.updated || 0,
+      skipped: result.skipped || 0,
+      total: result.total || 0
+    };
   } catch (error) {
     logError('AlquimiaGeneralService', 'Error en incrementAll', {
-      traceId: getRequestId(),
+      traceId,
       error: error.message,
       itemRef
     });
@@ -739,11 +871,13 @@ export async function incrementAll(itemRef, productKey = 'pde') {
 /**
  * Ajusta remaining manualmente para un alumno (una_vez)
  * 
+ * DELEGADO AL CLEANING ENGINE v1 (single decider)
+ * 
  * @param {number} studentId - ID del alumno
  * @param {string} itemRef - item_ref del item
  * @param {number} remaining - Nuevo valor de remaining
  * @param {string} [productKey='pde'] - Clave del producto
- * @returns {Promise<Object|null>} Estado actualizado o null si no existe
+ * @returns {Promise<Object|null>} Estado actualizado o null si no existe/está pausado
  */
 export async function adjustRemaining(studentId, itemRef, remaining, productKey = 'pde') {
   if (!studentId || !itemRef || remaining === undefined) return null;
@@ -751,24 +885,22 @@ export async function adjustRemaining(studentId, itemRef, remaining, productKey 
   const traceId = getRequestId();
   
   try {
-    // Resolver itemRef → item_id (obligatorio: student_item_state requiere item_id NOT NULL)
-    const item = await getItemByRef(itemRef);
-    if (!item || !item.id) {
-      logError('AlquimiaGeneralService', 'Item no encontrado para adjustRemaining', {
-        traceId,
-        itemRef,
-        studentId
-      });
-      return null;
-    }
+    // Delegar al Cleaning Engine v1 (single decider)
+    const { setRemainingShared: cleaningSetRemaining } = await import('../core/master/services/cleaning-engine-service.js');
     
-    const itemId = item.id;
-    
-    // Usar repo MASTER (sin dependencias STUDENT)
-    // domain_key canónico para transmutaciones energéticas
-    const domainKey = 'transmutaciones_energeticas';
-    const repo = getDefaultMasterStudentTransmutationReadRepo();
-    return await repo.adjustRemaining(studentId, itemId, remaining, productKey, domainKey);
+    return await cleaningSetRemaining({
+      student_id: studentId,
+      item_ref: itemRef,
+      remaining,
+      product_key: productKey,
+      domain_type: 'transmutation',
+      actor_type: 'master',
+      surface_key: 'master.alquimia_general',
+      meta: {
+        source: 'alquimia-general-service',
+        legacy_call: true
+      }
+    });
   } catch (error) {
     logError('AlquimiaGeneralService', 'Error en adjustRemaining', {
       traceId,
@@ -783,6 +915,8 @@ export async function adjustRemaining(studentId, itemRef, remaining, productKey 
 /**
  * Marca limpieza PDE diaria para todos los alumnos (recurrente)
  * Diferente de markCleanAll: registra en pde_daily_item_clean_log (append-only SOT)
+ * 
+ * DELEGADO AL CLEANING ENGINE v1 con clean_layer='pde' + log adicional
  * 
  * @param {string} itemRef - item_ref del item
  * @param {string} [productKey='pde'] - Clave del producto
@@ -818,27 +952,35 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     
     const itemId = item.id;
     
-    // Obtener todos los alumnos (misma selección que markCleanAll)
-    const domainKey = 'transmutaciones_energeticas';
-    const studentRepo = getDefaultMasterStudentTransmutationReadRepo();
+    // 1) Usar Cleaning Engine con clean_layer='pde'
+    const { markCleanAllStudents: cleaningMarkCleanAll } = await import('../core/master/services/cleaning-engine-service.js');
     
-    // Obtener lista de alumnos (query directa)
+    const cleaningResult = await cleaningMarkCleanAll({
+      item_ref: itemRef,
+      clean_layer: 'pde', // PDE layer
+      product_key: productKey,
+      domain_type: 'transmutation',
+      actor_type: 'master',
+      actor_ref: ctx.actor_id ? `master:${ctx.actor_id}` : null,
+      surface_key: 'master.alquimia_general',
+      meta: {
+        source: 'alquimia-general-service',
+        action: 'markPdeCleanAll',
+        item_id: itemId,
+        lista_id: item.lista_id
+      }
+    });
+    
+    const updatedStudents = cleaningResult.updated || 0;
+    
+    // 2) Insertar logs en pde_daily_item_clean_log (append-only SOT adicional)
+    const cleanedDate = new Date();
+    const cleanedDateStr = cleanedDate.toISOString().split('T')[0];
+    
+    // Obtener lista de alumnos (query directa para log)
     const { query } = await import('../../database/pg.js');
     const alumnosResult = await query('SELECT id FROM alumnos', []);
     const studentIds = alumnosResult.rows.map(row => row.id);
-    
-    if (studentIds.length === 0) {
-      return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
-    }
-    
-    // 1) Actualizar student_item_state (igual que markCleanAll con GREATEST)
-    const stateResult = await studentRepo.markCleanAll(itemId, productKey, domainKey);
-    const updatedStudents = stateResult?.updated || 0;
-    
-    // 2) Insertar logs en pde_daily_item_clean_log
-    const cleanedDate = new Date();
-    // Normalizar a fecha en timezone Europe/Madrid
-    const cleanedDateStr = cleanedDate.toISOString().split('T')[0];
     
     const logRepo = getDefaultPdeDailyCleanLogRepo();
     const logResult = await logRepo.insertManyDailyLogs({
@@ -858,7 +1000,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     const logged = logResult.inserted || 0;
     const skipped = logResult.skipped || 0;
     
-    // 3) Emitir señales (fail-open)
+    // 3) Emitir señales (fail-open) - el Cleaning Engine ya emite, pero mantenemos señal legacy
     try {
       const { emitSignal } = await import('./pde-signal-emitter.js');
       
@@ -871,6 +1013,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
         domain: 'transmutation',
         product_key: productKey,
         source: 'master',
+        clean_layer: 'pde',
         executed_at: cleanedDate.toISOString(),
         cleaned_date: cleanedDateStr
       }, {}, {}, {
@@ -879,7 +1022,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
         action: 'markPdeCleanAll'
       });
     } catch (signalError) {
-      logError('AlquimiaGeneralService', 'Error emitiendo señales en markPdeCleanAll', {
+      logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
         traceId,
         error: signalError.message,
         itemRef

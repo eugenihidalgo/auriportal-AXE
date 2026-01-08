@@ -73,6 +73,7 @@
       nivel: 9,
       grupo: '',
       frecuencia_dias: 20,
+      veces_limpiar: 1,
       nombre: '',
       descripcion: ''
     },
@@ -463,6 +464,8 @@
     
     if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
       headers.push({ key: 'frecuencia_dias', label: 'DÍAS RECURRENCIA' });
+    } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
+      headers.push({ key: 'veces_limpiar', label: 'VECES LIMPIAR' });
     }
     
     headers.push({ key: 'actions', label: 'ACCIONES' });
@@ -646,8 +649,9 @@
 
   /**
    * Maneja el click en botón VER (abre flotante)
+   * Soporta clean_layer (SHARED/PDE) vía parámetro opcional
    */
-  async function handleVerItem(item) {
+  async function handleVerItem(item, cleanLayer = 'shared') {
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
       // Mostrar error visible en UI
@@ -663,8 +667,8 @@
     }
 
     try {
-      // Cargar estudiantes para este item
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students`);
+      // Cargar estudiantes para este item con clean_layer
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students?clean_layer=${cleanLayer}`);
       
       // Verificar content-type
       const contentType = response.headers.get('content-type') || '';
@@ -680,6 +684,7 @@
       // Log forense
       console.log('[MasterAlquimiaGeneral] flotante payload', { 
         itemRef: item.item_ref, 
+        cleanLayer,
         keys: Object.keys(result || {}), 
         traceId: result?.trace_id,
         hasData: !!result?.data,
@@ -688,6 +693,7 @@
 
       // Normalizar payload
       const normalized = normalizeStudentsPayload(result);
+      normalized.clean_layer = cleanLayer; // Añadir clean_layer al payload normalizado
       
       // Si no es ok, mostrar warning pero no crash
       if (!normalized.ok) {
@@ -792,10 +798,47 @@
     const header = document.createElement('div');
     header.style.cssText = 'padding: 1rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;';
     
+    const titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'display: flex; flex-direction: column; gap: 0.5rem;';
+    
     const title = document.createElement('h3');
     title.textContent = item.nombre || item.name || 'Item sin nombre';
     title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin: 0;';
-    header.appendChild(title);
+    titleDiv.appendChild(title);
+    
+    // Toggle SHARED/PDE
+    const toggleContainer = document.createElement('div');
+    toggleContainer.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+    
+    const toggleLabel = document.createElement('span');
+    toggleLabel.textContent = 'Vista:';
+    toggleLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
+    toggleContainer.appendChild(toggleLabel);
+    
+    const currentCleanLayer = normalized.clean_layer || 'shared';
+    
+    const btnShared = document.createElement('button');
+    btnShared.textContent = 'Alumno (SHARED)';
+    btnShared.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentCleanLayer === 'shared' ? '#4f46e5' : 'transparent'}; color: ${currentCleanLayer === 'shared' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnShared.addEventListener('click', () => {
+      if (currentCleanLayer !== 'shared') {
+        handleVerItem(item, 'shared');
+      }
+    });
+    toggleContainer.appendChild(btnShared);
+    
+    const btnPde = document.createElement('button');
+    btnPde.textContent = 'PDE';
+    btnPde.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentCleanLayer === 'pde' ? '#8b5cf6' : 'transparent'}; color: ${currentCleanLayer === 'pde' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnPde.addEventListener('click', () => {
+      if (currentCleanLayer !== 'pde') {
+        handleVerItem(item, 'pde');
+      }
+    });
+    toggleContainer.appendChild(btnPde);
+    
+    titleDiv.appendChild(toggleContainer);
+    header.appendChild(titleDiv);
 
     const btnCerrar = document.createElement('button');
     btnCerrar.textContent = '❌';
@@ -829,45 +872,132 @@
       content.appendChild(warningBox);
     }
     
-    // Agrupar estudiantes por estado
-    const studentsByState = {
-      reviewed: [],
-      pending: [],
-      important: [],
-      never: []
-    };
-
-    // Usar students del payload normalizado (siempre array)
+    // Separar estudiantes aplicables y no aplicables
+    const studentsAplicables = [];
+    const studentsNoAplica = [];
+    
     if (normalized.students && Array.isArray(normalized.students)) {
       normalized.students.forEach(student => {
-        const state = student.state || 'never';
-        if (studentsByState[state]) {
-          studentsByState[state].push(student);
+        if (student.no_aplica) {
+          studentsNoAplica.push(student);
+        } else {
+          studentsAplicables.push(student);
+        }
+      });
+    }
+    
+    // También incluir students_no_aplica del payload si existe
+    if (normalized.students_no_aplica && Array.isArray(normalized.students_no_aplica)) {
+      normalized.students_no_aplica.forEach(student => {
+        if (!studentsNoAplica.find(s => s.student_id === student.student_id)) {
+          studentsNoAplica.push(student);
         }
       });
     }
 
-    // Renderizar columnas por estado
+    // Agrupar estudiantes aplicables por estado
+    const studentsByState = {
+      reviewed: [],
+      pending: [],
+      important: [],
+      never: [],
+      completed: [],
+      // Para una_vez
+    };
+
+    const tipo = normalized.tipo || 'recurrente';
+    
+    studentsAplicables.forEach(student => {
+      const state = student.state || (tipo === 'una_vez' ? 'pending' : 'never');
+      if (studentsByState[state]) {
+        studentsByState[state].push(student);
+      } else if (tipo === 'una_vez' && state === 'completed') {
+        studentsByState.completed.push(student);
+      } else if (tipo === 'recurrente') {
+        // Fallback para recurrentes
+        if (state === 'completed') {
+          studentsByState.reviewed.push(student); // Tratar completed como reviewed en recurrentes
+        } else {
+          studentsByState.never.push(student);
+        }
+      }
+    });
+
+    // Renderizar columnas por estado según tipo
     const columnsContainer = document.createElement('div');
-    columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
+    
+    if (tipo === 'recurrente') {
+      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
+      
+      // 🟢 REVISADO
+      const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, normalized);
+      columnsContainer.appendChild(colReviewed);
 
-    // 🟢 REVISADO
-    const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, normalized);
-    columnsContainer.appendChild(colReviewed);
+      // 🟡 PENDIENTE
+      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
+      columnsContainer.appendChild(colPending);
 
-    // 🟡 PENDIENTE
-    const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
-    columnsContainer.appendChild(colPending);
+      // 🔴 IMPORTANTE REVISAR
+      const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, normalized);
+      columnsContainer.appendChild(colImportant);
 
-    // 🔴 IMPORTANTE REVISAR
-    const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, normalized);
-    columnsContainer.appendChild(colImportant);
+      // ⚪ NUNCA (colapsable)
+      const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
+      columnsContainer.appendChild(colNever);
+    } else {
+      // una_vez
+      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;';
+      
+      // ✅ COMPLETADO
+      const colCompleted = createStateColumn('✅ COMPLETADO', studentsByState.completed, 'completed', item, normalized);
+      columnsContainer.appendChild(colCompleted);
 
-    // ⚪ NUNCA (colapsable)
-    const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
-    columnsContainer.appendChild(colNever);
+      // 🟡 PENDIENTE
+      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
+      columnsContainer.appendChild(colPending);
+    }
 
     content.appendChild(columnsContainer);
+    
+    // Sección "NO APLICA (nivel)" colapsable
+    if (studentsNoAplica.length > 0) {
+      const noAplicaSection = document.createElement('div');
+      noAplicaSection.style.cssText = 'margin-top: 1rem; padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;';
+      
+      const noAplicaHeader = document.createElement('div');
+      noAplicaHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; cursor: pointer;';
+      
+      const noAplicaTitle = document.createElement('div');
+      noAplicaTitle.textContent = `⚠️ NO APLICA (nivel) (${studentsNoAplica.length})`;
+      noAplicaTitle.style.cssText = 'color: #94a3b8; font-weight: 600; font-size: 0.875rem;';
+      noAplicaHeader.appendChild(noAplicaTitle);
+      
+      const collapseIcon = document.createElement('span');
+      collapseIcon.textContent = ' ▼';
+      collapseIcon.style.cssText = 'color: #94a3b8;';
+      noAplicaHeader.appendChild(collapseIcon);
+      
+      const noAplicaContent = document.createElement('div');
+      noAplicaContent.style.cssText = 'display: none; margin-top: 0.5rem;';
+      
+      let isNoAplicaCollapsed = true;
+      noAplicaHeader.addEventListener('click', () => {
+        isNoAplicaCollapsed = !isNoAplicaCollapsed;
+        collapseIcon.textContent = isNoAplicaCollapsed ? ' ▼' : ' ▲';
+        noAplicaContent.style.display = isNoAplicaCollapsed ? 'none' : 'block';
+      });
+      
+      studentsNoAplica.forEach(student => {
+        const studentDiv = document.createElement('div');
+        studentDiv.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; background: rgba(148, 163, 184, 0.1); color: #94a3b8; font-size: 0.875rem;';
+        studentDiv.textContent = `${student.display_name || student.student_name || student.student_email || 'Sin nombre'} (nivel ${student.nivel_efectivo || '?'} < item nivel ${student.item_nivel || '?'})`;
+        noAplicaContent.appendChild(studentDiv);
+      });
+      
+      noAplicaSection.appendChild(noAplicaHeader);
+      noAplicaSection.appendChild(noAplicaContent);
+      content.appendChild(noAplicaSection);
+    }
     modal.appendChild(content);
 
     overlay.appendChild(modal);
@@ -901,7 +1031,7 @@
     header.style.cssText = 'padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.875rem; cursor: pointer;';
     
     // Color según estado
-    if (stateKey === 'reviewed') {
+    if (stateKey === 'reviewed' || stateKey === 'completed') {
       header.style.cssText += 'background: rgba(34, 197, 94, 0.3); color: #86efac;';
     } else if (stateKey === 'pending') {
       header.style.cssText += 'background: rgba(234, 179, 8, 0.3); color: #fde047;';
@@ -965,7 +1095,7 @@
     row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center;';
     
     // Color de fondo según estado
-    if (stateKey === 'reviewed') {
+    if (stateKey === 'reviewed' || stateKey === 'completed') {
       row.style.cssText += 'background: rgba(34, 197, 94, 0.1);';
     } else if (stateKey === 'pending') {
       row.style.cssText += 'background: rgba(234, 179, 8, 0.1);';
@@ -980,13 +1110,16 @@
     nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem; flex: 1;';
     row.appendChild(nameDiv);
 
-    // Botón ✓ para limpiar individual (excepto REVISADO)
-    if (stateKey !== 'reviewed') {
+    // Botón ✓ para limpiar individual (excepto REVISADO/COMPLETADO)
+    const cleanLayer = normalized.clean_layer || 'shared';
+    const tipo = normalized.tipo || 'recurrente';
+    
+    if (stateKey !== 'reviewed' && stateKey !== 'completed') {
       const btnClean = document.createElement('button');
       btnClean.textContent = '✓';
       btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
       btnClean.addEventListener('click', async () => {
-        await handleLimpiarEstudiante(student, item);
+        await handleLimpiarEstudiante(student, item, cleanLayer, tipo);
       });
       row.appendChild(btnClean);
     }
@@ -996,23 +1129,44 @@
 
   /**
    * Maneja la limpieza individual de un estudiante
+   * Soporta recurrente (mark-clean) y una_vez (increment o mark-clean según clean_layer)
    */
-  async function handleLimpiarEstudiante(student, item) {
+  async function handleLimpiarEstudiante(student, item, cleanLayer = 'shared', tipo = 'recurrente') {
     if (!item || !item.item_ref || !student || !student.student_id) {
       console.error('[MasterAlquimiaGeneral] Datos incompletos para limpiar:', { item, student });
       return;
     }
 
     try {
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          student_id: student.student_id
-        })
-      });
+      let response;
+      
+      if (tipo === 'una_vez' && cleanLayer === 'shared') {
+        // Para una_vez SHARED: usar increment-all (aunque sea individual, el endpoint soporta)
+        // O mejor: crear endpoint específico para increment individual
+        // Por ahora, usamos mark-clean-student que el Cleaning Engine manejará correctamente
+        response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            student_id: student.student_id,
+            clean_layer: cleanLayer
+          })
+        });
+      } else {
+        // Recurrente o PDE: usar mark-clean-student
+        response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            student_id: student.student_id,
+            clean_layer: cleanLayer
+          })
+        });
+      }
 
       const result = await response.json();
       
@@ -1022,8 +1176,8 @@
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
       
-      // Recargar flotante
-      await handleVerItem(item);
+      // Recargar flotante con mismo clean_layer
+      await handleVerItem(item, cleanLayer);
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       alert(`Error: ${error.message}`);
@@ -1337,6 +1491,40 @@
       diasInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
       tdDias.appendChild(diasInput);
       tr.appendChild(tdDias);
+    } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
+      // VECES LIMPIAR (solo una_vez)
+      const tdVeces = document.createElement('td');
+      tdVeces.style.cssText = 'padding: 0.5rem;';
+      const vecesInput = document.createElement('input');
+      vecesInput.type = 'number';
+      vecesInput.min = '0';
+      if (isCreateRow) {
+        vecesInput.value = state.newItemDraft.veces_limpiar || '1';
+        vecesInput.placeholder = '1';
+        vecesInput.addEventListener('change', () => {
+          state.newItemDraft.veces_limpiar = parseInt(vecesInput.value) || 1;
+        });
+        vecesInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && nombreInput.value.trim() && nivelInput.value) {
+            handleCrearItemInlineSticky();
+          }
+        });
+      } else {
+        vecesInput.value = item.veces_limpiar || '';
+        vecesInput.placeholder = '1';
+        vecesInput.addEventListener('change', () => {
+          const val = vecesInput.value === '' ? null : (parseInt(vecesInput.value) || null);
+          if (val !== null && val < 0) {
+            showWarning('veces_limpiar debe ser >= 0');
+            vecesInput.value = item.veces_limpiar || '';
+            return;
+          }
+          debouncedUpdateItem(item.id, { veces_limpiar: val });
+        });
+      }
+      vecesInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
+      tdVeces.appendChild(vecesInput);
+      tr.appendChild(tdVeces);
     }
     
     // ACCIONES
@@ -1365,6 +1553,20 @@
         btnPde.textContent = 'PDE';
         btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnPde.addEventListener('click', () => handlePdeCleanItem(item));
+        actionsDiv.appendChild(btnPde);
+      } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
+        // Botón +1 (increment-all shared para una_vez)
+        const btnIncrement = document.createElement('button');
+        btnIncrement.textContent = '+1';
+        btnIncrement.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnIncrement.addEventListener('click', () => handleIncrementAllItem(item));
+        actionsDiv.appendChild(btnIncrement);
+        
+        // Botón PDE (para una_vez, registra evento PDE)
+        const btnPde = document.createElement('button');
+        btnPde.textContent = 'PDE';
+        btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnPde.addEventListener('click', () => handlePdeIncrementAllItem(item));
         actionsDiv.appendChild(btnPde);
       }
       
@@ -1475,7 +1677,7 @@
       if (state.listaActiva.tipo === 'recurrente') {
         body.frecuencia_dias = state.newItemDraft.frecuencia_dias || 20;
       } else {
-        body.veces_limpiar = 1;
+        body.veces_limpiar = state.newItemDraft.veces_limpiar || 1;
       }
       
       if (state.newItemDraft.grupo && state.newItemDraft.grupo.trim() !== '') {
@@ -1711,6 +1913,94 @@
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
+      showWarning(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón +1 (increment-all para una_vez)
+   */
+  async function handleIncrementAllItem(item) {
+    if (!item || !item.item_ref) {
+      console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      return;
+    }
+
+    if (!confirm('¿Incrementar +1 este item para TODOS los alumnos (SHARED)?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          clean_layer: 'shared'
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error incrementando item');
+      }
+
+      console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', result);
+      alert(`Item incrementado para ${result.updated || 0} alumnos`);
+      
+      // Recargar items para refrescar estado
+      if (state.listaActiva && state.listaActiva.id) {
+        await loadItems(state.listaActiva.id);
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
+      alert(`Error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Maneja el click en botón PDE (increment-all PDE para una_vez)
+   */
+  async function handlePdeIncrementAllItem(item) {
+    if (!item || !item.item_ref) {
+      console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      return;
+    }
+
+    if (!confirm('¿Registrar incremento PDE para todos los alumnos? (solo audit, no afecta remaining del alumno)')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          clean_layer: 'pde'
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error en incremento PDE');
+      }
+
+      console.log('[MasterAlquimiaGeneral] Incremento PDE registrado:', result);
+      showWarning(`PDE registrado: ${result.updated || 0} alumnos`);
+      
+      // Recargar items y flotante si está abierto
+      await loadItems(state.listaActiva.id);
+      const flotante = document.getElementById('flotante-ver-alquimia');
+      if (flotante) {
+        await handleVerItem(item);
+      }
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);
       showWarning(`Error: ${error.message}`);
     }
   }

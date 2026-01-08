@@ -437,5 +437,129 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Inventar arquitectura nueva
       - Hardcodear lógica de gates
 
+# =========================================
+# CONSTITUCIÓN CLEANING ENGINE v1
+# =========================================
+
+  - id: cleaning-engine-v1-single-decider
+    title: Cleaning Engine v1 como único decisor de estados de limpieza
+    content: >
+      Cleaning Engine v1 es el ÚNICO decisor canónico de estados de limpieza.
+      PROHIBIDO:
+      - Calcular estados de limpieza (reviewed/pending/important/completed) fuera del Cleaning Engine
+      - Escribir directamente en student_item_state sin pasar por Cleaning Engine
+      - Duplicar lógica de limpieza en handlers o servicios
+      OBLIGATORIO:
+      - Toda mutación de estado de limpieza pasa por CleaningEngineService
+      - Alquimia General actúa como UI + orquestación, NO como decisor
+      - Estados calculados (reviewed/pending/important) se derivan de last_cleaned_at, threshold_days, critical_multiplier
+
+  - id: cleaning-engine-two-layers
+    title: Dos capas de limpieza: SHARED y PDE
+    content: >
+      El sistema soporta dos capas de limpieza distintas:
+      - SHARED: Visible para estudiantes, sincroniza con student_item_state
+      - PDE: Solo master, no afecta student_item_state (solo auditoría)
+      PROHIBIDO:
+      - Mezclar lógica entre capas
+      - Usar SHARED cuando se requiere PDE o viceversa
+      - Asumir que una limpieza afecta ambas capas
+      OBLIGATORIO:
+      - Toda acción debe declarar explícitamente su clean_layer
+      - SHARED se sincroniza automáticamente con student_item_state
+      - PDE solo se registra en cleaning_events y cleaning_item_state
+
+  - id: cleaning-engine-paused-exclusion
+    title: Exclusión obligatoria de estudiantes pausados
+    content: >
+      Estudiantes pausados DEBEN ser excluidos de todas las operaciones de limpieza.
+      PROHIBIDO:
+      - Incluir estudiantes pausados en modales, conteos, o "clean all"
+      - Permitir que estudiantes pausados aparezcan en UI de limpieza
+      - Procesar limpiezas para estudiantes pausados
+      OBLIGATORIO:
+      - Cleaning Engine excluye automáticamente estudiantes pausados
+      - UI debe filtrar estudiantes pausados antes de mostrar
+      - "clean all" solo afecta estudiantes activos
+
+  - id: cleaning-engine-idempotency
+    title: Idempotencia obligatoria por execution_key
+    content: >
+      Todas las acciones de limpieza DEBEN ser idempotentes usando execution_key.
+      PROHIBIDO:
+      - Procesar la misma acción dos veces sin verificar execution_key
+      - Permitir duplicados en cleaning_events
+      OBLIGATORIO:
+      - Unique constraint en (execution_key, student_id) en cleaning_events
+      - Repositorios verifican idempotencia antes de insertar
+      - Mismo execution_key = misma acción = mismo resultado
+
+  - id: cleaning-engine-no-aplica-nivel
+    title: Lógica "NO APLICA (nivel)" basada en Level Engine
+    content: >
+      Items con nivel > nivel_efectivo del estudiante NO APLICAN.
+      PROHIBIDO:
+      - Mostrar items no aplicables como "nunca trabajados"
+      - Calcular nivel efectivo en UI o handlers
+      - Duplicar lógica de "NO APLICA" fuera del Cleaning Engine
+      OBLIGATORIO:
+      - Consultar Level Engine para obtener nivel_efectivo
+      - Filtrar items no aplicables en UI (sección colapsable "NO APLICA (nivel)")
+      - Cleaning Engine respeta nivel_efectivo al calcular estados
+
+  - id: cleaning-engine-event-sourcing
+    title: Event sourcing como fuente de verdad histórica
+    content: >
+      cleaning_events es el event log append-only canónico.
+      PROHIBIDO:
+      - Modificar o eliminar eventos históricos
+      - Recalcular estados desde cero sin usar eventos
+      - Saltarse el event log para actualizar estados
+      OBLIGATORIO:
+      - Todo cambio de estado genera evento en cleaning_events
+      - cleaning_item_state es proyección optimizada para lecturas
+      - Estados se reconstruyen desde eventos si es necesario
+
+  - id: cleaning-engine-sync-shared
+    title: Sincronización automática SHARED con student_item_state
+    content: >
+      Limpiezas SHARED DEBEN sincronizarse automáticamente con student_item_state.
+      PROHIBIDO:
+      - Escribir en student_item_state sin pasar por Cleaning Engine
+      - Desincronizar SHARED y student_item_state
+      - Permitir inconsistencias entre capas
+      OBLIGATORIO:
+      - Cleaning Engine sincroniza automáticamente SHARED con student_item_state
+      - PDE no afecta student_item_state (solo auditoría)
+      - Sincronización es atómica (misma transacción)
+
+  - id: infra-repos-pg-import-canonical
+    title: Infra repos PG deben importar desde módulo canónico real
+    content: >
+      Los repositorios PostgreSQL en src/infra/repos/**/*-repo-pg.js DEBEN importar database/pg.js desde el path correcto.
+      PROHIBIDO:
+      - Inventar imports a rutas que no existan (ej. src/database/pg.js)
+      - Usar paths relativos incorrectos sin verificar
+      - Crear nuevos repos sin copiar el patrón de imports de repos existentes
+      OBLIGATORIO:
+      - Verificar el path correcto desde la ubicación del repo (usar path.relative si es necesario)
+      - Copiar el patrón de import de un repo-pg existente que funcione
+      - Desde src/infra/repos/cleaning/ usar: import { query } from '../../../../database/pg.js'
+      - Verificar que el import funciona antes de considerar el trabajo completado
+
+  - id: cleaning-engine-required-count-coherence
+    title: Coherencia de remaining cuando cambia required_count (veces_limpiar)
+    content: >
+      Cuando cambia veces_limpiar (required_count) de un item una_vez, DEBE recalcularse remaining para todos los estudiantes activos.
+      PROHIBIDO:
+      - Dejar remaining desincronizado después de cambiar required_count
+      - Recalcular remaining solo en lectura (debe ser eager, al guardar)
+      - Incluir estudiantes pausados en el recálculo
+      OBLIGATORIO:
+      - Al actualizar veces_limpiar en updateItem, recalcular remaining = max(required_count - completed, 0) para todos los estudiantes activos
+      - Usar Cleaning Engine (setRemainingShared) para actualizar masivamente
+      - Excluir estudiantes pausados del recálculo
+      - Log estructurado del recálculo con trace_id
+
 
 

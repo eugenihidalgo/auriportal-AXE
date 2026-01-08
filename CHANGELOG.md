@@ -9,6 +9,105 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.59.1] - 2026-01-08
+
+### Fixed
+- **Cleaning Engine Import Bug**: Corregido import roto de `database/pg.js` en repos de cleaning
+  - `cleaning-events-repo-pg.js` y `cleaning-item-state-repo-pg.js` ahora importan correctamente desde `../../../../database/pg.js`
+  - Corregido import de `logger.js` desde `../../../core/observability/logger.js`
+  - Restaurado modal "VER" y funcionalidad "Limpiar a todos" en Alquimia General
+- **Coherencia required_count**: Implementado recálculo automático de `remaining` cuando cambia `veces_limpiar`
+  - Al actualizar `veces_limpiar` en items "Una vez", se recalcula `remaining = max(required_count - completed, 0)` para todos los estudiantes activos
+  - Excluye automáticamente estudiantes pausados del recálculo
+  - Usa Cleaning Engine para actualización masiva con auditoría completa
+
+### Changed
+- **Alquimia General Service**: `updateItem` ahora recalcula `remaining` cuando cambia `veces_limpiar` para items "Una vez"
+  - Estrategia "eager": recálculo inmediato al guardar (no lazy en lectura)
+  - Log estructurado con trace_id para auditoría
+
+### Added
+- **Reglas Constitucionales**: Añadidas reglas en `.cursorrules` para prevenir bugs de imports y garantizar coherencia de `remaining`
+  - `infra-repos-pg-import-canonical`: Obliga a verificar paths de imports antes de crear repos nuevos
+  - `cleaning-engine-required-count-coherence`: Garantiza coherencia de `remaining` cuando cambia `required_count`
+
+---
+
+## [5.59.0] - 2025-01-XX
+
+### Added
+- **Cleaning Engine v1**: Sistema canónico de gestión de limpiezas (single decider)
+  - **Migración SQL v5.59.0**: Crea tablas `cleaning_events` y `cleaning_item_state`
+    - `cleaning_events`: Event log append-only con idempotencia por `execution_key`
+    - `cleaning_item_state`: Proyección canónica para lecturas rápidas
+    - Índices optimizados para consultas por estudiante, item, layer
+  - **Dos capas de limpieza**: `SHARED` (visible para estudiantes) y `PDE` (solo master)
+    - Acciones deben declarar su capa explícitamente
+    - Estados separados por capa en `cleaning_item_state`
+  - **Actores**: Soporte para `master`, `student`, `automation` con `actor_id` y `surface_key`
+  - **Exclusión de estudiantes pausados**: El Cleaning Engine excluye automáticamente estudiantes pausados de todas las operaciones
+  - **Integración con Level Engine**: Lógica "NO APLICA (nivel)" basada en `nivel_efectivo` del estudiante
+  - **Repositorios canónicos**:
+    - `CleaningEventsRepo`: Contrato e implementación PostgreSQL
+    - `CleaningItemStateRepo`: Contrato e implementación PostgreSQL
+  - **CleaningEngineService**: Servicio central como único decisor de estados de limpieza
+    - `markClean`: Marca item como limpiado (recurrente o una_vez)
+    - `markCleanAllStudents`: Marca limpieza para todos los estudiantes activos
+    - `incrementOneTimeItem`: Incrementa contador de item "Una vez"
+    - `setOneTimeItemRemaining`: Ajusta `remaining` de item "Una vez"
+    - `getStudentCleaningState`: Obtiene estado de limpieza de un estudiante
+    - `getStudentsCleaningStates`: Obtiene estados de múltiples estudiantes con filtros
+    - `getStudentEffectiveLevel`: Obtiene nivel efectivo desde Level Engine
+    - `isStudentPaused`: Verifica si estudiante está pausado
+  - **Integración con Alquimia General**:
+    - `alquimia-general-service.js` refactorizado para delegar al Cleaning Engine
+    - Endpoints API actualizados para aceptar `clean_layer` opcional
+    - UI actualizada para soportar toggle SHARED/PDE en modal "VER"
+    - Sección "NO APLICA (nivel)" colapsable en modal "VER"
+  - **Soporte completo "Una vez"**:
+    - Edición inline de `veces_limpiar` (required_count) en tabla de items
+    - Botones de acción: "PDE" (increment-all PDE) y "+1" (increment-all SHARED)
+    - Modal "VER" muestra `completed`/`remaining` para items "Una vez"
+    - Endpoints: `POST /items/:item_ref/master/increment-all` y `POST /items/:item_ref/master/adjust-remaining`
+  - **Sincronización con student_item_state**: 
+    - Limpiezas SHARED se sincronizan automáticamente con `student_item_state`
+    - Limpiezas PDE no afectan `student_item_state` (solo auditoría)
+  - **Scripts de verificación**:
+    - `scripts/verify-cleaning-engine-db.js`: Verifica estructura de BD
+    - `scripts/verify-cleaning-engine-sample.js`: Verifica funcionalidad con datos de ejemplo
+    - `npm run verify:cleaning-engine`: Ejecuta ambos scripts
+  - **Documentación**:
+    - `docs/master/MASTER_CLEANING_ENGINE_V1_DESIGN.md`: Diseño as-built completo
+    - `docs/master/MASTER_CLEANING_ENGINE_V1.md`: Documentación operativa
+    - Actualización de `.cursorrules` con reglas constitucionales
+
+### Changed
+- **Alquimia General Service**: Refactorizado para usar Cleaning Engine como único decisor
+  - `markCleanStudent`, `markCleanAll`, `incrementAll`, `adjustRemaining`, `markPdeCleanAll` ahora delegan al Cleaning Engine
+  - `getStudentsForItem` actualizado para leer desde `cleaning_item_state` cuando se especifica `clean_layer`
+  - Aplicación de lógica "NO APLICA (nivel)" usando Level Engine
+- **APIs MASTER Alquimia General**: Extendidas para soportar `clean_layer` opcional
+  - `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all`: Acepta `clean_layer` en body
+  - `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student`: Acepta `clean_layer` en body
+  - `POST /master/api/alquimia-general/items/:item_ref/master/increment-all`: Acepta `clean_layer` en body
+  - `POST /master/api/alquimia-general/items/:item_ref/master/adjust-remaining`: Acepta `clean_layer` en body
+  - `GET /master/api/alquimia-general/items/:item_ref/students`: Acepta `clean_layer` en query params
+  - `POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all`: Actualizado para usar Cleaning Engine
+- **UI MASTER Alquimia General**: Mejoras significativas
+  - Modal "VER" con toggle "Vista: Alumno (SHARED) | PDE"
+  - Sección colapsable "NO APLICA (nivel)" para estudiantes con nivel insuficiente
+  - Columnas de estado adaptadas para items "Una vez" (COMPLETADO/PENDIENTE)
+  - Botones de acción contextuales según `clean_layer` y `item_kind`
+  - Edición inline de `veces_limpiar` para items "Una vez"
+  - Exclusión visual de estudiantes pausados
+
+### Fixed
+- **Robustez de APIs**: Endpoints ahora son fail-soft, siempre retornan JSON con `ok: true` y `warnings` en caso de errores
+- **Parsing de números**: Defensivo parsing de `nivel`, `priority`, `days`, `veces_limpiar` con fallbacks canónicos
+- **Preservación de tags**: `PUT /listas/:id/classification` ahora preserva tags existentes si no se pasan explícitamente
+
+---
+
 ## [5.58.0] - 2025-01-XX
 
 ### Added

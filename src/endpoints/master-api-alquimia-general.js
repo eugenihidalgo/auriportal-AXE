@@ -714,10 +714,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
     // GET /master/api/alquimia-general/items/:item_ref/students (modal)
     // FAIL-OPEN: Este endpoint NUNCA devuelve 500, siempre ok:true con shape estable
+    // Soporta clean_layer para leer desde Cleaning Engine v1
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/students$/) && method === 'GET') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/students');
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
+      const cleanLayer = url.searchParams.get('clean_layer') || 'shared'; // Default shared
       const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : null;
       const offset = url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset'), 10) : 0;
 
@@ -776,7 +778,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // Llamar servicio con try/catch para fail-open
         let result;
         try {
-          result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset });
+          result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset, clean_layer: cleanLayer });
         } catch (serviceError) {
           logError('MasterApiAlquimiaGeneral', 'Error en getStudentsForItem (fail-open)', {
             traceId,
@@ -835,22 +837,32 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       }
     }
 
-    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all (recurrente)
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all (recurrente o una_vez)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-clean-all$/) && method === 'POST') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-clean-all');
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
+      
+      // Leer clean_layer del body o query (default: 'shared')
+      let body = null;
+      try {
+        body = await request.json().catch(() => ({}));
+      } catch (e) {
+        body = {};
+      }
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
-      const result = await markCleanAll(itemRef, productKey);
+      const result = await markCleanAll(itemRef, productKey, cleanLayer);
       return jsonSuccess(result, traceId);
     }
 
-    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student (recurrente)
+    // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student (recurrente o una_vez)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-clean-student$/) && method === 'POST') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student');
       const itemRef = params.item_ref;
       const body = await request.json();
       const productKey = url.searchParams.get('product_key') || 'pde';
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
       if (!body.student_id) {
         return jsonError('student_id es requerido', 'MISSING_STUDENT_ID', 400, traceId);
@@ -861,9 +873,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
       }
 
-      const state = await markCleanStudent(studentId, itemRef, productKey);
+      const state = await markCleanStudent(studentId, itemRef, productKey, cleanLayer);
       if (!state) {
-        return jsonError('Error marcando limpio', 'MARK_CLEAN_ERROR', 500, traceId);
+        // Puede ser null si está pausado o no aplica por nivel (no es error)
+        return jsonSuccess({ 
+          state: null, 
+          message: 'Alumno en pausa o item no aplica por nivel' 
+        }, traceId);
       }
 
       return jsonSuccess({ state }, traceId);
@@ -902,8 +918,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/increment-all');
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
+      
+      // Leer clean_layer del body o query (default: 'shared')
+      let body = null;
+      try {
+        body = await request.json().catch(() => ({}));
+      } catch (e) {
+        body = {};
+      }
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
-      const result = await incrementAll(itemRef, productKey);
+      const result = await incrementAll(itemRef, productKey, cleanLayer);
       return jsonSuccess(result, traceId);
     }
 

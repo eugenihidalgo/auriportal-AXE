@@ -140,6 +140,124 @@ export class MasterStudentTransmutationReadRepoPg {
   }
 
   /**
+   * Obtiene datos básicos de alumnos para un item desde cleaning_item_state (Cleaning Engine v1)
+   * Retorna datos raw de cleaning_item_state según clean_layer
+   * 
+   * @param {string} itemRef - item_ref del item
+   * @param {string} tipo - Tipo del item ('recurrente' o 'una_vez')
+   * @param {string} cleanLayer - Capa de limpieza ('shared' | 'pde')
+   * @param {string} productKey - Clave del producto
+   * @param {Object} options - Opciones adicionales (limit, offset)
+   * @param {Object} client - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object>} Objeto con students, counts, total
+   */
+  async getStudentsForItemFromCleaningEngine(itemRef, tipo, cleanLayer, productKey = 'pde', options = {}, client = null) {
+    if (!itemRef || !tipo || !cleanLayer) {
+      return { students: [], counts: {}, total: 0 };
+    }
+
+    const { limit, offset = 0 } = options;
+    const queryFn = client ? client.query.bind(client) : query;
+    const domainType = 'transmutation';
+
+    // Obtener TODOS los alumnos, con su estado desde cleaning_item_state
+    // LEFT JOIN para incluir alumnos sin estado aún
+    // Filtrar alumnos en pausa (usando tabla pausas)
+    let sql = `
+      SELECT 
+        a.id as student_id,
+        COALESCE(a.nombre_completo, a.apodo, a.email) as student_name,
+        a.email as student_email,
+        a.apodo,
+        a.nombre_completo,
+        c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
+        c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'} as clean_count,
+        c.shared_remaining,
+        c.shared_completed,
+        c.pde_completed
+      FROM alumnos a
+      LEFT JOIN cleaning_item_state c ON c.student_id = a.id
+        AND c.product_key = $1
+        AND c.domain_type = $2
+        AND c.item_ref = $3
+      LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
+      WHERE p.id IS NULL  -- Excluir alumnos en pausa
+      ORDER BY a.nombre_completo ASC, a.email ASC
+    `;
+
+    const params = [productKey, domainType, itemRef];
+
+    if (limit) {
+      sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit, offset);
+    }
+
+    const result = await queryFn(sql, params);
+
+    const students = [];
+    const counts = tipo === 'recurrente' 
+      ? { reviewed: 0, pending: 0, important: 0, never: 0 }
+      : { incomplete: 0, complete: 0 };
+
+    for (const row of result.rows) {
+      if (tipo === 'recurrente') {
+        const daysSinceLastClean = row.last_cleaned_at 
+          ? Math.floor((new Date().getTime() - new Date(row.last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+
+        students.push({
+          student_id: row.student_id,
+          student_name: row.student_name || row.student_email || 'Sin nombre',
+          student_email: row.student_email,
+          apodo: row.apodo,
+          nombre_completo: row.nombre_completo,
+          days_since_last_clean: daysSinceLastClean,
+          last_cleaned_at: row.last_cleaned_at,
+          clean_count: row.clean_count || 0
+        });
+      } else {
+        // una_vez - solo SHARED tiene remaining/completed
+        const remaining = cleanLayer === 'shared' 
+          ? (row.shared_remaining !== null ? parseInt(row.shared_remaining, 10) : null)
+          : null;
+        const completed = cleanLayer === 'shared'
+          ? (row.shared_completed !== null ? parseInt(row.shared_completed, 10) : 0)
+          : (row.pde_completed !== null ? parseInt(row.pde_completed, 10) : 0);
+        const isComplete = remaining !== null && remaining <= 0;
+
+        if (isComplete) {
+          counts.complete++;
+        } else {
+          counts.incomplete++;
+        }
+
+        students.push({
+          student_id: row.student_id,
+          student_name: row.student_name || row.student_email || 'Sin nombre',
+          student_email: row.student_email,
+          apodo: row.apodo,
+          nombre_completo: row.nombre_completo,
+          remaining,
+          completed,
+          is_complete: isComplete
+        });
+      }
+    }
+
+    // Obtener total (sin limit/offset, excluyendo pausados)
+    const totalResult = await queryFn(
+      `SELECT COUNT(*) as total 
+       FROM alumnos a
+       LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
+       WHERE p.id IS NULL`,
+      []
+    );
+    const total = parseInt(totalResult.rows[0]?.total || '0', 10);
+
+    return { students, counts, total };
+  }
+
+  /**
    * Marca limpio un alumno específico (recurrente)
    * @param {number} studentId - ID del alumno
    * @param {number} itemId - ID numérico del item (PK de items_transmutaciones)
