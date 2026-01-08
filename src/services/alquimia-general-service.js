@@ -1021,7 +1021,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     });
     
     const logged = logResult.inserted || 0;
-    const skipped = logResult.skipped || 0;
+    const logSkipped = logResult.skipped || 0;
     
     // 3) Emitir señales (fail-open) - el Cleaning Engine ya emite, pero mantenemos señal legacy
     try {
@@ -1057,14 +1057,15 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
       itemRef,
       updated_students: updatedStudents,
       logged,
-      skipped,
+      log_skipped: logSkipped,
+      cleaning_skipped: skipped,
       cleaned_date: cleanedDateStr
     });
     
     return {
       updated_students: updatedStudents,
       logged,
-      skipped,
+      skipped: skipped, // skipped del cleaning result (no del log)
       cleaned_date: cleanedDateStr,
       skipped_breakdown: skippedBreakdown
     };

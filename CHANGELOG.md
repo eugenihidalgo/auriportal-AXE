@@ -9,6 +9,26 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.56.8] - 2026-01-08
+
+### Fixed
+- **Alquimia General Base APIs 500**: Corregido error de sintaxis JavaScript
+  - `Identifier 'skipped' has already been declared` en `markPdeCleanAll`
+  - Variable `skipped` declarada dos veces (líneas 988 y 1024)
+  - Renombrada segunda declaración a `logSkipped` para evitar conflicto
+  - Endpoints base ahora cargan correctamente: classifications, item-groups, listas
+- **Smoke Test**: Añadido script canónico `scripts/smoke-master-alquimia-general.js`
+  - Verifica los 3 endpoints críticos de init
+  - Falla si status != 200, ok != true, o falta trace_id
+  - Añadido npm script: `npm run smoke:master-alquimia`
+
+### Changed
+- **Alquimia General Service**: Mejorado logging en `markPdeCleanAll`
+  - Distingue entre `log_skipped` (del log) y `cleaning_skipped` (del cleaning result)
+  - Logs más informativos para debugging
+
+---
+
 ## [5.59.3] - 2026-01-08
 
 ### Fixed
