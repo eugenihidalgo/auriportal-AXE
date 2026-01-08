@@ -9,6 +9,70 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.57.0] - 2025-01-XX
+
+### Added
+- **Level Engine PDE v1**: Sistema canónico de cálculo y persistencia de niveles y fases PDE (Progreso de Despertar Espiritual)
+  - **Migración SQL v5.57.0**: Crea tablas `level_lines`, `level_definitions`, `phase_definitions`, `level_gates`, `student_level_state`, `student_level_history`
+  - **Repositorios Core + Infra PostgreSQL**: 6 repos core (contratos) + 6 repos infra (implementación PostgreSQL)
+    - `LevelLinesRepo`: Gestión de líneas de progreso
+    - `LevelDefinitionsRepo`: Definiciones de niveles por días
+    - `PhaseDefinitionsRepo`: Definiciones de fases
+    - `LevelGatesRepo`: Bloqueos futuros (estructura preparada)
+    - `StudentLevelStateRepo`: Estado actual del alumno por línea
+    - `StudentLevelHistoryRepo`: Historial auditado de cambios
+  - **Servicio Canónico**: `src/core/master/services/level-engine-service.js`
+    - `ensureLineStarted()`: Inicializa línea si no existe
+    - `computeAndPersist()`: Calcula y persiste estado (nivel/fase/upgrade_status)
+    - `getStudentLevels()`: Obtiene todos los estados del alumno
+    - `recomputeStudent()`: Fuerza recálculo del estado
+    - **Lógica de cómputo:**
+      - Resolución de fecha de inicio (`students.created_at` o legacy `alumnos.fecha_inscripcion`)
+      - Cálculo de días congelados (pausas PAUSED/SUSPENDED)
+      - Cálculo de nivel actual según `computed_days` y `min_days`
+      - Cálculo de fase actual según `computed_days` y `min_days`
+      - Cálculo de estado de actualización (`available`, `pending`, `locked`)
+  - **Endpoints MASTER**:
+    - `GET /master/api/levels/lines`: Lista líneas activas
+    - `GET /master/api/levels/lines/:line_key/definitions`: Definiciones de línea (niveles + fases)
+    - `GET /master/api/students/:student_uuid/levels`: Estado del alumno (requiere admin context)
+    - `POST /master/api/levels/recompute/:student_uuid`: Fuerza recálculo (requiere admin context, query param `line_key` opcional)
+  - **Señales Registradas y Emitidas**:
+    - `student.pde.level.changed`: Cambio de nivel (payload: `before`, `after`, `computed_days`)
+    - `student.pde.phase.changed`: Cambio de fase (payload: `before`, `after`, `computed_days`)
+    - `student.pde.upgrade.pending`: Actualización pendiente (payload: `current_level_number`, `next_level_number`)
+    - `student.pde.upgrade.locked`: Bloqueo de actualización (payload: `gate_key`, `pending_requirements`)
+  - **Feature Flag**: `level_engine_pde_v1` (OFF por defecto, runtime, system scope)
+    - Cuando OFF: Endpoints retornan 404, servicio no calcula, señales no se emiten
+    - Cuando ON: Sistema funciona normalmente
+  - **Scripts de Verificación**:
+    - `scripts/verify-level-engine-db.js`: Verifica tablas, constraints, índices, seed data
+    - `scripts/verify-level-engine-sample.js`: Test de `computeAndPersist` para alumno de prueba
+    - `npm run verify:levels`: Ejecuta ambos scripts
+  - **Seed Data Inicial**:
+    - Línea 'pde': `line_key: 'pde'`, `display_name: 'PDE (Progreso de Despertar Espiritual)'`
+    - Niveles iniciales: 1 (0 días), 2 (30 días), 3 (60 días)
+    - Fases iniciales: 'inicio' (0 días), 'sanacion_avanzada' (60 días)
+  - **Documentación Completa**: `docs/master/MASTER_LEVEL_ENGINE_PDE_V1.md`
+
+### Changed
+- **`.cursorrules`**: Añadidas reglas canónicas del Level Engine PDE v1
+  - "Level Engine PDE v1 es la autoridad de 'level PDE' y 'phase PDE'"
+  - "No introducir lógica de nivel en pantallas de dominios (alquimia/lugares/proyectos/apadrinados); deben consultar al motor"
+  - "Order Pipeline: Las pantallas consultan al Level Engine, el Level Engine emite señales para automatizaciones"
+  - Reglas sobre contratos explícitos, registros canónicos, decisión solo en servicios, APIs MASTER JSON, feature flags, testing
+
+### Technical Details
+- **Source of Truth**: PostgreSQL es el único SOT de niveles y fases PDE
+- **Autoridad Única**: Level Engine es el único decisor de nivel/fase PDE
+- **Congelación**: Días se congelan cuando `student_operational_state` es `PAUSED` o `SUSPENDED`
+- **Auditoría**: Todos los cambios se registran en `student_level_history` con `trace_id`
+- **Fail-Open**: Señales se emiten con fail-open (no bloquean flujo principal)
+- **Anti-Cache**: Endpoints incluyen headers anti-cache para forensics
+- **Trace ID**: Todas las operaciones incluyen `trace_id` para observabilidad
+
+---
+
 ## [5.47.1] - 2024-12-30
 
 ### Fixed
