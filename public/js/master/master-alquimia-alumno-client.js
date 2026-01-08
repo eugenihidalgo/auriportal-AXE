@@ -382,17 +382,17 @@
       megalistSection.removeChild(megalistSection.firstChild);
     }
     
-    // CRÍTICO: Renderizar TODAS las listas siempre (estructura base)
-    // Las listas NO dependen de items - son estructura canónica
+    // CRÍTICO: Renderizar SOLO listas que tienen items con estado
+    // Las listas aparecen SOLO si contienen al menos un item con estado
     if (lists.length === 0) {
       const p = document.createElement('p');
       p.className = 'text-slate-400 text-center py-8';
-      p.textContent = 'No hay listas disponibles';
+      p.textContent = 'No hay items con estado para este alumno';
       megalistSection.appendChild(p);
       return;
     }
     
-    // Renderizar cada lista (incluso si está vacía)
+    // Renderizar cada lista (todas tienen items con estado)
     lists.forEach(list => {
       const listDiv = renderList(list);
       megalistSection.appendChild(listDiv);
@@ -416,36 +416,24 @@
     listDiv.appendChild(header);
     
     // Contenido
+    // CRÍTICO: Esta lista SIEMPRE tiene items con estado (filtrado en backend)
     const content = document.createElement('div');
     content.className = 'p-4';
     
-    // Calcular total de items en la lista
-    const totalItems = (list.never?.length || 0) + 
-                      (list.important?.length || 0) + 
-                      (list.pending?.length || 0);
+    // Orden canónico: never → important → pending (siempre en este orden)
+    if (list.never && list.never.length > 0) {
+      const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
+      content.appendChild(neverGroup);
+    }
     
-    // Si la lista está vacía, mostrar mensaje
-    if (totalItems === 0) {
-      const emptyMsg = document.createElement('p');
-      emptyMsg.className = 'text-slate-500 text-center py-4 italic';
-      emptyMsg.textContent = 'Lista vacía';
-      content.appendChild(emptyMsg);
-    } else {
-      // Orden canónico: never → important → pending (siempre en este orden)
-      if (list.never && list.never.length > 0) {
-        const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
-        content.appendChild(neverGroup);
-      }
-      
-      if (list.important && list.important.length > 0) {
-        const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
-        content.appendChild(importantGroup);
-      }
-      
-      if (list.pending && list.pending.length > 0) {
-        const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
-        content.appendChild(pendingGroup);
-      }
+    if (list.important && list.important.length > 0) {
+      const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
+      content.appendChild(importantGroup);
+    }
+    
+    if (list.pending && list.pending.length > 0) {
+      const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
+      content.appendChild(pendingGroup);
     }
     
     listDiv.appendChild(content);

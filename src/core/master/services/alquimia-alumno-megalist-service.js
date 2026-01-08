@@ -1,17 +1,18 @@
 // src/core/master/services/alquimia-alumno-megalist-service.js
-// Alquimia Alumno Megalist Service v1
+// Alquimia Alumno Megalist Service v1.1
 //
-// Read model para construir la megalista de un alumno:
-// - Agrupa por listas
-// - Calcula estados (never/important/pending/reviewed)
-// - Separa revisados por actor (student vs master)
-// - Orden canónico: never → important → pending → reviewed
+// Read model CANÓNICO: Construye megalista EXCLUSIVAMENTE desde cleaning_item_state
+// REGLA FUNDAMENTAL: La megalista se construye desde el ESTADO DEL ALUMNO, no desde el catálogo
+//
+// - Fuente única: cleaning_item_state WHERE student_id = ?
+// - Catálogo SOLO como resolver (nombre, descripción)
+// - Listas aparecen SOLO si contienen items con estado
+// - Si item no se puede resolver → WARNING + NO SE RENDERIZA
 
 import { query } from '../../../../database/pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-catalog-repo-pg.js';
-import { getDefaultCleaningItemStateRepo } from '../../../infra/repos/cleaning/cleaning-item-state-repo-pg.js';
 import { getDefaultStudentRepo } from '../../../infra/repos/student-repo-pg.js';
 import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
@@ -20,7 +21,7 @@ import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
  * Calcula el estado de un item basado en cleaning_item_state
  * 
  * @param {Object} state - Estado de cleaning_item_state (SHARED)
- * @param {Object} item - Item del catálogo
+ * @param {Object} item - Item del catálogo (para metadata: frecuencia_dias, critical_multiplier, tipo)
  * @param {string} tipo - Tipo de lista ('recurrente' | 'una_vez')
  * @returns {string} Estado: 'never' | 'important' | 'pending' | 'reviewed'
  */
@@ -115,7 +116,13 @@ async function getLastCleanActor(studentId, itemRef) {
 }
 
 /**
- * Construye la megalista para un alumno
+ * Construye la megalista para un alumno DESDE cleaning_item_state
+ * 
+ * REGLA FUNDAMENTAL: La megalista se construye desde el ESTADO DEL ALUMNO, no desde el catálogo
+ * - Fuente única: cleaning_item_state WHERE student_id = ?
+ * - Catálogo SOLO como resolver (nombre, descripción)
+ * - Listas aparecen SOLO si contienen items con estado
+ * - Si item no se puede resolver → WARNING + NO SE RENDERIZA
  * 
  * @param {Object} options - Opciones
  * @param {number} options.student_id - ID del alumno
@@ -131,7 +138,7 @@ export async function getMegalistForStudent(options = {}) {
   }
   
   try {
-    logInfo('AlquimiaAlumnoMegalist', 'Construyendo megalista', {
+    logInfo('AlquimiaAlumnoMegalist', 'Construyendo megalista desde estado', {
       traceId,
       student_id,
       levels_mode
@@ -153,16 +160,12 @@ export async function getMegalistForStudent(options = {}) {
         traceId,
         student_id
       });
-      // No lanzar error, pero retornar warning
     }
     
     // 3. Obtener nivel efectivo del alumno
     const nivelEfectivo = await getStudentEffectiveLevel(student_id);
     
-    // 4. Obtener todos los estados de limpieza SHARED para este alumno
-    const stateRepo = getDefaultCleaningItemStateRepo();
-    
-    // Query directa para obtener todos los estados SHARED
+    // 4. OBTENER TODOS LOS ESTADOS DE LIMPIEZA SHARED PARA ESTE ALUMNO (FUENTE ÚNICA)
     const statesResult = await query(`
       SELECT * FROM cleaning_item_state
       WHERE student_id = $1
@@ -173,130 +176,109 @@ export async function getMegalistForStudent(options = {}) {
     
     const states = statesResult.rows || [];
     
-    // 5. Obtener todos los items del catálogo (query directa con fail-open)
-    // FIX: listItems requiere listaId, así que hacemos query directa para obtener todos
-    let allItems = [];
-    let allListas = [];
+    logInfo('AlquimiaAlumnoMegalist', 'Estados obtenidos desde cleaning_item_state', {
+      traceId,
+      student_id,
+      states_count: states.length
+    });
+    
+    // 5. Cargar catálogo SOLO como resolver (para obtener nombre, descripción, lista_id)
+    let itemsByRef = {};
+    let listasById = {};
     
     try {
       const catalogRepo = getDefaultAlquimiaCatalogRepo();
-      allListas = await catalogRepo.listListas({ onlyActive: true });
       
-      // Obtener todos los items activos con query directa (fail-open)
+      // Cargar listas del catálogo (para resolver lista_id → nombre)
+      const allListas = await catalogRepo.listListas({ onlyActive: true });
+      for (const lista of allListas) {
+        listasById[lista.id] = lista;
+      }
+      
+      // Cargar items del catálogo (para resolver item_ref → nombre, nivel, lista_id, metadata)
       const itemsResult = await query(`
         SELECT * FROM items_transmutaciones
         WHERE (status = 'active' OR activo = true)
         ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC
       `);
-      allItems = itemsResult.rows || [];
+      const allItems = itemsResult.rows || [];
+      
+      for (const item of allItems) {
+        if (item.item_ref) {
+          itemsByRef[item.item_ref] = item;
+        }
+      }
+      
+      logInfo('AlquimiaAlumnoMegalist', 'Catálogo cargado como resolver', {
+        traceId,
+        items_count: allItems.length,
+        listas_count: allListas.length
+      });
     } catch (error) {
       logWarn('AlquimiaAlumnoMegalist', 'Error obteniendo catálogo (fail-open)', {
         traceId,
         student_id,
         error: error.message
       });
-      // Fail-open: continuar con arrays vacíos
-      allItems = [];
-      allListas = [];
-      warnings.push({
-        type: 'CATALOG_FETCH_ERROR',
-        message: `Error obteniendo catálogo: ${error.message}`
-      });
+      // Fail-open: continuar con mapas vacíos (solo warnings)
+      itemsByRef = {};
+      listasById = {};
     }
     
-    // Crear mapas para acceso rápido
-    const itemsByRef = {};
-    for (const item of allItems) {
-      itemsByRef[item.item_ref] = item;
-    }
-    
-    const listasById = {};
-    for (const lista of allListas) {
-      listasById[lista.id] = lista;
-    }
-    
-    // 6. Construir estructura agrupada por listas
-    const listsMap = {};
+    // 6. Construir estructura agrupada por listas DESDE ESTADOS
+    const listsMap = {}; // Solo listas que tienen items con estado
     const warnings = [];
     
-    // Inicializar todas las listas
-    for (const lista of allListas) {
-      listsMap[lista.id] = {
-        lista_id: lista.id,
-        lista_nombre: lista.nombre,
-        lista_tipo: lista.tipo,
-        never: [],
-        important: [],
-        pending: [],
-        reviewed_by_student: [],
-        reviewed_by_master: []
-      };
-    }
-    
-    // Procesar estados (con fail-open completo)
+    // Procesar CADA estado (CRÍTICO: fuente única)
     for (const state of states) {
-      // Fail-open: si state no tiene item_ref, saltar
+      // Validar estado
       if (!state?.item_ref) {
+        logWarn('AlquimiaAlumnoMegalist', 'Estado sin item_ref (STATE_WITHOUT_ITEM)', {
+          traceId,
+          student_id,
+          state_id: state?.id || 'unknown'
+        });
         warnings.push({
-          type: 'STATE_MISSING_ITEM_REF',
+          type: 'STATE_WITHOUT_ITEM',
           state_id: state?.id || 'unknown',
           message: 'Estado sin item_ref, saltando'
         });
         continue;
       }
       
+      // Resolver item desde catálogo (SOLO como resolver, NO crea items)
       const item = itemsByRef[state.item_ref];
       
-      // Fail-open: si item no existe, usar fallback pero continuar
       if (!item) {
+        // Si el estado existe pero el item no → WARNING + NO RENDERIZAR
+        logWarn('AlquimiaAlumnoMegalist', 'Estado sin item en catálogo (ITEM_WITHOUT_RESOLVER)', {
+          traceId,
+          student_id,
+          item_ref: state.item_ref
+        });
         warnings.push({
-          type: 'ITEM_NOT_RESOLVED',
+          type: 'ITEM_WITHOUT_RESOLVER',
           item_ref: state.item_ref,
           domain_type: state.domain_type || 'transmutation',
-          message: `Item no encontrado en catálogo: ${state.item_ref}`
+          message: `Item no encontrado en catálogo: ${state.item_ref} - NO SE RENDERIZA`
         });
-        
-        // Usar fallback para item no resuelto
-        const fallbackListaId = 'unknown';
-        if (!listsMap[fallbackListaId]) {
-          listsMap[fallbackListaId] = {
-            lista_id: fallbackListaId,
-            lista_nombre: 'Sin lista (NO_RESUELTO)',
-            lista_tipo: 'recurrente',
-            never: [],
-            important: [],
-            pending: [],
-            reviewed_by_student: [],
-            reviewed_by_master: []
-          };
-        }
-        
-        // Agregar item no resuelto como "never" en lista unknown
-        listsMap[fallbackListaId].never.push({
-          item_id: null,
-          item_ref: state.item_ref,
-          item_nombre: 'NO_RESUELTO',
-          item_nivel: null,
-          lista_id: fallbackListaId,
-          lista_nombre: 'Sin lista (NO_RESUELTO)',
-          lista_tipo: 'recurrente',
-          state: 'never',
-          shared_last_cleaned_at: state.shared_last_cleaned_at || null,
-          shared_clean_count: state.shared_clean_count || 0,
-          shared_completed: state.shared_completed || 0,
-          shared_remaining: state.shared_remaining ?? null,
-          last_actor: null
-        });
-        continue;
+        continue; // NO SE RENDERIZA
       }
       
-      // Fail-open: verificar nivel (si no se puede comparar, no filtrar)
+      // Verificar nivel efectivo (si item.nivel > nivel_efectivo, no aplica)
       const itemNivel = item.nivel ?? null;
       const nivelEfectivoNum = nivelEfectivo ?? null;
       
       if (itemNivel !== null && nivelEfectivoNum !== null) {
         if (itemNivel > nivelEfectivoNum) {
-          // No incluir en megalista (no aplica)
+          // No incluir en megalista (no aplica por nivel)
+          logInfo('AlquimiaAlumnoMegalist', 'Item excluido por nivel', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref,
+            item_nivel: itemNivel,
+            nivel_efectivo: nivelEfectivoNum
+          });
           continue;
         }
       } else if (itemNivel !== null || nivelEfectivoNum !== null) {
@@ -310,7 +292,7 @@ export async function getMegalistForStudent(options = {}) {
         });
       }
       
-      // Fail-open: resolver lista
+      // Resolver lista desde catálogo (SOLO como resolver)
       const listaId = item.lista_id ?? null;
       let lista = null;
       
@@ -319,35 +301,23 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       if (!lista) {
+        // Si el item existe pero la lista no → WARNING + NO RENDERIZAR
+        logWarn('AlquimiaAlumnoMegalist', 'Item sin lista en catálogo (ITEM_WITHOUT_LIST)', {
+          traceId,
+          student_id,
+          item_ref: state.item_ref,
+          lista_id: listaId
+        });
         warnings.push({
-          type: 'LIST_NOT_RESOLVED',
+          type: 'ITEM_WITHOUT_LIST',
           item_ref: state.item_ref,
           lista_id: listaId,
-          message: `Lista no encontrada: ${listaId || 'null'}`
+          message: `Lista no encontrada: ${listaId || 'null'} - NO SE RENDERIZA`
         });
-        
-        // Usar fallback para lista no resuelta
-        const fallbackListaId = 'unknown';
-        if (!listsMap[fallbackListaId]) {
-          listsMap[fallbackListaId] = {
-            lista_id: fallbackListaId,
-            lista_nombre: 'Sin lista (NO_RESUELTO)',
-            lista_tipo: 'recurrente',
-            never: [],
-            important: [],
-            pending: [],
-            reviewed_by_student: [],
-            reviewed_by_master: []
-          };
-        }
-        lista = {
-          id: fallbackListaId,
-          nombre: 'Sin lista (NO_RESUELTO)',
-          tipo: 'recurrente'
-        };
+        continue; // NO SE RENDERIZA
       }
       
-      // Fail-open: calcular estado (si lista.tipo no existe, usar 'recurrente')
+      // Calcular estado del item
       const listaTipo = lista.tipo || 'recurrente';
       let itemState;
       try {
@@ -368,16 +338,17 @@ export async function getMegalistForStudent(options = {}) {
         });
       }
       
-      // Obtener último actor (para separar revisados) - fail-open ya implementado
+      // Obtener último actor (para separar revisados)
       const lastActor = await getLastCleanActor(student_id, state.item_ref);
       
+      // Construir datos del item
       const itemData = {
         item_id: item.id ?? null,
         item_ref: item.item_ref || state.item_ref,
-        item_nombre: item.nombre || 'NO_RESUELTO',
+        item_nombre: item.nombre || 'NO_RESUELTO', // Fail-open para nombre
         item_nivel: itemNivel,
         lista_id: lista.id,
-        lista_nombre: lista.nombre || 'Sin lista (NO_RESUELTO)',
+        lista_nombre: lista.nombre || 'Sin lista', // Fail-open para nombre
         lista_tipo: listaTipo,
         state: itemState,
         shared_last_cleaned_at: state.shared_last_cleaned_at || null,
@@ -387,11 +358,11 @@ export async function getMegalistForStudent(options = {}) {
         last_actor: lastActor
       };
       
-      // Fail-open: asegurar que listsMap[lista.id] existe antes de push
+      // Asegurar que la lista existe en listsMap (SOLO si tiene items con estado)
       if (!listsMap[lista.id]) {
         listsMap[lista.id] = {
           lista_id: lista.id,
-          lista_nombre: lista.nombre || 'Sin lista (NO_RESUELTO)',
+          lista_nombre: lista.nombre || 'Sin nombre',
           lista_tipo: listaTipo,
           never: [],
           important: [],
@@ -401,154 +372,28 @@ export async function getMegalistForStudent(options = {}) {
         };
       }
       
-      // Fail-open: asegurar que el grupo de estado existe
-      if (!listsMap[lista.id][itemState]) {
-        listsMap[lista.id][itemState] = [];
-      }
-      
+      // Agregar item a la lista correspondiente
       if (itemState === 'reviewed') {
         const reviewedGroup = lastActor === 'student' ? 'reviewed_by_student' : 'reviewed_by_master';
-        if (!listsMap[lista.id][reviewedGroup]) {
-          listsMap[lista.id][reviewedGroup] = [];
-        }
         listsMap[lista.id][reviewedGroup].push(itemData);
       } else {
         listsMap[lista.id][itemState].push(itemData);
       }
     }
     
-    // 7. Procesar items que NO tienen estado (nunca limpiados) - con fail-open
-    for (const item of allItems) {
-      // Fail-open: si item no tiene item_ref, saltar
-      if (!item?.item_ref) {
-        warnings.push({
-          type: 'ITEM_MISSING_REF',
-          item_id: item?.id || 'unknown',
-          message: 'Item sin item_ref, saltando'
-        });
-        continue;
-      }
-      
-      // Fail-open: verificar nivel (si no se puede comparar, no filtrar)
-      const itemNivel = item.nivel ?? null;
-      const nivelEfectivoNum = nivelEfectivo ?? null;
-      
-      if (itemNivel !== null && nivelEfectivoNum !== null) {
-        if (itemNivel > nivelEfectivoNum) {
-          // No incluir en megalista (no aplica)
-          continue;
-        }
-      } else if (itemNivel !== null || nivelEfectivoNum !== null) {
-        // Uno es null, no se puede comparar → warning pero continuar
-        warnings.push({
-          type: 'LEVEL_NOT_COMPARABLE',
-          item_ref: item.item_ref,
-          item_level: itemNivel,
-          student_level: nivelEfectivoNum,
-          message: 'No se puede comparar nivel (uno es null)'
-        });
-      }
-      
-      // Si ya está en algún estado, saltar
-      const existingState = states.find(s => s?.item_ref === item.item_ref);
-      if (existingState) {
-        continue;
-      }
-      
-      // Fail-open: resolver lista
-      const listaId = item.lista_id ?? null;
-      let lista = null;
-      
-      if (listaId !== null) {
-        lista = listasById[listaId];
-      }
-      
-      if (!lista) {
-        warnings.push({
-          type: 'LIST_NOT_RESOLVED',
-          item_ref: item.item_ref,
-          lista_id: listaId,
-          message: `Lista no encontrada para item nunca limpiado: ${listaId || 'null'}`
-        });
-        
-        // Usar fallback para lista no resuelta
-        const fallbackListaId = 'unknown';
-        if (!listsMap[fallbackListaId]) {
-          listsMap[fallbackListaId] = {
-            lista_id: fallbackListaId,
-            lista_nombre: 'Sin lista (NO_RESUELTO)',
-            lista_tipo: 'recurrente',
-            never: [],
-            important: [],
-            pending: [],
-            reviewed_by_student: [],
-            reviewed_by_master: []
-          };
-        }
-        lista = {
-          id: fallbackListaId,
-          nombre: 'Sin lista (NO_RESUELTO)',
-          tipo: 'recurrente'
-        };
-      }
-      
-      // Fail-open: asegurar que listsMap[lista.id] existe
-      if (!listsMap[lista.id]) {
-        listsMap[lista.id] = {
-          lista_id: lista.id,
-          lista_nombre: lista.nombre || 'Sin lista (NO_RESUELTO)',
-          lista_tipo: lista.tipo || 'recurrente',
-          never: [],
-          important: [],
-          pending: [],
-          reviewed_by_student: [],
-          reviewed_by_master: []
-        };
-      }
-      
-      // Fail-open: asegurar que never existe
-      if (!listsMap[lista.id].never) {
-        listsMap[lista.id].never = [];
-      }
-      
-      listsMap[lista.id].never.push({
-        item_id: item.id ?? null,
-        item_ref: item.item_ref,
-        item_nombre: item.nombre || 'NO_RESUELTO',
-        item_nivel: itemNivel,
-        lista_id: lista.id,
-        lista_nombre: lista.nombre || 'Sin lista (NO_RESUELTO)',
-        lista_tipo: lista.tipo || 'recurrente',
-        state: 'never',
-        shared_last_cleaned_at: null,
-        shared_clean_count: 0,
-        shared_completed: 0,
-        shared_remaining: null,
-        last_actor: null
-      });
-    }
-    
-    // 8. Asegurar que TODAS las listas canónicas estén presentes (CRÍTICO: listas como estructura)
-    // Las listas NO dependen de items - son estructura base
-    for (const lista of allListas) {
-      if (!listsMap[lista.id]) {
-        listsMap[lista.id] = {
-          lista_id: lista.id,
-          lista_nombre: lista.nombre || 'Sin nombre',
-          lista_tipo: lista.tipo || 'recurrente',
-          never: [],
-          important: [],
-          pending: [],
-          reviewed_by_student: [],
-          reviewed_by_master: []
-        };
-      }
-    }
-    
-    // 9. Convertir map a array y ordenar listas por orden (SIN FILTRAR - todas las listas siempre visibles)
+    // 7. Convertir map a array y ordenar listas (SOLO listas que tienen items con estado)
     const lists = Object.values(listsMap)
+      .filter(list => {
+        // Filtrar: solo listas que tienen al menos un item con estado
+        const hasItems = (list.never?.length || 0) +
+                        (list.important?.length || 0) +
+                        (list.pending?.length || 0) +
+                        (list.reviewed_by_student?.length || 0) +
+                        (list.reviewed_by_master?.length || 0) > 0;
+        return hasItems;
+      })
       .sort((a, b) => {
-        // Ordenar por orden de lista (si existe) o por nombre - con fail-open
+        // Ordenar por orden de lista (si existe) o por nombre
         const listaA = listasById[a?.lista_id] || null;
         const listaB = listasById[b?.lista_id] || null;
         const ordenA = listaA?.orden ?? 999;
@@ -561,7 +406,7 @@ export async function getMegalistForStudent(options = {}) {
         return nombreA.localeCompare(nombreB);
       });
     
-    // 10. Calcular resumen (con fail-open)
+    // 8. Calcular resumen DESDE ESTADOS REALES
     let total = 0;
     let never = 0;
     let important = 0;
@@ -571,7 +416,6 @@ export async function getMegalistForStudent(options = {}) {
     let reviewedByMaster = 0;
     
     for (const list of lists) {
-      // Fail-open: asegurar que los arrays existen antes de acceder
       never += (list.never?.length || 0);
       important += (list.important?.length || 0);
       pending += (list.pending?.length || 0);
@@ -582,9 +426,25 @@ export async function getMegalistForStudent(options = {}) {
     reviewed = reviewedByStudent + reviewedByMaster;
     total = never + important + pending + reviewed;
     
+    // Validar coherencia: total debe coincidir con estados procesados (menos los excluidos)
+    logInfo('AlquimiaAlumnoMegalist', 'Resumen calculado desde estados', {
+      traceId,
+      student_id,
+      states_count: states.length,
+      total,
+      never,
+      important,
+      pending,
+      reviewed,
+      reviewed_by_student: reviewedByStudent,
+      reviewed_by_master: reviewedByMaster,
+      lists_count: lists.length,
+      warnings_count: warnings.length
+    });
+    
     const percentReviewed = total > 0 ? Math.round((reviewed / total) * 100) : 0;
     
-    // 11. Construir respuesta
+    // 9. Construir respuesta
     const result = {
       student: {
         id: student.id,
@@ -604,18 +464,22 @@ export async function getMegalistForStudent(options = {}) {
         reviewed_by_master: reviewedByMaster,
         percent_reviewed: percentReviewed
       },
-      lists,
+      lists, // SOLO listas que tienen items con estado
       reviewed: {
-        by_student: lists.map(list => ({
-          lista_id: list.lista_id || 'unknown',
-          lista_nombre: list.lista_nombre || 'Sin lista (NO_RESUELTO)',
-          items: list.reviewed_by_student || []
-        })),
-        by_master: lists.map(list => ({
-          lista_id: list.lista_id || 'unknown',
-          lista_nombre: list.lista_nombre || 'Sin lista (NO_RESUELTO)',
-          items: list.reviewed_by_master || []
-        }))
+        by_student: lists
+          .filter(list => (list.reviewed_by_student?.length || 0) > 0)
+          .map(list => ({
+            lista_id: list.lista_id,
+            lista_nombre: list.lista_nombre,
+            items: list.reviewed_by_student || []
+          })),
+        by_master: lists
+          .filter(list => (list.reviewed_by_master?.length || 0) > 0)
+          .map(list => ({
+            lista_id: list.lista_id,
+            lista_nombre: list.lista_nombre,
+            items: list.reviewed_by_master || []
+          }))
       },
       warnings: warnings.length > 0 ? warnings : undefined,
       context: {
@@ -624,7 +488,7 @@ export async function getMegalistForStudent(options = {}) {
       }
     };
     
-    logInfo('AlquimiaAlumnoMegalist', 'Megalista construida', {
+    logInfo('AlquimiaAlumnoMegalist', 'Megalista construida desde estado', {
       traceId,
       student_id,
       total,
