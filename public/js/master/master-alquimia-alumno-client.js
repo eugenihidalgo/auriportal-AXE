@@ -505,19 +505,26 @@
     const rightDiv = document.createElement('div');
     rightDiv.className = 'flex items-center gap-2';
     
-    if (!isReviewed && item.state !== 'never') {
-      // Botón limpiar
+    // Botón limpiar (solo si NO está revisado)
+    // CRÍTICO: Acción operativa - permite intervención inmediata
+    if (item.state !== 'reviewed') {
       const cleanBtn = document.createElement('button');
-      cleanBtn.className = 'px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors';
-      cleanBtn.textContent = 'Limpiar (SHARED)';
-      cleanBtn.addEventListener('click', () => handleCleanItem(item));
+      cleanBtn.className = 'px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded transition-colors';
+      cleanBtn.textContent = 'Marcar como revisado';
+      cleanBtn.title = 'Limpiar item (SHARED) - acción inmediata';
+      cleanBtn.addEventListener('click', () => {
+        if (confirm(`¿Marcar "${item.item_nombre}" como revisado?`)) {
+          handleCleanItem(item);
+        }
+      });
       rightDiv.appendChild(cleanBtn);
     }
     
-    // Botón historial
+    // Botón historial (siempre visible)
     const historyBtn = document.createElement('button');
-    historyBtn.className = 'px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors';
+    historyBtn.className = 'px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors';
     historyBtn.textContent = 'Historial';
+    historyBtn.title = 'Ver historial completo de limpiezas';
     historyBtn.addEventListener('click', () => handleShowHistory(item));
     rightDiv.appendChild(historyBtn);
     
