@@ -478,6 +478,34 @@ export const MASTER_ROUTES = [
     type: 'api'
     // Handler maneja: GET, POST
   },
+  
+  // ============================================
+  // RUTAS API LEVEL ENGINE PDE v1
+  // ============================================
+  {
+    key: 'master-api-levels-lines',
+    path: '/master/api/levels/lines',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-levels-line-definitions',
+    path: '/master/api/levels/lines/:line_key/definitions',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-student-levels',
+    path: '/master/api/students/:student_uuid/levels',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-levels-recompute',
+    path: '/master/api/levels/recompute/:student_uuid',
+    type: 'api',
+    method: 'POST'
+  },
   {
     key: 'master-api-sponsors-id',
     path: '/master/api/sponsors/:id',

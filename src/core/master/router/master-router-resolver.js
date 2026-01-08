@@ -131,6 +131,12 @@ const MASTER_HANDLER_MAP = {
   'master-api-sponsors-care-id-end': () => import('../../../endpoints/master-api-sponsor-care.js'),
   'master-api-sponsors-internal-cleanup-student': () => import('../../../endpoints/master-api-sponsors.js'),
   
+  // Level Engine PDE v1 API Handlers
+  'master-api-levels-lines': () => import('../../../endpoints/master-api-levels.js'),
+  'master-api-levels-line-definitions': () => import('../../../endpoints/master-api-levels.js'),
+  'master-api-student-levels': () => import('../../../endpoints/master-api-student-levels.js'),
+  'master-api-levels-recompute': () => import('../../../endpoints/master-api-student-levels.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),

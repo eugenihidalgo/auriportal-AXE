@@ -297,5 +297,67 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Leer clasificaciones sin JOIN con tabla de relación
       - Persistir sin logs estructurados
 
+# =========================================
+# CONSTITUCIÓN LEVEL ENGINE PDE v1
+# =========================================
+
+  - id: level-engine-pde-v1-authority
+    title: Level Engine PDE v1 es la autoridad del nivel PDE y fase PDE
+    content: >
+      Level Engine PDE v1 es el ÚNICO decisor canónico de:
+      - nivel PDE de un alumno
+      - fase PDE de un alumno
+      - días transcurridos PDE (con congelación en pausas)
+      - estado de upgrade (ok/pending_requirements/locked)
+      PROHIBIDO:
+      - Usar alumnos.nivel_actual como fuente de verdad para PDE
+      - Calcular nivel PDE en pantallas o handlers directamente
+      - Duplicar lógica de cálculo de días PDE fuera del motor
+      OBLIGATORIO:
+      - Consultar Level Engine para obtener nivel/fase PDE
+      - Usar servicios canónicos como únicos decisores
+      - Respetar feature flag level_engine_pde_v1
+
+  - id: no-level-logic-in-domains
+    title: No introducir lógica de nivel en pantallas de dominios
+    content: >
+      Las pantallas de dominios (alquimia/lugares/proyectos/apadrinados) NO deben calcular niveles PDE.
+      PROHIBIDO:
+      - Calcular nivel PDE en handlers de dominios
+      - Leer alumnos.nivel_actual para decidir permisos en dominios
+      - Duplicar lógica de niveles en múltiples lugares
+      OBLIGATORIO:
+      - Consultar Level Engine vía API o servicio para obtener nivel/fase PDE
+      - Usar contratos explícitos para decisiones basadas en nivel
+      - Dejar que el motor decida y emita señales
+
+  - id: level-engine-signals-canonical
+    title: Señales del Level Engine son canónicas y registradas
+    content: >
+      TODAS las señales del Level Engine DEBEN estar registradas en el registry canónico.
+      PROHIBIDO:
+      - Emitir señales ad-hoc sin registro
+      - Emitir señales desde endpoints (deben emitirse desde servicios)
+      OBLIGATORIO:
+      - Registrar señales en student-signal-registry.js antes de emitir
+      - Emitir señales desde level-engine-service.js (no desde endpoints)
+      - Incluir trace_id en todas las señales
+      - Fail-open si signal dispatcher falla (log estructurado y continuar)
+
+  - id: level-engine-order-pipeline
+    title: Order Pipeline es contrato canónico
+    content: >
+      El "Order Pipeline" es el contrato canónico que conecta:
+      - Level Engine (cálculo de nivel/fase)
+      - Señales (eventos de cambio)
+      - Automatizaciones (respuestas a eventos)
+      PROHIBIDO:
+      - Saltarse el pipeline de señales para tomar decisiones
+      - Implementar lógica que debería ser automatización como código directo
+      OBLIGATORIO:
+      - Level Engine emite señales para cambios de nivel/fase
+      - Automatizaciones consumen señales y ejecutan acciones
+      - Documentar el pipeline en documentación canónica
+
 
 

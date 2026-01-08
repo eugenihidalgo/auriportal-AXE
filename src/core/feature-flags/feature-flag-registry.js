@@ -89,6 +89,19 @@ export const FEATURE_FLAG_REGISTRY = [
     scope: 'admin',
     default: true,
     irreversible: false
+  },
+  
+  // ============================================================================
+  // LEVEL ENGINE PDE v1
+  // ============================================================================
+  
+  {
+    key: 'level_engine_pde_v1',
+    description: 'Controla si el Level Engine PDE v1 está activo (OFF→BETA→ON)',
+    type: 'runtime',
+    scope: 'system',
+    default: false,
+    irreversible: false
   }
 ];
 
