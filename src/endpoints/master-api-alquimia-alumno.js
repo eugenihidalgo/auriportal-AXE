@@ -12,6 +12,7 @@ import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import { getMegalistForStudent } from '../core/master/services/alquimia-alumno-megalist-service.js';
 import { markCleanStudent } from '../core/master/services/cleaning-engine-service.js';
 import { getDefaultCleaningEventsRepo } from '../infra/repos/cleaning/cleaning-events-repo-pg.js';
+import { ensureCleaningItemStateSeedForStudent } from '../core/master/services/cleaning-state-seed-service.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -118,6 +119,23 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         levels_mode: levelsMode
       });
       
+      // CRÍTICO: Seed estados "NUNCA" antes de construir megalista
+      // Esto asegura que todos los items aplicables tengan estado materializado
+      const seedResult = await ensureCleaningItemStateSeedForStudent({
+        student_id: studentId,
+        product_key: 'pde',
+        domain_type: 'transmutation'
+      });
+      
+      logInfo('MasterApiAlquimiaAlumno', 'Seed completado', {
+        traceId,
+        student_id: studentId,
+        inserted: seedResult.inserted,
+        skipped: seedResult.skipped,
+        total_applicable: seedResult.total_applicable
+      });
+      
+      // Construir megalista SOLO desde estados (como fix b1cca23)
       const result = await getMegalistForStudent({
         student_id: studentId,
         levels_mode: levelsMode
@@ -148,6 +166,46 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         domain_type,
         product_key
       });
+      
+      // CRÍTICO: Validar que el estado existe en cleaning_item_state
+      // (tras seed debería existir, pero validamos por seguridad)
+      const { query } = await import('../../database/pg.js');
+      const stateCheck = await query(`
+        SELECT 1 
+        FROM cleaning_item_state
+        WHERE student_id = $1
+          AND product_key = $2
+          AND domain_type = $3
+          AND item_ref = $4
+      `, [student_id, product_key, domain_type, item_ref]);
+      
+      if (!stateCheck.rows || stateCheck.rows.length === 0) {
+        // Si no existe, intentar seed primero (puede ser item nuevo)
+        await ensureCleaningItemStateSeedForStudent({
+          student_id,
+          product_key,
+          domain_type
+        });
+        
+        // Verificar de nuevo
+        const stateCheck2 = await query(`
+          SELECT 1 
+          FROM cleaning_item_state
+          WHERE student_id = $1
+            AND product_key = $2
+            AND domain_type = $3
+            AND item_ref = $4
+        `, [student_id, product_key, domain_type, item_ref]);
+        
+        if (!stateCheck2.rows || stateCheck2.rows.length === 0) {
+          return jsonError(
+            `Estado no encontrado para item_ref: ${item_ref}. El item puede no ser aplicable para este alumno.`,
+            'STATE_NOT_FOUND',
+            400,
+            traceId
+          );
+        }
+      }
       
       // Forzar clean_layer='shared' y actor_type='master'
       const result = await markCleanStudent({
