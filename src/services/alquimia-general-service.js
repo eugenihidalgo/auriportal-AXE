@@ -483,6 +483,13 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     // Si se especifica clean_layer, leer desde Cleaning Engine
     let rawResult;
     if (clean_layer) {
+      logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Leyendo desde Cleaning Engine', {
+        traceId,
+        itemRef,
+        tipo,
+        clean_layer,
+        productKey
+      });
       const repo = getDefaultMasterStudentTransmutationReadRepo();
       rawResult = await repo.getStudentsForItemFromCleaningEngine(
         itemRef, 
@@ -491,6 +498,13 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         productKey, 
         otherOptions
       );
+      logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Resultado Cleaning Engine', {
+        traceId,
+        itemRef,
+        clean_layer,
+        students_count: rawResult.students?.length || 0,
+        counts: rawResult.counts
+      });
     } else {
       // Compatibilidad: leer desde student_item_state (legacy)
       const repo = getDefaultMasterStudentTransmutationReadRepo();
@@ -1052,13 +1066,18 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
       });
     }
     
-    logInfo('AlquimiaGeneralService', 'markPdeCleanAll completado', {
+    logInfo('AlquimiaGeneralService', '[PDE_CLEAN_ALL] markPdeCleanAll completado', {
       traceId,
       itemRef,
+      item_id: itemId,
+      lista_id: item.lista_id,
+      lista_tipo: lista.tipo,
+      clean_layer: 'pde',
       updated_students: updatedStudents,
       logged,
       log_skipped: logSkipped,
       cleaning_skipped: skipped,
+      skipped_breakdown: skippedBreakdown,
       cleaned_date: cleanedDateStr
     });
     

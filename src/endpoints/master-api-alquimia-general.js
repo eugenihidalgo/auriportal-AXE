@@ -720,6 +720,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
       const cleanLayer = url.searchParams.get('clean_layer') || 'shared'; // Default shared
+      
+      logInfo('MasterApiAlquimiaGeneral', '[GET_STUDENTS] Request recibido', {
+        traceId,
+        itemRef,
+        clean_layer: cleanLayer,
+        product_key: productKey
+      });
       const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : null;
       const offset = url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset'), 10) : 0;
 

@@ -533,6 +533,20 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - PDE no afecta student_item_state (solo auditoría)
       - Sincronización es atómica (misma transacción)
 
+  - id: cleaning-engine-pde-refresh-modal
+    title: Refresh obligatorio del modal después de PDE clean-all
+    content: >
+      Después de ejecutar PDE clean-all, el modal "VER" DEBE refrescarse con clean_layer='pde'.
+      PROHIBIDO:
+      - Ejecutar PDE clean-all sin refrescar el modal si está abierto
+      - Refrescar el modal sin actualizar state.modal.cleanLayer explícitamente
+      - Asumir que el modal conserva el cleanLayer correcto sin actualizarlo
+      OBLIGATORIO:
+      - Actualizar state.modal.cleanLayer = 'pde' antes de refrescar
+      - Llamar handleVerItem(item, 'pde') después de PDE clean-all si el modal está abierto
+      - Logs estructurados con prefijos canónicos ([PDE_CLEAN_ALL], [GET_STUDENTS]) para debugging
+      - Verificación con script canónico (verify:cleaning-engine-pde) antes de considerar completado
+
   - id: infra-repos-pg-import-canonical
     title: Infra repos PG deben importar desde módulo canónico real
     content: >

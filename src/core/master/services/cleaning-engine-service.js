@@ -493,9 +493,12 @@ export async function markCleanAllStudents(options, client = null) {
       traceId,
       item_ref,
       clean_layer,
+      item_kind: itemKind,
+      item_id: item.id,
+      item_nivel: itemNivel,
+      total: activeStudentIds.length,
       updated,
       skipped,
-      total: activeStudentIds.length,
       skipped_breakdown: skippedBreakdown
     });
     

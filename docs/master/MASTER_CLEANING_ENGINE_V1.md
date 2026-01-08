@@ -181,6 +181,36 @@ Esto ejecuta:
 
 ## Incidentes y Hotfixes
 
+### Incidente v5.59.4: PDE clean-all no se reflejaba en vista PDE
+
+**Síntoma:**
+- Al pulsar botón PDE en Alquimia General, la limpieza se ejecutaba pero no se reflejaba en el modal "VER" cuando se cambiaba a vista PDE
+- El modal seguía mostrando estado "nunca limpio" incluso después de ejecutar PDE clean-all
+- SHARED funcionaba correctamente
+
+**Causa Raíz:**
+- El código de escritura y lectura estaba correcto (Cleaning Engine escribe en `pde_last_cleaned_at` y `pde_clean_count`, y el repo lee correctamente según `clean_layer`)
+- El problema era que el modal no se refrescaba correctamente después de PDE clean-all
+- El estado del modal (`state.modal.cleanLayer`) no se actualizaba explícitamente antes de refrescar
+
+**Fix Canónico:**
+- Añadido `state.modal.cleanLayer = 'pde'` antes de refrescar el modal después de PDE clean-all
+- Añadidos logs estructurados en `getStudentsForItem` y `markPdeCleanAll` para debugging:
+  - `[GET_STUDENTS]` logs cuando se lee desde Cleaning Engine con `clean_layer`
+  - `[PDE_CLEAN_ALL]` logs con `item_id`, `lista_tipo`, `clean_layer`, `skipped_breakdown`
+- Añadido log en Cleaning Engine con `item_kind`, `item_id`, `item_nivel` en `markCleanAllStudents`
+- Creado script de verificación `scripts/verify-cleaning-engine-pde.js` para validar escritura/lectura PDE
+
+**Verificación:**
+- `npm run verify:cleaning-engine-pde` valida que PDE se escribe y lee correctamente
+- Logs estructurados permiten rastrear el flujo completo con `trace_id`
+- Modal se refresca automáticamente con `clean_layer='pde'` después de PDE clean-all
+
+**Prevención:**
+- Script de verificación PDE añadido a `package.json` (`verify:cleaning-engine-pde`)
+- Logs estructurados con prefijos canónicos (`[PDE_CLEAN_ALL]`, `[GET_STUDENTS]`) para debugging
+- Estado del modal (`state.modal.cleanLayer`) se actualiza explícitamente antes de refrescar
+
 ### Incidente v5.59.2: Import Roto en cleaning-engine-service.js + Modal State
 
 **Síntoma:**

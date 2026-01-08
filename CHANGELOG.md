@@ -9,6 +9,27 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.59.4] - 2026-01-08
+
+### Fixed
+- **PDE clean-all no se reflejaba en vista PDE**: Corregido refresh del modal después de PDE clean-all
+  - Modal ahora se refresca automáticamente con `clean_layer='pde'` después de ejecutar PDE clean-all
+  - Estado del modal (`state.modal.cleanLayer`) se actualiza explícitamente antes de refrescar
+  - Logs estructurados añadidos para debugging: `[PDE_CLEAN_ALL]` y `[GET_STUDENTS]`
+  - Creado script de verificación `scripts/verify-cleaning-engine-pde.js` para validar escritura/lectura PDE
+
+### Changed
+- **Logging**: Mejorado logging estructurado en Cleaning Engine y Alquimia General Service
+  - `markCleanAllStudents` ahora loguea `item_kind`, `item_id`, `item_nivel`, `skipped_breakdown`
+  - `markPdeCleanAll` ahora loguea `item_id`, `lista_tipo`, `clean_layer`, `skipped_breakdown`
+  - `getStudentsForItem` ahora loguea cuando lee desde Cleaning Engine con `clean_layer`
+- **Verificación**: Añadido script `verify:cleaning-engine-pde` para validar capa PDE
+  - Verifica escritura de eventos PDE en `cleaning_events`
+  - Verifica proyección PDE en `cleaning_item_state` (pde_last_cleaned_at, pde_clean_count)
+  - Verifica lectura PDE desde `cleaning_item_state` (separada de SHARED)
+
+---
+
 ## [5.56.8] - 2026-01-08
 
 ### Fixed

@@ -1975,6 +1975,9 @@
       await loadItems(state.listaActiva.id);
       // Si hay flotante abierto, recargarlo con clean_layer=pde
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        console.log('[MasterAlquimiaGeneral] Refrescando modal con clean_layer=pde después de PDE clean-all');
+        // Forzar refresh del modal con clean_layer='pde'
+        state.modal.cleanLayer = 'pde';
         await handleVerItem(item, 'pde');
       }
     } catch (error) {
