@@ -382,15 +382,17 @@
       megalistSection.removeChild(megalistSection.firstChild);
     }
     
+    // CRÍTICO: Renderizar TODAS las listas siempre (estructura base)
+    // Las listas NO dependen de items - son estructura canónica
     if (lists.length === 0) {
       const p = document.createElement('p');
       p.className = 'text-slate-400 text-center py-8';
-      p.textContent = 'No hay items en ninguna lista';
+      p.textContent = 'No hay listas disponibles';
       megalistSection.appendChild(p);
       return;
     }
     
-    // Renderizar cada lista
+    // Renderizar cada lista (incluso si está vacía)
     lists.forEach(list => {
       const listDiv = renderList(list);
       megalistSection.appendChild(listDiv);
@@ -398,7 +400,7 @@
   }
 
   /**
-   * Renderiza una lista con sus grupos
+   * Renderiza una lista con sus grupos (SIEMPRE visible, aunque esté vacía)
    */
   function renderList(list) {
     const listDiv = document.createElement('div');
@@ -417,20 +419,33 @@
     const content = document.createElement('div');
     content.className = 'p-4';
     
-    // Orden canónico: never → important → pending
-    if (list.never.length > 0) {
-      const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
-      content.appendChild(neverGroup);
-    }
+    // Calcular total de items en la lista
+    const totalItems = (list.never?.length || 0) + 
+                      (list.important?.length || 0) + 
+                      (list.pending?.length || 0);
     
-    if (list.important.length > 0) {
-      const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
-      content.appendChild(importantGroup);
-    }
-    
-    if (list.pending.length > 0) {
-      const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
-      content.appendChild(pendingGroup);
+    // Si la lista está vacía, mostrar mensaje
+    if (totalItems === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'text-slate-500 text-center py-4 italic';
+      emptyMsg.textContent = 'Lista vacía';
+      content.appendChild(emptyMsg);
+    } else {
+      // Orden canónico: never → important → pending (siempre en este orden)
+      if (list.never && list.never.length > 0) {
+        const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
+        content.appendChild(neverGroup);
+      }
+      
+      if (list.important && list.important.length > 0) {
+        const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
+        content.appendChild(importantGroup);
+      }
+      
+      if (list.pending && list.pending.length > 0) {
+        const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
+        content.appendChild(pendingGroup);
+      }
     }
     
     listDiv.appendChild(content);
@@ -572,10 +587,26 @@
   }
 
   /**
-   * Maneja la limpieza de un item
+   * Maneja la limpieza de un item (SHARED, acción operativa)
    */
   async function handleCleanItem(item) {
-    if (!state.selectedStudentId) return;
+    if (!state.selectedStudentId) {
+      console.warn('[MasterAlquimiaAlumno] No hay alumno seleccionado');
+      return;
+    }
+    
+    console.log('[MasterAlquimiaAlumno] Limpiando item:', {
+      student_id: state.selectedStudentId,
+      item_ref: item.item_ref,
+      item_nombre: item.item_nombre
+    });
+    
+    // Mostrar indicador de carga
+    const loadingMsg = document.createElement('div');
+    loadingMsg.id = 'cleaning-loading';
+    loadingMsg.className = 'fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50';
+    loadingMsg.textContent = 'Limpiando item...';
+    document.body.appendChild(loadingMsg);
     
     try {
       const response = await fetch('/master/api/alquimia-alumno/clean', {
@@ -593,15 +624,45 @@
       
       const result = await response.json();
       
+      // Remover indicador de carga
+      if (loadingMsg.parentNode) {
+        loadingMsg.parentNode.removeChild(loadingMsg);
+      }
+      
       if (!result.ok) {
         console.error('[MasterAlquimiaAlumno] Error limpiando item:', result.error);
         alert('Error limpiando item: ' + (result.error?.message || 'Error desconocido'));
         return;
       }
       
-      // Refetch megalist
+      if (!result.data?.applied) {
+        console.warn('[MasterAlquimiaAlumno] Limpieza no aplicada:', result.data?.reason);
+        alert('Limpieza no aplicada: ' + (result.data?.reason || 'Razón desconocida'));
+        return;
+      }
+      
+      // Éxito: mostrar mensaje y refetch inmediato
+      const successMsg = document.createElement('div');
+      successMsg.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50';
+      successMsg.textContent = `✓ ${item.item_nombre} marcado como revisado`;
+      document.body.appendChild(successMsg);
+      
+      setTimeout(() => {
+        if (successMsg.parentNode) {
+          successMsg.parentNode.removeChild(successMsg);
+        }
+      }, 2000);
+      
+      // Refetch megalist inmediato (el item debe moverse a "Revisados")
       await loadMegalist(state.selectedStudentId);
+      
+      console.log('[MasterAlquimiaAlumno] Item limpiado exitosamente, megalist refrescada');
     } catch (error) {
+      // Remover indicador de carga
+      if (loadingMsg.parentNode) {
+        loadingMsg.parentNode.removeChild(loadingMsg);
+      }
+      
       console.error('[MasterAlquimiaAlumno] Error limpiando item:', error);
       alert('Error limpiando item: ' + error.message);
     }

@@ -528,15 +528,25 @@ export async function getMegalistForStudent(options = {}) {
       });
     }
     
-    // 8. Convertir map a array y ordenar listas por orden
+    // 8. Asegurar que TODAS las listas canónicas estén presentes (CRÍTICO: listas como estructura)
+    // Las listas NO dependen de items - son estructura base
+    for (const lista of allListas) {
+      if (!listsMap[lista.id]) {
+        listsMap[lista.id] = {
+          lista_id: lista.id,
+          lista_nombre: lista.nombre || 'Sin nombre',
+          lista_tipo: lista.tipo || 'recurrente',
+          never: [],
+          important: [],
+          pending: [],
+          reviewed_by_student: [],
+          reviewed_by_master: []
+        };
+      }
+    }
+    
+    // 9. Convertir map a array y ordenar listas por orden (SIN FILTRAR - todas las listas siempre visibles)
     const lists = Object.values(listsMap)
-      .filter(list => 
-        list.never.length > 0 ||
-        list.important.length > 0 ||
-        list.pending.length > 0 ||
-        list.reviewed_by_student.length > 0 ||
-        list.reviewed_by_master.length > 0
-      )
       .sort((a, b) => {
         // Ordenar por orden de lista (si existe) o por nombre - con fail-open
         const listaA = listasById[a?.lista_id] || null;
@@ -551,7 +561,7 @@ export async function getMegalistForStudent(options = {}) {
         return nombreA.localeCompare(nombreB);
       });
     
-    // 9. Calcular resumen (con fail-open)
+    // 10. Calcular resumen (con fail-open)
     let total = 0;
     let never = 0;
     let important = 0;
@@ -574,7 +584,7 @@ export async function getMegalistForStudent(options = {}) {
     
     const percentReviewed = total > 0 ? Math.round((reviewed / total) * 100) : 0;
     
-    // 10. Construir respuesta
+    // 11. Construir respuesta
     const result = {
       student: {
         id: student.id,
