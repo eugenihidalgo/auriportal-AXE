@@ -9,6 +9,69 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.58.0] - 2025-01-XX
+
+### Added
+- **Level Gates v1 (Multi-Line)**: Sistema canónico de bloqueo declarativo de niveles
+  - **Migración SQL v5.58.0**: Extiende `level_gates` con `display_name` y `description`, añade índices para consultas eficientes
+  - **Condition Engine v1**: Sistema reutilizable de evaluación de condiciones declarativas
+    - Contrato canónico: `{ all: [...] }` o `{ any: [...] }`
+    - Operadores: `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `contains`, `exists`, `truthy`
+    - Sin eval(), sin Function(), sin hacks
+    - Context mínimo: `{ now_iso, student, line, level }`
+  - **Level Engine Modificado**: Aplica gates cuando feature flag está ON
+    - Evalúa gates con Condition Engine cuando `computed_days >= min_days` siguiente nivel
+    - Actualiza `upgrade_status = 'locked'` cuando algún gate falla
+    - Pobla `pending_requirements` con información de gates fallidos
+  - **Señales Genéricas**: Señales genéricas `student.level.*` con backward compat `student.pde.*`
+    - `student.level.changed` (genérica, incluye `line_key`)
+    - `student.level.phase.changed` (genérica, incluye `line_key`)
+    - `student.level.upgrade.pending` (genérica, incluye `line_key`)
+    - `student.level.upgrade.locked` (genérica, incluye `line_key`)
+  - **APIs MASTER de Gates**:
+    - `GET /master/api/levels/lines/:line_key/gates`: Lista gates activos de una línea
+    - `POST /master/api/levels/lines/:line_key/gates`: Crea nuevo gate
+    - `PUT /master/api/levels/gates/:gate_id`: Actualiza gate existente
+    - `POST /master/api/levels/gates/:gate_id/deprecate`: Depreca gate
+  - **UI MASTER de Progreso**: `/master/alumnos/:student_uuid/progreso`
+    - Muestra estados de nivel, fases, gates bloqueantes, historial
+    - Consume APIs MASTER exclusivamente
+    - DOM API only (sin innerHTML dinámico)
+  - **UI MASTER de Gestión Global**: `/master/systema/levels/gates`
+    - Lista líneas y gates
+    - Permite crear, editar y deprecar gates
+    - JSON editor para definiciones de condiciones
+  - **Feature Flag**: `level_gates_v1` (OFF por defecto, runtime, system scope)
+    - Cuando OFF: Level Engine ignora gates, sistema se comporta como antes
+    - Cuando ON: Gates activos pueden bloquear upgrade
+  - **Scripts de Verificación**:
+    - `scripts/verify-level-gates-db.js`: Verifica estructura de BD (columnas, índices)
+    - `scripts/verify-level-gates-sample.js`: Verifica funcionalidad (Condition Engine, repos)
+    - `npm run verify:level-gates`: Ejecuta ambos scripts
+  - **Documentación Completa**: `docs/master/MASTER_LEVEL_GATES_V1.md`
+
+### Changed
+- **`.cursorrules`**: Añadidas reglas canónicas de Level Gates v1, Condition Engine v1 y UI Progreso
+  - "Level Gates v1 como sistema de bloqueo declarativo"
+  - "Condition Engine v1 como evaluador canónico de condiciones"
+  - "Señales genéricas de nivel obligatorias"
+  - "UI Progreso como sección soberana de MASTER/ALUMNOS"
+  - "UI de gestión global de gates"
+- **Level Engine Service**: Modificado para aplicar gates con Condition Engine cuando flag está ON
+- **Signal Registry**: Añadidas señales genéricas `student.level.*` con backward compat
+- **Level Gates Repo**: Añadidos métodos `getById()` y `update()` para gestión completa
+
+### Technical Details
+- **Gates Multi-Línea**: Gates son por `line_key`, soportan múltiples líneas (PDE, productos, mantenimiento, etc.)
+- **Gates NO Congelan Días**: Gates solo bloquean upgrade, no afectan cálculo de días
+- **Evaluación Condicional**: Gates se evalúan SOLO cuando `computed_days >= min_days` del siguiente nivel
+- **Fail-Safe**: Si evaluación de gate falla, se considera como failed (fail-safe)
+- **Auditoría**: Gates evaluados se registran en `student_level_history` con `trace_id`
+- **DOM API Only**: UIs usan DOM API exclusivamente (prohibido innerHTML dinámico)
+- **Anti-Cache**: APIs incluyen headers anti-cache para forensics
+
+---
+
 ## [5.57.0] - 2025-01-XX
 
 ### Added

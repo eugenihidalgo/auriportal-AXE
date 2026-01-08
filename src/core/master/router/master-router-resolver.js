@@ -137,6 +137,11 @@ const MASTER_HANDLER_MAP = {
   'master-api-student-levels': () => import('../../../endpoints/master-api-student-levels.js'),
   'master-api-levels-recompute': () => import('../../../endpoints/master-api-student-levels.js'),
   
+  // Level Gates v1 API Handlers
+  'master-api-levels-lines-gates': () => import('../../../endpoints/master-api-level-gates.js'),
+  'master-api-levels-gates-id': () => import('../../../endpoints/master-api-level-gates.js'),
+  'master-api-levels-gates-id-deprecate': () => import('../../../endpoints/master-api-level-gates.js'),
+  
   // Island Handlers (páginas con handlers específicos)
   'master-dashboard': () => import('../../../endpoints/master-dashboard.js'),
   'master-dashboard-alias': () => import('../../../endpoints/master-dashboard.js'),
@@ -145,7 +150,9 @@ const MASTER_HANDLER_MAP = {
   'master-alumnos-postgresql': () => import('../../../endpoints/master-alumnos-postgresql.js'),
   'master-alumnos-alumnos': () => import('../../../endpoints/master-alumnos-alumnos.js'),
   'master-alumnos-info': () => import('../../../endpoints/master-alumnos-info.js'),
+  'master-alumnos-progreso': () => import('../../../endpoints/master-alumnos-progreso.js'),
   'master-systema': () => import('../../../endpoints/master-systema.js'),
+  'master-systema-levels-gates': () => import('../../../endpoints/master-systema-levels-gates.js'),
   
   // Templo de Luz Handlers
   'master-templo-luz-alquimia-general': () => import('../../../endpoints/master-templo-luz-alquimia-general.js'),

@@ -44,8 +44,35 @@ export function getActiveByLine(lineKey) {
  * @param {string} data.gate_key - Clave única del gate
  * @param {Object} [data.definition={}] - Definición JSONB
  * @param {string} [data.status='active'] - Estado
+ * @param {string} [data.display_name] - Nombre mostrado
+ * @param {string} [data.description] - Descripción
  * @returns {Promise<Object>} Gate creado
  */
 export function create(data) {
   throw new Error('create debe ser implementado por el repositorio concreto');
+}
+
+/**
+ * CONTRATO: getById(gateId)
+ * 
+ * Obtiene un gate por su ID.
+ * 
+ * @param {string} gateId - UUID del gate
+ * @returns {Promise<Object|null>} Gate o null si no existe
+ */
+export function getById(gateId) {
+  throw new Error('getById debe ser implementado por el repositorio concreto');
+}
+
+/**
+ * CONTRATO: update(gateId, patch)
+ * 
+ * Actualiza un gate existente.
+ * 
+ * @param {string} gateId - UUID del gate
+ * @param {Object} patch - Campos a actualizar (parcial)
+ * @returns {Promise<Object|null>} Gate actualizado o null si no existe
+ */
+export function update(gateId, patch) {
+  throw new Error('update debe ser implementado por el repositorio concreto');
 }

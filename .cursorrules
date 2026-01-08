@@ -359,5 +359,83 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Automatizaciones consumen señales y ejecutan acciones
       - Documentar el pipeline en documentación canónica
 
+  - id: level-gates-v1-authority
+    title: Level Gates v1 como sistema de bloqueo declarativo
+    content: >
+      Level Gates v1 es el sistema canónico de bloqueo de niveles.
+      PROHIBIDO:
+      - Hardcodear lógica de gates en UI o handlers
+      - Evaluar condiciones en pantallas
+      - Congelar días por gates (gates solo bloquean upgrade, no días)
+      - Duplicar lógica de evaluación de gates
+      OBLIGATORIO:
+      - Gates se evalúan SOLO en Level Engine usando Condition Engine
+      - Gates son multi-línea (por line_key, no por producto)
+      - Gates se evalúan SOLO cuando computed_days >= min_days del siguiente nivel
+      - upgrade_status = locked cuando algún gate falla
+      - pending_requirements contiene explicación de gates fallidos
+
+  - id: condition-engine-v1-canonical
+    title: Condition Engine v1 como evaluador canónico de condiciones
+    content: >
+      Condition Engine v1 es el ÚNICO evaluador de condiciones declarativas.
+      PROHIBIDO:
+      - Usar eval() o Function() para evaluar condiciones
+      - Evaluar condiciones en UI o handlers directamente
+      - Crear evaluadores alternativos
+      OBLIGATORIO:
+      - Todas las condiciones usan Condition Engine v1
+      - Contrato canónico: { all:[...] } o { any:[...] }
+      - Clauses: { path, op, value? }
+      - Ops mínimas: == != > >= < <= in contains exists truthy
+      - Context mínimo: student, line, level, now_iso
+      - Sin eval(), sin Function(), sin hacks
+
+  - id: signals-generic-level-obligatory
+    title: Señales genéricas de nivel obligatorias
+    content: >
+      Las señales de nivel DEBEN ser genéricas (student.level.*) con backward compat.
+      OBLIGATORIAS:
+      - student.level.changed (genérica, incluye line_key)
+      - student.level.phase.changed (genérica, incluye line_key)
+      - student.level.upgrade.pending (genérica, incluye line_key)
+      - student.level.upgrade.locked (genérica, incluye line_key)
+      BACKWARD COMPAT:
+      - Si line_key === 'pde', emitir TAMBIÉN student.pde.*
+      - Payload SIEMPRE incluye: student_id, line_key, before/after, computed_days, trace_id
+
+  - id: ui-progreso-sovereign-section
+    title: UI Progreso como sección soberana de MASTER/ALUMNOS
+    content: >
+      /master/alumnos/:student_uuid/progreso es una SECCIÓN MAYOR, no un tab o subpanel.
+      PROHIBIDO:
+      - Calcular niveles, días o fases en UI
+      - Duplicar lógica del Level Engine
+      - Usar APIs ADMIN desde MASTER
+      - Ejecutar inject_main.js en MASTER
+      - Usar innerHTML dinámico
+      OBLIGATORIO:
+      - Consumir SOLO APIs MASTER
+      - DOM API only
+      - Scripts cargados por contrato MASTER
+      - Handler MASTER propio
+      - Subsecciones: resumen, niveles, fases, bloqueos, historial, overrides, diagnóstico
+
+  - id: ui-gates-global-management
+    title: UI de gestión global de gates
+    content: >
+      UI mínima pero real para gestionar gates globalmente.
+      OBLIGATORIO:
+      - Listar líneas, niveles y gates
+      - Crear gate (JSON editor)
+      - Editar gate
+      - Deprecar gate
+      - DOM API only
+      - BUILD_STAMP visible
+      - Usar convención existente (templo-luz o system)
+      PROHIBIDO:
+      - Inventar arquitectura nueva
+      - Hardcodear lógica de gates
+
 
 

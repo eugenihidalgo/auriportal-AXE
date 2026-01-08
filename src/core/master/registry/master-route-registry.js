@@ -507,6 +507,24 @@ export const MASTER_ROUTES = [
     method: 'POST'
   },
   {
+    key: 'master-api-levels-lines-gates',
+    path: '/master/api/levels/lines/:line_key/gates',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-levels-gates-id',
+    path: '/master/api/levels/gates/:gate_id',
+    type: 'api',
+    method: 'PUT'
+  },
+  {
+    key: 'master-api-levels-gates-id-deprecate',
+    path: '/master/api/levels/gates/:gate_id/deprecate',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'master-api-sponsors-id',
     path: '/master/api/sponsors/:id',
     type: 'api'
@@ -600,8 +618,18 @@ export const MASTER_ROUTES = [
     type: 'island'
   },
   {
+    key: 'master-alumnos-progreso',
+    path: '/master/alumnos/:student_uuid/progreso',
+    type: 'island'
+  },
+  {
     key: 'master-systema',
     path: '/master/systema',
+    type: 'island'
+  },
+  {
+    key: 'master-systema-levels-gates',
+    path: '/master/systema/levels/gates',
     type: 'island'
   },
   

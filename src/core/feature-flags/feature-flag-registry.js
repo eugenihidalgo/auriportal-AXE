@@ -102,6 +102,15 @@ export const FEATURE_FLAG_REGISTRY = [
     scope: 'system',
     default: false,
     irreversible: false
+  },
+  
+  {
+    key: 'level_gates_v1',
+    description: 'Controla si Level Gates v1 está activo (gates bloquean upgrade cuando fallan)',
+    type: 'runtime',
+    scope: 'system',
+    default: false,
+    irreversible: false
   }
 ];
 

@@ -9,8 +9,8 @@
 import 'dotenv/config';
 import { query } from '../database/pg.js';
 import { initPostgreSQL } from '../database/pg.js';
-import { isFeatureEnabled } from '../core/flags/feature-flags.js';
-import { computeAndPersist, getStudentLevels } from '../core/master/services/level-engine-service.js';
+import { isEnabled } from '../src/core/feature-flags/feature-flag-service.js';
+import { computeAndPersist, getStudentLevels } from '../src/core/master/services/level-engine-service.js';
 import { randomUUID } from 'crypto';
 
 async function verifyLevelEngineSample() {
@@ -24,10 +24,10 @@ async function verifyLevelEngineSample() {
     console.log('[VERIFY][LevelEngine] ✅ PostgreSQL conectado\n');
     
     // Verificar feature flag
-    const flagEnabled = isFeatureEnabled('level_engine_pde_v1');
+    const flagEnabled = await isEnabled('level_engine_pde_v1');
     console.log(`[VERIFY][LevelEngine] Feature flag level_engine_pde_v1: ${flagEnabled}\n`);
     
-    if (flagEnabled === 'off') {
+    if (!flagEnabled) {
       console.log('[VERIFY][LevelEngine] ⚠️  Feature flag OFF - ejecutando en modo dry-run\n');
     }
     

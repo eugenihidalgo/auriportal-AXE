@@ -19,12 +19,13 @@ import { getDefaultLevelGatesRepo } from '../../../infra/repos/levels/level-gate
 import { getDefaultStudentLevelStateRepo } from '../../../infra/repos/levels/student-level-state-repo-pg.js';
 import { getDefaultStudentLevelHistoryRepo } from '../../../infra/repos/levels/student-level-history-repo-pg.js';
 import { getDefaultStudentOperationalStateRepo } from '../../../infra/repos/student-operational-state-repo-pg.js';
-import { getDefaultStudentRepo } from '../../../infra/repos/student-repo-pg.js';
 import { dispatchSignal } from '../../signals/signal-dispatcher.js';
 import { query, getPool } from '../../../../database/pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logInfo, logWarn, logError } from '../../observability/logger.js';
 import { randomUUID } from 'crypto';
+import { isEnabled } from '../../feature-flags/feature-flag-service.js';
+import { evaluateCondition } from '../../conditions/condition-evaluator.js';
 
 /**
  * Resuelve la fecha de inicio de un alumno para una línea específica.
@@ -41,50 +42,64 @@ async function resolveStudentStartDate(studentId, lineKey) {
     // Prioridad 2: legacy alumnos.fecha_inscripcion (si link existe)
     // Fallback: now() (registrar en meta)
     
-    const studentRepo = getDefaultStudentRepo();
-    const student = await studentRepo.getById(studentId);
-    
-    if (!student) {
-      logWarn('LevelEngine', 'Student no encontrado para resolver fecha de inicio', { student_id: studentId, line_key: lineKey });
-      return new Date(); // Fallback: ahora
-    }
-    
-    // Intentar students.created_at
-    if (student.created_at) {
-      return new Date(student.created_at);
-    }
-    
-    // Intentar legacy alumnos.fecha_inscripcion si existe link
-    if (student.legacy_alumno_id) {
-      try {
-        const legacyResult = await query(
-          'SELECT fecha_inscripcion FROM alumnos WHERE id = $1',
-          [student.legacy_alumno_id]
-        );
-        if (legacyResult.rows[0] && legacyResult.rows[0].fecha_inscripcion) {
-          const legacyDate = legacyResult.rows[0].fecha_inscripcion;
-          logInfo('LevelEngine', 'Usando fecha legacy alumnos.fecha_inscripcion', {
+    // Consultar directamente la tabla students (UUID)
+    try {
+      const studentResult = await query(
+        'SELECT id, created_at, legacy_alumno_id FROM students WHERE id = $1',
+        [studentId]
+      );
+      
+      if (!studentResult.rows[0]) {
+        logWarn('LevelEngine', 'Student no encontrado para resolver fecha de inicio', { student_id: studentId, line_key: lineKey });
+        return new Date(); // Fallback: ahora
+      }
+      
+      const student = studentResult.rows[0];
+      
+      // Intentar students.created_at
+      if (student.created_at) {
+        return new Date(student.created_at);
+      }
+      
+      // Intentar legacy alumnos.fecha_inscripcion si existe link
+      if (student.legacy_alumno_id) {
+        try {
+          const legacyResult = await query(
+            'SELECT fecha_inscripcion FROM alumnos WHERE id = $1',
+            [student.legacy_alumno_id]
+          );
+          if (legacyResult.rows[0] && legacyResult.rows[0].fecha_inscripcion) {
+            const legacyDate = legacyResult.rows[0].fecha_inscripcion;
+            logInfo('LevelEngine', 'Usando fecha legacy alumnos.fecha_inscripcion', {
+              student_id: studentId,
+              legacy_alumno_id: student.legacy_alumno_id,
+              fecha_inscripcion: legacyDate
+            });
+            return new Date(legacyDate);
+          }
+        } catch (error) {
+          logWarn('LevelEngine', 'Error consultando legacy alumnos (continuando)', {
             student_id: studentId,
             legacy_alumno_id: student.legacy_alumno_id,
-            fecha_inscripcion: legacyDate
+            error: error.message
           });
-          return new Date(legacyDate);
         }
-      } catch (error) {
-        logWarn('LevelEngine', 'Error consultando legacy alumnos (continuando)', {
-          student_id: studentId,
-          legacy_alumno_id: student.legacy_alumno_id,
-          error: error.message
-        });
       }
+      
+      // Fallback: now() (registrar en meta)
+      logWarn('LevelEngine', 'Usando fallback now() para fecha de inicio (registrar en meta)', {
+        student_id: studentId,
+        line_key: lineKey
+      });
+      return new Date();
+    } catch (error) {
+      logWarn('LevelEngine', 'Error consultando students (usando fallback)', {
+        student_id: studentId,
+        line_key: lineKey,
+        error: error.message
+      });
+      return new Date();
     }
-    
-    // Fallback: now() (registrar en meta)
-    logWarn('LevelEngine', 'Usando fallback now() para fecha de inicio (registrar en meta)', {
-      student_id: studentId,
-      line_key: lineKey
-    });
-    return new Date();
   }
   
   // Para otras líneas, usar lógica similar (por ahora mismo fallback)
@@ -275,19 +290,112 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
   let currentLevelNumber = currentLevel ? currentLevel.level_number : null;
   
   if (currentLevel) {
-    // Verificar si hay gates activos para el siguiente nivel
+    // Verificar si hay siguiente nivel
     const nextLevelNumber = currentLevel.level_number + 1;
-    const gatesRepo = getDefaultLevelGatesRepo();
-    const activeGates = await gatesRepo.getActiveByLineAndLevel(lineKey, nextLevelNumber);
+    const nextLevel = await levelDefsRepo.getByLineAndLevel(lineKey, nextLevelNumber);
     
-    if (activeGates.length > 0) {
-      // Hay gates activos: verificar si computed_days alcanza el siguiente nivel
-      const nextLevel = await levelDefsRepo.getByLineAndLevel(lineKey, nextLevelNumber);
+    if (!nextLevel) {
+      // No hay siguiente nivel: available (está en máximo nivel)
+      upgradeStatus = 'ok';
+    } else if (computedDays < nextLevel.min_days) {
+      // Aún no cumple días mínimos: available
+      upgradeStatus = 'ok';
+    } else {
+      // Cumple días: verificar gates si el flag está ON
+      const gatesEnabled = await isEnabled('level_gates_v1');
       
-      if (nextLevel && computedDays >= nextLevel.min_days) {
-        // Cumple días pero hay gates: pending_requirements
+      if (!gatesEnabled) {
+        // Flag OFF: pending (puede subir)
         upgradeStatus = 'pending_requirements';
-        pendingRequirements = activeGates.map(gate => gate.gate_key);
+      } else {
+        // Flag ON: evaluar gates con Condition Engine
+        const gatesRepo = getDefaultLevelGatesRepo();
+        const activeGates = await gatesRepo.getActiveByLineAndLevel(lineKey, nextLevelNumber);
+        
+        if (activeGates.length === 0) {
+          // No hay gates: pending
+          upgradeStatus = 'pending_requirements';
+        } else {
+          // Hay gates: evaluar cada uno
+          const failedGates = [];
+          
+          // Construir contexto para Condition Engine
+          const studentResult = await query(
+            'SELECT id, created_at FROM students WHERE id = $1',
+            [studentId]
+          );
+          const student = studentResult.rows[0];
+          
+          const conditionCtx = {
+            now_iso: now.toISOString(),
+            student: {
+              id: student?.id || studentId,
+              uuid: studentId,
+              email: null, // Se puede obtener si es necesario
+              apodo: null, // Se puede obtener si es necesario
+              created_at: student?.created_at || startedAt.toISOString()
+            },
+            line: {
+              line_key: lineKey
+            },
+            level: {
+              started_at: startedAt.toISOString(),
+              frozen_seconds: frozenSeconds,
+              computed_days: computedDays,
+              current_level_number: currentLevelNumber,
+              next_level_number: nextLevelNumber,
+              next_level_min_days: nextLevel.min_days
+            }
+          };
+          
+          // Evaluar cada gate
+          for (const gate of activeGates) {
+            try {
+              if (!gate.definition || Object.keys(gate.definition).length === 0) {
+                // Gate sin definición: considerar como passed (no bloquea)
+                continue;
+              }
+              
+              const evaluation = await evaluateCondition(gate.definition, conditionCtx);
+              
+              if (!evaluation.ok) {
+                // Gate falló: añadir a failed
+                failedGates.push({
+                  gate_key: gate.gate_key,
+                  display_name: gate.display_name || gate.gate_key,
+                  missing: evaluation.missing || []
+                });
+              }
+            } catch (error) {
+              // Error evaluando gate: considerar como failed (fail-safe)
+              logWarn('LevelEngine', 'Error evaluando gate (considerando como failed)', {
+                gate_key: gate.gate_key,
+                error: error.message,
+                student_id: studentId,
+                line_key: lineKey,
+                trace_id: traceId
+              });
+              failedGates.push({
+                gate_key: gate.gate_key,
+                display_name: gate.display_name || gate.gate_key,
+                missing: [`evaluation error: ${error.message}`]
+              });
+            }
+          }
+          
+          if (failedGates.length > 0) {
+            // Al menos un gate falló: locked
+            upgradeStatus = 'locked';
+            pendingRequirements = failedGates.map(fg => ({
+              gate_key: fg.gate_key,
+              display_name: fg.display_name,
+              missing: fg.missing
+            }));
+          } else {
+            // Todos los gates pasaron: pending
+            upgradeStatus = 'pending_requirements';
+          }
+        }
       }
     }
   }
@@ -322,6 +430,9 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
   // Persistir estado e historial en transacción
   const pool = getPool();
   const client = await pool.connect();
+  
+  const stateRepo = getDefaultStudentLevelStateRepo();
+  const historyRepo = getDefaultStudentLevelHistoryRepo();
   
   try {
     await client.query('BEGIN');
@@ -359,18 +470,26 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
     
     // Emitir señales si hay cambios relevantes
     // Nota: Fail-open si dispatcher falla
+    // Emitir señales genéricas (student.level.*) + backward compat (student.pde.*)
+    
     if (levelChanged) {
       try {
+        // Señal genérica
         await dispatchSignal({
-          signal_key: 'student.pde.level.changed',
+          signal_key: 'student.level.changed',
           payload: {
             student_id: studentId,
             line_key: lineKey,
             computed_days: computedDays,
-            level_number: currentLevelNumber,
-            previous_level_number: previousLevelNumber,
+            before: {
+              level_number: previousLevelNumber
+            },
+            after: {
+              level_number: currentLevelNumber
+            },
             upgrade_status: upgradeStatus,
-            pending_requirements_count: pendingRequirements.length
+            pending_requirements_count: pendingRequirements.length,
+            trace_id: traceId
           },
           runtime: {
             trace_id: traceId
@@ -378,6 +497,28 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
         }, {
           source: { type: actorType, id: actorId || 'system' }
         });
+        
+        // Backward compat: emitir también student.pde.* si line_key === 'pde'
+        if (lineKey === 'pde') {
+          await dispatchSignal({
+            signal_key: 'student.pde.level.changed',
+            payload: {
+              student_id: studentId,
+              line_key: lineKey,
+              computed_days: computedDays,
+              level_number: currentLevelNumber,
+              previous_level_number: previousLevelNumber,
+              upgrade_status: upgradeStatus,
+              pending_requirements_count: pendingRequirements.length,
+              trace_id: traceId
+            },
+            runtime: {
+              trace_id: traceId
+            }
+          }, {
+            source: { type: actorType, id: actorId || 'system' }
+          });
+        }
       } catch (signalError) {
         logWarn('LevelEngine', 'Error emitiendo señal level.changed (continuando)', {
           error: signalError.message,
@@ -390,14 +531,20 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
     
     if (phaseChanged) {
       try {
+        // Señal genérica
         await dispatchSignal({
-          signal_key: 'student.pde.phase.changed',
+          signal_key: 'student.level.phase.changed',
           payload: {
             student_id: studentId,
             line_key: lineKey,
             computed_days: computedDays,
-            phase_key: currentPhase ? currentPhase.phase_key : null,
-            previous_phase_key: previousPhaseKey
+            before: {
+              phase_key: previousPhaseKey
+            },
+            after: {
+              phase_key: currentPhase ? currentPhase.phase_key : null
+            },
+            trace_id: traceId
           },
           runtime: {
             trace_id: traceId
@@ -405,6 +552,26 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
         }, {
           source: { type: actorType, id: actorId || 'system' }
         });
+        
+        // Backward compat: emitir también student.pde.* si line_key === 'pde'
+        if (lineKey === 'pde') {
+          await dispatchSignal({
+            signal_key: 'student.pde.phase.changed',
+            payload: {
+              student_id: studentId,
+              line_key: lineKey,
+              computed_days: computedDays,
+              phase_key: currentPhase ? currentPhase.phase_key : null,
+              previous_phase_key: previousPhaseKey,
+              trace_id: traceId
+            },
+            runtime: {
+              trace_id: traceId
+            }
+          }, {
+            source: { type: actorType, id: actorId || 'system' }
+          });
+        }
       } catch (signalError) {
         logWarn('LevelEngine', 'Error emitiendo señal phase.changed (continuando)', {
           error: signalError.message,
@@ -417,14 +584,17 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
     
     if (upgradeStatusChanged && upgradeStatus === 'pending_requirements') {
       try {
+        // Señal genérica
         await dispatchSignal({
-          signal_key: 'student.pde.upgrade.pending',
+          signal_key: 'student.level.upgrade.pending',
           payload: {
             student_id: studentId,
             line_key: lineKey,
             computed_days: computedDays,
-            target_level_number: currentLevelNumber ? currentLevelNumber + 1 : null,
-            pending_requirements: pendingRequirements
+            current_level_number: currentLevelNumber,
+            next_level_number: currentLevelNumber ? currentLevelNumber + 1 : null,
+            pending_requirements: pendingRequirements,
+            trace_id: traceId
           },
           runtime: {
             trace_id: traceId
@@ -432,6 +602,26 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
         }, {
           source: { type: actorType, id: actorId || 'system' }
         });
+        
+        // Backward compat: emitir también student.pde.* si line_key === 'pde'
+        if (lineKey === 'pde') {
+          await dispatchSignal({
+            signal_key: 'student.pde.upgrade.pending',
+            payload: {
+              student_id: studentId,
+              line_key: lineKey,
+              computed_days: computedDays,
+              target_level_number: currentLevelNumber ? currentLevelNumber + 1 : null,
+              pending_requirements: pendingRequirements,
+              trace_id: traceId
+            },
+            runtime: {
+              trace_id: traceId
+            }
+          }, {
+            source: { type: actorType, id: actorId || 'system' }
+          });
+        }
       } catch (signalError) {
         logWarn('LevelEngine', 'Error emitiendo señal upgrade.pending (continuando)', {
           error: signalError.message,
@@ -444,15 +634,17 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
     
     if (upgradeStatusChanged && upgradeStatus === 'locked') {
       try {
+        // Señal genérica
         await dispatchSignal({
-          signal_key: 'student.pde.upgrade.locked',
+          signal_key: 'student.level.upgrade.locked',
           payload: {
             student_id: studentId,
             line_key: lineKey,
             computed_days: computedDays,
             current_level_number: currentLevelNumber,
-            upgrade_status: upgradeStatus,
-            pending_requirements: pendingRequirements
+            target_level_number: currentLevelNumber ? currentLevelNumber + 1 : null,
+            pending_requirements: pendingRequirements,
+            trace_id: traceId
           },
           runtime: {
             trace_id: traceId
@@ -460,6 +652,27 @@ export async function computeAndPersist(studentId, lineKey, now = new Date(), op
         }, {
           source: { type: actorType, id: actorId || 'system' }
         });
+        
+        // Backward compat: emitir también student.pde.* si line_key === 'pde'
+        if (lineKey === 'pde') {
+          await dispatchSignal({
+            signal_key: 'student.pde.upgrade.locked',
+            payload: {
+              student_id: studentId,
+              line_key: lineKey,
+              computed_days: computedDays,
+              current_level_number: currentLevelNumber,
+              upgrade_status: upgradeStatus,
+              pending_requirements: pendingRequirements,
+              trace_id: traceId
+            },
+            runtime: {
+              trace_id: traceId
+            }
+          }, {
+            source: { type: actorType, id: actorId || 'system' }
+          });
+        }
       } catch (signalError) {
         logWarn('LevelEngine', 'Error emitiendo señal upgrade.locked (continuando)', {
           error: signalError.message,

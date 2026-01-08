@@ -522,7 +522,75 @@ export const STUDENT_SIGNAL_REGISTRY = {
   },
 
   // ============================================
-  // LEVEL ENGINE SIGNALS (Level Engine PDE v1)
+  // LEVEL ENGINE SIGNALS (Genéricas + Backward Compat)
+  // ============================================
+  'student.level.changed': {
+    key: 'student.level.changed',
+    description: 'Se emite cuando cambia el nivel de un alumno en cualquier línea (genérica)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'UUID del alumno',
+      line_key: 'Clave de la línea (ej: pde)',
+      computed_days: 'Días calculados desde inicio',
+      before: 'Objeto con nivel anterior { level_number, level_title? }',
+      after: 'Objeto con nivel nuevo { level_number, level_title? }',
+      upgrade_status: 'Estado de upgrade (ok, pending_requirements, locked)',
+      pending_requirements_count: 'Número de requisitos pendientes',
+      trace_id: 'ID de traza'
+    }
+  },
+  'student.level.phase.changed': {
+    key: 'student.level.phase.changed',
+    description: 'Se emite cuando cambia la fase de un alumno en cualquier línea (genérica)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'UUID del alumno',
+      line_key: 'Clave de la línea (ej: pde)',
+      computed_days: 'Días calculados desde inicio',
+      before: 'Objeto con fase anterior { phase_key, phase_name? }',
+      after: 'Objeto con fase nueva { phase_key, phase_name? }',
+      trace_id: 'ID de traza'
+    }
+  },
+  'student.level.upgrade.pending': {
+    key: 'student.level.upgrade.pending',
+    description: 'Se emite cuando un alumno cumple días para subir de nivel pero tiene requisitos pendientes (genérica)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'UUID del alumno',
+      line_key: 'Clave de la línea (ej: pde)',
+      computed_days: 'Días calculados desde inicio',
+      current_level_number: 'Número del nivel actual',
+      next_level_number: 'Número del nivel objetivo',
+      pending_requirements: 'Array con información de gates pendientes',
+      trace_id: 'ID de traza'
+    }
+  },
+  'student.level.upgrade.locked': {
+    key: 'student.level.upgrade.locked',
+    description: 'Se emite cuando un alumno está bloqueado para subir de nivel (genérica)',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'UUID del alumno',
+      line_key: 'Clave de la línea (ej: pde)',
+      computed_days: 'Días calculados desde inicio',
+      current_level_number: 'Número del nivel actual',
+      target_level_number: 'Número del nivel objetivo',
+      pending_requirements: 'Array con información de gates bloqueantes',
+      trace_id: 'ID de traza'
+    }
+  },
+  
+  // ============================================
+  // LEVEL ENGINE SIGNALS (Backward Compat - PDE específicas)
   // ============================================
   'student.pde.level.changed': {
     key: 'student.pde.level.changed',

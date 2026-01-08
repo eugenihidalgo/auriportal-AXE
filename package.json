@@ -17,6 +17,7 @@
     "verificar-v4": "node scripts/verificar-v4.js",
     "audit:no-sqlite": "node scripts/audit-no-sqlite.js",
     "verify:levels": "node scripts/verify-level-engine-db.js && node scripts/verify-level-engine-sample.js",
+    "verify:level-gates": "node scripts/verify-level-gates-db.js && node scripts/verify-level-gates-sample.js",
     "mcp:google-workspace": "node mcp-server/google-workspace.js",
     "mcp:test": "node mcp-server/test-connection.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
