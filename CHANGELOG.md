@@ -9,6 +9,51 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.60.0] - 2026-01-08
+
+### Added
+- **Panel Alquimia del Alumno v1**: Nueva pantalla `/master/templo-luz/alquimia-alumno`
+  - Selector de alumno arriba con búsqueda (reutiliza API `/master/api/students`)
+  - Deep-link soportado: `?student_id=...` autoselecciona y carga
+  - Empty state cuando no hay alumno seleccionado
+  - Megalista operativa agrupada por listas con orden canónico:
+    - NUNCA (gris) → IMPORTANTE (rojo) → PENDIENTE (amarillo) → REVISADO (verde)
+  - Revisados separados por actor: "Por Alumno" y "Por Master" (ambos por listas)
+  - Limpieza ítem-por-ítem SHARED con update instantáneo
+  - Historial completo por ítem (modal simplificado)
+  - Informe básico v1 por días (separando Master vs Alumno, sin sesiones)
+  - Resumen con porcentaje de revisados y contadores por estado
+- **Servicio Megalista**: `alquimia-alumno-megalist-service.js`
+  - Read model v1 que construye megalista desde `cleaning_item_state` (SHARED)
+  - Calcula estados determinísticos (never/important/pending/reviewed)
+  - Separa revisados por actor desde `cleaning_events`
+  - Respeta nivel efectivo del alumno (excluye items no aplicables)
+- **APIs MASTER canónicas** (4 endpoints con doble registro):
+  - `GET /master/api/alquimia-alumno/megalist?student_id=...&levels_mode=...`
+  - `POST /master/api/alquimia-alumno/clean` (limpieza SHARED ítem-por-ítem)
+  - `GET /master/api/alquimia-alumno/item-history?student_id=...&domain_type=...&item_ref=...&limit=...`
+  - `GET /master/api/alquimia-alumno/report?student_id=...&days=...`
+  - Todas con respuestas JSON canónicas `{ ok, data|error, trace_id }` incluso en 500
+  - Anti-cache headers obligatorios
+  - Registradas en `master-route-registry.js` y mapeadas en `MASTER_HANDLER_MAP`
+- **UI MASTER canónica**:
+  - Handler: `master-templo-luz-alquimia-alumno.js`
+  - Cliente JS: `master-alquimia-alumno-client.js` (DOM API only, sin innerHTML)
+  - Script cargado por contrato en `master-layout-registry.v1.json`
+
+### Changed
+- **Registry MASTER**: Actualizado `master-route-registry.js` con 4 nuevas rutas API
+- **Handler Map MASTER**: Actualizado `master-router-resolver.js` con mapeos de nuevos endpoints
+
+### Technical Notes
+- Panel solo usa limpiezas SHARED (no PDE)
+- No existe "limpiar todo" (solo ítem-por-ítem)
+- Estado calculado desde `cleaning_item_state` (no `student_item_state`)
+- Historial desde `cleaning_events` (append-only)
+- Informe básico sin concepto de "sesión" (solo por días)
+
+---
+
 ## [5.59.5] - 2026-01-08
 
 ### Fixed

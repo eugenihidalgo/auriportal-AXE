@@ -54,9 +54,11 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-groups': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista-classification': () => import('../../../endpoints/master-api-alquimia-general.js'),
   
-  // Alquimia por Alumno API Handlers
-  'master-api-alquimia-alumno': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
-  'master-api-alquimia-clean': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  // Alquimia por Alumno API Handlers (Panel Alquimia del Alumno v1)
+  'master-api-alquimia-alumno-megalist': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-alquimia-alumno-clean': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-alquimia-alumno-item-history': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-alquimia-alumno-report': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   
   // Tags API Handlers (TAG SOT GLOBAL v1)
   'master-api-tags': () => import('../../../endpoints/master-api-tags.js'),

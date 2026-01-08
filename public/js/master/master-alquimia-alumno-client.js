@@ -1,37 +1,138 @@
 /**
- * MASTER Alquimia por Alumno Client
+ * MASTER ALQUIMIA ALUMNO CLIENT v1
  * 
- * Cliente JavaScript para la UI de Alquimia por Alumno.
+ * Cliente JavaScript canónico para el Panel Alquimia del Alumno en dominio MASTER.
  * 
- * REGLAS CONSTITUCIONALES:
- * - DOM API únicamente (sin innerHTML)
- * - No lógica de negocio en frontend
+ * REGLAS ABSOLUTAS:
+ * - Prohibido innerHTML, template literals con HTML, concatenación de strings HTML
+ * - Usar SOLO DOM API (createElement, textContent, appendChild, etc.)
+ * - La UI NO calcula estados (todo viene del backend)
  * - Refetch después de mutaciones
+ * 
+ * CONTRATO:
+ * - Se ejecuta cuando window.__AP_CONTEXT__ === 'MASTER'
+ * - Bootstrap autoejecutable con guards
  */
 
 (function() {
   'use strict';
-  
-  // Verificar que estamos en el contexto correcto
-  if (typeof window === 'undefined' || !document.getElementById('alquimia-alumno-container')) {
+
+  // CLIENT SENTINEL: Log al cargar el módulo
+  console.log('[MASTER][ALQUIMIA_ALUMNO] client loaded', {
+    time: Date.now(),
+    context: window.__AP_CONTEXT__,
+    readyState: document.readyState
+  });
+
+  // Guard: Verificar contexto MASTER y contenedor
+  if (typeof window === 'undefined' || window.__AP_CONTEXT__ !== 'MASTER') {
+    console.warn('[MasterAlquimiaAlumno] No ejecutando en contexto no-MASTER');
     return;
   }
-  
-  // Estado
-  let students = [];
-  let filteredStudents = [];
-  let currentStudentId = null;
-  let currentData = null;
-  
+
+  const rootContainer = document.getElementById('master-alquimia-alumno-root');
+  if (!rootContainer) {
+    console.warn('[MASTER][ALQUIMIA_ALUMNO] root not found');
+    return;
+  }
+
+  // CLIENT SENTINEL: Insertar bloque visible para confirmar que el script se ejecutó
+  try {
+    const clientSentinel = document.createElement('div');
+    clientSentinel.id = 'ap-client-sentinel';
+    clientSentinel.style.cssText = 'background: #10b981; color: #000; padding: 0.25rem 0.5rem; font-size: 0.75rem; font-family: monospace; margin-bottom: 0.5rem; border-radius: 0.25rem;';
+    clientSentinel.textContent = 'CLIENT_SENTINEL: booted';
+    
+    const serverSentinel = document.getElementById('ap-sentinel');
+    if (serverSentinel && serverSentinel.nextSibling) {
+      rootContainer.insertBefore(clientSentinel, serverSentinel.nextSibling);
+    } else {
+      rootContainer.insertBefore(clientSentinel, rootContainer.firstChild);
+    }
+  } catch (sentinelError) {
+    console.error('[MASTER][ALQUIMIA_ALUMNO] Error creando client sentinel:', sentinelError);
+  }
+
+  // Estado global
+  const state = {
+    students: [],
+    selectedStudentId: null,
+    megalistData: null,
+    loading: false
+  };
+
   // Elementos DOM
-  const studentSearch = document.getElementById('student-search');
-  const studentSelect = document.getElementById('student-select');
-  const progressIndicator = document.getElementById('progress-indicator');
-  const progressText = document.getElementById('progress-text');
-  const progressBar = document.getElementById('progress-bar');
-  const listasContainer = document.getElementById('listas-container');
-  const errorMessage = document.getElementById('error-message');
-  
+  const studentSelectorContainer = document.getElementById('student-selector-container');
+  const emptyState = document.getElementById('empty-state');
+  const panelContent = document.getElementById('panel-content');
+  const summarySection = document.getElementById('summary-section');
+  const megalistSection = document.getElementById('megalist-section');
+  const reviewedSection = document.getElementById('reviewed-section');
+  const reviewedByStudent = document.getElementById('reviewed-by-student');
+  const reviewedByMaster = document.getElementById('reviewed-by-master');
+  const reportSection = document.getElementById('report-section');
+  const reportContent = document.getElementById('report-content');
+
+  /**
+   * Inicialización
+   */
+  async function init() {
+    console.log('[MasterAlquimiaAlumno] Inicializando...');
+    
+    // Renderizar selector de alumno
+    renderStudentSelector();
+    
+    // Cargar lista de alumnos
+    await loadStudents();
+    
+    // Verificar deep-link (?student_id=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const studentIdParam = urlParams.get('student_id');
+    if (studentIdParam) {
+      const studentId = parseInt(studentIdParam, 10);
+      if (studentId && !isNaN(studentId)) {
+        selectStudent(studentId);
+      }
+    }
+  }
+
+  /**
+   * Renderiza el selector de alumno
+   */
+  function renderStudentSelector() {
+    if (!studentSelectorContainer) return;
+    
+    // Input de búsqueda
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Buscar alumno por nombre o email...';
+    searchInput.className = 'px-4 py-2 bg-slate-800 text-white border border-slate-700 rounded-lg flex-1';
+    searchInput.id = 'student-search-input';
+    
+    // Select dropdown
+    const select = document.createElement('select');
+    select.id = 'student-select';
+    select.className = 'px-4 py-2 bg-slate-800 text-white border border-slate-700 rounded-lg ml-2';
+    select.innerHTML = '<option value="">Seleccionar alumno...</option>';
+    
+    // Event listeners
+    searchInput.addEventListener('input', (e) => {
+      filterStudents(e.target.value);
+    });
+    
+    select.addEventListener('change', (e) => {
+      const studentId = parseInt(e.target.value, 10);
+      if (studentId && !isNaN(studentId)) {
+        selectStudent(studentId);
+      } else {
+        clearSelection();
+      }
+    });
+    
+    studentSelectorContainer.appendChild(searchInput);
+    studentSelectorContainer.appendChild(select);
+  }
+
   /**
    * Carga la lista de alumnos
    */
@@ -41,245 +142,451 @@
       const result = await response.json();
       
       if (!result.ok) {
-        showError('Error cargando alumnos: ' + (result.error || 'Error desconocido'));
+        console.error('[MasterAlquimiaAlumno] Error cargando alumnos:', result.error);
         return;
       }
       
-      students = result.data.items || [];
-      filteredStudents = [...students];
-      renderStudentOptions();
+      state.students = result.data.items || [];
+      updateStudentSelect();
     } catch (error) {
-      console.error('[AlquimiaAlumno] Error cargando alumnos:', error);
-      showError('Error cargando alumnos: ' + error.message);
+      console.error('[MasterAlquimiaAlumno] Error cargando alumnos:', error);
     }
   }
-  
+
   /**
-   * Renderiza las opciones del dropdown
+   * Actualiza el select de alumnos
    */
-  function renderStudentOptions() {
-    // Limpiar opciones existentes (excepto la primera)
-    while (studentSelect.children.length > 1) {
-      studentSelect.removeChild(studentSelect.lastChild);
+  function updateStudentSelect() {
+    const select = document.getElementById('student-select');
+    if (!select) return;
+    
+    // Limpiar opciones (excepto la primera)
+    while (select.children.length > 1) {
+      select.removeChild(select.lastChild);
     }
     
-    // Añadir opciones filtradas
-    filteredStudents.forEach(student => {
+    // Añadir alumnos
+    state.students.forEach(student => {
       const option = document.createElement('option');
       option.value = student.id;
-      option.textContent = `${student.nombre_completo || student.apodo || student.email} (${student.email})`;
-      studentSelect.appendChild(option);
+      const displayName = student.apodo || student.nombre_completo || student.email;
+      option.textContent = `${displayName} (${student.email})`;
+      select.appendChild(option);
     });
   }
-  
+
   /**
    * Filtra alumnos según búsqueda
    */
   function filterStudents(searchTerm) {
     const term = searchTerm.toLowerCase().trim();
+    const select = document.getElementById('student-select');
+    if (!select) return;
     
-    if (!term) {
-      filteredStudents = [...students];
-    } else {
-      filteredStudents = students.filter(student => {
-        const nombre = (student.nombre_completo || '').toLowerCase();
-        const apodo = (student.apodo || '').toLowerCase();
-        const email = (student.email || '').toLowerCase();
-        
-        return nombre.includes(term) || apodo.includes(term) || email.includes(term);
-      });
+    // Limpiar opciones (excepto la primera)
+    while (select.children.length > 1) {
+      select.removeChild(select.lastChild);
     }
     
-    renderStudentOptions();
+    // Filtrar y añadir
+    const filtered = term ? state.students.filter(s => {
+      const nombre = (s.nombre_completo || '').toLowerCase();
+      const apodo = (s.apodo || '').toLowerCase();
+      const email = (s.email || '').toLowerCase();
+      return nombre.includes(term) || apodo.includes(term) || email.includes(term);
+    }) : state.students;
+    
+    filtered.forEach(student => {
+      const option = document.createElement('option');
+      option.value = student.id;
+      const displayName = student.apodo || student.nombre_completo || student.email;
+      option.textContent = `${displayName} (${student.email})`;
+      select.appendChild(option);
+    });
   }
-  
+
   /**
-   * Carga datos de alquimia para un alumno
+   * Selecciona un alumno y carga sus datos
    */
-  async function loadAlumnoAlquimia(studentId) {
-    if (!studentId) {
-      clearData();
-      return;
+  async function selectStudent(studentId) {
+    state.selectedStudentId = studentId;
+    state.loading = true;
+    
+    // Actualizar URL
+    const url = new URL(window.location);
+    url.searchParams.set('student_id', studentId);
+    window.history.pushState({}, '', url);
+    
+    // Actualizar select
+    const select = document.getElementById('student-select');
+    if (select) {
+      select.value = studentId;
     }
     
+    // Ocultar empty state, mostrar panel
+    if (emptyState) emptyState.classList.add('hidden');
+    if (panelContent) panelContent.classList.remove('hidden');
+    
+    // Cargar megalista y informe
+    await Promise.all([
+      loadMegalist(studentId),
+      loadReport()
+    ]);
+  }
+
+  /**
+   * Limpia la selección
+   */
+  function clearSelection() {
+    state.selectedStudentId = null;
+    state.megalistData = null;
+    
+    // Actualizar URL
+    const url = new URL(window.location);
+    url.searchParams.delete('student_id');
+    window.history.pushState({}, '', url);
+    
+    // Mostrar empty state, ocultar panel
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (panelContent) panelContent.classList.add('hidden');
+    
+    // Limpiar contenido
+    clearContent();
+  }
+
+  /**
+   * Carga la megalista para un alumno
+   */
+  async function loadMegalist(studentId) {
     try {
+      state.loading = true;
       showLoading();
       
-      const response = await fetch(`/master/api/alquimia/alumno/${studentId}`);
+      const response = await fetch(`/master/api/alquimia-alumno/megalist?student_id=${studentId}`);
       const result = await response.json();
       
       if (!result.ok) {
-        showError('Error cargando datos: ' + (result.error || 'Error desconocido'));
-        clearData();
+        console.error('[MasterAlquimiaAlumno] Error cargando megalist:', result.error);
+        showError('Error cargando datos: ' + (result.error?.message || 'Error desconocido'));
         return;
       }
       
-      currentData = result;
-      currentStudentId = studentId;
-      renderData(result);
+      state.megalistData = result.data;
+      renderMegalist(result.data);
     } catch (error) {
-      console.error('[AlquimiaAlumno] Error cargando datos:', error);
+      console.error('[MasterAlquimiaAlumno] Error cargando megalist:', error);
       showError('Error cargando datos: ' + error.message);
-      clearData();
+    } finally {
+      state.loading = false;
+      hideLoading();
     }
   }
-  
+
   /**
-   * Renderiza los datos del alumno
+   * Renderiza la megalista completa
    */
-  function renderData(data) {
-    // Actualizar indicador de progreso
-    const porcentaje = data.summary.porcentaje_limpio || 0;
-    progressText.textContent = `${porcentaje}%`;
-    progressBar.style.width = `${porcentaje}%`;
-    progressIndicator.style.display = 'block';
+  function renderMegalist(data) {
+    // Renderizar resumen
+    renderSummary(data.summary);
     
-    // Limpiar contenedor
-    while (listasContainer.firstChild) {
-      listasContainer.removeChild(listasContainer.firstChild);
+    // Renderizar megalista por listas
+    renderMegalistByLists(data.lists);
+    
+    // Renderizar revisados
+    renderReviewed(data.reviewed);
+  }
+
+  /**
+   * Renderiza el resumen
+   */
+  function renderSummary(summary) {
+    if (!summarySection) return;
+    
+    // Limpiar
+    while (summarySection.firstChild) {
+      summarySection.removeChild(summarySection.firstChild);
     }
     
-    if (data.listas.length === 0) {
+    // Contenedor
+    const container = document.createElement('div');
+    container.className = 'grid grid-cols-4 gap-4 mb-6';
+    
+    // Total
+    const totalCard = createSummaryCard('Total', summary.total, 'text-slate-300');
+    container.appendChild(totalCard);
+    
+    // Nunca
+    const neverCard = createSummaryCard('Nunca', summary.never, 'text-slate-400');
+    container.appendChild(neverCard);
+    
+    // Importante
+    const importantCard = createSummaryCard('Importante', summary.important, 'text-red-400');
+    container.appendChild(importantCard);
+    
+    // Pendiente
+    const pendingCard = createSummaryCard('Pendiente', summary.pending, 'text-yellow-400');
+    container.appendChild(pendingCard);
+    
+    // Revisado
+    const reviewedCard = createSummaryCard('Revisado', summary.reviewed, 'text-green-400');
+    container.appendChild(reviewedCard);
+    
+    // Porcentaje
+    const percentDiv = document.createElement('div');
+    percentDiv.className = 'col-span-4 mt-4';
+    const percentBar = document.createElement('div');
+    percentBar.className = 'w-full bg-slate-700 rounded-full h-4';
+    const percentFill = document.createElement('div');
+    percentFill.className = 'bg-green-600 h-4 rounded-full transition-all';
+    percentFill.style.width = `${summary.percent_reviewed}%`;
+    percentBar.appendChild(percentFill);
+    const percentText = document.createElement('p');
+    percentText.className = 'text-slate-300 text-sm mt-2';
+    percentText.textContent = `${summary.percent_reviewed}% revisado`;
+    percentDiv.appendChild(percentBar);
+    percentDiv.appendChild(percentText);
+    container.appendChild(percentDiv);
+    
+    summarySection.appendChild(container);
+  }
+
+  /**
+   * Crea una tarjeta de resumen
+   */
+  function createSummaryCard(label, value, colorClass) {
+    const card = document.createElement('div');
+    card.className = 'bg-slate-800 rounded-lg p-4';
+    
+    const labelEl = document.createElement('p');
+    labelEl.className = 'text-slate-400 text-sm mb-1';
+    labelEl.textContent = label;
+    
+    const valueEl = document.createElement('p');
+    valueEl.className = `${colorClass} text-2xl font-bold`;
+    valueEl.textContent = value;
+    
+    card.appendChild(labelEl);
+    card.appendChild(valueEl);
+    
+    return card;
+  }
+
+  /**
+   * Renderiza la megalista agrupada por listas
+   */
+  function renderMegalistByLists(lists) {
+    if (!megalistSection) return;
+    
+    // Limpiar
+    while (megalistSection.firstChild) {
+      megalistSection.removeChild(megalistSection.firstChild);
+    }
+    
+    if (lists.length === 0) {
       const p = document.createElement('p');
-      p.style.cssText = 'color: #666; text-align: center; padding: 2rem;';
-      p.textContent = 'No hay items de alquimia para este alumno';
-      listasContainer.appendChild(p);
+      p.className = 'text-slate-400 text-center py-8';
+      p.textContent = 'No hay items en ninguna lista';
+      megalistSection.appendChild(p);
       return;
     }
     
     // Renderizar cada lista
-    data.listas.forEach(lista => {
-      const listaDiv = document.createElement('div');
-      listaDiv.style.cssText = 'margin-bottom: 2rem; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;';
-      
-      // Título colapsable
-      const titleDiv = document.createElement('div');
-      titleDiv.style.cssText = 'padding: 1rem; background: #f5f5f5; cursor: pointer; display: flex; justify-content: space-between; align-items: center;';
-      titleDiv.addEventListener('click', () => toggleLista(listaDiv));
-      
-      const titleText = document.createElement('h3');
-      titleText.style.cssText = 'margin: 0; font-size: 1.2rem;';
-      titleText.textContent = lista.list_name;
-      
-      const toggleIcon = document.createElement('span');
-      toggleIcon.textContent = '▼';
-      toggleIcon.style.cssText = 'transition: transform 0.2s;';
-      
-      titleDiv.appendChild(titleText);
-      titleDiv.appendChild(toggleIcon);
-      
-      // Contenido
-      const contentDiv = document.createElement('div');
-      contentDiv.style.cssText = 'padding: 1rem;';
-      
-      // Pendientes
-      if (lista.items.pendientes.length > 0) {
-        const pendientesTitle = document.createElement('h4');
-        pendientesTitle.style.cssText = 'margin: 0 0 1rem 0; color: #d32f2f;';
-        pendientesTitle.textContent = `Pendientes (${lista.items.pendientes.length})`;
-        contentDiv.appendChild(pendientesTitle);
-        
-        const pendientesList = document.createElement('div');
-        pendientesList.style.cssText = 'margin-bottom: 1.5rem;';
-        
-        lista.items.pendientes.forEach(item => {
-          const itemDiv = createItemDiv(item, 'pendiente', lista.list_id);
-          pendientesList.appendChild(itemDiv);
-        });
-        
-        contentDiv.appendChild(pendientesList);
-      }
-      
-      // Revisados (colapsado por defecto)
-      if (lista.items.revisados.length > 0) {
-        const revisadosTitle = document.createElement('h4');
-        revisadosTitle.style.cssText = 'margin: 1rem 0 1rem 0; color: #388e3c; cursor: pointer;';
-        revisadosTitle.textContent = `Revisados (${lista.items.revisados.length}) ▶`;
-        revisadosTitle.addEventListener('click', () => {
-          const isOpen = revisadosList.style.display !== 'none';
-          revisadosList.style.display = isOpen ? 'none' : 'block';
-          updateRevisadosToggleText(revisadosTitle, !isOpen);
-        });
-        
-        const revisadosList = document.createElement('div');
-        revisadosList.style.cssText = 'display: none;';
-        
-        lista.items.revisados.forEach(item => {
-          const itemDiv = createItemDiv(item, 'revisado', lista.list_id);
-          revisadosList.appendChild(itemDiv);
-        });
-        
-        contentDiv.appendChild(revisadosTitle);
-        contentDiv.appendChild(revisadosList);
-      }
-      
-      listaDiv.appendChild(titleDiv);
-      listaDiv.appendChild(contentDiv);
-      listasContainer.appendChild(listaDiv);
+    lists.forEach(list => {
+      const listDiv = renderList(list);
+      megalistSection.appendChild(listDiv);
+    });
+  }
+
+  /**
+   * Renderiza una lista con sus grupos
+   */
+  function renderList(list) {
+    const listDiv = document.createElement('div');
+    listDiv.className = 'mb-8 border border-slate-700 rounded-lg overflow-hidden';
+    
+    // Header de lista
+    const header = document.createElement('div');
+    header.className = 'bg-slate-800 px-4 py-3 border-b border-slate-700';
+    const title = document.createElement('h3');
+    title.className = 'text-xl font-bold text-white';
+    title.textContent = list.lista_nombre;
+    header.appendChild(title);
+    listDiv.appendChild(header);
+    
+    // Contenido
+    const content = document.createElement('div');
+    content.className = 'p-4';
+    
+    // Orden canónico: never → important → pending
+    if (list.never.length > 0) {
+      const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
+      content.appendChild(neverGroup);
+    }
+    
+    if (list.important.length > 0) {
+      const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
+      content.appendChild(importantGroup);
+    }
+    
+    if (list.pending.length > 0) {
+      const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
+      content.appendChild(pendingGroup);
+    }
+    
+    listDiv.appendChild(content);
+    
+    return listDiv;
+  }
+
+  /**
+   * Renderiza un grupo de items
+   */
+  function renderItemGroup(title, items, titleColorClass, bgClass) {
+    const groupDiv = document.createElement('div');
+    groupDiv.className = `mb-4 ${bgClass} rounded-lg p-4`;
+    
+    const titleEl = document.createElement('h4');
+    titleEl.className = `${titleColorClass} font-semibold mb-3`;
+    titleEl.textContent = `${title} (${items.length})`;
+    groupDiv.appendChild(titleEl);
+    
+    const itemsList = document.createElement('div');
+    itemsList.className = 'space-y-2';
+    
+    items.forEach(item => {
+      const itemEl = renderItem(item, false);
+      itemsList.appendChild(itemEl);
     });
     
-    hideLoading();
+    groupDiv.appendChild(itemsList);
+    
+    return groupDiv;
   }
-  
+
   /**
-   * Crea un div para un item
+   * Renderiza un item individual
    */
-  function createItemDiv(item, tipo, listId) {
+  function renderItem(item, isReviewed = false) {
     const itemDiv = document.createElement('div');
-    itemDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; margin-bottom: 0.5rem; background: #fafafa; border-radius: 4px;';
+    itemDiv.className = 'flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700';
     
-    const nameDiv = document.createElement('div');
-    nameDiv.style.cssText = 'flex: 1;';
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'flex-1';
     
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = item.name;
-    nameSpan.style.cssText = 'font-weight: ' + (item.status === 'important' ? 'bold' : 'normal') + '; color: ' + (item.status === 'important' ? '#d32f2f' : '#333') + ';';
-    nameDiv.appendChild(nameSpan);
+    const nameEl = document.createElement('p');
+    nameEl.className = 'text-white font-medium';
+    nameEl.textContent = item.item_nombre;
+    leftDiv.appendChild(nameEl);
     
-    itemDiv.appendChild(nameDiv);
-    
-    if (tipo === 'pendiente') {
-      const button = document.createElement('button');
-      button.textContent = 'LIMPIAR';
-      button.style.cssText = 'padding: 0.5rem 1rem; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;';
-      button.dataset.itemRef = item.item_ref;
-      button.dataset.itemId = item.item_id;
-      button.addEventListener('click', () => cleanItem(button, item.item_ref));
-      itemDiv.appendChild(button);
-    } else {
-      const dateSpan = document.createElement('span');
-      dateSpan.style.cssText = 'color: #666; font-size: 0.9rem;';
-      if (item.cleaned_at) {
-        const date = new Date(item.cleaned_at);
-        dateSpan.textContent = 'Limpiado: ' + date.toLocaleDateString('es-ES');
-      }
-      itemDiv.appendChild(dateSpan);
+    if (item.item_nivel) {
+      const levelEl = document.createElement('p');
+      levelEl.className = 'text-slate-400 text-sm mt-1';
+      levelEl.textContent = `Nivel ${item.item_nivel}`;
+      leftDiv.appendChild(levelEl);
     }
+    
+    itemDiv.appendChild(leftDiv);
+    
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'flex items-center gap-2';
+    
+    if (!isReviewed && item.state !== 'never') {
+      // Botón limpiar
+      const cleanBtn = document.createElement('button');
+      cleanBtn.className = 'px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors';
+      cleanBtn.textContent = 'Limpiar (SHARED)';
+      cleanBtn.addEventListener('click', () => handleCleanItem(item));
+      rightDiv.appendChild(cleanBtn);
+    }
+    
+    // Botón historial
+    const historyBtn = document.createElement('button');
+    historyBtn.className = 'px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors';
+    historyBtn.textContent = 'Historial';
+    historyBtn.addEventListener('click', () => handleShowHistory(item));
+    rightDiv.appendChild(historyBtn);
+    
+    itemDiv.appendChild(rightDiv);
     
     return itemDiv;
   }
-  
+
   /**
-   * Limpia un item
+   * Renderiza la sección de revisados
    */
-  async function cleanItem(button, itemRef) {
-    if (!currentStudentId) return;
+  function renderReviewed(reviewed) {
+    if (!reviewedSection) return;
     
-    // Deshabilitar botón y mostrar loading
-    button.disabled = true;
-    button.textContent = 'Limpiando...';
-    button.style.opacity = '0.6';
+    // Limpiar
+    while (reviewedByStudent.firstChild) {
+      reviewedByStudent.removeChild(reviewedByStudent.firstChild);
+    }
+    while (reviewedByMaster.firstChild) {
+      reviewedByMaster.removeChild(reviewedByMaster.firstChild);
+    }
+    
+    // Revisados por alumno
+    if (reviewed.by_student.length > 0) {
+      reviewed.by_student.forEach(list => {
+        if (list.items.length > 0) {
+          const listDiv = renderReviewedList(list.lista_nombre, list.items);
+          reviewedByStudent.appendChild(listDiv);
+        }
+      });
+    }
+    
+    // Revisados por master
+    if (reviewed.by_master.length > 0) {
+      reviewed.by_master.forEach(list => {
+        if (list.items.length > 0) {
+          const listDiv = renderReviewedList(list.lista_nombre, list.items);
+          reviewedByMaster.appendChild(listDiv);
+        }
+      });
+    }
+  }
+
+  /**
+   * Renderiza una lista de revisados
+   */
+  function renderReviewedList(listaNombre, items) {
+    const listDiv = document.createElement('div');
+    listDiv.className = 'mb-4';
+    
+    const title = document.createElement('h4');
+    title.className = 'text-slate-300 font-semibold mb-2';
+    title.textContent = `${listaNombre} (${items.length})`;
+    listDiv.appendChild(title);
+    
+    const itemsList = document.createElement('div');
+    itemsList.className = 'space-y-2';
+    
+    items.forEach(item => {
+      const itemEl = renderItem(item, true);
+      itemsList.appendChild(itemEl);
+    });
+    
+    listDiv.appendChild(itemsList);
+    
+    return listDiv;
+  }
+
+  /**
+   * Maneja la limpieza de un item
+   */
+  async function handleCleanItem(item) {
+    if (!state.selectedStudentId) return;
     
     try {
-      const response = await fetch('/master/api/alquimia/clean', {
+      const response = await fetch('/master/api/alquimia-alumno/clean', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          student_id: currentStudentId,
-          item_ref: itemRef,
-          domain: 'transmutation',
+          student_id: state.selectedStudentId,
+          item_ref: item.item_ref,
+          domain_type: 'transmutation',
           product_key: 'pde'
         })
       });
@@ -287,148 +594,206 @@
       const result = await response.json();
       
       if (!result.ok) {
-        showError('Error limpiando item: ' + (result.error || 'Error desconocido'));
-        button.disabled = false;
-        button.textContent = 'LIMPIAR';
-        button.style.opacity = '1';
+        console.error('[MasterAlquimiaAlumno] Error limpiando item:', result.error);
+        alert('Error limpiando item: ' + (result.error?.message || 'Error desconocido'));
         return;
       }
       
-      // Refetch datos del alumno
-      await loadAlumnoAlquimia(currentStudentId);
+      // Refetch megalist
+      await loadMegalist(state.selectedStudentId);
     } catch (error) {
-      console.error('[AlquimiaAlumno] Error limpiando item:', error);
-      showError('Error limpiando item: ' + error.message);
-      button.disabled = false;
-      button.textContent = 'LIMPIAR';
-      button.style.opacity = '1';
+      console.error('[MasterAlquimiaAlumno] Error limpiando item:', error);
+      alert('Error limpiando item: ' + error.message);
     }
   }
-  
+
   /**
-   * Toggle lista colapsable
+   * Muestra el historial de un item
    */
-  function toggleLista(listaDiv) {
-    const contentDiv = listaDiv.querySelector('div:last-child');
-    const toggleIcon = listaDiv.querySelector('span');
+  async function handleShowHistory(item) {
+    if (!state.selectedStudentId) return;
     
-    if (contentDiv.style.display === 'none') {
-      contentDiv.style.display = 'block';
-      toggleIcon.textContent = '▼';
-    } else {
-      contentDiv.style.display = 'none';
-      toggleIcon.textContent = '▶';
+    try {
+      const response = await fetch(`/master/api/alquimia-alumno/item-history?student_id=${state.selectedStudentId}&domain_type=transmutation&item_ref=${item.item_ref}&limit=50`);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.error('[MasterAlquimiaAlumno] Error cargando historial:', result.error);
+        alert('Error cargando historial: ' + (result.error?.message || 'Error desconocido'));
+        return;
+      }
+      
+      // Mostrar modal con historial (simplificado por ahora)
+      showHistoryModal(item.item_nombre, result.data.events);
+    } catch (error) {
+      console.error('[MasterAlquimiaAlumno] Error cargando historial:', error);
+      alert('Error cargando historial: ' + error.message);
     }
   }
-  
+
   /**
-   * Toggle revisados
+   * Muestra modal de historial (simplificado)
    */
-  function toggleRevisados(title, list) {
-    if (list.style.display === 'none') {
-      list.style.display = 'block';
-      title.textContent = title.textContent.replace('▶', '▼');
-    } else {
-      list.style.display = 'none';
-      title.textContent = title.textContent.replace('▼', '▶');
-    }
-  }
-  
-  /**
-   * Actualiza el texto del toggle de revisados
-   */
-  function updateRevisadosToggleText(title, isOpen) {
-    const match = title.textContent.match(/^Revisados \(\d+\)/);
-    if (match) {
-      title.textContent = match[0] + (isOpen ? ' ▼' : ' ▶');
-    }
-  }
-  
-  /**
-   * Limpia los datos mostrados
-   */
-  function clearData() {
-    currentData = null;
-    currentStudentId = null;
-    progressIndicator.style.display = 'none';
+  function showHistoryModal(itemName, events) {
+    // Por ahora, solo alert (se puede mejorar con modal real)
+    const eventsText = events.map(e => {
+      const date = new Date(e.created_at).toLocaleString('es-ES');
+      return `${date}: ${e.action_type} (${e.actor_type})`;
+    }).join('\n');
     
-    while (listasContainer.firstChild) {
-      listasContainer.removeChild(listasContainer.firstChild);
+    alert(`Historial de ${itemName}:\n\n${eventsText || 'No hay eventos'}`);
+  }
+
+  /**
+   * Carga el informe
+   */
+  async function loadReport() {
+    if (!state.selectedStudentId || !reportContent) return;
+    
+    try {
+      const response = await fetch(`/master/api/alquimia-alumno/report?student_id=${state.selectedStudentId}&days=30`);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.error('[MasterAlquimiaAlumno] Error cargando informe:', result.error);
+        return;
+      }
+      
+      renderReport(result.data);
+    } catch (error) {
+      console.error('[MasterAlquimiaAlumno] Error cargando informe:', error);
+    }
+  }
+
+  /**
+   * Renderiza el informe
+   */
+  function renderReport(data) {
+    if (!reportContent) return;
+    
+    // Limpiar
+    while (reportContent.firstChild) {
+      reportContent.removeChild(reportContent.firstChild);
     }
     
-    const p = document.createElement('p');
-    p.style.cssText = 'color: #666; text-align: center; padding: 2rem;';
-    p.textContent = 'Selecciona un alumno para ver sus items de alquimia';
-    listasContainer.appendChild(p);
-  }
-  
-  /**
-   * Muestra error
-   */
-  function showError(message) {
-    errorMessage.textContent = message;
-    errorMessage.style.display = 'block';
+    // Título
+    const title = document.createElement('h3');
+    title.className = 'text-lg font-semibold text-white mb-4';
+    title.textContent = `Últimos ${data.days} días`;
+    reportContent.appendChild(title);
     
-    setTimeout(() => {
-      errorMessage.style.display = 'none';
-    }, 5000);
+    // Master events
+    const masterDiv = document.createElement('div');
+    masterDiv.className = 'mb-6';
+    const masterTitle = document.createElement('h4');
+    masterTitle.className = 'text-slate-300 font-semibold mb-2';
+    masterTitle.textContent = `Por Master (${data.master_events.length})`;
+    masterDiv.appendChild(masterTitle);
+    
+    const masterList = document.createElement('div');
+    masterList.className = 'space-y-2';
+    data.master_events.forEach(event => {
+      const eventEl = renderReportEvent(event);
+      masterList.appendChild(eventEl);
+    });
+    masterDiv.appendChild(masterList);
+    reportContent.appendChild(masterDiv);
+    
+    // Student events
+    const studentDiv = document.createElement('div');
+    const studentTitle = document.createElement('h4');
+    studentTitle.className = 'text-slate-300 font-semibold mb-2';
+    studentTitle.textContent = `Por Alumno (${data.student_events.length})`;
+    studentDiv.appendChild(studentTitle);
+    
+    const studentList = document.createElement('div');
+    studentList.className = 'space-y-2';
+    data.student_events.forEach(event => {
+      const eventEl = renderReportEvent(event);
+      studentList.appendChild(eventEl);
+    });
+    studentDiv.appendChild(studentList);
+    reportContent.appendChild(studentDiv);
   }
-  
+
+  /**
+   * Renderiza un evento del informe
+   */
+  function renderReportEvent(event) {
+    const eventDiv = document.createElement('div');
+    eventDiv.className = 'p-3 bg-slate-800 rounded border border-slate-700';
+    
+    const date = new Date(event.created_at).toLocaleString('es-ES');
+    const text = document.createElement('p');
+    text.className = 'text-slate-300 text-sm';
+    text.textContent = `${date} - ${event.item_ref} (${event.action_type})`;
+    eventDiv.appendChild(text);
+    
+    return eventDiv;
+  }
+
+  /**
+   * Limpia el contenido
+   */
+  function clearContent() {
+    if (summarySection) {
+      while (summarySection.firstChild) {
+        summarySection.removeChild(summarySection.firstChild);
+      }
+    }
+    if (megalistSection) {
+      while (megalistSection.firstChild) {
+        megalistSection.removeChild(megalistSection.firstChild);
+      }
+    }
+    if (reviewedByStudent) {
+      while (reviewedByStudent.firstChild) {
+        reviewedByStudent.removeChild(reviewedByStudent.firstChild);
+      }
+    }
+    if (reviewedByMaster) {
+      while (reviewedByMaster.firstChild) {
+        reviewedByMaster.removeChild(reviewedByMaster.firstChild);
+      }
+    }
+    if (reportContent) {
+      while (reportContent.firstChild) {
+        reportContent.removeChild(reportContent.firstChild);
+      }
+    }
+  }
+
   /**
    * Muestra loading
    */
   function showLoading() {
-    while (listasContainer.firstChild) {
-      listasContainer.removeChild(listasContainer.firstChild);
+    if (megalistSection) {
+      while (megalistSection.firstChild) {
+        megalistSection.removeChild(megalistSection.firstChild);
+      }
+      const p = document.createElement('p');
+      p.className = 'text-slate-400 text-center py-8';
+      p.textContent = 'Cargando...';
+      megalistSection.appendChild(p);
     }
-    
-    const p = document.createElement('p');
-    p.style.cssText = 'color: #666; text-align: center; padding: 2rem;';
-    p.textContent = 'Cargando...';
-    listasContainer.appendChild(p);
   }
-  
+
   /**
    * Oculta loading
    */
   function hideLoading() {
-    // Ya se renderizó en renderData
+    // Ya se renderizó en renderMegalist
   }
-  
+
   /**
-   * Inicialización
+   * Muestra error
    */
-  function init() {
-    // Event listeners
-    studentSearch.addEventListener('input', (e) => {
-      filterStudents(e.target.value);
-    });
-    
-    studentSearch.addEventListener('focus', () => {
-      studentSelect.style.display = 'block';
-    });
-    
-    studentSearch.addEventListener('blur', () => {
-      // Delay para permitir click en select
-      setTimeout(() => {
-        studentSelect.style.display = 'none';
-      }, 200);
-    });
-    
-    studentSelect.addEventListener('change', (e) => {
-      const studentId = parseInt(e.target.value, 10);
-      if (studentId) {
-        studentSearch.value = '';
-        loadAlumnoAlquimia(studentId);
-      } else {
-        clearData();
-      }
-    });
-    
-    // Cargar alumnos
-    loadStudents();
+  function showError(message) {
+    console.error('[MasterAlquimiaAlumno]', message);
+    // Por ahora solo log, se puede mejorar con UI de error
   }
-  
+
+
   // Inicializar cuando el DOM esté listo
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -436,3 +801,6 @@
     init();
   }
 })();
+
+
+

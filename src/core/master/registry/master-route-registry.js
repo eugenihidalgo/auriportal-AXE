@@ -143,19 +143,31 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
-  // RUTAS API ALQUIMIA POR ALUMNO
+  // RUTAS API ALQUIMIA POR ALUMNO (Panel Alquimia del Alumno v1)
   // ============================================
   {
-    key: 'master-api-alquimia-alumno',
-    path: '/master/api/alquimia/alumno/:student_id',
+    key: 'master-api-alquimia-alumno-megalist',
+    path: '/master/api/alquimia-alumno/megalist',
     type: 'api',
     method: 'GET'
   },
   {
-    key: 'master-api-alquimia-clean',
-    path: '/master/api/alquimia/clean',
+    key: 'master-api-alquimia-alumno-clean',
+    path: '/master/api/alquimia-alumno/clean',
     type: 'api',
     method: 'POST'
+  },
+  {
+    key: 'master-api-alquimia-alumno-item-history',
+    path: '/master/api/alquimia-alumno/item-history',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-alquimia-alumno-report',
+    path: '/master/api/alquimia-alumno/report',
+    type: 'api',
+    method: 'GET'
   },
   
   // ============================================

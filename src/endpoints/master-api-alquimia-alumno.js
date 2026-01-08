@@ -1,32 +1,38 @@
 // src/endpoints/master-api-alquimia-alumno.js
-// Endpoints API MASTER para Alquimia por Alumno
+// Endpoints API MASTER para Panel Alquimia del Alumno
 //
-// Endpoints:
-// - GET /master/api/alquimia/alumno/:student_id
-// - POST /master/api/alquimia/clean
-//
-// Usa requireAdminContext() para auth (mismo sistema de sesión que Admin)
+// Endpoints bajo /master/api/alquimia-alumno/*
+// Usa requireAdminContext() para auth
 // Devuelve JSON siempre (nunca HTML)
+// Anti-cache headers obligatorios
 
 import { requireAdminContext } from '../core/auth-context.js';
 import { getRequestId } from '../core/observability/request-context.js';
-import { logError, logInfo } from '../core/observability/logger.js';
-import { getAlquimiaByStudent } from '../services/alquimia-alumno-service.js';
-import { markCleanStudent } from '../services/alquimia-general-service.js';
+import { logError, logInfo, logWarn } from '../core/observability/logger.js';
+import { getMegalistForStudent } from '../core/master/services/alquimia-alumno-megalist-service.js';
+import { markCleanStudent } from '../core/master/services/cleaning-engine-service.js';
+import { getDefaultCleaningEventsRepo } from '../infra/repos/cleaning/cleaning-events-repo-pg.js';
 
 /**
  * Helper: Respuesta JSON de error
  */
 function jsonError(message, code, status = 400, traceId = null) {
-  return new Response(JSON.stringify({
+  const response = {
     ok: false,
-    error: message,
-    code: code || 'ERROR',
+    error: {
+      code: code || 'ERROR',
+      message: message
+    },
     trace_id: traceId || getRequestId()
-  }), {
+  };
+  
+  return new Response(JSON.stringify(response), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'X-Trace-Id': traceId || getRequestId()
     }
   });
@@ -36,14 +42,19 @@ function jsonError(message, code, status = 400, traceId = null) {
  * Helper: Respuesta JSON de éxito
  */
 function jsonSuccess(data, traceId = null) {
-  return new Response(JSON.stringify({
+  const response = {
     ok: true,
-    ...data,
+    data,
     trace_id: traceId || getRequestId()
-  }), {
+  };
+  
+  return new Response(JSON.stringify(response), {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'X-Trace-Id': traceId || getRequestId()
     }
   });
@@ -68,104 +79,7 @@ function extractRouteParams(path, pattern) {
 }
 
 /**
- * GET /master/api/alquimia/alumno/:student_id
- * Obtiene todos los items de alquimia de un alumno
- */
-async function getAlumnoAlquimiaHandler(request, env, ctx) {
-  const traceId = getRequestId();
-  const url = new URL(request.url);
-  const path = url.pathname;
-  
-  try {
-    // Extraer student_id del path
-    const params = extractRouteParams(path, '/master/api/alquimia/alumno/:student_id');
-    const studentId = parseInt(params.student_id, 10);
-    
-    if (isNaN(studentId)) {
-      return jsonError('ID de alumno inválido', 'INVALID_STUDENT_ID', 400, traceId);
-    }
-    
-    logInfo('MasterApiAlquimiaAlumno', 'Obteniendo alquimia por alumno', {
-      traceId,
-      studentId
-    });
-    
-    // Obtener datos
-    const result = await getAlquimiaByStudent(studentId);
-    
-    return jsonSuccess(result, traceId);
-  } catch (error) {
-    logError('MasterApiAlquimiaAlumno', 'Error en getAlumnoAlquimiaHandler', {
-      traceId,
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    
-    return jsonError(
-      error.message || 'Error interno del servidor',
-      error.code || 'INTERNAL_ERROR',
-      500,
-      traceId
-    );
-  }
-}
-
-/**
- * POST /master/api/alquimia/clean
- * Limpia un ítem de alquimia para un alumno
- */
-async function cleanItemHandler(request, env, ctx) {
-  const traceId = getRequestId();
-  
-  try {
-    const body = await request.json();
-    
-    const { student_id, item_ref, domain = 'transmutation', product_key = 'pde' } = body;
-    
-    if (!student_id || !item_ref) {
-      return jsonError('Faltan parámetros requeridos: student_id, item_ref', 'MISSING_PARAMS', 400, traceId);
-    }
-    
-    logInfo('MasterApiAlquimiaAlumno', 'Limpiando item', {
-      traceId,
-      student_id,
-      item_ref,
-      domain,
-      product_key
-    });
-    
-    // Limpiar item
-    const result = await markCleanStudent(student_id, item_ref, product_key);
-    
-    if (!result) {
-      return jsonError('No se pudo limpiar el item', 'CLEAN_FAILED', 500, traceId);
-    }
-    
-    return jsonSuccess({
-      message: 'Item limpiado correctamente',
-      student_id,
-      item_ref
-    }, traceId);
-  } catch (error) {
-    logError('MasterApiAlquimiaAlumno', 'Error en cleanItemHandler', {
-      traceId,
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    
-    return jsonError(
-      error.message || 'Error interno del servidor',
-      error.code || 'INTERNAL_ERROR',
-      500,
-      traceId
-    );
-  }
-}
-
-/**
- * Handler principal (despacha según método HTTP y path)
+ * Handler principal de endpoints API Alquimia Alumno
  */
 export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) {
   const traceId = getRequestId();
@@ -173,35 +87,206 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
   const path = url.pathname;
   const method = request.method;
 
-  // Auth: usar requireAdminContext (mismo sistema de sesión)
-  const authCtx = await requireAdminContext(request, env);
-  if (authCtx instanceof Response) {
-    // Si requireAdminContext devuelve Response (HTML de login), convertir a JSON 401
-    return new Response(JSON.stringify({
-      ok: false,
-      error: 'No autorizado',
-      code: 'UNAUTHORIZED',
-      trace_id: traceId
-    }), {
-      status: 401,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'X-Trace-Id': traceId
-      }
+  // Auth: usar requireAdminContext
+  let authCtx;
+  try {
+    authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return jsonError('No autorizado', 'UNAUTHORIZED', 401, traceId);
+    }
+  } catch (authError) {
+    logError('MasterApiAlquimiaAlumno', 'Error en requireAdminContext', {
+      error: authError.message,
+      traceId
     });
+    return jsonError('Error de autenticación', 'AUTH_ERROR', 401, traceId);
   }
 
-  logInfo('MasterApiAlquimiaAlumno', 'Request recibido', { path, method, traceId });
-
-  // Despachar según path y método
-  if (path.startsWith('/master/api/alquimia/alumno/') && method === 'GET') {
-    return await getAlumnoAlquimiaHandler(request, env, ctx);
+  try {
+    // 1) GET /master/api/alquimia-alumno/megalist?student_id=...&levels_mode=...
+    if (path.match(/^\/master\/api\/alquimia-alumno\/megalist$/) && method === 'GET') {
+      const studentId = parseInt(url.searchParams.get('student_id'), 10);
+      const levelsMode = url.searchParams.get('levels_mode') || null;
+      
+      if (!studentId || isNaN(studentId)) {
+        return jsonError('student_id es requerido y debe ser un número', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+      
+      logInfo('MasterApiAlquimiaAlumno', 'GET megalist', {
+        traceId,
+        student_id: studentId,
+        levels_mode: levelsMode
+      });
+      
+      const result = await getMegalistForStudent({
+        student_id: studentId,
+        levels_mode: levelsMode
+      });
+      
+      return jsonSuccess(result, traceId);
+    }
+    
+    // 2) POST /master/api/alquimia-alumno/clean
+    if (path.match(/^\/master\/api\/alquimia-alumno\/clean$/) && method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (parseError) {
+        return jsonError('Body JSON inválido', 'INVALID_JSON', 400, traceId);
+      }
+      
+      const { student_id, item_ref, domain_type = 'transmutation', product_key = 'pde', actor_ref = null, surface_key = null } = body;
+      
+      if (!student_id || !item_ref) {
+        return jsonError('student_id e item_ref son requeridos', 'MISSING_PARAMS', 400, traceId);
+      }
+      
+      logInfo('MasterApiAlquimiaAlumno', 'POST clean', {
+        traceId,
+        student_id,
+        item_ref,
+        domain_type,
+        product_key
+      });
+      
+      // Forzar clean_layer='shared' y actor_type='master'
+      const result = await markCleanStudent({
+        student_id,
+        item_ref,
+        clean_layer: 'shared', // Siempre SHARED en este panel
+        product_key,
+        domain_type,
+        actor_type: 'master',
+        actor_ref,
+        surface_key: surface_key || 'master.alquimia_alumno'
+      });
+      
+      if (!result) {
+        return jsonSuccess({
+          applied: false,
+          reason: 'Alumno en pausa o item no aplica'
+        }, traceId);
+      }
+      
+      return jsonSuccess({
+        applied: true,
+        state: result
+      }, traceId);
+    }
+    
+    // 3) GET /master/api/alquimia-alumno/item-history?student_id=...&domain_type=...&item_ref=...&limit=...
+    if (path.match(/^\/master\/api\/alquimia-alumno\/item-history$/) && method === 'GET') {
+      const studentId = parseInt(url.searchParams.get('student_id'), 10);
+      const domainType = url.searchParams.get('domain_type') || 'transmutation';
+      const itemRef = url.searchParams.get('item_ref');
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
+      
+      if (!studentId || isNaN(studentId)) {
+        return jsonError('student_id es requerido y debe ser un número', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+      
+      if (!itemRef) {
+        return jsonError('item_ref es requerido', 'MISSING_ITEM_REF', 400, traceId);
+      }
+      
+      logInfo('MasterApiAlquimiaAlumno', 'GET item-history', {
+        traceId,
+        student_id: studentId,
+        domain_type: domainType,
+        item_ref: itemRef,
+        limit
+      });
+      
+      const eventsRepo = getDefaultCleaningEventsRepo();
+      const events = await eventsRepo.listEventsForStudentItem({
+        student_id: studentId,
+        item_ref: itemRef,
+        product_key: 'pde',
+        domain_type: domainType,
+        limit
+      });
+      
+      return jsonSuccess({
+        events: events.map(e => ({
+          id: e.id,
+          created_at: e.created_at,
+          action_type: e.action_type,
+          clean_layer: e.clean_layer,
+          actor_type: e.actor_type,
+          actor_ref: e.actor_ref,
+          surface_key: e.surface_key,
+          meta: e.meta
+        }))
+      }, traceId);
+    }
+    
+    // 4) GET /master/api/alquimia-alumno/report?student_id=...&days=...
+    if (path.match(/^\/master\/api\/alquimia-alumno\/report$/) && method === 'GET') {
+      const studentId = parseInt(url.searchParams.get('student_id'), 10);
+      const days = Math.min(parseInt(url.searchParams.get('days') || '30', 10), 365);
+      
+      if (!studentId || isNaN(studentId)) {
+        return jsonError('student_id es requerido y debe ser un número', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+      
+      logInfo('MasterApiAlquimiaAlumno', 'GET report', {
+        traceId,
+        student_id: studentId,
+        days
+      });
+      
+      // Calcular fecha desde
+      const sinceDate = new Date();
+      sinceDate.setDate(sinceDate.getDate() - days);
+      
+      // Query directa a cleaning_events
+      const { query } = await import('../../database/pg.js');
+      const result = await query(`
+        SELECT 
+          id,
+          created_at,
+          item_ref,
+          domain_type,
+          action_type,
+          clean_layer,
+          actor_type,
+          actor_ref,
+          surface_key,
+          meta
+        FROM cleaning_events
+        WHERE student_id = $1
+          AND product_key = 'pde'
+          AND created_at >= $2
+        ORDER BY created_at DESC
+      `, [studentId, sinceDate.toISOString()]);
+      
+      const events = result.rows || [];
+      
+      // Separar por actor
+      const masterEvents = events.filter(e => e.actor_type === 'master');
+      const studentEvents = events.filter(e => e.actor_type === 'student');
+      
+      return jsonSuccess({
+        days,
+        since_date: sinceDate.toISOString(),
+        master_events: masterEvents,
+        student_events: studentEvents,
+        total: events.length
+      }, traceId);
+    }
+    
+    // Método no soportado
+    return jsonError('Ruta no encontrada', 'NOT_FOUND', 404, traceId);
+  } catch (error) {
+    logError('MasterApiAlquimiaAlumno', 'Error en handler', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      path,
+      method
+    });
+    
+    return jsonError('Error interno del servidor', 'INTERNAL_ERROR', 500, traceId);
   }
-  
-  if (path === '/master/api/alquimia/clean' && method === 'POST') {
-    return await cleanItemHandler(request, env, ctx);
-  }
-
-  // Ruta no encontrada
-  return jsonError('Ruta no encontrada', 'ROUTE_NOT_FOUND', 404, traceId);
 }
