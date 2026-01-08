@@ -246,7 +246,7 @@ export async function markCleanStudent(options, client = null) {
       domain_type,
       item_ref,
       clean_layer,
-      item_kind,
+      item_kind: itemKind, // Usar itemKind (definido arriba)
       action_type: 'mark_clean',
       delta_completed: itemKind === 'una_vez' ? 1 : null,
       set_remaining: null,
@@ -432,12 +432,33 @@ export async function markCleanAllStudents(options, client = null) {
       }
     }
     
-    // 5. Aplicar limpieza a cada alumno activo
+    // 5. Obtener nivel del item para verificación
+    const itemNivel = item.nivel || 999;
+    
+    // 6. Aplicar limpieza a cada alumno activo con breakdown de razones
     let updated = 0;
     let skipped = 0;
+    const skippedBreakdown = {
+      paused: 0,
+      not_applicable_level: 0,
+      already_clean: 0,
+      missing_item: 0,
+      no_change: 0,
+      error: 0,
+      other: 0
+    };
     
     for (const studentId of activeStudentIds) {
       try {
+        // Verificar si aplica por nivel antes de limpiar
+        const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key);
+        
+        if (nivelEfectivo < itemNivel) {
+          skipped++;
+          skippedBreakdown.not_applicable_level++;
+          continue;
+        }
+        
         const result = await markCleanStudent({
           student_id: studentId,
           item_ref,
@@ -453,7 +474,8 @@ export async function markCleanAllStudents(options, client = null) {
         if (result) {
           updated++;
         } else {
-          skipped++; // Pausado o no aplica por nivel
+          skipped++;
+          skippedBreakdown.no_change++; // Ya estaba limpio o idempotencia
         }
       } catch (error) {
         logWarn('CleaningEngine', 'Error en markCleanStudent individual (continuando)', {
@@ -463,6 +485,7 @@ export async function markCleanAllStudents(options, client = null) {
           error: error.message
         });
         skipped++;
+        skippedBreakdown.error++;
       }
     }
     
@@ -472,10 +495,16 @@ export async function markCleanAllStudents(options, client = null) {
       clean_layer,
       updated,
       skipped,
-      total: activeStudentIds.length
+      total: activeStudentIds.length,
+      skipped_breakdown: skippedBreakdown
     });
     
-    return { updated, skipped, total: activeStudentIds.length };
+    return { 
+      updated, 
+      skipped, 
+      total: activeStudentIds.length,
+      skipped_breakdown: skippedBreakdown
+    };
   } catch (error) {
     logError('CleaningEngine', 'Error en markCleanAllStudents', {
       traceId,

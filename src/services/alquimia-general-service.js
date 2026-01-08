@@ -756,6 +756,19 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       }
     });
     
+    // Asegurar que skipped_breakdown está presente
+    if (!result.skipped_breakdown) {
+      result.skipped_breakdown = {
+        paused: 0,
+        not_applicable_level: 0,
+        already_clean: 0,
+        missing_item: 0,
+        no_change: 0,
+        error: 0,
+        other: 0
+      };
+    }
+    
     // Mantener señales legacy para compatibilidad (el Cleaning Engine ya emite señales)
     if (result && result.updated > 0) {
       try {
@@ -972,6 +985,16 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     });
     
     const updatedStudents = cleaningResult.updated || 0;
+    const skipped = cleaningResult.skipped || 0;
+    const skippedBreakdown = cleaningResult.skipped_breakdown || {
+      paused: 0,
+      not_applicable_level: 0,
+      already_clean: 0,
+      missing_item: 0,
+      no_change: 0,
+      error: 0,
+      other: 0
+    };
     
     // 2) Insertar logs en pde_daily_item_clean_log (append-only SOT adicional)
     const cleanedDate = new Date();
@@ -1042,7 +1065,8 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
       updated_students: updatedStudents,
       logged,
       skipped,
-      cleaned_date: cleanedDateStr
+      cleaned_date: cleanedDateStr,
+      skipped_breakdown: skippedBreakdown
     };
   } catch (error) {
     logError('AlquimiaGeneralService', 'Error en markPdeCleanAll', {

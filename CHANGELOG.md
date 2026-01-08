@@ -9,6 +9,34 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.59.3] - 2026-01-08
+
+### Fixed
+- **item_kind is not defined**: Corregido error en `cleaning-engine-service.js` línea 249
+  - Variable `item_kind` ahora usa `itemKind` (definido correctamente)
+  - Fix aplicado a `markCleanStudent` para evitar ReferenceError
+- **PDE clean-all 500**: Registrada ruta `mark-pde-clean-all` en `master-route-registry.js`
+  - Añadida entrada con `key: 'master-api-alquimia-item-mark-pde-clean-all'`
+  - Ruta ahora resuelve correctamente como API endpoint
+- **Skipped reasons breakdown**: Implementado breakdown canónico de razones de skip
+  - `markCleanAllStudents` ahora devuelve `skipped_breakdown` con categorías:
+    - `paused`: estudiantes en pausa
+    - `not_applicable_level`: no aplican por nivel
+    - `already_clean`: ya estaban limpios
+    - `no_change`: idempotencia (ya aplicado)
+    - `error`: errores durante procesamiento
+    - `other`: otras razones
+  - Breakdown incluido en logs estructurados con trace_id
+  - UI muestra breakdown cuando `updated=0` y `skipped>0`
+
+### Changed
+- **UI Messages**: Mejorados mensajes de resultado en modal VER
+  - Cuando `updated=0`, muestra breakdown detallado (ej: "0 actualizados; 16 no aplican (nivel)")
+  - Aplicado tanto a SHARED como PDE clean-all
+  - Mensajes más informativos para debugging
+
+---
+
 ## [5.59.2] - 2026-01-08
 
 ### Fixed

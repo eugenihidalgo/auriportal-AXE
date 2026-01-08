@@ -770,8 +770,24 @@
 
       console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', result);
       
-      // Mostrar mensaje en UI (no alert)
-      const message = `✅ Item limpiado para ${result.updated || 0} alumnos`;
+      // Mostrar mensaje en UI con breakdown si updated=0
+      const updated = result.updated || result.data?.updated || 0;
+      const skipped = result.skipped || result.data?.skipped || 0;
+      const breakdown = result.skipped_breakdown || result.data?.skipped_breakdown || {};
+      
+      let message = `✅ Item limpiado para ${updated} alumnos`;
+      if (updated === 0 && skipped > 0) {
+        const reasons = [];
+        if (breakdown.paused > 0) reasons.push(`${breakdown.paused} pausados`);
+        if (breakdown.not_applicable_level > 0) reasons.push(`${breakdown.not_applicable_level} no aplican (nivel)`);
+        if (breakdown.no_change > 0) reasons.push(`${breakdown.no_change} ya limpios`);
+        if (breakdown.error > 0) reasons.push(`${breakdown.error} errores`);
+        if (reasons.length > 0) {
+          message = `⚠️ 0 actualizados; ${reasons.join(', ')}`;
+        } else {
+          message = `⚠️ 0 actualizados; ${skipped} omitidos`;
+        }
+      }
       showWarning(message);
       
       // Recargar items para refrescar estado
@@ -1936,7 +1952,23 @@
       }
 
       const data = result.data || result;
-      const message = `PDE registrado: ${data.logged || 0} alumnos (fecha ${data.cleaned_date || 'hoy'})`;
+      const updated = data.updated_students || 0;
+      const skipped = data.skipped || 0;
+      const breakdown = data.skipped_breakdown || {};
+      
+      let message = `PDE registrado: ${data.logged || updated} alumnos (fecha ${data.cleaned_date || 'hoy'})`;
+      if (updated === 0 && skipped > 0) {
+        const reasons = [];
+        if (breakdown.paused > 0) reasons.push(`${breakdown.paused} pausados`);
+        if (breakdown.not_applicable_level > 0) reasons.push(`${breakdown.not_applicable_level} no aplican (nivel)`);
+        if (breakdown.no_change > 0) reasons.push(`${breakdown.no_change} ya limpios`);
+        if (breakdown.error > 0) reasons.push(`${breakdown.error} errores`);
+        if (reasons.length > 0) {
+          message = `⚠️ PDE: 0 actualizados; ${reasons.join(', ')}`;
+        } else {
+          message = `⚠️ PDE: 0 actualizados; ${skipped} omitidos`;
+        }
+      }
       showWarning(message);
       
       // Refetch items y flotante si está abierto

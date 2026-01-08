@@ -100,6 +100,12 @@ export const MASTER_ROUTES = [
     method: 'POST'
   },
   {
+    key: 'master-api-alquimia-item-mark-pde-clean-all',
+    path: '/master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'master-api-alquimia-item-mark-clean-student',
     path: '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student',
     type: 'api',
