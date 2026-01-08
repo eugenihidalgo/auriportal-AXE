@@ -9,6 +9,26 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.59.5] - 2026-01-08
+
+### Fixed
+- **PDE clean-all endpoint 500**: Corregido handler no mapeado en MASTER_HANDLER_MAP
+  - Ruta `master-api-alquimia-item-mark-pde-clean-all` estaba registrada pero no mapeada
+  - Añadido mapeo en `master-router-resolver.js` línea 49
+  - Endpoint ahora resuelve correctamente y devuelve 200 OK
+- **Error surfacing en cliente**: Mejorado manejo de errores en `handlePdeCleanItem`
+  - Cliente ahora lee body como texto si no es JSON y loguea trace_id
+  - Logs forenses incluyen: status, url, trace_id, content_type, body_preview (300 chars)
+  - Errores siempre incluyen trace_id para debugging
+
+### Changed
+- **Logging**: Mejorado logging estructurado en endpoint PDE clean-all
+  - Prefijo `[PDE_CLEAN_ALL]` en logs de error para fácil filtrado
+  - Logs incluyen `itemRef` y `productKey` para contexto completo
+  - Endpoint siempre devuelve JSON con `trace_id` incluso en 500
+
+---
+
 ## [5.59.4] - 2026-01-08
 
 ### Fixed

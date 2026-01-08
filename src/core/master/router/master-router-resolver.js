@@ -46,6 +46,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-students': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-mark-clean-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-item-mark-pde-clean-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-mark-clean-student': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-increment-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),

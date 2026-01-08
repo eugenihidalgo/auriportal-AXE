@@ -1945,10 +1945,37 @@
         headers: { 'Content-Type': 'application/json' }
       });
 
-      const result = await response.json();
+      // Error surfacing: leer body como texto primero para diagnóstico
+      const contentType = response.headers.get('content-type') || '';
+      let result;
       
-      if (!result.ok) {
-        throw new Error(result.error || 'Error en limpieza PDE');
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        const traceId = response.headers.get('x-trace-id') || 'missing';
+        console.error('[MasterAlquimiaGeneral] PDE clean-all: respuesta no-JSON', {
+          status: response.status,
+          url: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`,
+          trace_id: traceId,
+          content_type: contentType,
+          body_preview: text.substring(0, 300)
+        });
+        throw new Error(`Respuesta no-JSON del servidor (${response.status}). Trace ID: ${traceId}`);
+      }
+      
+      result = await response.json();
+      
+      // Log forense si hay error
+      if (!result.ok || response.status !== 200) {
+        const traceId = result.trace_id || response.headers.get('x-trace-id') || 'missing';
+        console.error('[MasterAlquimiaGeneral] PDE clean-all: error en respuesta', {
+          status: response.status,
+          ok: result.ok,
+          error: result.error,
+          code: result.code,
+          trace_id: traceId,
+          url: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`
+        });
+        throw new Error(result.error || `Error en limpieza PDE (${response.status})`);
       }
 
       const data = result.data || result;

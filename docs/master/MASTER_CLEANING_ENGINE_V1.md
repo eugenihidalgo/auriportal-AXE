@@ -181,6 +181,34 @@ Esto ejecuta:
 
 ## Incidentes y Hotfixes
 
+### Incidente v5.59.5: PDE clean-all endpoint devolvía 500 (handler no mapeado)
+
+**Síntoma:**
+- Al pulsar botón PDE en Alquimia General, el endpoint devolvía 500
+- Error en logs: "MASTER API handler not mapped: POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (routeKey=master-api-alquimia-item-mark-pde-clean-all)"
+- El navegador solo mostraba 500 sin trace_id visible
+
+**Causa Raíz:**
+- La ruta estaba registrada en `master-route-registry.js` pero NO estaba mapeada en `MASTER_HANDLER_MAP` en `master-router-resolver.js`
+- El router lanzaba error estructural que no se capturaba correctamente como JSON con trace_id
+- El cliente no tenía "error surfacing" para mostrar trace_id cuando la respuesta no era JSON
+
+**Fix Canónico:**
+- Añadido mapeo `'master-api-alquimia-item-mark-pde-clean-all': () => import('../../../endpoints/master-api-alquimia-general.js')` en `MASTER_HANDLER_MAP` (línea 49)
+- Mejorado error handling en cliente: lee body como texto si no es JSON y loguea trace_id
+- Endpoint ahora envuelve todo en try/catch y siempre devuelve JSON con trace_id incluso en 500
+- Logs estructurados con prefijo `[PDE_CLEAN_ALL]` para fácil filtrado
+
+**Verificación:**
+- Endpoint ahora devuelve 200 OK tras click PDE
+- Logs muestran trace_id en todos los errores
+- Cliente muestra trace_id en consola cuando hay errores
+
+**Prevención:**
+- Regla constitucional: Toda ruta registrada DEBE estar mapeada en `MASTER_HANDLER_MAP`
+- Script de verificación: `npm run check:master-api` (si existe) debería detectar handlers faltantes
+- Error surfacing en cliente: Todos los errores de API muestran trace_id en consola
+
 ### Incidente v5.59.4: PDE clean-all no se reflejaba en vista PDE
 
 **Síntoma:**
