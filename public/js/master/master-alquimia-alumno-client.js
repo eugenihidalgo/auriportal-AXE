@@ -58,7 +58,8 @@
     students: [],
     selectedStudentId: null,
     megalistData: null,
-    loading: false
+    loading: false,
+    levelCap: null // null = Auto (nivel_efectivo), number = cap explícito
   };
 
   // Elementos DOM
@@ -212,6 +213,16 @@
     state.selectedStudentId = studentId;
     state.loading = true;
     
+    // Cargar level_cap desde localStorage
+    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${studentId}`;
+    const savedCap = localStorage.getItem(storageKey);
+    if (savedCap) {
+      const cap = parseInt(savedCap, 10);
+      state.levelCap = isNaN(cap) ? null : cap;
+    } else {
+      state.levelCap = null; // Auto
+    }
+    
     // Actualizar URL
     const url = new URL(window.location);
     url.searchParams.set('student_id', studentId);
@@ -262,7 +273,13 @@
       state.loading = true;
       showLoading();
       
-      const response = await fetch(`/master/api/alquimia-alumno/megalist?student_id=${studentId}`);
+      // Construir URL con level_cap si viene
+      let url = `/master/api/alquimia-alumno/megalist?student_id=${studentId}`;
+      if (state.levelCap !== null) {
+        url += `&level_cap=${state.levelCap === 999 ? 'infinity' : state.levelCap}`;
+      }
+      
+      const response = await fetch(url);
       const result = await response.json();
       
       if (!result.ok) {
@@ -297,19 +314,142 @@
   }
 
   /**
+   * Renderiza el selector de nivel cap
+   */
+  function renderLevelCapSelector() {
+    if (!summarySection) return;
+    
+    // Contenedor para selector (arriba del resumen)
+    let selectorContainer = document.getElementById('level-cap-selector-container');
+    if (!selectorContainer) {
+      selectorContainer = document.createElement('div');
+      selectorContainer.id = 'level-cap-selector-container';
+      selectorContainer.className = 'mb-4 flex items-center gap-4';
+      summarySection.insertBefore(selectorContainer, summarySection.firstChild);
+    }
+    
+    // Limpiar
+    while (selectorContainer.firstChild) {
+      selectorContainer.removeChild(selectorContainer.firstChild);
+    }
+    
+    // Label
+    const label = document.createElement('label');
+    label.className = 'text-slate-300 text-sm font-medium';
+    label.textContent = 'Mostrar hasta nivel:';
+    selectorContainer.appendChild(label);
+    
+    // Select
+    const select = document.createElement('select');
+    select.id = 'level-cap-select';
+    select.className = 'px-4 py-2 bg-slate-800 text-white border border-slate-700 rounded-lg';
+    
+    // Opciones: Auto, 1..9, ∞
+    const options = [
+      { value: '', text: 'Auto (nivel efectivo)' },
+      { value: '1', text: '1' },
+      { value: '2', text: '2' },
+      { value: '3', text: '3' },
+      { value: '4', text: '4' },
+      { value: '5', text: '5' },
+      { value: '6', text: '6' },
+      { value: '7', text: '7' },
+      { value: '8', text: '8' },
+      { value: '9', text: '9' },
+      { value: '999', text: '∞ (Todos)' }
+    ];
+    
+    for (const opt of options) {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.text;
+      select.appendChild(option);
+    }
+    
+    // Cargar valor desde localStorage o state
+    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentId}`;
+    const savedCap = state.levelCap !== null ? state.levelCap.toString() : 
+                     (localStorage.getItem(storageKey) || '');
+    
+    if (savedCap === '999' || savedCap === 'infinity' || savedCap === '∞') {
+      select.value = '999';
+    } else if (savedCap) {
+      select.value = savedCap;
+    } else {
+      select.value = ''; // Auto
+    }
+    
+    // Event listener
+    select.addEventListener('change', (e) => {
+      const value = e.target.value;
+      let cap = null;
+      
+      if (value === '999' || value === 'infinity' || value === '∞') {
+        cap = 999;
+      } else if (value) {
+        cap = parseInt(value, 10);
+        if (isNaN(cap) || cap < 1) {
+          cap = null;
+        }
+      }
+      
+      state.levelCap = cap;
+      
+      // Persistir en localStorage
+      if (state.selectedStudentId) {
+        const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentId}`;
+        if (cap === null) {
+          localStorage.removeItem(storageKey);
+        } else {
+          localStorage.setItem(storageKey, cap.toString());
+        }
+      }
+      
+      // Recargar megalist con nuevo cap
+      if (state.selectedStudentId) {
+        loadMegalist(state.selectedStudentId);
+      }
+    });
+    
+    selectorContainer.appendChild(select);
+  }
+
+  /**
    * Renderiza el resumen
    */
   function renderSummary(summary) {
     if (!summarySection) return;
     
-    // Limpiar
-    while (summarySection.firstChild) {
-      summarySection.removeChild(summarySection.firstChild);
+    // Renderizar selector de nivel cap primero
+    renderLevelCapSelector();
+    
+    // Limpiar resumen (pero no el selector)
+    const summaryContent = document.getElementById('summary-content');
+    if (summaryContent) {
+      while (summaryContent.firstChild) {
+        summaryContent.removeChild(summaryContent.firstChild);
+      }
     }
     
-    // Contenedor
-    const container = document.createElement('div');
-    container.className = 'grid grid-cols-4 gap-4 mb-6';
+    // Contenedor para resumen
+    let container = document.getElementById('summary-content');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'summary-content';
+      container.className = 'grid grid-cols-4 gap-4 mb-6';
+      // Insertar después del selector
+      const selectorContainer = document.getElementById('level-cap-selector-container');
+      if (selectorContainer && selectorContainer.nextSibling) {
+        summarySection.insertBefore(container, selectorContainer.nextSibling);
+      } else {
+        summarySection.appendChild(container);
+      }
+    }
+    
+    // Limpiar contenido previo del contenedor
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
     
     // Total
     const totalCard = createSummaryCard('Total', summary.total, 'text-slate-300');
@@ -604,17 +744,24 @@
     document.body.appendChild(loadingMsg);
     
     try {
+      // Incluir level_cap en el body si viene
+      const body = {
+        student_id: state.selectedStudentId,
+        item_ref: item.item_ref,
+        domain_type: 'transmutation',
+        product_key: 'pde'
+      };
+      
+      if (state.levelCap !== null) {
+        body.level_cap = state.levelCap === 999 ? 'infinity' : state.levelCap;
+      }
+      
       const response = await fetch('/master/api/alquimia-alumno/clean', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          student_id: state.selectedStudentId,
-          item_ref: item.item_ref,
-          domain_type: 'transmutation',
-          product_key: 'pde'
-        })
+        body: JSON.stringify(body)
       });
       
       const result = await response.json();

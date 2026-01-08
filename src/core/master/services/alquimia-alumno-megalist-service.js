@@ -127,24 +127,39 @@ async function getLastCleanActor(studentId, itemRef) {
  * @param {Object} options - Opciones
  * @param {number} options.student_id - ID del alumno
  * @param {string} [options.levels_mode] - Modo de niveles (por ahora solo aceptado, no usado)
+ * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
  * @returns {Promise<Object>} Estructura de megalista
  */
 export async function getMegalistForStudent(options = {}) {
   const traceId = getRequestId();
-  const { student_id, levels_mode } = options;
+  const { student_id, levels_mode, level_cap = null } = options;
   
   if (!student_id) {
     throw new Error('student_id es requerido');
   }
   
   try {
+    // 1. Determinar cap de nivel
+    let nivelCap;
+    if (level_cap !== null && level_cap !== undefined) {
+      nivelCap = parseInt(level_cap, 10);
+      if (isNaN(nivelCap) || nivelCap < 1) {
+        nivelCap = 999; // Fallback a infinito si inválido
+      }
+    } else {
+      // Usar nivel efectivo como default
+      nivelCap = await getStudentEffectiveLevel(student_id);
+    }
+    
     logInfo('AlquimiaAlumnoMegalist', 'Construyendo megalista desde estado', {
       traceId,
       student_id,
-      levels_mode
+      levels_mode,
+      level_cap: nivelCap,
+      level_cap_provided: level_cap !== null
     });
     
-    // 1. Verificar que el alumno existe
+    // 2. Verificar que el alumno existe
     const studentRepo = getDefaultStudentRepo();
     const student = await studentRepo.getById(student_id);
     
@@ -152,7 +167,7 @@ export async function getMegalistForStudent(options = {}) {
       throw new Error(`Alumno no encontrado: ${student_id}`);
     }
     
-    // 2. Verificar que no esté en pausa
+    // 3. Verificar que no esté en pausa
     const pausaRepo = getDefaultPausaRepo();
     const pausaActiva = await pausaRepo.getPausaActiva(student_id);
     if (pausaActiva) {
@@ -162,23 +177,26 @@ export async function getMegalistForStudent(options = {}) {
       });
     }
     
-    // 3. Obtener nivel efectivo del alumno
-    const nivelEfectivo = await getStudentEffectiveLevel(student_id);
-    
-    // 4. OBTENER TODOS LOS ESTADOS DE LIMPIEZA SHARED PARA ESTE ALUMNO (FUENTE ÚNICA)
+    // 4. OBTENER ESTADOS DE LIMPIEZA SHARED PARA ESTE ALUMNO (FUENTE ÚNICA)
+    // Filtrar por level_cap: solo items con nivel <= cap
+    // Necesitamos hacer JOIN con items_transmutaciones para filtrar por nivel
     const statesResult = await query(`
-      SELECT * FROM cleaning_item_state
-      WHERE student_id = $1
-        AND product_key = 'pde'
-        AND domain_type = 'transmutation'
-      ORDER BY item_ref
-    `, [student_id]);
+      SELECT s.*, i.nivel as item_nivel
+      FROM cleaning_item_state s
+      LEFT JOIN items_transmutaciones i ON i.item_ref = s.item_ref
+      WHERE s.student_id = $1
+        AND s.product_key = 'pde'
+        AND s.domain_type = 'transmutation'
+        AND (i.nivel IS NULL OR i.nivel <= $2::integer)
+      ORDER BY s.item_ref
+    `, [student_id, nivelCap]);
     
     const states = statesResult.rows || [];
     
-    logInfo('AlquimiaAlumnoMegalist', 'Estados obtenidos desde cleaning_item_state', {
+    logInfo('AlquimiaAlumnoMegalist', 'Estados obtenidos desde cleaning_item_state (filtrados por level_cap)', {
       traceId,
       student_id,
+      level_cap: nivelCap,
       states_count: states.length
     });
     
@@ -452,7 +470,9 @@ export async function getMegalistForStudent(options = {}) {
         email: student.email,
         apodo: student.apodo || null,
         nombre_completo: student.nombre_completo || null,
-        nivel_efectivo: nivelEfectivo
+        nivel_efectivo: nivelCap,
+        level_cap: nivelCap,
+        level_cap_provided: level_cap !== null
       },
       summary: {
         total,
@@ -484,7 +504,9 @@ export async function getMegalistForStudent(options = {}) {
       warnings: warnings.length > 0 ? warnings : undefined,
       context: {
         levels_mode,
-        clean_layer: 'shared' // Siempre SHARED en este panel
+        clean_layer: 'shared', // Siempre SHARED en este panel
+        level_cap: nivelCap,
+        level_cap_provided: level_cap !== null
       }
     };
     

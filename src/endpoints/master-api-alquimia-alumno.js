@@ -104,10 +104,13 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
   }
 
   try {
-    // 1) GET /master/api/alquimia-alumno/megalist?student_id=...&levels_mode=...
+    // 1) GET /master/api/alquimia-alumno/megalist?student_id=...&levels_mode=...&level_cap=...
     if (path.match(/^\/master\/api\/alquimia-alumno\/megalist$/) && method === 'GET') {
       const studentId = parseInt(url.searchParams.get('student_id'), 10);
       const levelsMode = url.searchParams.get('levels_mode') || null;
+      const levelCapParam = url.searchParams.get('level_cap');
+      const levelCap = levelCapParam === null || levelCapParam === '' ? null : 
+                       (levelCapParam === 'infinity' || levelCapParam === '∞' ? 999 : parseInt(levelCapParam, 10));
       
       if (!studentId || isNaN(studentId)) {
         return jsonError('student_id es requerido y debe ser un número', 'INVALID_STUDENT_ID', 400, traceId);
@@ -116,15 +119,19 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       logInfo('MasterApiAlquimiaAlumno', 'GET megalist', {
         traceId,
         student_id: studentId,
-        levels_mode: levelsMode
+        levels_mode: levelsMode,
+        level_cap: levelCap,
+        level_cap_provided: levelCap !== null
       });
       
       // CRÍTICO: Seed estados "NUNCA" antes de construir megalista
       // Esto asegura que todos los items aplicables tengan estado materializado
+      // Usar level_cap si viene, si no usar nivel_efectivo (default)
       const seedResult = await ensureCleaningItemStateSeedForStudent({
         student_id: studentId,
         product_key: 'pde',
-        domain_type: 'transmutation'
+        domain_type: 'transmutation',
+        level_cap: levelCap
       });
       
       logInfo('MasterApiAlquimiaAlumno', 'Seed completado', {
@@ -132,13 +139,16 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         student_id: studentId,
         inserted: seedResult.inserted,
         skipped: seedResult.skipped,
-        total_applicable: seedResult.total_applicable
+        total_applicable: seedResult.total_applicable,
+        level_cap: levelCap
       });
       
       // Construir megalista SOLO desde estados (como fix b1cca23)
+      // Filtrar por level_cap si viene
       const result = await getMegalistForStudent({
         student_id: studentId,
-        levels_mode: levelsMode
+        levels_mode: levelsMode,
+        level_cap: levelCap
       });
       
       return jsonSuccess(result, traceId);
@@ -153,10 +163,31 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('Body JSON inválido', 'INVALID_JSON', 400, traceId);
       }
       
-      const { student_id, item_ref, domain_type = 'transmutation', product_key = 'pde', actor_ref = null, surface_key = null } = body;
+      const { 
+        student_id, 
+        item_ref, 
+        domain_type = 'transmutation', 
+        product_key = 'pde', 
+        actor_ref = null, 
+        surface_key = null,
+        level_cap = null
+      } = body;
       
       if (!student_id || !item_ref) {
         return jsonError('student_id e item_ref son requeridos', 'MISSING_PARAMS', 400, traceId);
+      }
+      
+      // Normalizar level_cap (infinity/∞ → 999)
+      let levelCapOverride = null;
+      if (level_cap !== null && level_cap !== undefined) {
+        if (level_cap === 'infinity' || level_cap === '∞') {
+          levelCapOverride = 999;
+        } else {
+          levelCapOverride = parseInt(level_cap, 10);
+          if (isNaN(levelCapOverride) || levelCapOverride < 1) {
+            levelCapOverride = 999; // Fallback
+          }
+        }
       }
       
       logInfo('MasterApiAlquimiaAlumno', 'POST clean', {
@@ -164,12 +195,35 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         student_id,
         item_ref,
         domain_type,
-        product_key
+        product_key,
+        level_cap_override: levelCapOverride
       });
       
       // CRÍTICO: Validar que el estado existe en cleaning_item_state
       // (tras seed debería existir, pero validamos por seguridad)
       const { query } = await import('../../database/pg.js');
+      
+      // Si hay level_cap_override, validar que el item no excede el cap
+      if (levelCapOverride !== null) {
+        const itemCheck = await query(`
+          SELECT nivel
+          FROM items_transmutaciones
+          WHERE item_ref = $1
+        `, [item_ref]);
+        
+        if (itemCheck.rows && itemCheck.rows.length > 0) {
+          const itemNivel = itemCheck.rows[0].nivel;
+          if (itemNivel !== null && itemNivel > levelCapOverride) {
+            return jsonError(
+              `Item nivel ${itemNivel} excede el cap seleccionado (${levelCapOverride})`,
+              'ITEM_LEVEL_EXCEEDS_CAP',
+              400,
+              traceId
+            );
+          }
+        }
+      }
+      
       const stateCheck = await query(`
         SELECT 1 
         FROM cleaning_item_state
@@ -181,10 +235,12 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       if (!stateCheck.rows || stateCheck.rows.length === 0) {
         // Si no existe, intentar seed primero (puede ser item nuevo)
+        // Usar level_cap si viene
         await ensureCleaningItemStateSeedForStudent({
           student_id,
           product_key,
-          domain_type
+          domain_type,
+          level_cap: levelCapOverride
         });
         
         // Verificar de nuevo
@@ -208,6 +264,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       }
       
       // Forzar clean_layer='shared' y actor_type='master'
+      // Pasar level_cap_override si viene (solo para Master en alquimia_alumno)
       const result = await markCleanStudent({
         student_id,
         item_ref,
@@ -216,7 +273,8 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         domain_type,
         actor_type: 'master',
         actor_ref,
-        surface_key: surface_key || 'master.alquimia_alumno'
+        surface_key: surface_key || 'master.alquimia_alumno',
+        level_cap_override: levelCapOverride
       });
       
       if (!result) {

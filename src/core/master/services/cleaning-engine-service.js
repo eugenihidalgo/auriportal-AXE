@@ -170,6 +170,7 @@ async function syncToStudentItemState(options, client = null) {
  * @param {string} options.actor_type - Tipo de actor ('master' | 'student' | 'automation')
  * @param {string} [options.actor_ref] - Referencia del actor
  * @param {string} [options.surface_key] - Superficie de origen
+ * @param {number|null} [options.level_cap_override] - Override de cap de nivel (solo Master en alquimia_alumno)
  * @param {Object} [options.meta={}] - Metadatos adicionales
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object|null>} Estado actualizado o null si está pausado/no aplica
@@ -185,6 +186,7 @@ export async function markCleanStudent(options, client = null) {
     actor_type,
     actor_ref = null,
     surface_key = null,
+    level_cap_override = null,
     meta = {}
   } = options;
   
@@ -213,14 +215,42 @@ export async function markCleanStudent(options, client = null) {
     }
     
     // 3. Verificar nivel (si item tiene nivel > nivel_efectivo, no aplica)
+    // EXCEPCIÓN: Master Override en alquimia_alumno (guards estrictos)
     const nivelEfectivo = await getStudentEffectiveLevel(student_id);
-    if (item.nivel && item.nivel > nivelEfectivo) {
+    let nivelCapAplicar = nivelEfectivo;
+    let overrideAplicado = false;
+    
+    // Guards estrictos para Master Override:
+    // - actor_type === 'master'
+    // - surface_key === 'master.alquimia_alumno'
+    // - level_cap_override is not null
+    if (level_cap_override !== null && 
+        actor_type === 'master' && 
+        surface_key === 'master.alquimia_alumno') {
+      nivelCapAplicar = parseInt(level_cap_override, 10);
+      if (isNaN(nivelCapAplicar) || nivelCapAplicar < 1) {
+        nivelCapAplicar = 999; // Fallback a infinito
+      }
+      overrideAplicado = true;
+      logInfo('CleaningEngine', 'Master Override aplicado (level_cap_override)', {
+        traceId,
+        student_id,
+        item_ref,
+        item_nivel: item.nivel,
+        nivel_efectivo: nivelEfectivo,
+        level_cap_override: nivelCapAplicar
+      });
+    }
+    
+    if (item.nivel && item.nivel > nivelCapAplicar) {
       logInfo('CleaningEngine', 'Item no aplica por nivel', {
         traceId,
         student_id,
         item_ref,
         item_nivel: item.nivel,
-        nivel_efectivo: nivelEfectivo
+        nivel_efectivo: nivelEfectivo,
+        nivel_cap_aplicar: nivelCapAplicar,
+        override_aplicado: overrideAplicado
       });
       return null; // No aplica, pero no es error
     }
@@ -258,7 +288,11 @@ export async function markCleanStudent(options, client = null) {
         item_id: item.id,
         lista_id: item.lista_id,
         item_nivel: item.nivel,
-        nivel_efectivo: nivelEfectivo
+        nivel_efectivo: nivelEfectivo,
+        ...(overrideAplicado ? {
+          level_cap_override_applied: true,
+          level_cap_override: nivelCapAplicar
+        } : {})
       }
     };
     

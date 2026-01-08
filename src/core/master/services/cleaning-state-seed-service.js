@@ -19,6 +19,7 @@ import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
  * @param {number} options.student_id - ID del alumno
  * @param {string} [options.product_key='pde'] - Product key
  * @param {string} [options.domain_type='transmutation'] - Domain type
+ * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
  * @param {Object} [options.client] - Cliente de transacción (opcional)
  * @returns {Promise<Object>} { inserted, skipped, total_applicable }
  */
@@ -27,7 +28,8 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
   const { 
     student_id, 
     product_key = 'pde', 
-    domain_type = 'transmutation' 
+    domain_type = 'transmutation',
+    level_cap = null
   } = options;
   
   if (!student_id) {
@@ -37,21 +39,33 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
   const queryFn = client ? client.query.bind(client) : query;
   
   try {
+    // 1. Determinar cap de nivel
+    // Si level_cap viene explícito, usarlo; si no, usar nivel_efectivo
+    let nivelCap;
+    if (level_cap !== null && level_cap !== undefined) {
+      nivelCap = parseInt(level_cap, 10);
+      if (isNaN(nivelCap) || nivelCap < 1) {
+        nivelCap = 999; // Fallback a infinito si inválido
+      }
+    } else {
+      // Usar nivel efectivo como default
+      nivelCap = await getStudentEffectiveLevel(student_id);
+    }
+    
     logInfo('SEED_CLEAN_STATE', 'Iniciando seed de estados', {
       traceId,
       student_id,
       product_key,
-      domain_type
+      domain_type,
+      level_cap: nivelCap,
+      level_cap_provided: level_cap !== null
     });
-    
-    // 1. Obtener nivel efectivo del alumno
-    const nivelEfectivo = await getStudentEffectiveLevel(student_id);
     
     // 2. Insertar estados faltantes para items aplicables del catálogo
     // Filtros:
     // - Items activos (status='active' OR activo=true)
     // - Items con item_ref no null
-    // - Items con nivel <= nivel_efectivo (si nivel no es null)
+    // - Items con nivel <= nivelCap (si nivel no es null)
     // - Items que NO tienen estado en cleaning_item_state
     const insertResult = await queryFn(`
       INSERT INTO cleaning_item_state (
@@ -98,7 +112,7 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
             AND s.item_ref = i.item_ref
         )
       ON CONFLICT (student_id, product_key, domain_type, item_ref) DO NOTHING
-    `, [student_id, product_key, domain_type, nivelEfectivo]);
+    `, [student_id, product_key, domain_type, nivelCap]);
     
     const inserted = insertResult.rowCount || 0;
     
@@ -109,7 +123,7 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       WHERE (i.status = 'active' OR i.activo = true)
         AND i.item_ref IS NOT NULL
         AND (i.nivel IS NULL OR i.nivel <= $1::integer)
-    `, [nivelEfectivo]);
+    `, [nivelCap]);
     
     const totalApplicable = parseInt(totalResult.rows[0]?.total || '0', 10);
     
@@ -130,7 +144,8 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       student_id,
       product_key,
       domain_type,
-      nivel_efectivo: nivelEfectivo,
+      level_cap: nivelCap,
+      level_cap_provided: level_cap !== null,
       inserted,
       skipped,
       total_applicable: totalApplicable,
