@@ -70,7 +70,7 @@ export async function getStudentEffectiveLevel(studentId, lineKey = 'pde') {
   
   try {
     // Obtener UUID del alumno desde tabla students (si existe link)
-    const { query } = await import('../../../database/pg.js');
+    const { query } = await import('../../../../database/pg.js');
     const studentResult = await query(
       'SELECT id FROM students WHERE legacy_alumno_id = $1 LIMIT 1',
       [studentId]
@@ -417,7 +417,7 @@ export async function markCleanAllStudents(options, client = null) {
     const itemKind = lista.tipo;
     
     // 3. Obtener todos los alumnos (no paused)
-    const { query } = await import('../../../database/pg.js');
+    const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
     const alumnosResult = await queryFn('SELECT id FROM alumnos', []);

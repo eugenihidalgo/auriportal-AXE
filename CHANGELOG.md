@@ -9,6 +9,28 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.59.2] - 2026-01-08
+
+### Fixed
+- **Cleaning Engine Service Import**: Corregido import de `database/pg.js` en `cleaning-engine-service.js`
+  - Cambiado de `../../../database/pg.js` a `../../../../database/pg.js` (path correcto desde `src/core/master/services/`)
+  - Verificado con test de import dinámico
+- **Modal VER State Management**: Corregido estado del modal y refresco después de limpiar
+  - Añadido `state.modal` para trackear item y `cleanLayer` activos
+  - Modal se refresca automáticamente después de "Limpiar" (SHARED) y "PDE"
+  - Estado se limpia correctamente al cerrar modal (click fuera, ESC, botón cerrar)
+- **Clean Layer en Requests**: Asegurado que `clean_layer` se pasa en body de `mark-clean-all`
+  - Cliente ahora envía `clean_layer` desde `state.modal.cleanLayer` o default 'shared'
+  - Refresco automático del modal tras limpiar mantiene el `clean_layer` activo
+
+### Changed
+- **Modal Refresh Logic**: Mejorado refresco del modal después de acciones de limpieza
+  - "Limpiar" (SHARED) refresca modal con mismo `clean_layer`
+  - "PDE" refresca modal con `clean_layer='pde'`
+  - Mensajes de éxito mostrados en UI (no alert) con `showWarning()`
+
+---
+
 ## [5.59.1] - 2026-01-08
 
 ### Fixed

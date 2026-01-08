@@ -77,7 +77,11 @@
       nombre: '',
       descripcion: ''
     },
-    debounceTimers: {} // Map de item_id -> timer para autosave
+    debounceTimers: {}, // Map de item_id -> timer para autosave
+    modal: {
+      item: null,
+      cleanLayer: 'shared' // 'shared' | 'pde'
+    }
   };
 
   // Elementos DOM
@@ -695,6 +699,10 @@
       const normalized = normalizeStudentsPayload(result);
       normalized.clean_layer = cleanLayer; // Añadir clean_layer al payload normalizado
       
+      // Guardar estado del modal
+      state.modal.item = item;
+      state.modal.cleanLayer = cleanLayer;
+      
       // Si no es ok, mostrar warning pero no crash
       if (!normalized.ok) {
         console.warn('[MasterAlquimiaGeneral] Respuesta no-ok:', normalized.raw);
@@ -741,11 +749,17 @@
     }
 
     try {
+      // Determinar clean_layer desde el estado del modal o default 'shared'
+      const cleanLayer = state.modal?.cleanLayer || 'shared';
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          clean_layer: cleanLayer
+        })
       });
 
       const result = await response.json();
@@ -755,11 +769,19 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', result);
-      alert(`Item limpiado para ${result.updated || 0} alumnos`);
+      
+      // Mostrar mensaje en UI (no alert)
+      const message = `✅ Item limpiado para ${result.updated || 0} alumnos`;
+      showWarning(message);
       
       // Recargar items para refrescar estado
       if (state.listaActiva && state.listaActiva.id) {
         await loadItems(state.listaActiva.id);
+      }
+      
+      // Refrescar modal si está abierto
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        await handleVerItem(state.modal.item, state.modal.cleanLayer);
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
@@ -786,6 +808,9 @@
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         overlay.remove();
+        // Limpiar estado del modal
+        state.modal.item = null;
+        state.modal.cleanLayer = 'shared';
       }
     });
 
@@ -843,7 +868,12 @@
     const btnCerrar = document.createElement('button');
     btnCerrar.textContent = '❌';
     btnCerrar.style.cssText = 'background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem;';
-    btnCerrar.addEventListener('click', () => overlay.remove());
+    btnCerrar.addEventListener('click', () => {
+      overlay.remove();
+      // Limpiar estado del modal
+      state.modal.item = null;
+      state.modal.cleanLayer = 'shared';
+    });
     header.appendChild(btnCerrar);
 
     modal.appendChild(header);
@@ -1008,6 +1038,9 @@
       if (e.key === 'Escape') {
         overlay.remove();
         document.removeEventListener('keydown', escHandler);
+        // Limpiar estado del modal
+        state.modal.item = null;
+        state.modal.cleanLayer = 'shared';
       }
     };
     document.addEventListener('keydown', escHandler);
@@ -1177,7 +1210,9 @@
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
       
       // Recargar flotante con mismo clean_layer
-      await handleVerItem(item, cleanLayer);
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        await handleVerItem(item, cleanLayer);
+      }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       alert(`Error: ${error.message}`);
@@ -1906,10 +1941,9 @@
       
       // Refetch items y flotante si está abierto
       await loadItems(state.listaActiva.id);
-      // Si hay flotante abierto, recargarlo
-      const flotante = document.getElementById('flotante-ver-alquimia');
-      if (flotante) {
-        await handleVerItem(item);
+      // Si hay flotante abierto, recargarlo con clean_layer=pde
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        await handleVerItem(item, 'pde');
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
@@ -2056,6 +2090,9 @@
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         overlay.remove();
+        // Limpiar estado del modal
+        state.modal.item = null;
+        state.modal.cleanLayer = 'shared';
       }
     });
 
@@ -2304,6 +2341,9 @@
       if (e.key === 'Escape') {
         overlay.remove();
         document.removeEventListener('keydown', escHandler);
+        // Limpiar estado del modal
+        state.modal.item = null;
+        state.modal.cleanLayer = 'shared';
       }
     };
     document.addEventListener('keydown', escHandler);

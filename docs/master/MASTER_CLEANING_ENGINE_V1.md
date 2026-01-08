@@ -179,7 +179,32 @@ Esto ejecuta:
 - `scripts/verify-cleaning-engine-db.js`: Verifica estructura de BD
 - `scripts/verify-cleaning-engine-sample.js`: Verifica funcionalidad con datos de ejemplo
 
-## Incidente v5.59.0: Import Roto pg.js
+## Incidentes y Hotfixes
+
+### Incidente v5.59.2: Import Roto en cleaning-engine-service.js + Modal State
+
+**Síntoma:**
+- Modal "VER" mostraba error: "Cannot find module '/var/www/aurelinportal/src/database/pg.js'"
+- Modal no se refrescaba después de limpiar
+- `clean_layer` no se pasaba correctamente en requests
+
+**Causa Raíz:**
+- `cleaning-engine-service.js` usaba `../../../database/pg.js` (3 niveles) cuando debería ser `../../../../database/pg.js` (4 niveles desde `src/core/master/services/`)
+- Estado del modal (`state.modal`) no estaba inicializado
+- Cliente no pasaba `clean_layer` en body de `mark-clean-all`
+
+**Fix Canónico:**
+- Corregido import a `../../../../database/pg.js` en líneas 73 y 420
+- Añadido `state.modal = { item: null, cleanLayer: 'shared' }` al estado global
+- Cliente ahora envía `clean_layer` en body de `mark-clean-all`
+- Modal se refresca automáticamente después de limpiar manteniendo `clean_layer` activo
+- Estado del modal se limpia correctamente al cerrar (click fuera, ESC, botón cerrar)
+
+**Verificación:**
+- `node -e "import('./src/core/master/services/cleaning-engine-service.js')"` → ✅ Import OK
+- `npm run verify:cleaning-engine` → ✅ Todas las verificaciones pasan
+
+### Incidente v5.59.0: Import Roto pg.js
 
 ### Síntoma
 - Modal "VER" en Alquimia General mostraba error: "Cannot find module '/var/www/aurelinportal/src/database/pg.js'"
