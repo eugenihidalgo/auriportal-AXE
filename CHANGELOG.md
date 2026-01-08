@@ -13,6 +13,8 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 - **Panel Alquimia del Alumno v1**: Nueva pantalla `/master/templo-luz/alquimia-alumno`
+  - **Verificación DB**: Tablas `cleaning_events` y `cleaning_item_state` verificadas y operativas
+  - **Sin migraciones requeridas**: Todas las tablas necesarias ya existían
   - Selector de alumno arriba con búsqueda (reutiliza API `/master/api/students`)
   - Deep-link soportado: `?student_id=...` autoselecciona y carga
   - Empty state cuando no hay alumno seleccionado
