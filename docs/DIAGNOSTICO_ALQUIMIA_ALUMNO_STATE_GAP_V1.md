@@ -45,11 +45,24 @@ ORDER BY student_id;
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "student_id": 4,
+    "total_events": "5",
+    "unique_items_with_events": "5"
+  },
+  {
+    "student_id": 6,
+    "total_events": "3",
+    "unique_items_with_events": "3"
+  }
+]
+```
 
 ---
 
-### 1.3. TOP 20 item_ref con shared_last_cleaned_at (student_id=4)
+### 1.3. Catálogo - Items activos
 
 **Query:**
 ```sql
@@ -87,11 +100,20 @@ WHERE (status = 'active' OR activo = true);
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "total_items_activos": "117",
+    "unique_listas": "13",
+    "items_with_ref": "117",
+    "items_with_lista": "117"
+  }
+]
+```
 
 ---
 
-### 1.5. Catálogo - Listas activas
+### 1.4. Catálogo - Listas activas
 
 **Query:**
 ```sql
@@ -102,11 +124,17 @@ WHERE (status = 'active' OR activo = true);
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "total_listas_activas": "16"
+  }
+]
+```
 
 ---
 
-### 1.6. GAP - Items del catálogo sin estado (student_id=4)
+### 1.5. GAP - Items del catálogo sin estado (student_id=4)
 
 **Query:**
 ```sql
@@ -126,11 +154,17 @@ WHERE (i.status = 'active' OR i.activo = true)
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "items_catalogo_sin_estado": "112"
+  }
+]
+```
 
 ---
 
-### 1.7. GAP - States con item_ref inexistente (student_id=4)
+### 1.6. GAP - States con item_ref inexistente (student_id=4)
 
 **Query:**
 ```sql
@@ -149,11 +183,17 @@ WHERE s.student_id = 4
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "states_con_item_ref_inexistente": "0"
+  }
+]
+```
 
 ---
 
-### 1.8. Ejemplo items sin estado (student_id=4, primeros 10)
+### 1.7. Ejemplo items sin estado (student_id=4, primeros 10)
 
 **Query:**
 ```sql
@@ -177,11 +217,74 @@ LIMIT 10;
 ```
 
 **Resultados:**
-*(Ver output de terminal)*
+```json
+[
+  {
+    "item_ref": "te_item_119",
+    "nombre": "Segrestos d'altres realitats",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_113",
+    "nombre": "Pobreza en la fuerza y en la determinación",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_115",
+    "nombre": "Pobreza en otros planos y líneas paralelas",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_116",
+    "nombre": "Decretos en contra de la abundancia",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_117",
+    "nombre": "Votos de pobreza",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_130",
+    "nombre": "Interferencias conceptuales en la abundancia",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_131",
+    "nombre": "Pobreza en la alegria",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_132",
+    "nombre": "Pobreza económica",
+    "lista_id": 14,
+    "nivel": 1
+  },
+  {
+    "item_ref": "te_item_66",
+    "nombre": "Eje divino",
+    "lista_id": 6,
+    "nivel": 4
+  },
+  {
+    "item_ref": "te_item_133",
+    "nombre": "Sacrificio personal",
+    "lista_id": 14,
+    "nivel": 1
+  }
+]
+```
 
 ---
 
-### 1.9. Nivel efectivo del alumno 4
+### 1.8. Nivel efectivo del alumno 4
 
 **Query:**
 ```sql
