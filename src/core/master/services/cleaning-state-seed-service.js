@@ -67,6 +67,8 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
     // - Items con item_ref no null
     // - Items con nivel <= nivelCap (si nivel no es null)
     // - Items que NO tienen estado en cleaning_item_state
+    // REGLA UNA_VEZ: Para items en listas tipo='una_vez', inicializar shared_remaining = COALESCE(veces_limpiar, 1)
+    // REGLA RECURRENTE: Para items en listas tipo='recurrente', inicializar shared_remaining = 0
     const insertResult = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id,
@@ -93,14 +95,31 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
         NULL as pde_last_cleaned_at,
         0 as shared_clean_count,
         0 as pde_clean_count,
-        0 as shared_completed,
-        0 as shared_remaining,
+        -- shared_completed: para una_vez, es 0 si remaining > 0, 1 si remaining = 0
+        -- Para recurrentes, siempre 0 en seed
+        CASE 
+          WHEN l.tipo = 'una_vez' AND COALESCE(i.veces_limpiar, 1) > 0 THEN 0
+          WHEN l.tipo = 'una_vez' AND COALESCE(i.veces_limpiar, 1) = 0 THEN 1
+          ELSE 0
+        END as shared_completed,
+        -- shared_remaining: para una_vez, usar veces_limpiar (fallback 1 si null)
+        -- Para recurrentes, siempre 0
+        CASE 
+          WHEN l.tipo = 'una_vez' THEN GREATEST(COALESCE(i.veces_limpiar, 1), 0)
+          ELSE 0
+        END as shared_remaining,
         0 as pde_completed,
-        '{}'::jsonb as meta,
+        jsonb_build_object(
+          'lista_tipo', l.tipo,
+          'veces_limpiar_catalog', i.veces_limpiar,
+          'frecuencia_dias_catalog', i.frecuencia_dias
+        ) as meta,
         now() as created_at,
         now() as updated_at
       FROM items_transmutaciones i
+      JOIN listas_transmutaciones l ON l.id = i.lista_id
       WHERE (i.status = 'active' OR i.activo = true)
+        AND (l.status = 'active' OR l.activo = true)
         AND i.item_ref IS NOT NULL
         AND (i.nivel IS NULL OR i.nivel <= $4::integer)
         AND NOT EXISTS (

@@ -9,6 +9,56 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.64.0] - 2026-01-08
+
+### Added
+- **Alquimia UNA_VEZ - Engine Canónico**: Implementación completa del estatuto UNA_VEZ v1
+  - Seed inicializa `shared_remaining` correctamente para items `una_vez` (usando `veces_limpiar` o fallback 1)
+  - Cálculo de estado mejorado: distingue entre `never`, `pending`, `reviewed` basado en `remaining` y `clean_count`
+  - Permite limpiezas múltiples sin límite diario (idempotencia por día previene duplicados)
+  - Actualización de `shared_completed` basada en `shared_remaining`
+- **Alquimia UNA_VEZ - UI Mejorada**: Visualización y acciones para items `una_vez`
+  - Progreso visible: "X / Y" (realizadas / requeridas)
+  - Marca visual "✓ Trabajado" cuando `realizadas > 0` (sin ocultar item)
+  - Botón "Limpiar" siempre visible y activo (permite múltiples limpiezas)
+  - Tooltip muestra progreso actual
+- **Documentación UNA_VEZ**:
+  - `docs/CONSTITUTION_ALQUIMIA_UNA_VEZ_V1.md`: Reglas constitucionales canónicas
+  - `docs/MASTER_ALQUIMIA_UNA_VEZ_ENGINE_V1.md`: Documentación técnica del engine
+  - `docs/MASTER_ALQUIMIA_ALUMNO_UNA_VEZ_UI_V1.md`: Documentación de UI
+  - `docs/DIAGNOSTICO_UNA_VEZ_AS_IS_V1.md`: Diagnóstico automático estado actual
+- **Tests UNA_VEZ**: Script de tests automáticos
+  - Test 1: Seed inicializa remaining correctamente para una_vez
+  - Test 2: Item archivado NO aparece en megalist
+  - Test 3: Limpiezas múltiples mismo día son idempotentes
+  - Test 4: Legacy veces_limpiar null usa fallback 1
+  - Comando npm: `npm run test:alquimia-una-vez`
+
+### Changed
+- **Seed Service**: Modificado para inicializar `shared_remaining` correctamente según tipo de lista
+  - Items `una_vez`: `shared_remaining = COALESCE(veces_limpiar, 1)`
+  - Items recurrentes: `shared_remaining = 0`
+  - Metadata guarda `lista_tipo`, `veces_limpiar_catalog`, `frecuencia_dias_catalog`
+- **Cálculo de Estado UNA_VEZ**: Lógica mejorada para distinguir estados
+  - `never`: `remaining > 0` y `clean_count = 0`
+  - `pending`: `remaining > 0` y `clean_count > 0`
+  - `reviewed`: `remaining <= 0` o `completed > 0`
+- **Repositorio Cleaning Item State**: Actualizado `upsertApplyOneTimeIncrementShared`
+  - Recalcula `shared_completed` basado en nuevo `shared_remaining`
+  - Mantiene coherencia entre `remaining`, `completed`, y `clean_count`
+- **Megalist Service**: Añadidos campos `progress_realizadas` y `progress_requeridas` para items `una_vez`
+- **UI Alquimia del Alumno**: Render mejorado para items `una_vez`
+  - Muestra progreso en formato "X / Y"
+  - Botón "Limpiar" siempre visible para items `una_vez`
+  - Ignora `frecuencia_dias` para items `una_vez` (solo usa `veces_limpiar`)
+
+### Fixed
+- **Problema Crítico**: Items `una_vez` ahora aparecen como limpiables en la UI
+  - Antes: Seed inicializaba `remaining = 0` → estado `reviewed` → botón oculto
+  - Ahora: Seed inicializa `remaining = veces_limpiar || 1` → estado `never`/`pending` → botón visible
+
+---
+
 ## [5.63.0] - 2025-01-27
 
 ### Added

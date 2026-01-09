@@ -123,19 +123,31 @@ export class CleaningItemStateRepoPg {
     const domainType = options.domain_type;
     const requiredCount = options.required_count || 1;
 
-    // Si no existe estado, inicializar con remaining = required_count - 1, completed = 1
-    // Si existe, incrementar completed y decrementar remaining (con clamp a 0)
+    // REGLA UNA_VEZ: 
+    // - Incrementar clean_count
+    // - Recalcular remaining = max(required_count - clean_count, 0)
+    // - Recalcular completed = (remaining === 0 ? 1 : 0)
+    // Si no existe estado, inicializar con clean_count = 1, remaining = max(0, required_count - 1), completed = (remaining === 0)
     const result = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id, product_key, domain_type, item_ref,
-        shared_completed, shared_remaining
+        shared_clean_count, shared_remaining, shared_completed
       ) VALUES (
-        $1, $2, $3, $4, 1, GREATEST(0, $5 - 1)
+        $1, $2, $3, $4, 1, GREATEST(0, $5 - 1), 
+        CASE WHEN $5 - 1 <= 0 THEN 1 ELSE 0 END
       )
       ON CONFLICT (student_id, product_key, domain_type, item_ref)
       DO UPDATE SET
-        shared_completed = cleaning_item_state.shared_completed + 1,
+        shared_clean_count = cleaning_item_state.shared_clean_count + 1,
+        -- Recalcular remaining basado en required_count y nuevo clean_count
+        -- Asumimos que remaining original = required_count - clean_count original
+        -- Nuevo remaining = required_count - (clean_count + 1) = remaining - 1
         shared_remaining = GREATEST(0, cleaning_item_state.shared_remaining - 1),
+        -- Recalcular completed: es 1 si remaining = 0, 0 si remaining > 0
+        shared_completed = CASE 
+          WHEN GREATEST(0, cleaning_item_state.shared_remaining - 1) <= 0 THEN 1 
+          ELSE 0 
+        END,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [

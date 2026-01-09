@@ -65,17 +65,37 @@ function calculateItemState(state, item, tipo) {
     }
   } else {
     // una_vez
+    // REGLA CANÓNICA: remaining = veces_limpiar - clean_count (calculado dinámicamente)
+    // Para determinar estado:
+    // - never: remaining > 0 y clean_count = 0 (nunca trabajado)
+    // - pending: remaining > 0 y clean_count > 0 (parcialmente trabajado)
+    // - reviewed: remaining <= 0 (completado)
     const remaining = state?.shared_remaining ?? null;
+    const cleanCount = state?.shared_clean_count ?? 0;
     const completed = state?.shared_completed ?? 0;
     
-    if (remaining === null && completed === 0) {
+    // Fail-open: si no hay estado, retornar 'never'
+    if (remaining === null) {
       return 'never';
     }
     
-    if (remaining !== null && remaining <= 0) {
+    // REGLA: remaining <= 0 significa que está completado
+    // Pero también verificamos clean_count para evitar falsos positivos
+    if (remaining <= 0 || completed > 0) {
       return 'reviewed';
     }
     
+    // REGLA: Si tiene clean_count > 0 pero remaining > 0, está parcialmente trabajado
+    if (cleanCount > 0 && remaining > 0) {
+      return 'pending';
+    }
+    
+    // REGLA: Si remaining > 0 y clean_count = 0, nunca trabajado
+    if (remaining > 0 && cleanCount === 0) {
+      return 'never';
+    }
+    
+    // Fallback: pending
     return 'pending';
   }
 }
@@ -434,8 +454,8 @@ export async function getMegalistForStudent(options = {}) {
         item_nombre: item.nombre || 'NO_RESUELTO', // Fail-open para nombre
         item_descripcion: item.descripcion || null, // Descripción para UI
         item_nivel: itemNivel,
-        item_frecuencia_dias: item.frecuencia_dias || null, // Para recurrentes
-        item_veces_limpiar: item.veces_limpiar ?? null, // Para una_vez
+        item_frecuencia_dias: item.frecuencia_dias || null, // Para recurrentes (ignorar para una_vez)
+        item_veces_limpiar: item.veces_limpiar ?? null, // Para una_vez (requerido para progreso)
         lista_id: lista.id,
         lista_nombre: lista.nombre || 'Sin lista', // Fail-open para nombre
         lista_tipo: listaTipo,
@@ -444,6 +464,9 @@ export async function getMegalistForStudent(options = {}) {
         shared_clean_count: state.shared_clean_count || 0,
         shared_completed: state.shared_completed || 0,
         shared_remaining: state.shared_remaining ?? null,
+        // Para una_vez: calcular progreso (realizadas / requeridas)
+        progress_realizadas: listaTipo === 'una_vez' ? (state.shared_clean_count || 0) : null,
+        progress_requeridas: listaTipo === 'una_vez' ? (item.veces_limpiar || 1) : null,
         last_actor: lastActor
       };
       

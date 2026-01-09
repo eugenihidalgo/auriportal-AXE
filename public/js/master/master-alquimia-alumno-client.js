@@ -661,16 +661,32 @@
     }
     
     // Recurrencia (frecuencia_dias o veces_limpiar)
-    if (item.item_frecuencia_dias !== null && item.item_frecuencia_dias !== undefined) {
+    // Para una_vez: mostrar progreso (realizadas / requeridas)
+    // Para recurrentes: mostrar frecuencia_dias
+    if (item.lista_tipo === 'una_vez') {
+      // Items una_vez: mostrar progreso
+      if (item.progress_requeridas !== null && item.progress_requeridas !== undefined) {
+        const vecesEl = document.createElement('span');
+        vecesEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
+        const realizadas = item.progress_realizadas || 0;
+        const requeridas = item.progress_requeridas || 1;
+        vecesEl.textContent = `${realizadas} / ${requeridas}`;
+        metaDiv.appendChild(vecesEl);
+        
+        // Marca visual si está trabajado (sin ocultar)
+        if (realizadas > 0) {
+          const workedEl = document.createElement('span');
+          workedEl.style.cssText = 'color: #10b981; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(16, 185, 129, 0.2); border-radius: 0.25rem;';
+          workedEl.textContent = '✓ Trabajado';
+          metaDiv.appendChild(workedEl);
+        }
+      }
+    } else if (item.item_frecuencia_dias !== null && item.item_frecuencia_dias !== undefined) {
+      // Items recurrentes: mostrar frecuencia_dias
       const recurEl = document.createElement('span');
       recurEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
       recurEl.textContent = `Cada ${item.item_frecuencia_dias} días`;
       metaDiv.appendChild(recurEl);
-    } else if (item.item_veces_limpiar !== null && item.item_veces_limpiar !== undefined) {
-      const vecesEl = document.createElement('span');
-      vecesEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
-      vecesEl.textContent = `${item.item_veces_limpiar} vez${item.item_veces_limpiar !== 1 ? 'es' : ''}`;
-      metaDiv.appendChild(vecesEl);
     }
     
     if (metaDiv.children.length > 0) {
@@ -682,15 +698,29 @@
     const rightDiv = document.createElement('div');
     rightDiv.className = 'flex items-center gap-2';
     
-    // Botón limpiar (solo si NO está revisado)
-    // CRÍTICO: Acción operativa - permite intervención inmediata
-    if (item.state !== 'reviewed') {
+    // Botón limpiar
+    // REGLA UNA_VEZ: Botón siempre activo (permite múltiples limpiezas sin límite diario)
+    // REGLA RECURRENTE: Solo si NO está revisado
+    const shouldShowCleanButton = item.lista_tipo === 'una_vez' || item.state !== 'reviewed';
+    
+    if (shouldShowCleanButton) {
       const cleanBtn = document.createElement('button');
       cleanBtn.className = 'px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded transition-colors';
-      cleanBtn.textContent = 'Marcar como revisado';
-      cleanBtn.title = 'Limpiar item (SHARED) - acción inmediata';
+      
+      // Texto diferente para una_vez vs recurrentes
+      if (item.lista_tipo === 'una_vez') {
+        cleanBtn.textContent = 'Limpiar';
+        cleanBtn.title = `Limpiar item (SHARED) - Progreso: ${item.progress_realizadas || 0} / ${item.progress_requeridas || 1}`;
+      } else {
+        cleanBtn.textContent = 'Marcar como revisado';
+        cleanBtn.title = 'Limpiar item (SHARED) - acción inmediata';
+      }
+      
       cleanBtn.addEventListener('click', () => {
-        if (confirm(`¿Marcar "${item.item_nombre}" como revisado?`)) {
+        const confirmMsg = item.lista_tipo === 'una_vez' 
+          ? `¿Limpiar "${item.item_nombre}"? (Progreso: ${item.progress_realizadas || 0} / ${item.progress_requeridas || 1})`
+          : `¿Marcar "${item.item_nombre}" como revisado?`;
+        if (confirm(confirmMsg)) {
           handleCleanItem(item);
         }
       });
