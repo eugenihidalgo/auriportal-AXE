@@ -109,6 +109,26 @@
 
 ---
 
+### 10. Rol Master en Alquimia General
+
+**REGLA:** Master puede limpiar cualquier item a cualquier alumno, sin validación de nivel.
+
+**Flotante de alumnos:**
+- SIEMPRE muestra todos los alumnos (nunca filtra por nivel)
+- Master puede limpiar items de cualquier nivel a cualquier alumno
+- No hay restricción de aplicabilidad por nivel
+
+**Limpieza desde flotante:**
+- Payload debe incluir: `item_kind`, `domain_type`, `actor_type='master'`, `surface_key='master.alquimia_general'`
+- Backend bypassa validación de nivel si `actor_type === 'master'` y `surface_key === 'master.alquimia_general'`
+
+**Ubicación:**
+- Frontend: `public/js/master/master-alquimia-general-client.js` (función `handleLimpiarEstudiante`)
+- Backend: `src/core/master/services/cleaning-engine-service.js` (función `markCleanStudent`)
+- Servicio: `src/services/alquimia-general-service.js` (función `getStudentsForItem` con `skip_level_filter=true`)
+
+---
+
 ## PROHIBICIONES
 
 1. **Prohibido:** Inicializar `shared_remaining = 0` para items `una_vez` en el seed

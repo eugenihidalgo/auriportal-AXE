@@ -57,12 +57,31 @@ Al cambiar de tab, se recargan las listas correspondientes.
 - **DÍAS RECURRENCIA** (solo recurrentes): Frecuencia en días (editable inline, autosave)
 - **VECES LIMPIAR** (solo una_vez): Número de veces requeridas (editable inline, autosave)
 - **ACCIONES**:
-  - **VER**: Abre modal con estudiantes por estado
+  - **VER**: Abre modal/flotante con estudiantes por estado
   - **🟢 Limpiar** (solo recurrentes): Limpieza global SHARED para todos los alumnos
   - **PDE** (solo recurrentes): Registro PDE de hoy para todos los alumnos
   - **+1** (solo una_vez): Incrementar +1 para todos los alumnos (SHARED)
   - **PDE** (solo una_vez): Registro PDE de incremento
   - **🗑**: Archivar item (soft delete, `status='archived'`)
+
+### 4. Flotante de Alumnos (Modal VER)
+
+**Acceso**: Botón "VER" en cada item
+
+**Funcionalidad**:
+- Muestra estudiantes agrupados por estado (reviewed, pending, important, never)
+- Permite limpieza individual por estudiante
+- Soporta capas SHARED y PDE (selector en header)
+
+**REGLA MASTER - Flotante de Alumnos**:
+- **SIEMPRE muestra TODOS los alumnos** (nunca filtra por nivel)
+- Master puede limpiar cualquier item a cualquier alumno
+- No hay restricción de aplicabilidad por nivel en contexto Master
+- Botón "Limpiar" individual disponible para cada alumno
+
+**Limpieza Individual**:
+- Payload canónico incluye: `item_kind`, `domain_type`, `actor_type='master'`, `surface_key='master.alquimia_general'`
+- Backend bypassa validación de nivel para contexto Master
 
 **Ordenamiento**:
 - Clic en header de columna: establecer como prioridad 1
@@ -71,7 +90,7 @@ Al cambiar de tab, se recargan las listas correspondientes.
 
 **REGLA CANÓNICA**: Solo se muestran items con `status='active'`. Items archivados no aparecen.
 
-### 4. Panel de Diagnóstico
+### 5. Panel de Diagnóstico
 
 **Ubicación**: Parte inferior de la página
 
@@ -108,6 +127,8 @@ Al cambiar de tab, se recargan las listas correspondientes.
 3. **Autosave**: Cambios en items se guardan automáticamente tras 800ms de inactividad
 4. **Clasificaciones desde SOT**: Siempre usar `pde_classification_terms` + `transmutacion_lista_classifications`
 5. **Refetch tras Mutaciones**: Después de crear/editar/archivar, refetch completo
+6. **Flotante Master - Sin Filtro de Nivel**: Flotante de alumnos SIEMPRE muestra todos los alumnos (nunca filtra por nivel)
+7. **Limpieza Master - Bypass de Nivel**: Master puede limpiar cualquier item a cualquier alumno sin validación de nivel
 
 ## Endpoints Consumidos
 
@@ -124,6 +145,7 @@ Al cambiar de tab, se recargan las listas correspondientes.
 - `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all`
 - `POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all`
 - `POST /master/api/alquimia-general/items/:item_ref/master/increment-all`
+- `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student` (limpieza individual desde flotante)
 - `GET /master/api/alquimia-general/diagnostics`
 
 ---

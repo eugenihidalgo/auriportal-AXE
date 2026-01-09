@@ -14,6 +14,7 @@ import {
   getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
   listItemGroups
 } from '../services/alquimia-general-service.js';
+import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
 
@@ -738,9 +739,10 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // ENDPOINTS MASTER - Estado de Alumnos
     // ============================================================================
 
-    // GET /master/api/alquimia-general/items/:item_ref/students (modal)
+    // GET /master/api/alquimia-general/items/:item_ref/students (modal/flotante)
     // FAIL-OPEN: Este endpoint NUNCA devuelve 500, siempre ok:true con shape estable
     // Soporta clean_layer para leer desde Cleaning Engine v1
+    // REGLA MASTER: Flotante Master NUNCA filtra alumnos por nivel (muestra todos los alumnos)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/students$/) && method === 'GET') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/students');
       const itemRef = params.item_ref;
@@ -809,9 +811,15 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         const tipo = lista.tipo;
         
         // Llamar servicio con try/catch para fail-open
+        // REGLA MASTER: Flotante Master NUNCA filtra alumnos por nivel (skip_level_filter=true)
         let result;
         try {
-          result = await getStudentsForItem(itemRef, tipo, productKey, { limit, offset, clean_layer: cleanLayer });
+          result = await getStudentsForItem(itemRef, tipo, productKey, { 
+            limit, 
+            offset, 
+            clean_layer: cleanLayer,
+            skip_level_filter: true // Master puede limpiar cualquier item a cualquier alumno
+          });
         } catch (serviceError) {
           logError('MasterApiAlquimiaGeneral', 'Error en getStudentsForItem (fail-open)', {
             traceId,
@@ -890,6 +898,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student (recurrente o una_vez)
+    // REGLA: Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-clean-student$/) && method === 'POST') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student');
       const itemRef = params.item_ref;
@@ -906,12 +915,36 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
       }
 
-      const state = await markCleanStudent(studentId, itemRef, productKey, cleanLayer);
+      // Validar que item existe y no está archivado
+      const catalogRepo = getDefaultAlquimiaCatalogRepo();
+      const item = await catalogRepo.getItemByRef(itemRef);
+      if (!item) {
+        return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
+      }
+      if (item.status === 'archived') {
+        return jsonError('Item archivado', 'ITEM_ARCHIVED', 404, traceId);
+      }
+
+      // Construir payload canónico para markCleanStudent
+      const options = {
+        student_id: studentId,
+        item_ref: itemRef,
+        product_key: productKey,
+        domain_type: body.domain_type || 'transmutation',
+        clean_layer: cleanLayer,
+        actor_type: body.actor_type || 'master',
+        actor_ref: body.actor_ref || null,
+        surface_key: body.surface_key || 'master.alquimia_general',
+        item_kind: body.item_kind || null, // Si viene del frontend, usarlo; si no, se determina desde lista
+        meta: body.meta || {}
+      };
+
+      const state = await markCleanStudent(options);
       if (!state) {
-        // Puede ser null si está pausado o no aplica por nivel (no es error)
+        // Puede ser null si está pausado (no es error, pero Master no debería estar bloqueado por nivel)
         return jsonSuccess({ 
           state: null, 
-          message: 'Alumno en pausa o item no aplica por nivel' 
+          message: 'Alumno en pausa' 
         }, traceId);
       }
 

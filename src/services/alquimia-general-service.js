@@ -512,6 +512,8 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     }
 
     // Filtrar por nivel efectivo y pausa (si clean_layer está especificado)
+    // REGLA MASTER: Flotante Master NUNCA filtra por nivel (bypass si skip_level_filter=true)
+    const skipLevelFilter = options.skip_level_filter === true; // Para contexto Master
     const studentsFiltered = [];
     const studentsNoAplica = []; // Alumnos cuyo nivel no aplica
     
@@ -525,10 +527,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         }
       }
       
-      // Verificar nivel efectivo
+      // Verificar nivel efectivo (SKIP si es Master desde alquimia_general)
       const nivelEfectivo = await getStudentEffectiveLevel(student.student_id);
-      if (item.nivel && item.nivel > nivelEfectivo) {
-        // No aplica por nivel
+      if (!skipLevelFilter && item.nivel && item.nivel > nivelEfectivo) {
+        // No aplica por nivel (solo si NO es Master)
         studentsNoAplica.push({
           ...student,
           nivel_efectivo: nivelEfectivo,

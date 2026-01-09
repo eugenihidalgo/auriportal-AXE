@@ -215,53 +215,68 @@ export async function markCleanStudent(options, client = null) {
     }
     
     // 3. Verificar nivel (si item tiene nivel > nivel_efectivo, no aplica)
+    // EXCEPCIÓN: Master desde alquimia_general NO valida nivel (puede limpiar cualquier item)
     // EXCEPCIÓN: Master Override en alquimia_alumno (guards estrictos)
+    const isMasterFromGeneral = actor_type === 'master' && surface_key === 'master.alquimia_general';
     const nivelEfectivo = await getStudentEffectiveLevel(student_id);
     let nivelCapAplicar = nivelEfectivo;
     let overrideAplicado = false;
     
-    // Guards estrictos para Master Override:
-    // - actor_type === 'master'
-    // - surface_key === 'master.alquimia_alumno'
-    // - level_cap_override is not null
-    if (level_cap_override !== null && 
-        actor_type === 'master' && 
-        surface_key === 'master.alquimia_alumno') {
-      nivelCapAplicar = parseInt(level_cap_override, 10);
-      if (isNaN(nivelCapAplicar) || nivelCapAplicar < 1) {
-        nivelCapAplicar = 999; // Fallback a infinito
+    // Si es Master desde alquimia_general, NO validar nivel (bypass completo)
+    if (!isMasterFromGeneral) {
+      // Guards estrictos para Master Override en alquimia_alumno:
+      // - actor_type === 'master'
+      // - surface_key === 'master.alquimia_alumno'
+      // - level_cap_override is not null
+      if (level_cap_override !== null && 
+          actor_type === 'master' && 
+          surface_key === 'master.alquimia_alumno') {
+        nivelCapAplicar = parseInt(level_cap_override, 10);
+        if (isNaN(nivelCapAplicar) || nivelCapAplicar < 1) {
+          nivelCapAplicar = 999; // Fallback a infinito
+        }
+        overrideAplicado = true;
+        logInfo('CleaningEngine', 'Master Override aplicado (level_cap_override)', {
+          traceId,
+          student_id,
+          item_ref,
+          item_nivel: item.nivel,
+          nivel_efectivo: nivelEfectivo,
+          level_cap_override: nivelCapAplicar
+        });
       }
-      overrideAplicado = true;
-      logInfo('CleaningEngine', 'Master Override aplicado (level_cap_override)', {
+      
+      // Validar nivel solo si NO es Master desde alquimia_general
+      if (item.nivel && item.nivel > nivelCapAplicar) {
+        logInfo('CleaningEngine', 'Item no aplica por nivel', {
+          traceId,
+          student_id,
+          item_ref,
+          item_nivel: item.nivel,
+          nivel_efectivo: nivelEfectivo,
+          nivel_cap_aplicar: nivelCapAplicar,
+          override_aplicado: overrideAplicado
+        });
+        return null; // No aplica, pero no es error
+      }
+    } else {
+      logInfo('CleaningEngine', 'Master desde alquimia_general: bypass de validación de nivel', {
         traceId,
         student_id,
         item_ref,
         item_nivel: item.nivel,
-        nivel_efectivo: nivelEfectivo,
-        level_cap_override: nivelCapAplicar
+        nivel_efectivo: nivelEfectivo
       });
     }
     
-    if (item.nivel && item.nivel > nivelCapAplicar) {
-      logInfo('CleaningEngine', 'Item no aplica por nivel', {
-        traceId,
-        student_id,
-        item_ref,
-        item_nivel: item.nivel,
-        nivel_efectivo: nivelEfectivo,
-        nivel_cap_aplicar: nivelCapAplicar,
-        override_aplicado: overrideAplicado
-      });
-      return null; // No aplica, pero no es error
-    }
-    
-    // 4. Determinar item_kind desde lista
+    // 4. Determinar item_kind desde lista o usar el que viene en options
     const lista = await catalogRepo.getListaById(item.lista_id);
     if (!lista) {
       throw new Error(`Lista no encontrada para item: ${item_ref}`);
     }
     
-    const itemKind = lista.tipo; // 'recurrente' o 'una_vez'
+    // Si item_kind viene en options, usarlo; si no, determinarlo desde la lista
+    const itemKind = options.item_kind || lista.tipo; // 'recurrente' o 'una_vez'
     
     // 5. Generar execution_key para idempotencia
     const executionKey = generateExecutionKey('mark_clean', item_ref, student_id);
@@ -345,7 +360,7 @@ export async function markCleanStudent(options, client = null) {
     if (clean_layer === 'shared') {
       await syncToStudentItemState({
         ...options,
-        item_kind,
+        item_kind: itemKind, // Usar variable local itemKind (camelCase)
         item_id: item.id
       }, client);
     }

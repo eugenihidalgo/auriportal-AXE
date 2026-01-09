@@ -1358,33 +1358,25 @@
     try {
       let response;
       
-      if (tipo === 'una_vez' && cleanLayer === 'shared') {
-        // Para una_vez SHARED: usar increment-all (aunque sea individual, el endpoint soporta)
-        // O mejor: crear endpoint específico para increment individual
-        // Por ahora, usamos mark-clean-student que el Cleaning Engine manejará correctamente
-        response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            student_id: student.student_id,
-            clean_layer: cleanLayer
-          })
-        });
-      } else {
-        // Recurrente o PDE: usar mark-clean-student
-        response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            student_id: student.student_id,
-            clean_layer: cleanLayer
-          })
-        });
-      }
+      // Payload canónico para limpieza Master desde Alquimia General
+      // REGLA: Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
+      const payload = {
+        student_id: student.student_id,
+        item_ref: item.item_ref,
+        item_kind: tipo, // 'recurrente' | 'una_vez' - REQUERIDO
+        domain_type: 'transmutation',
+        clean_layer: cleanLayer,
+        actor_type: 'master',
+        surface_key: 'master.alquimia_general'
+      };
+      
+      response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
       const result = await response.json();
       

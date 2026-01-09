@@ -9,6 +9,28 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.64.1] - 2026-01-09
+
+### Fixed
+- **Error crítico: Limpieza Master UNA_VEZ**: Fix "item_kind is not defined" en limpieza Master desde Alquimia General
+  - Frontend ahora envía payload completo: `item_kind`, `domain_type`, `actor_type`, `surface_key`
+  - Backend usa correctamente `itemKind` (variable local) en `syncToStudentItemState`
+  - Endpoint construye objeto `options` completo para `markCleanStudent`
+
+### Changed
+- **Limpieza Master - Bypass de Nivel**: Master puede limpiar cualquier item a cualquier alumno sin validación de nivel
+  - Backend bypassa validación de nivel si `actor_type === 'master'` y `surface_key === 'master.alquimia_general'`
+  - Flotante de alumnos nunca filtra por nivel (muestra todos los alumnos)
+  - Servicio `getStudentsForItem` acepta `skip_level_filter=true` para contexto Master
+
+### Added
+- **Documentación Fix Limpieza Master**:
+  - `docs/DIAGNOSTICO_FIX_LIMPIEZA_MASTER_V1.md`: Diagnóstico del problema y solución
+- **Regla Constitucional**: Añadida sección sobre rol Master en Alquimia General (`CONSTITUTION_ALQUIMIA_UNA_VEZ_V1.md`)
+- **Actualización UI Docs**: Documentado flotante de alumnos y reglas Master (`MASTER_ALQUIMIA_GENERAL_UI_V1.md`)
+
+---
+
 ## [5.64.0] - 2026-01-08
 
 ### Added
