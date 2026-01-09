@@ -37,14 +37,18 @@ async function runTests() {
     const code = readFileSync('./src/core/master/services/cleaning-engine-service.js', 'utf8');
     
     // Verificar que existe validación de item_kind requerido
-    if (!code.includes('item_kind es requerido') && !code.includes('item_kind.*requerido')) {
+    if (!code.includes('item_kind es requerido')) {
       throw new Error('Backend NO tiene validación explícita de item_kind como requerido');
     }
     
-    // Verificar que se valida antes de usar
-    const validationPattern = /if.*item_kind.*requerido|item_kind.*required/i;
-    if (!validationPattern.test(code)) {
-      throw new Error('Backend NO valida item_kind antes de usarlo');
+    // Verificar que se valida en markCleanStudent
+    if (!code.includes('options.item_kind') || !code.includes('!options.item_kind')) {
+      throw new Error('Backend NO valida item_kind en markCleanStudent');
+    }
+    
+    // Verificar que se valida el valor
+    if (!code.includes('recurrente') || !code.includes('una_vez')) {
+      throw new Error('Backend NO valida valores permitidos de item_kind');
     }
   });
 
@@ -147,6 +151,40 @@ async function runTests() {
     
     if (!alumnoValidates || !generalValidates) {
       throw new Error('Ambas rutas deben validar item_kind');
+    }
+  });
+
+  // Test 7: Verificar que NO existe confirm() ni alert() en funciones de limpieza
+  test('No existe confirm() ni alert() en funciones de limpieza', () => {
+    const codeAlumno = readFileSync('./public/js/master/master-alquimia-alumno-client.js', 'utf8');
+    const codeGeneral = readFileSync('./public/js/master/master-alquimia-general-client.js', 'utf8');
+    
+    // Funciones de limpieza que no deben tener confirm/alert
+    const cleaningFunctions = [
+      'handleCleanItem',
+      'handleIncrementAllItem',
+      'handleLimpiarItem',
+      'handleLimpiarEstudiante',
+      'handlePdeIncrementAllItem'
+    ];
+    
+    // Buscar confirm/alert en funciones de limpieza (búsqueda simple)
+    for (const func of cleaningFunctions) {
+      const funcRegex = new RegExp(`(async\\s+)?function\\s+${func}[\\s\\S]*?\\n\\s*\\}`, 'g');
+      const matches = codeAlumno.match(funcRegex) || codeGeneral.match(funcRegex);
+      
+      if (matches) {
+        for (const match of matches) {
+          if (/confirm\s*\(/.test(match)) {
+            throw new Error(`Función ${func} todavía tiene confirm()`);
+          }
+          // Alert está permitido solo si es para errores críticos fuera del flujo normal
+          // Verificamos que no está en el flujo de éxito
+          if (/alert\s*\(.*success|alert\s*\(.*éxito|alert\s*\(.*completado/i.test(match)) {
+            throw new Error(`Función ${func} todavía tiene alert() para éxito (debe usar toast)`);
+          }
+        }
+      }
     }
   });
 

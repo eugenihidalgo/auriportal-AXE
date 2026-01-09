@@ -866,18 +866,19 @@ export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'sh
   
   try {
     // Delegar al Cleaning Engine v1 (single decider)
+    // CONTRATO LIMPIEZA v1: item_kind es REQUERIDO
     const { incrementAllStudents: cleaningIncrementAll } = await import('../core/master/services/cleaning-engine-service.js');
     
     const result = await cleaningIncrementAll({
       item_ref: itemRef,
+      item_kind: 'una_vez', // REQUERIDO según contrato canónico
       clean_layer: cleanLayer,
       product_key: productKey,
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
       meta: {
-        source: 'alquimia-general-service',
-        legacy_call: true
+        source: 'alquimia-general-service'
       }
     });
     

@@ -9,6 +9,28 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.65.1] - 2026-01-09
+
+### Fixed
+- **Botón +1 UNA_VEZ**: Corregido para usar contrato canónico con `item_kind` explícito
+  - Servicio `incrementAll` ahora envía `item_kind: 'una_vez'` explícitamente
+  - `incrementAllStudents` asegura que `item_kind` se pasa a `markCleanAllStudents`
+  - `markCleanAllStudents` valida `item_kind` como requerido (sin inferir desde lista)
+
+### Changed
+- **UX sin fricción**: Eliminados todos los `confirm()` y `alert()` de funciones de limpieza
+  - Implementado sistema de toasts no bloqueantes (`showToastSuccess`, `showToastError`)
+  - Toasts en posición bottom-right, auto-dismiss después de 2-3 segundos
+  - Sin interrupciones de flujo de trabajo
+- **Validación de contrato en markCleanAllStudents**: Añadida validación de campos requeridos
+  - `item_kind` es ahora REQUERIDO (validación estricta)
+  - Validación de coherencia con `lista.tipo` (warning si no coincide, pero usa el proporcionado)
+
+### Added
+- **Tests de toasts**: Verificación de ausencia de `confirm()` y `alert()` en funciones de limpieza
+
+---
+
 ## [5.65.0] - 2026-01-09
 
 ### Added

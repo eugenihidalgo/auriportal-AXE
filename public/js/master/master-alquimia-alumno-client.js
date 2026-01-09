@@ -720,9 +720,8 @@
         const confirmMsg = item.lista_tipo === 'una_vez' 
           ? `¿Limpiar "${item.item_nombre}"? (Progreso: ${item.progress_realizadas || 0} / ${item.progress_requeridas || 1})`
           : `¿Marcar "${item.item_nombre}" como revisado?`;
-        if (confirm(confirmMsg)) {
-          handleCleanItem(item);
-        }
+        // Sin confirmación (UX sin fricción)
+        handleCleanItem(item);
       });
       rightDiv.appendChild(cleanBtn);
     }
@@ -856,27 +855,18 @@
       
       if (!result.ok) {
         console.error('[MasterAlquimiaAlumno] Error limpiando item:', result.error);
-        alert('Error limpiando item: ' + (result.error?.message || 'Error desconocido'));
+        showToastError('Error limpiando item: ' + (result.error?.message || 'Error desconocido'));
         return;
       }
       
       if (!result.data?.applied) {
         console.warn('[MasterAlquimiaAlumno] Limpieza no aplicada:', result.data?.reason);
-        alert('Limpieza no aplicada: ' + (result.data?.reason || 'Razón desconocida'));
+        showToastError('Limpieza no aplicada: ' + (result.data?.reason || 'Razón desconocida'));
         return;
       }
       
-      // Éxito: mostrar mensaje y refetch inmediato
-      const successMsg = document.createElement('div');
-      successMsg.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50';
-      successMsg.textContent = `✓ ${item.item_nombre} marcado como revisado`;
-      document.body.appendChild(successMsg);
-      
-      setTimeout(() => {
-        if (successMsg.parentNode) {
-          successMsg.parentNode.removeChild(successMsg);
-        }
-      }, 2000);
+      // Éxito: mostrar toast y refetch inmediato
+      showToastSuccess(`✓ ${item.item_nombre} marcado como revisado`);
       
       // Refetch megalist inmediato (el item debe moverse a "Revisados")
       await loadMegalist(state.selectedStudentId);
@@ -889,7 +879,7 @@
       }
       
       console.error('[MasterAlquimiaAlumno] Error limpiando item:', error);
-      alert('Error limpiando item: ' + error.message);
+      showToastError('Error limpiando item: ' + error.message);
     }
   }
 
@@ -905,7 +895,7 @@
       
       if (!result.ok) {
         console.error('[MasterAlquimiaAlumno] Error cargando historial:', result.error);
-        alert('Error cargando historial: ' + (result.error?.message || 'Error desconocido'));
+        showToastError('Error cargando historial: ' + (result.error?.message || 'Error desconocido'));
         return;
       }
       
@@ -913,7 +903,7 @@
       showHistoryModal(item.item_nombre, result.data);
     } catch (error) {
       console.error('[MasterAlquimiaAlumno] Error cargando historial:', error);
-      alert('Error cargando historial: ' + error.message);
+      showToastError('Error cargando historial: ' + error.message);
     }
   }
 

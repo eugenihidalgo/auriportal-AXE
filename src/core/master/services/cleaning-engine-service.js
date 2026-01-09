@@ -467,8 +467,18 @@ export async function markCleanAllStudents(options, client = null) {
     meta = {}
   } = options;
   
-  if (!item_ref || !actor_type) {
-    throw new Error('item_ref y actor_type son requeridos');
+  // Validar campos requeridos según contrato canónico
+  if (!item_ref || !actor_type || !options.item_kind || !options.surface_key) {
+    const missing = [];
+    if (!item_ref) missing.push('item_ref');
+    if (!actor_type) missing.push('actor_type');
+    if (!options.item_kind) missing.push('item_kind');
+    if (!options.surface_key) missing.push('surface_key');
+    throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+  }
+  
+  if (!options.item_kind || (options.item_kind !== 'recurrente' && options.item_kind !== 'una_vez')) {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
   }
   
   try {
@@ -480,13 +490,24 @@ export async function markCleanAllStudents(options, client = null) {
       throw new Error(`Item no encontrado: ${item_ref}`);
     }
     
-    // 2. Obtener lista para conocer tipo
+    // 2. Validar coherencia con lista (no inferir, solo validar)
     const lista = await catalogRepo.getListaById(item.lista_id);
     if (!lista) {
       throw new Error(`Lista no encontrada para item: ${item_ref}`);
     }
     
-    const itemKind = lista.tipo;
+    // Usar item_kind del options (contrato canónico: payload explícito)
+    const itemKind = options.item_kind;
+    
+    // Validar coherencia (warning si no coincide, pero usar el proporcionado)
+    if (itemKind !== lista.tipo) {
+      logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo en markCleanAllStudents', {
+        traceId,
+        item_ref,
+        item_kind_provided: itemKind,
+        lista_tipo: lista.tipo
+      });
+    }
     
     // 3. Obtener todos los alumnos (no paused)
     const { query } = await import('../../../../database/pg.js');
@@ -608,11 +629,16 @@ export async function markCleanAllStudents(options, client = null) {
  */
 export async function incrementAllStudents(options, client = null) {
   // Similar a markCleanAllStudents pero para una_vez
-  // Por ahora, reutilizamos markCleanAllStudents con item_kind='una_vez'
-  // (se detecta automáticamente desde la lista)
+  // CONTRATO LIMPIEZA v1: item_kind debe venir en options
+  if (!options.item_kind) {
+    // Fallback a 'una_vez' solo si no viene (compatibilidad legacy, pero debería venir)
+    options.item_kind = 'una_vez';
+  }
+  
   return await markCleanAllStudents({
     ...options,
-    clean_layer: 'shared' // Solo SHARED para increment-all
+    item_kind: options.item_kind, // Asegurar que se pasa explícitamente
+    clean_layer: options.clean_layer || 'shared' // Usar clean_layer de options si viene
   }, client);
 }
 

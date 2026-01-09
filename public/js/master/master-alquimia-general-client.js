@@ -38,6 +38,43 @@
     return;
   }
 
+  /**
+   * Sistema de toasts no bloqueantes
+   */
+  function showToastSuccess(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position: fixed; bottom: 1rem; right: 1rem; background: #10b981; color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; font-size: 0.875rem; font-weight: 500; max-width: 400px;';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.style.transition = 'opacity 0.3s ease-out';
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 2000);
+  }
+
+  function showToastError(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position: fixed; bottom: 1rem; right: 1rem; background: #ef4444; color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; font-size: 0.875rem; font-weight: 500; max-width: 400px;';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.style.transition = 'opacity 0.3s ease-out';
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 3000);
+  }
+
   // CLIENT SENTINEL: Insertar bloque visible para confirmar que el script se ejecutó
   try {
     const clientSentinel = document.createElement('div');
@@ -746,7 +783,7 @@
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando lista:', error);
-      alert(`Error creando lista: ${error.message}`);
+      showToastError(`Error creando lista: ${error.message}`);
     }
   }
 
@@ -787,7 +824,7 @@
       await loadItems(listaId);
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando item:', error);
-      alert(`Error creando item: ${error.message}`);
+      showToastError(`Error creando item: ${error.message}`);
     }
   }
 
@@ -913,9 +950,7 @@
       return;
     }
 
-    if (!confirm(`¿Limpiar este item para TODOS los alumnos?`)) {
-      return;
-    }
+    // Sin confirmación (UX sin fricción)
 
     try {
       // Determinar clean_layer desde el estado del modal o default 'shared'
@@ -2096,9 +2131,7 @@
       return;
     }
 
-    if (!confirm('¿Registrar Limpieza PDE de hoy para todos los alumnos?')) {
-      return;
-    }
+    // Sin confirmación (UX sin fricción)
 
     try {
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
@@ -2183,10 +2216,6 @@
       return;
     }
 
-    if (!confirm('¿Incrementar +1 este item para TODOS los alumnos (SHARED)?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
@@ -2205,7 +2234,7 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', result);
-      alert(`Item incrementado para ${result.updated || 0} alumnos`);
+      showToastSuccess(`Item incrementado para ${result.data?.updated || result.updated || 0} alumnos`);
       
       // Recargar items para refrescar estado
       if (state.listaActiva && state.listaActiva.id) {
@@ -2213,7 +2242,7 @@
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
-      alert(`Error: ${error.message}`);
+      showToastError(`Error: ${error.message}`);
     }
   }
 
@@ -2223,10 +2252,6 @@
   async function handlePdeIncrementAllItem(item) {
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
-      return;
-    }
-
-    if (!confirm('¿Registrar incremento PDE para todos los alumnos? (solo audit, no afecta remaining del alumno)')) {
       return;
     }
 
@@ -2248,7 +2273,7 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Incremento PDE registrado:', result);
-      showWarning(`PDE registrado: ${result.updated || 0} alumnos`);
+      showToastSuccess(`PDE registrado: ${result.data?.updated || result.updated || 0} alumnos`);
       
       // Recargar items y flotante si está abierto
       await loadItems(state.listaActiva.id);
@@ -2258,7 +2283,7 @@
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);
-      showWarning(`Error: ${error.message}`);
+      showToastError(`Error: ${error.message}`);
     }
   }
 
@@ -2271,9 +2296,7 @@
       return;
     }
 
-    if (!confirm(`¿Eliminar el item "${item.nombre || item.name}"? (se archivará)`)) {
-      return;
-    }
+    // Sin confirmación (UX sin fricción, acción reversible)
 
     try {
       const response = await fetch(`/master/api/alquimia-general/items/${item.id}`, {
