@@ -283,31 +283,22 @@ export async function getMegalistForStudent(options = {}) {
         continue; // NO SE RENDERIZA
       }
       
-      // Verificar nivel efectivo (si item.nivel > nivel_efectivo, no aplica)
+      // Verificar nivel efectivo (si item.nivel > nivelCap, no aplica)
+      // NOTA: Los estados ya vienen filtrados por nivelCap en la query, pero verificamos por seguridad
       const itemNivel = item.nivel ?? null;
-      const nivelEfectivoNum = nivelEfectivo ?? null;
       
-      if (itemNivel !== null && nivelEfectivoNum !== null) {
-        if (itemNivel > nivelEfectivoNum) {
+      if (itemNivel !== null && nivelCap !== null) {
+        if (itemNivel > nivelCap) {
           // No incluir en megalista (no aplica por nivel)
           logInfo('AlquimiaAlumnoMegalist', 'Item excluido por nivel', {
             traceId,
             student_id,
             item_ref: state.item_ref,
             item_nivel: itemNivel,
-            nivel_efectivo: nivelEfectivoNum
+            nivel_efectivo: nivelCap
           });
           continue;
         }
-      } else if (itemNivel !== null || nivelEfectivoNum !== null) {
-        // Uno es null, no se puede comparar → warning pero continuar
-        warnings.push({
-          type: 'LEVEL_NOT_COMPARABLE',
-          item_ref: state.item_ref,
-          item_level: itemNivel,
-          student_level: nivelEfectivoNum,
-          message: 'No se puede comparar nivel (uno es null)'
-        });
       }
       
       // Resolver lista desde catálogo (SOLO como resolver)
