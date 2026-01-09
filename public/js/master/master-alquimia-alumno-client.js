@@ -823,10 +823,14 @@
     document.body.appendChild(loadingMsg);
     
     try {
-      // Incluir level_cap en el body si viene
+      // Payload canónico según CONTRATO_LIMPIEZA_V1 (todos los campos requeridos explícitos)
       const body = {
         student_id: state.selectedStudentId,
         item_ref: item.item_ref,
+        item_kind: item.lista_tipo || 'recurrente', // REQUERIDO (ya disponible en megalist)
+        actor_type: 'master', // REQUERIDO
+        surface_key: 'master.alquimia_alumno', // REQUERIDO
+        clean_layer: 'shared', // REQUERIDO
         domain_type: 'transmutation',
         product_key: 'pde'
       };

@@ -906,6 +906,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const productKey = url.searchParams.get('product_key') || 'pde';
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
+      // Validar campos requeridos según contrato canónico
       if (!body.student_id) {
         return jsonError('student_id es requerido', 'MISSING_STUDENT_ID', 400, traceId);
       }
@@ -913,6 +914,18 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const studentId = parseInt(body.student_id);
       if (isNaN(studentId) || studentId <= 0) {
         return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
+      }
+      
+      if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
+        return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+      }
+      
+      if (!body.actor_type) {
+        return jsonError('actor_type es requerido', 'MISSING_ACTOR_TYPE', 400, traceId);
+      }
+      
+      if (!body.surface_key) {
+        return jsonError('surface_key es requerido', 'MISSING_SURFACE_KEY', 400, traceId);
       }
 
       // Validar que item existe y no está archivado
@@ -925,17 +938,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Item archivado', 'ITEM_ARCHIVED', 404, traceId);
       }
 
-      // Construir payload canónico para markCleanStudent
+      // Construir payload canónico para markCleanStudent (todos los campos vienen del frontend)
       const options = {
         student_id: studentId,
         item_ref: itemRef,
+        item_kind: body.item_kind, // REQUERIDO (validado arriba)
         product_key: productKey,
         domain_type: body.domain_type || 'transmutation',
         clean_layer: cleanLayer,
-        actor_type: body.actor_type || 'master',
+        actor_type: body.actor_type, // REQUERIDO (validado arriba)
         actor_ref: body.actor_ref || null,
-        surface_key: body.surface_key || 'master.alquimia_general',
-        item_kind: body.item_kind || null, // Si viene del frontend, usarlo; si no, se determina desde lista
+        surface_key: body.surface_key, // REQUERIDO (validado arriba)
         meta: body.meta || {}
       };
 

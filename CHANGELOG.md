@@ -9,6 +9,51 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.65.0] - 2026-01-09
+
+### Added
+- **CONTRATO LIMPIEZA v1**: Implementación del contrato canónico para operaciones de limpieza
+  - Payload explícito sin inferencias (todos los campos requeridos vienen del frontend)
+  - Validación estricta en backend: `item_kind`, `actor_type`, `surface_key` son requeridos
+  - Eliminación de inferencias: backend NO consulta lista para determinar `item_kind`
+  - Endpoints NO fuerzan campos que deben venir del frontend
+  - Frontend Alquimia Alumno envía `item_kind`, `actor_type`, `surface_key` explícitamente
+  - Frontend Alquimia General ya cumplía contrato, validación reforzada
+- **Tests Contrato Limpieza**: Script de tests para verificar cumplimiento del contrato
+  - Verifica validación de campos requeridos
+  - Verifica ausencia de inferencias
+  - Verifica consistencia entre rutas
+  - Comando: `npm run test:contrato-limpieza`
+- **Documentación Contrato**: `docs/CONTRATO_LIMPIEZA_V1.md`
+  - Especificación completa del contrato canónico
+  - Interfaz TypeScript del payload
+  - Reglas constitucionales y prohibiciones
+  - Referencias a diagnóstico y otros contratos
+
+### Changed
+- **Backend Cleaning Engine**: `item_kind` es ahora REQUERIDO
+  - Eliminado fallback `options.item_kind || lista.tipo`
+  - Validación explícita: debe ser 'recurrente' o 'una_vez'
+  - Validación de coherencia con lista.tipo (warning si no coincide, pero usa el proporcionado)
+- **Endpoint Alquimia Alumno**: Eliminado forzado de campos
+  - NO fuerza `actor_type: 'master'`
+  - NO fuerza `surface_key: 'master.alquimia_alumno'`
+  - NO fuerza `clean_layer: 'shared'`
+  - Valida que todos los campos requeridos vengan en payload
+- **Frontend Alquimia Alumno**: Envía payload completo
+  - Usa `item.lista_tipo` para `item_kind` (ya disponible en megalist)
+  - Envía `actor_type: 'master'` explícitamente
+  - Envía `surface_key: 'master.alquimia_alumno'` explícitamente
+  - Envía `clean_layer: 'shared'` explícitamente
+
+### Fixed
+- **Inconsistencias de Contrato**: Unificación del contrato entre rutas
+  - Alquimia Alumno y Alquimia General usan el mismo contrato canónico
+  - Eliminadas inferencias que dependían de consultas a BD
+  - Frontend tiene responsabilidad de enviar todos los campos requeridos
+
+---
+
 ## [5.64.1] - 2026-01-09
 
 ### Fixed

@@ -167,16 +167,32 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       const { 
         student_id, 
-        item_ref, 
+        item_ref,
+        item_kind,
+        actor_type,
+        surface_key,
+        clean_layer = 'shared',
         domain_type = 'transmutation', 
         product_key = 'pde', 
         actor_ref = null, 
-        surface_key = null,
         level_cap = null
       } = body;
       
+      // Validar campos requeridos según contrato canónico
       if (!student_id || !item_ref) {
         return jsonError('student_id e item_ref son requeridos', 'MISSING_PARAMS', 400, traceId);
+      }
+      
+      if (!item_kind || (item_kind !== 'recurrente' && item_kind !== 'una_vez')) {
+        return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+      }
+      
+      if (!actor_type) {
+        return jsonError('actor_type es requerido', 'MISSING_ACTOR_TYPE', 400, traceId);
+      }
+      
+      if (!surface_key) {
+        return jsonError('surface_key es requerido', 'MISSING_SURFACE_KEY', 400, traceId);
       }
       
       // Normalizar level_cap (infinity/∞ → 999)
@@ -265,17 +281,17 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         }
       }
       
-      // Forzar clean_layer='shared' y actor_type='master'
-      // Pasar level_cap_override si viene (solo para Master en alquimia_alumno)
+      // Usar campos del payload (contrato canónico: payload explícito, sin forzar)
       const result = await markCleanStudent({
         student_id,
         item_ref,
-        clean_layer: 'shared', // Siempre SHARED en este panel
+        item_kind,
+        clean_layer: clean_layer,
         product_key,
         domain_type,
-        actor_type: 'master',
+        actor_type,
         actor_ref,
-        surface_key: surface_key || 'master.alquimia_alumno',
+        surface_key,
         level_cap_override: levelCapOverride
       });
       

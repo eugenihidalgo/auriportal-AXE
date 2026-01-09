@@ -190,8 +190,15 @@ export async function markCleanStudent(options, client = null) {
     meta = {}
   } = options;
   
-  if (!student_id || !item_ref || !actor_type) {
-    throw new Error('student_id, item_ref y actor_type son requeridos');
+  // Validar campos requeridos según contrato canónico
+  if (!student_id || !item_ref || !actor_type || !options.item_kind || !options.surface_key) {
+    const missing = [];
+    if (!student_id) missing.push('student_id');
+    if (!item_ref) missing.push('item_ref');
+    if (!actor_type) missing.push('actor_type');
+    if (!options.item_kind) missing.push('item_kind');
+    if (!options.surface_key) missing.push('surface_key');
+    throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
   }
   
   try {
@@ -269,14 +276,30 @@ export async function markCleanStudent(options, client = null) {
       });
     }
     
-    // 4. Determinar item_kind desde lista o usar el que viene en options
+    // 4. Validar item_kind (REQUERIDO según contrato canónico)
+    if (!options.item_kind || (options.item_kind !== 'recurrente' && options.item_kind !== 'una_vez')) {
+      throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+    }
+    
+    // Verificar coherencia con lista (validación adicional, no inferencia)
     const lista = await catalogRepo.getListaById(item.lista_id);
     if (!lista) {
       throw new Error(`Lista no encontrada para item: ${item_ref}`);
     }
     
-    // Si item_kind viene en options, usarlo; si no, determinarlo desde la lista
-    const itemKind = options.item_kind || lista.tipo; // 'recurrente' o 'una_vez'
+    // Validar que item_kind coincide con lista.tipo (coherencia, no inferencia)
+    if (options.item_kind !== lista.tipo) {
+      logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo', {
+        traceId,
+        student_id,
+        item_ref,
+        item_kind_provided: options.item_kind,
+        lista_tipo: lista.tipo
+      });
+      // Fail-open: usar el proporcionado, pero log warning
+    }
+    
+    const itemKind = options.item_kind; // Usar siempre el proporcionado (sin fallback)
     
     // 5. Generar execution_key para idempotencia
     const executionKey = generateExecutionKey('mark_clean', item_ref, student_id);
