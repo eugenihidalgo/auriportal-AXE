@@ -9,6 +9,36 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.65.2] - 2026-01-09
+
+### Fixed
+- **Flotante alumnos sin filtro nivel**: Endpoint `/master/api/alquimia-general/items/:item_ref/students` ahora pasa `skip_level_filter: true` explícitamente
+  - Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
+  - Todos los alumnos siempre visibles en flotante
+- **Refresh determinista UI**: Tras limpiar alumno/item, refresh inmediato del flotante y lista
+  - `handleIncrementAllItem`: refresca items y flotante si está abierto
+  - `handleLimpiarEstudiante`: refresca flotante y muestra toast de éxito
+- **Toast común unificado**: Helper `public/js/master/ui/toast.js` eliminando duplicación
+  - Carga en fase "core" antes de clients
+  - Queue simple con stacking vertical
+  - DOM API only, sin innerHTML dinámico
+- **Eliminados alert() restantes**: Reemplazados por `showToastError()` en Alquimia General
+
+### Changed
+- **Garantía contractual rutas masivas**: `incrementAllStudents` con warning fuerte si falta `item_kind`
+  - TODO deprecación para v5.66.0
+  - Fallback legacy solo por compatibilidad temporal
+
+### Added
+- **Smoke tests**: `scripts/test-alquimia-smoke.js` para endpoints críticos
+  - GET megalist
+  - POST clean (Alumno y General)
+  - GET students (flotante)
+  - POST increment-all
+  - Script: `npm run test:alquimia-smoke`
+
+---
+
 ## [5.65.1] - 2026-01-09
 
 ### Fixed

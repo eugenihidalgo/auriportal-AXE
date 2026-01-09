@@ -1,6 +1,6 @@
 {
   "name": "auriportal-server",
-  "version": "5.65.1",
+  "version": "5.65.2",
   "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
   "main": "server.js",
   "type": "module",
@@ -24,6 +24,7 @@
     "test:alquimia-ui": "node scripts/test-alquimia-ui-critical.js",
     "test:alquimia-una-vez": "node scripts/test-alquimia-una-vez.js",
     "test:contrato-limpieza": "node scripts/test-contrato-limpieza-v1.js",
+    "test:alquimia-smoke": "node scripts/test-alquimia-smoke.js",
     "smoke:master-alquimia": "node scripts/smoke-master-alquimia-general.js",
     "mcp:google-workspace": "node mcp-server/google-workspace.js",
     "mcp:test": "node mcp-server/test-connection.js",

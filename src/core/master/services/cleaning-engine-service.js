@@ -630,9 +630,17 @@ export async function markCleanAllStudents(options, client = null) {
 export async function incrementAllStudents(options, client = null) {
   // Similar a markCleanAllStudents pero para una_vez
   // CONTRATO LIMPIEZA v1: item_kind debe venir en options
+  const traceId = getRequestId();
+  
   if (!options.item_kind) {
-    // Fallback a 'una_vez' solo si no viene (compatibilidad legacy, pero debería venir)
-    options.item_kind = 'una_vez';
+    // TODO DEPRECATION: Eliminar este fallback después de v5.66.0
+    // WARNING FUERTE: item_kind debe venir explícitamente desde el frontend
+    logWarn('CleaningEngine', 'DEPRECATED: incrementAllStudents llamado sin item_kind. Usando fallback "una_vez". Esto será un error en v5.66.0', {
+      traceId,
+      item_ref: options.item_ref,
+      stack: new Error().stack
+    });
+    options.item_kind = 'una_vez'; // Fallback legacy solo por compatibilidad temporal
   }
   
   return await markCleanAllStudents({

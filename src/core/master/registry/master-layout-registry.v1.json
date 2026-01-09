@@ -129,6 +129,16 @@
       "name": "Master Theme Resolver"
     },
     {
+      "id": "master-ui-toast",
+      "guard_id": "UI_TOAST",
+      "path": "/js/master/ui/toast.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "core",
+      "name": "Master UI Toast Helper"
+    },
+    {
       "id": "master-alquimia-general-client",
       "guard_id": "ALQUIMIA_GENERAL_CLIENT",
       "path": "/js/master/master-alquimia-general-client.js",

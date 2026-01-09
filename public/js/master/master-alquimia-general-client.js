@@ -38,42 +38,8 @@
     return;
   }
 
-  /**
-   * Sistema de toasts no bloqueantes
-   */
-  function showToastSuccess(message) {
-    const toast = document.createElement('div');
-    toast.style.cssText = 'position: fixed; bottom: 1rem; right: 1rem; background: #10b981; color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; font-size: 0.875rem; font-weight: 500; max-width: 400px;';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-      toast.style.transition = 'opacity 0.3s ease-out';
-      toast.style.opacity = '0';
-      setTimeout(() => {
-        if (toast.parentNode) {
-          toast.parentNode.removeChild(toast);
-        }
-      }, 300);
-    }, 2000);
-  }
-
-  function showToastError(message) {
-    const toast = document.createElement('div');
-    toast.style.cssText = 'position: fixed; bottom: 1rem; right: 1rem; background: #ef4444; color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10000; font-size: 0.875rem; font-weight: 500; max-width: 400px;';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-      toast.style.transition = 'opacity 0.3s ease-out';
-      toast.style.opacity = '0';
-      setTimeout(() => {
-        if (toast.parentNode) {
-          toast.parentNode.removeChild(toast);
-        }
-      }, 300);
-    }, 3000);
-  }
+  // Toast helpers: se cargan desde /js/master/ui/toast.js (common helper)
+  // showToastSuccess y showToastError están disponibles globalmente
 
   // CLIENT SENTINEL: Insertar bloque visible para confirmar que el script se ejecutó
   try {
@@ -1005,7 +971,7 @@
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
-      alert(`Error: ${error.message}`);
+      showToastError(`Error: ${error.message}`);
     }
   }
 
@@ -1420,14 +1386,15 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
+      showToastSuccess(`✓ ${student.nombre || student.email} limpiado`);
       
-      // Recargar flotante con mismo clean_layer
+      // Refresh determinista: recargar flotante con mismo clean_layer
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
         await handleVerItem(item, cleanLayer);
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
-      alert(`Error: ${error.message}`);
+      showToastError(`Error: ${error.message}`);
     }
   }
 
@@ -2236,9 +2203,14 @@
       console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', result);
       showToastSuccess(`Item incrementado para ${result.data?.updated || result.updated || 0} alumnos`);
       
-      // Recargar items para refrescar estado
+      // Refresh determinista: recargar items y flotante si está abierto
       if (state.listaActiva && state.listaActiva.id) {
         await loadItems(state.listaActiva.id);
+      }
+      
+      // Refrescar flotante si está abierto para este item
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        await handleVerItem(item, state.modal.cleanLayer || 'shared');
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
