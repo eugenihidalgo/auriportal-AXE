@@ -600,5 +600,67 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/MASTER_ALQUIMIA_ALUMNO_CONTRACTS_V2.md
       - docs/CONSTITUTION_ALQUIMIA_AND_CLASSIFICATIONS_V1.md
 
+  - id: alquimia-flotante-no-filter-level
+    title: Flotante alumnos NO filtra por nivel en MASTER
+    content: >
+      En flotantes de Alquimia General NO se filtra por nivel. Deben salir TODOS los alumnos siempre.
+      PROHIBIDO:
+      - Filtrar alumnos por nivel en flotante Master
+      - Ocultar alumnos cuyo nivel_efectivo < item.nivel
+      - Usar levelCap o filtros similares en flotante
+      OBLIGATORIO:
+      - Endpoint GET /master/api/alquimia-general/items/:item_ref/students pasa skip_level_filter=true
+      - Servicio getStudentsForItem respeta skip_level_filter=true y NO filtra por nivel
+      - Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
+      REFERENCIAS:
+      - docs/MASTER_ALQUIMIA_FLOTANTE_ALUMNOS_CONTRATO.md
+      - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
+  - id: alquimia-refresh-deterministic
+    title: Refresh determinista post-acción de limpieza
+    content: >
+      Tras cualquier acción de limpieza exitosa, la UI DEBE refrescarse de forma determinista.
+      OBLIGATORIO:
+      - Tras limpiar item desde Alquimia Alumno: re-fetch inmediato de megalist
+      - Tras limpiar alumno desde flotante: re-fetch inmediato del flotante
+      - Tras +1 para todos: re-fetch de items y flotante si está abierto
+      - Refresh debe ser inmediato (no esperar timeout o polling)
+      PROHIBIDO:
+      - Asumir que el estado local está sincronizado sin refetch
+      - Dejar UI desincronizada tras acciones exitosas
+      REFERENCIAS:
+      - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
+  - id: alquimia-toast-no-confirm
+    title: No usar confirm() ni alert() en flujos de limpieza
+    content: >
+      En funciones de limpieza NO se permite confirm() ni alert(). Usar toasts no bloqueantes.
+      PROHIBIDO:
+      - window.confirm() en funciones handleCleanItem, handleIncrementAllItem, handleLimpiarItem, handleLimpiarEstudiante
+      - alert() para mostrar errores o éxitos
+      OBLIGATORIO:
+      - Usar showToastSuccess() y showToastError() desde helper común /js/master/ui/toast.js
+      - Helper toast se carga en fase "core" antes de clients UI
+      REFERENCIAS:
+      - docs/MASTER_UI_TOAST_V1.md
+      - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
+  - id: alquimia-item-kind-obligatory
+    title: item_kind obligatorio en rutas de limpieza (student + all)
+    content: >
+      item_kind es OBLIGATORIO en todas las rutas de limpieza (markCleanStudent y markCleanAllStudents).
+      PROHIBIDO:
+      - Inferir item_kind desde lista.tipo en backend
+      - Llamar markCleanStudent o markCleanAllStudents sin item_kind explícito
+      - Usar fallback silencioso sin warning
+      OBLIGATORIO:
+      - Frontend SIEMPRE envía item_kind explícitamente en payload
+      - Backend valida item_kind como requerido y lanza error si falta
+      - Backend valida que item_kind sea 'recurrente' o 'una_vez'
+      - Si hay fallback legacy (incrementAllStudents), debe tener warning fuerte + TODO deprecación
+      REFERENCIAS:
+      - docs/CONTRATO_LIMPIEZA_V1.md
+      - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
 
 
