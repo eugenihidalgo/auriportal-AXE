@@ -1022,6 +1022,100 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       return jsonSuccess({ state }, traceId);
     }
 
+    // GET /master/api/alquimia-general/diagnostics
+    // Panel de diagnóstico de coherencia del catálogo (visual, no técnico)
+    if (path === '/master/api/alquimia-general/diagnostics' && method === 'GET') {
+      try {
+        const { query } = await import('../../database/pg.js');
+        
+        // 1. Items sin item_ref
+        const itemsSinRef = await query(`
+          SELECT COUNT(*) as count
+          FROM items_transmutaciones
+          WHERE status = 'active' AND (item_ref IS NULL OR item_ref = '')
+        `);
+        
+        // 2. Items sin lista_id
+        const itemsSinLista = await query(`
+          SELECT COUNT(*) as count
+          FROM items_transmutaciones
+          WHERE status = 'active' AND lista_id IS NULL
+        `);
+        
+        // 3. Listas sin items
+        const listasSinItems = await query(`
+          SELECT 
+            l.id,
+            l.nombre,
+            COUNT(i.id) as items_count
+          FROM listas_transmutaciones l
+          LEFT JOIN items_transmutaciones i ON i.lista_id = l.id AND i.status = 'active'
+          WHERE l.status = 'active'
+          GROUP BY l.id, l.nombre
+          HAVING COUNT(i.id) = 0
+        `);
+        
+        // 4. Listas sin clasificaciones
+        const listasSinClass = await query(`
+          SELECT 
+            l.id,
+            l.nombre
+          FROM listas_transmutaciones l
+          LEFT JOIN transmutacion_lista_classifications tlc ON tlc.lista_id = l.id
+          LEFT JOIN pde_classification_terms pct ON pct.id = tlc.classification_term_id AND pct.status = 'active'
+          WHERE l.status = 'active'
+          GROUP BY l.id, l.nombre
+          HAVING COUNT(pct.id) = 0
+        `);
+        
+        // 5. Campos legacy poblados (advertencia)
+        const legacyCategory = await query(`
+          SELECT COUNT(*) as count
+          FROM listas_transmutaciones
+          WHERE status = 'active' AND category_key IS NOT NULL AND category_key != ''
+        `);
+        
+        const legacySubtype = await query(`
+          SELECT COUNT(*) as count
+          FROM listas_transmutaciones
+          WHERE status = 'active' AND subtype_key IS NOT NULL AND subtype_key != ''
+        `);
+        
+        const legacyTags = await query(`
+          SELECT COUNT(*) as count
+          FROM listas_transmutaciones
+          WHERE status = 'active' AND tags IS NOT NULL AND tags != '[]'::jsonb
+        `);
+        
+        const diagnostics = {
+          items_sin_ref: parseInt(itemsSinRef.rows[0]?.count || '0', 10),
+          items_sin_lista: parseInt(itemsSinLista.rows[0]?.count || '0', 10),
+          listas_sin_items: listasSinItems.rows.map(r => ({
+            id: r.id,
+            nombre: r.nombre
+          })),
+          listas_sin_clasificaciones: listasSinClass.rows.map(r => ({
+            id: r.id,
+            nombre: r.nombre
+          })),
+          warnings: {
+            legacy_category_key: parseInt(legacyCategory.rows[0]?.count || '0', 10),
+            legacy_subtype_key: parseInt(legacySubtype.rows[0]?.count || '0', 10),
+            legacy_tags_jsonb: parseInt(legacyTags.rows[0]?.count || '0', 10)
+          }
+        };
+        
+        return jsonSuccess({ diagnostics }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en GET /diagnostics', {
+          traceId,
+          error: error.message,
+          stack: error.stack
+        });
+        throw error;
+      }
+    }
+
     // Ruta no encontrada
     return jsonError(`Ruta no encontrada: ${method} ${path}`, 'ROUTE_NOT_FOUND', 404, traceId);
 

@@ -427,12 +427,15 @@ export async function getMegalistForStudent(options = {}) {
       // Obtener último actor (para separar revisados)
       const lastActor = await getLastCleanActor(student_id, state.item_ref);
       
-      // Construir datos del item
+      // Construir datos del item (incluye metadata completa para UI)
       const itemData = {
         item_id: item.id ?? null,
         item_ref: item.item_ref || state.item_ref,
         item_nombre: item.nombre || 'NO_RESUELTO', // Fail-open para nombre
+        item_descripcion: item.descripcion || null, // Descripción para UI
         item_nivel: itemNivel,
+        item_frecuencia_dias: item.frecuencia_dias || null, // Para recurrentes
+        item_veces_limpiar: item.veces_limpiar ?? null, // Para una_vez
         lista_id: lista.id,
         lista_nombre: lista.nombre || 'Sin lista', // Fail-open para nombre
         lista_tipo: listaTipo,

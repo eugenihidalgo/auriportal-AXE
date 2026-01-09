@@ -114,7 +114,12 @@
     const select = document.createElement('select');
     select.id = 'student-select';
     select.className = 'px-4 py-2 bg-slate-800 text-white border border-slate-700 rounded-lg ml-2';
-    select.innerHTML = '<option value="">Seleccionar alumno...</option>';
+    
+    // OPCIÓN DEFAULT (DOM API only, no innerHTML)
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Seleccionar alumno...';
+    select.appendChild(defaultOption);
     
     // Event listeners
     searchInput.addEventListener('input', (e) => {
@@ -525,10 +530,25 @@
     // CRÍTICO: Renderizar SOLO listas que tienen items con estado
     // Las listas aparecen SOLO si contienen al menos un item con estado
     if (lists.length === 0) {
-      const p = document.createElement('p');
-      p.className = 'text-slate-400 text-center py-8';
-      p.textContent = 'No hay items con estado para este alumno';
-      megalistSection.appendChild(p);
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'padding: 3rem; text-align: center; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem;';
+      
+      const icon = document.createElement('div');
+      icon.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
+      icon.textContent = '📋';
+      emptyDiv.appendChild(icon);
+      
+      const title = document.createElement('h3');
+      title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;';
+      title.textContent = 'No hay items con estado para este alumno';
+      emptyDiv.appendChild(title);
+      
+      const explanation = document.createElement('p');
+      explanation.style.cssText = 'color: #94a3b8; font-size: 0.875rem; max-width: 500px; margin: 0 auto;';
+      explanation.textContent = 'Esto puede significar que: el alumno no tiene items aplicables para su nivel, o los items aún no han sido materializados (seed automático).';
+      emptyDiv.appendChild(explanation);
+      
+      megalistSection.appendChild(emptyDiv);
       return;
     }
     
@@ -621,11 +641,40 @@
     nameEl.textContent = item.item_nombre;
     leftDiv.appendChild(nameEl);
     
-    if (item.item_nivel) {
-      const levelEl = document.createElement('p');
-      levelEl.className = 'text-slate-400 text-sm mt-1';
+    // Descripción (si existe)
+    if (item.item_descripcion) {
+      const descEl = document.createElement('p');
+      descEl.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;';
+      descEl.textContent = item.item_descripcion;
+      leftDiv.appendChild(descEl);
+    }
+    
+    // Meta info: nivel, recurrencia
+    const metaDiv = document.createElement('div');
+    metaDiv.style.cssText = 'display: flex; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap;';
+    
+    if (item.item_nivel !== null && item.item_nivel !== undefined) {
+      const levelEl = document.createElement('span');
+      levelEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
       levelEl.textContent = `Nivel ${item.item_nivel}`;
-      leftDiv.appendChild(levelEl);
+      metaDiv.appendChild(levelEl);
+    }
+    
+    // Recurrencia (frecuencia_dias o veces_limpiar)
+    if (item.item_frecuencia_dias !== null && item.item_frecuencia_dias !== undefined) {
+      const recurEl = document.createElement('span');
+      recurEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
+      recurEl.textContent = `Cada ${item.item_frecuencia_dias} días`;
+      metaDiv.appendChild(recurEl);
+    } else if (item.item_veces_limpiar !== null && item.item_veces_limpiar !== undefined) {
+      const vecesEl = document.createElement('span');
+      vecesEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
+      vecesEl.textContent = `${item.item_veces_limpiar} vez${item.item_veces_limpiar !== 1 ? 'es' : ''}`;
+      metaDiv.appendChild(vecesEl);
+    }
+    
+    if (metaDiv.children.length > 0) {
+      leftDiv.appendChild(metaDiv);
     }
     
     itemDiv.appendChild(leftDiv);
@@ -811,7 +860,7 @@
   }
 
   /**
-   * Muestra el historial de un item
+   * Muestra el historial de un item (dos paneles: técnico + humano)
    */
   async function handleShowHistory(item) {
     if (!state.selectedStudentId) return;
@@ -826,8 +875,8 @@
         return;
       }
       
-      // Mostrar modal con historial (simplificado por ahora)
-      showHistoryModal(item.item_nombre, result.data.events);
+      // Mostrar modal con dos paneles (técnico colapsado + humano visible)
+      showHistoryModal(item.item_nombre, result.data);
     } catch (error) {
       console.error('[MasterAlquimiaAlumno] Error cargando historial:', error);
       alert('Error cargando historial: ' + error.message);
@@ -835,16 +884,260 @@
   }
 
   /**
-   * Muestra modal de historial (simplificado)
+   * Muestra modal de historial con DOS PANELES (técnico colapsado + humano visible)
    */
-  function showHistoryModal(itemName, events) {
-    // Por ahora, solo alert (se puede mejorar con modal real)
-    const eventsText = events.map(e => {
-      const date = new Date(e.created_at).toLocaleString('es-ES');
-      return `${date}: ${e.action_type} (${e.actor_type})`;
-    }).join('\n');
+  function showHistoryModal(itemName, data) {
+    // Eliminar modal existente si hay
+    const existingModal = document.getElementById('modal-item-history');
+    if (existingModal) {
+      existingModal.remove();
+    }
     
-    alert(`Historial de ${itemName}:\n\n${eventsText || 'No hay eventos'}`);
+    // Crear overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-item-history';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 2rem;';
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+    
+    // Crear modal
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; max-width: 90vw; max-height: 80vh; width: 1000px; display: flex; flex-direction: column; overflow: hidden;';
+    modal.addEventListener('click', (e) => e.stopPropagation());
+    
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'padding: 1rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;';
+    
+    const title = document.createElement('h3');
+    title.textContent = `Historial: ${itemName}`;
+    title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin: 0;';
+    header.appendChild(title);
+    
+    const btnCerrar = document.createElement('button');
+    btnCerrar.textContent = '❌';
+    btnCerrar.style.cssText = 'background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 1.25rem; padding: 0.25rem 0.5rem;';
+    btnCerrar.addEventListener('click', () => overlay.remove());
+    header.appendChild(btnCerrar);
+    
+    modal.appendChild(header);
+    
+    // Contenido (scrollable)
+    const content = document.createElement('div');
+    content.style.cssText = 'padding: 1rem; overflow-y: auto; flex: 1;';
+    
+    // PANEL HUMANO (VISIBLE POR DEFECTO)
+    const humanPanelDiv = document.createElement('div');
+    humanPanelDiv.id = 'history-human-panel';
+    humanPanelDiv.style.cssText = 'margin-bottom: 1rem;';
+    
+    const humanPanelTitle = document.createElement('h4');
+    humanPanelTitle.textContent = 'Historial Legible';
+    humanPanelTitle.style.cssText = 'color: #f1f5f9; font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem;';
+    humanPanelDiv.appendChild(humanPanelTitle);
+    
+    // Info del item
+    const itemInfo = data.human_panel?.item;
+    if (itemInfo) {
+      const itemInfoDiv = document.createElement('div');
+      itemInfoDiv.style.cssText = 'background: #0f172a; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem; border: 1px solid #334155;';
+      
+      const itemNameEl = document.createElement('p');
+      itemNameEl.style.cssText = 'color: #f1f5f9; font-weight: 600; margin-bottom: 0.25rem;';
+      itemNameEl.textContent = itemInfo.item_nombre || itemName;
+      itemInfoDiv.appendChild(itemNameEl);
+      
+      if (itemInfo.lista_nombre) {
+        const listaEl = document.createElement('p');
+        listaEl.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+        listaEl.textContent = `Lista: ${itemInfo.lista_nombre}`;
+        itemInfoDiv.appendChild(listaEl);
+      }
+      
+      // Clasificaciones
+      const classifications = itemInfo.clasificaciones;
+      if (classifications) {
+        const classDiv = document.createElement('div');
+        classDiv.style.cssText = 'margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;';
+        
+        if (classifications.category) {
+          const categoryTag = document.createElement('span');
+          categoryTag.style.cssText = 'padding: 0.125rem 0.5rem; background: #4f46e5; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+          categoryTag.textContent = `Categoría: ${classifications.category}`;
+          classDiv.appendChild(categoryTag);
+        }
+        
+        if (classifications.subcategory) {
+          const subcatTag = document.createElement('span');
+          subcatTag.style.cssText = 'padding: 0.125rem 0.5rem; background: #7c3aed; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+          subcatTag.textContent = `Subcategoría: ${classifications.subcategory}`;
+          classDiv.appendChild(subcatTag);
+        }
+        
+        if (classifications.tags && classifications.tags.length > 0) {
+          classifications.tags.forEach(tag => {
+            const tagEl = document.createElement('span');
+            tagEl.style.cssText = 'padding: 0.125rem 0.5rem; background: #64748b; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+            tagEl.textContent = tag;
+            classDiv.appendChild(tagEl);
+          });
+        }
+        
+        itemInfoDiv.appendChild(classDiv);
+      }
+      
+      humanPanelDiv.appendChild(itemInfoDiv);
+    }
+    
+    // Eventos humanos
+    const humanEvents = data.human_panel?.events || [];
+    if (humanEvents.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
+      emptyMsg.textContent = 'No hay eventos de limpieza registrados';
+      humanPanelDiv.appendChild(emptyMsg);
+    } else {
+      const eventsList = document.createElement('div');
+      eventsList.style.cssText = 'space-y-2';
+      
+      humanEvents.forEach(event => {
+        const eventDiv = document.createElement('div');
+        eventDiv.style.cssText = 'padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.375rem; margin-bottom: 0.5rem;';
+        
+        const date = new Date(event.created_at).toLocaleString('es-ES');
+        const dateEl = document.createElement('p');
+        dateEl.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.25rem;';
+        dateEl.textContent = date;
+        eventDiv.appendChild(dateEl);
+        
+        const actionEl = document.createElement('p');
+        actionEl.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+        
+        let actionText = '';
+        if (event.action_type === 'mark_clean') {
+          actionText = '✓ Limpieza registrada';
+        } else {
+          actionText = event.action_type || 'Acción desconocida';
+        }
+        
+        const actorText = event.actor_type === 'master' ? 'por Master' : 'por Alumno';
+        actionEl.textContent = `${actionText} ${actorText}`;
+        eventDiv.appendChild(actionEl);
+        
+        eventsList.appendChild(eventDiv);
+      });
+      
+      humanPanelDiv.appendChild(eventsList);
+    }
+    
+    content.appendChild(humanPanelDiv);
+    
+    // PANEL TÉCNICO (COLAPSADO POR DEFECTO)
+    const technicalPanelDiv = document.createElement('div');
+    technicalPanelDiv.id = 'history-technical-panel';
+    technicalPanelDiv.style.cssText = 'margin-top: 1rem; border-top: 1px solid #334155; padding-top: 1rem;';
+    
+    const technicalPanelHeader = document.createElement('div');
+    technicalPanelHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 0.5rem;';
+    
+    const technicalPanelTitle = document.createElement('h4');
+    technicalPanelTitle.textContent = 'Panel Técnico (Datos Raw)';
+    technicalPanelTitle.style.cssText = 'color: #94a3b8; font-size: 0.875rem; font-weight: 600;';
+    technicalPanelHeader.appendChild(technicalPanelTitle);
+    
+    const collapseIcon = document.createElement('span');
+    collapseIcon.id = 'technical-panel-collapse-icon';
+    collapseIcon.textContent = ' ▼';
+    collapseIcon.style.cssText = 'color: #94a3b8;';
+    technicalPanelHeader.appendChild(collapseIcon);
+    
+    const technicalPanelContent = document.createElement('div');
+    technicalPanelContent.id = 'history-technical-panel-content';
+    technicalPanelContent.style.cssText = 'display: none;'; // Oculto por defecto
+    
+    // Toggle collapse
+    let isTechnicalCollapsed = true;
+    technicalPanelHeader.addEventListener('click', () => {
+      isTechnicalCollapsed = !isTechnicalCollapsed;
+      collapseIcon.textContent = isTechnicalCollapsed ? ' ▼' : ' ▲';
+      technicalPanelContent.style.display = isTechnicalCollapsed ? 'none' : 'block';
+    });
+    
+    // Eventos técnicos
+    const technicalEvents = data.technical_panel?.events || [];
+    if (technicalEvents.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.style.cssText = 'color: #64748b; font-style: italic; font-size: 0.875rem; text-align: center; padding: 1rem;';
+      emptyMsg.textContent = 'No hay eventos técnicos';
+      technicalPanelContent.appendChild(emptyMsg);
+    } else {
+      const eventsTable = document.createElement('table');
+      eventsTable.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.75rem; font-family: monospace;';
+      
+      // Headers
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      headerRow.style.cssText = 'background: #0f172a; border-bottom: 1px solid #334155;';
+      
+      ['Fecha', 'Tipo', 'Layer', 'Actor', 'Execution Key', 'Meta'].forEach(h => {
+        const th = document.createElement('th');
+        th.style.cssText = 'padding: 0.5rem; text-align: left; color: #cbd5e1; font-weight: 600;';
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+      
+      thead.appendChild(headerRow);
+      eventsTable.appendChild(thead);
+      
+      // Body
+      const tbody = document.createElement('tbody');
+      technicalEvents.forEach(event => {
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom: 1px solid #334155;';
+        
+        const date = new Date(event.created_at).toISOString();
+        const cells = [
+          date.substring(0, 19).replace('T', ' '),
+          event.action_type || '-',
+          event.clean_layer || '-',
+          event.actor_type || '-',
+          event.execution_key ? event.execution_key.substring(0, 20) + '...' : '-',
+          JSON.stringify(event.meta || {}).substring(0, 50)
+        ];
+        
+        cells.forEach(cellText => {
+          const td = document.createElement('td');
+          td.style.cssText = 'padding: 0.5rem; color: #94a3b8;';
+          td.textContent = cellText;
+          tr.appendChild(td);
+        });
+        
+        tbody.appendChild(tr);
+      });
+      
+      eventsTable.appendChild(tbody);
+      technicalPanelContent.appendChild(eventsTable);
+    }
+    
+    technicalPanelDiv.appendChild(technicalPanelHeader);
+    technicalPanelDiv.appendChild(technicalPanelContent);
+    content.appendChild(technicalPanelDiv);
+    
+    modal.appendChild(content);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Cerrar con ESC
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
   }
 
   /**
@@ -869,7 +1162,7 @@
   }
 
   /**
-   * Renderiza el informe
+   * Renderiza el informe (DOS PANELES: técnico colapsado + humano visible)
    */
   function renderReport(data) {
     if (!reportContent) return;
@@ -879,60 +1172,226 @@
       reportContent.removeChild(reportContent.firstChild);
     }
     
-    // Título
-    const title = document.createElement('h3');
-    title.className = 'text-lg font-semibold text-white mb-4';
-    title.textContent = `Últimos ${data.days} días`;
-    reportContent.appendChild(title);
+    // PANEL HUMANO (VISIBLE POR DEFECTO)
+    const humanPanelDiv = document.createElement('div');
+    humanPanelDiv.id = 'report-human-panel';
+    humanPanelDiv.style.cssText = 'margin-bottom: 1rem;';
     
-    // Master events
-    const masterDiv = document.createElement('div');
-    masterDiv.className = 'mb-6';
-    const masterTitle = document.createElement('h4');
-    masterTitle.className = 'text-slate-300 font-semibold mb-2';
-    masterTitle.textContent = `Por Master (${data.master_events.length})`;
-    masterDiv.appendChild(masterTitle);
+    const humanPanelTitle = document.createElement('h3');
+    humanPanelTitle.className = 'text-lg font-semibold text-white mb-4';
+    humanPanelTitle.textContent = `Informe de Limpiezas (últimos ${data.metadata?.days || 30} días)`;
+    humanPanelDiv.appendChild(humanPanelTitle);
     
-    const masterList = document.createElement('div');
-    masterList.className = 'space-y-2';
-    data.master_events.forEach(event => {
-      const eventEl = renderReportEvent(event);
-      masterList.appendChild(eventEl);
+    // Agrupado por lista
+    const groupedByLista = data.human_panel?.grouped_by_lista || [];
+    
+    if (groupedByLista.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.style.cssText = 'color: #94a3b8; font-style: italic; text-align: center; padding: 2rem;';
+      emptyMsg.textContent = 'No hay eventos de limpieza en este período';
+      humanPanelDiv.appendChild(emptyMsg);
+    } else {
+      groupedByLista.forEach(listaGroup => {
+        const listaDiv = document.createElement('div');
+        listaDiv.style.cssText = 'margin-bottom: 1.5rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 1rem;';
+        
+        // Header de lista
+        const listaHeader = document.createElement('div');
+        listaHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;';
+        
+        const listaName = document.createElement('h4');
+        listaName.style.cssText = 'color: #f1f5f9; font-size: 1rem; font-weight: 600;';
+        listaName.textContent = listaGroup.lista_nombre || 'Sin lista';
+        listaHeader.appendChild(listaName);
+        
+        // Clasificaciones
+        if (listaGroup.items && listaGroup.items.length > 0 && listaGroup.items[0].clasificaciones) {
+          const classifications = listaGroup.items[0].clasificaciones;
+          const classDiv = document.createElement('div');
+          classDiv.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
+          
+          if (classifications.category) {
+            const catTag = document.createElement('span');
+            catTag.style.cssText = 'padding: 0.125rem 0.5rem; background: #4f46e5; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+            catTag.textContent = classifications.category;
+            classDiv.appendChild(catTag);
+          }
+          
+          if (classifications.subcategory) {
+            const subcatTag = document.createElement('span');
+            subcatTag.style.cssText = 'padding: 0.125rem 0.5rem; background: #7c3aed; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+            subcatTag.textContent = classifications.subcategory;
+            classDiv.appendChild(subcatTag);
+          }
+          
+          if (classifications.tags && classifications.tags.length > 0) {
+            classifications.tags.forEach(tag => {
+              const tagEl = document.createElement('span');
+              tagEl.style.cssText = 'padding: 0.125rem 0.5rem; background: #64748b; color: #fff; border-radius: 0.25rem; font-size: 0.75rem;';
+              tagEl.textContent = tag;
+              classDiv.appendChild(tagEl);
+            });
+          }
+          
+          listaHeader.appendChild(classDiv);
+        }
+        
+        listaDiv.appendChild(listaHeader);
+        
+        // Items de la lista
+        const itemsList = document.createElement('div');
+        itemsList.style.cssText = 'space-y-2';
+        
+        (listaGroup.items || []).forEach(item => {
+          const itemDiv = document.createElement('div');
+          itemDiv.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem; margin-bottom: 0.5rem;';
+          
+          const itemName = document.createElement('p');
+          itemName.style.cssText = 'color: #f1f5f9; font-weight: 600; margin-bottom: 0.25rem;';
+          itemName.textContent = item.item_nombre || item.item_ref;
+          itemDiv.appendChild(itemName);
+          
+          const itemMeta = document.createElement('div');
+          itemMeta.style.cssText = 'display: flex; gap: 1rem; color: #94a3b8; font-size: 0.875rem;';
+          
+          if (item.events_count) {
+            const eventsEl = document.createElement('span');
+            eventsEl.textContent = `${item.events_count} evento${item.events_count !== 1 ? 's' : ''}`;
+            itemMeta.appendChild(eventsEl);
+          }
+          
+          if (item.last_cleaned_at) {
+            const lastCleanDate = new Date(item.last_cleaned_at).toLocaleDateString('es-ES');
+            const lastCleanEl = document.createElement('span');
+            lastCleanEl.textContent = `Última limpieza: ${lastCleanDate}`;
+            itemMeta.appendChild(lastCleanEl);
+          }
+          
+          itemDiv.appendChild(itemMeta);
+          itemsList.appendChild(itemDiv);
+        });
+        
+        listaDiv.appendChild(itemsList);
+        humanPanelDiv.appendChild(listaDiv);
+      });
+    }
+    
+    reportContent.appendChild(humanPanelDiv);
+    
+    // PANEL TÉCNICO (COLAPSADO POR DEFECTO)
+    const technicalPanelDiv = document.createElement('div');
+    technicalPanelDiv.id = 'report-technical-panel';
+    technicalPanelDiv.style.cssText = 'margin-top: 1rem; border-top: 1px solid #334155; padding-top: 1rem;';
+    
+    const technicalPanelHeader = document.createElement('div');
+    technicalPanelHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 0.5rem;';
+    
+    const technicalPanelTitle = document.createElement('h4');
+    technicalPanelTitle.textContent = 'Panel Técnico (Datos Raw)';
+    technicalPanelTitle.style.cssText = 'color: #94a3b8; font-size: 0.875rem; font-weight: 600;';
+    technicalPanelHeader.appendChild(technicalPanelTitle);
+    
+    const collapseIcon = document.createElement('span');
+    collapseIcon.id = 'report-technical-panel-collapse-icon';
+    collapseIcon.textContent = ' ▼';
+    collapseIcon.style.cssText = 'color: #94a3b8;';
+    technicalPanelHeader.appendChild(collapseIcon);
+    
+    const technicalPanelContent = document.createElement('div');
+    technicalPanelContent.id = 'report-technical-panel-content';
+    technicalPanelContent.style.cssText = 'display: none;'; // Oculto por defecto
+    
+    // Toggle collapse
+    let isTechnicalCollapsed = true;
+    technicalPanelHeader.addEventListener('click', () => {
+      isTechnicalCollapsed = !isTechnicalCollapsed;
+      collapseIcon.textContent = isTechnicalCollapsed ? ' ▼' : ' ▲';
+      technicalPanelContent.style.display = isTechnicalCollapsed ? 'none' : 'block';
     });
-    masterDiv.appendChild(masterList);
-    reportContent.appendChild(masterDiv);
     
-    // Student events
-    const studentDiv = document.createElement('div');
-    const studentTitle = document.createElement('h4');
-    studentTitle.className = 'text-slate-300 font-semibold mb-2';
-    studentTitle.textContent = `Por Alumno (${data.student_events.length})`;
-    studentDiv.appendChild(studentTitle);
+    // Totales
+    const totals = data.technical_panel?.totals || {};
+    const totalsDiv = document.createElement('div');
+    totalsDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: #0f172a; border-radius: 0.375rem;';
     
-    const studentList = document.createElement('div');
-    studentList.className = 'space-y-2';
-    data.student_events.forEach(event => {
-      const eventEl = renderReportEvent(event);
-      studentList.appendChild(eventEl);
-    });
-    studentDiv.appendChild(studentList);
-    reportContent.appendChild(studentDiv);
-  }
-
-  /**
-   * Renderiza un evento del informe
-   */
-  function renderReportEvent(event) {
-    const eventDiv = document.createElement('div');
-    eventDiv.className = 'p-3 bg-slate-800 rounded border border-slate-700';
+    const totalsTitle = document.createElement('p');
+    totalsTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;';
+    totalsTitle.textContent = 'Totales:';
+    totalsDiv.appendChild(totalsTitle);
     
-    const date = new Date(event.created_at).toLocaleString('es-ES');
-    const text = document.createElement('p');
-    text.className = 'text-slate-300 text-sm';
-    text.textContent = `${date} - ${event.item_ref} (${event.action_type})`;
-    eventDiv.appendChild(text);
+    const totalsList = document.createElement('div');
+    totalsList.style.cssText = 'display: flex; gap: 1rem; flex-wrap: wrap; color: #94a3b8; font-size: 0.875rem;';
     
-    return eventDiv;
+    const totalEventsEl = document.createElement('span');
+    totalEventsEl.textContent = `Total eventos: ${totals.total_events || 0}`;
+    totalsList.appendChild(totalEventsEl);
+    
+    const masterEventsEl = document.createElement('span');
+    masterEventsEl.textContent = `Por Master: ${totals.master_events || 0}`;
+    totalsList.appendChild(masterEventsEl);
+    
+    const studentEventsEl = document.createElement('span');
+    studentEventsEl.textContent = `Por Alumno: ${totals.student_events || 0}`;
+    totalsList.appendChild(studentEventsEl);
+    
+    totalsDiv.appendChild(totalsList);
+    technicalPanelContent.appendChild(totalsDiv);
+    
+    // Top items
+    const topItems = data.technical_panel?.top_items_by_events || [];
+    if (topItems.length > 0) {
+      const topItemsDiv = document.createElement('div');
+      topItemsDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: #0f172a; border-radius: 0.375rem;';
+      
+      const topItemsTitle = document.createElement('p');
+      topItemsTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;';
+      topItemsTitle.textContent = 'Top Items por Eventos:';
+      topItemsDiv.appendChild(topItemsTitle);
+      
+      const topItemsList = document.createElement('div');
+      topItemsList.style.cssText = 'font-family: monospace; font-size: 0.75rem; color: #94a3b8;';
+      
+      topItems.forEach((item, idx) => {
+        const itemEl = document.createElement('div');
+        itemEl.style.cssText = 'padding: 0.25rem 0;';
+        itemEl.textContent = `${idx + 1}. ${item.item_ref} (${item.events_count} eventos)`;
+        topItemsList.appendChild(itemEl);
+      });
+      
+      topItemsDiv.appendChild(topItemsList);
+      technicalPanelContent.appendChild(topItemsDiv);
+    }
+    
+    // Events by day
+    const eventsByDay = data.technical_panel?.events_by_day || {};
+    if (Object.keys(eventsByDay).length > 0) {
+      const eventsByDayDiv = document.createElement('div');
+      eventsByDayDiv.style.cssText = 'padding: 0.75rem; background: #0f172a; border-radius: 0.375rem;';
+      
+      const eventsByDayTitle = document.createElement('p');
+      eventsByDayTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;';
+      eventsByDayTitle.textContent = 'Eventos por Día:';
+      eventsByDayDiv.appendChild(eventsByDayTitle);
+      
+      const eventsByDayList = document.createElement('div');
+      eventsByDayList.style.cssText = 'font-family: monospace; font-size: 0.75rem; color: #94a3b8;';
+      
+      Object.entries(eventsByDay)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .forEach(([day, count]) => {
+          const dayEl = document.createElement('div');
+          dayEl.style.cssText = 'padding: 0.25rem 0;';
+          dayEl.textContent = `${day}: ${count} evento${count !== 1 ? 's' : ''}`;
+          eventsByDayList.appendChild(dayEl);
+        });
+      
+      eventsByDayDiv.appendChild(eventsByDayList);
+      technicalPanelContent.appendChild(eventsByDayDiv);
+    }
+    
+    technicalPanelDiv.appendChild(technicalPanelHeader);
+    technicalPanelDiv.appendChild(technicalPanelContent);
+    reportContent.appendChild(technicalPanelDiv);
   }
 
   /**

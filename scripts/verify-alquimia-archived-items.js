@@ -111,9 +111,12 @@ async function verifyMegalistServiceExcludesArchived() {
   log('\n🔍 Verificando que Megalist Service excluye items/listas archivados...', 'cyan');
   
   try {
-    // Verificar que hay al menos un alumno para probar
+    // Obtener nivel efectivo usando la función canónica
+    const { getStudentEffectiveLevel } = await import('../src/core/master/services/cleaning-engine-service.js');
+    
+    // Verificar que hay al menos un alumno para probar (desde tabla alumnos)
     const students = await query(`
-      SELECT id, email, nivel_efectivo FROM alumnos LIMIT 1
+      SELECT id, email FROM alumnos LIMIT 1
     `);
     
     if (students.rows.length === 0) {
@@ -122,7 +125,18 @@ async function verifyMegalistServiceExcludesArchived() {
     }
     
     const student = students.rows[0];
-    log(`  ℹ️  Usando alumno de prueba: ${student.email} (id: ${student.id})`, 'yellow');
+    
+    // Obtener nivel efectivo usando la función canónica
+    let nivelEfectivo;
+    try {
+      nivelEfectivo = await getStudentEffectiveLevel(student.id);
+    } catch (error) {
+      // Si falla, usar nivel alto como fallback
+      log(`  ⚠️  No se pudo obtener nivel efectivo, usando nivel 999: ${error.message}`, 'yellow');
+      nivelEfectivo = 999;
+    }
+    
+    log(`  ℹ️  Usando alumno de prueba: ${student.email} (id: ${student.id}, nivel efectivo: ${nivelEfectivo})`, 'yellow');
     
     // Simular query de megalist: solo items activos
     const applicableItems = await query(`
@@ -142,7 +156,7 @@ async function verifyMegalistServiceExcludesArchived() {
         AND (it.nivel IS NULL OR it.nivel <= $1)
       ORDER BY lt.orden ASC, it.priority ASC, it.nivel ASC NULLS LAST, it.created_at ASC
       LIMIT 10
-    `, [student.nivel_efectivo || 999]);
+    `, [nivelEfectivo]);
     
     log(`  ✅ Items aplicables para alumno (nivel ${student.nivel_efectivo || 'null'}): ${applicableItems.rows.length}`, 'green');
     

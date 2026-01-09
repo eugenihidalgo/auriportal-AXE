@@ -9,6 +9,55 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.63.0] - 2025-01-27
+
+### Added
+- **UI Alquimia del Alumno - Modal de Historial**: Implementado modal con dos paneles
+  - Panel humano (visible): Nombres legibles, clasificaciones, eventos resueltos
+  - Panel técnico (colapsado): Datos raw, execution keys, metadata
+- **UI Alquimia del Alumno - Reporte Mejorado**: Implementado reporte con dos paneles
+  - Panel humano (visible): Agrupado por lista, clasificaciones, nombres legibles
+  - Panel técnico (colapsado): Totales, eventos por día, top items, dataset raw
+- **UI Alquimia General - Panel de Diagnóstico**: Implementado panel de coherencia visual
+  - Items sin item_ref (debe ser 0)
+  - Items sin lista_id (debe ser 0)
+  - Listas sin items (informativo)
+  - Listas sin clasificaciones (informativo)
+  - Advertencias de campos legacy poblados
+- **Mejoras UX - Estados Vacíos**: Mensajes claros y explicativos
+  - Megalist vacío: Explicación con ícono y mensaje contextual
+  - Selector de alumno: Mensaje claro cuando no hay selección
+- **Tests Mínimos Críticos**: Script de tests automáticos
+  - Test 1: Seed idempotente
+  - Test 2: Item archivado NO aparece en megalist
+  - Test 3: Item archivado SÍ aparece en panel técnico histórico
+  - Test 4: Report devuelve dos paneles
+  - Test 5: Filtro por nivel funciona
+  - Comando npm: `npm run test:alquimia-ui`
+- **Documentación UI Canónica**:
+  - `docs/MASTER_ALQUIMIA_GENERAL_UI_V1.md`: Documentación completa de UI General
+  - `docs/MASTER_ALQUIMIA_ALUMNO_UI_V1.md`: Documentación completa de UI Alumno
+  - `docs/ALQUIMIA_UX_RULES_V1.md`: Reglas fundamentales de UX
+
+### Changed
+- **UI Alquimia del Alumno - Items Mejorados**: Items muestran metadata completa
+  - Descripción del item (si existe)
+  - Nivel requerido (badge)
+  - Recurrencia: "Cada X días" (recurrentes) o "N veces" (una_vez)
+- **Megalist Service**: Incluye metadata completa en respuesta
+  - `item_descripcion`: Descripción del item
+  - `item_frecuencia_dias`: Frecuencia en días (recurrentes)
+  - `item_veces_limpiar`: Veces requeridas (una_vez)
+- **Selector de Alumno**: Corregido uso de `innerHTML` → DOM API only
+  - Opción por defecto creada con `createElement` y `appendChild`
+
+### Technical Notes
+- **DOM API Only**: Todas las actualizaciones respetan la regla constitucional
+- **Dos Paneles Obligatorios**: Historial y reporte implementan panel técnico colapsado + humano visible
+- **Panel de Diagnóstico**: NO bloqueante, solo informativo (visual)
+
+---
+
 ## [5.62.0] - 2025-01-27
 
 ### Added

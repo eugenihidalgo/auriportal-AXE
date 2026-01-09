@@ -108,9 +108,178 @@
     // Cargar listas iniciales
     await loadListas('recurrente');
     
+    // Cargar diagnóstico
+    await loadDiagnostics();
+    
     // Event listeners
     if (btnCrearLista) {
       btnCrearLista.addEventListener('click', handleCrearLista);
+    }
+  }
+
+  /**
+   * Carga y renderiza el diagnóstico de coherencia
+   */
+  async function loadDiagnostics() {
+    const diagnosticsContent = document.getElementById('diagnostics-content');
+    if (!diagnosticsContent) return;
+    
+    try {
+      const response = await fetch('/master/api/alquimia-general/diagnostics');
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.warn('[MasterAlquimiaGeneral] Error cargando diagnóstico:', result.error);
+        return;
+      }
+      
+      renderDiagnostics(result.diagnostics);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando diagnóstico:', error);
+    }
+  }
+
+  /**
+   * Renderiza el panel de diagnóstico
+   */
+  function renderDiagnostics(diagnostics) {
+    const diagnosticsContent = document.getElementById('diagnostics-content');
+    if (!diagnosticsContent) return;
+    
+    // Limpiar
+    while (diagnosticsContent.firstChild) {
+      diagnosticsContent.removeChild(diagnosticsContent.firstChild);
+    }
+    
+    // Items sin item_ref (debe ser 0)
+    const itemsSinRefDiv = document.createElement('div');
+    itemsSinRefDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: ' + (diagnostics.items_sin_ref === 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)') + '; border-radius: 0.375rem; border: 1px solid ' + (diagnostics.items_sin_ref === 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)') + ';';
+    
+    const itemsSinRefTitle = document.createElement('div');
+    itemsSinRefTitle.style.cssText = 'color: ' + (diagnostics.items_sin_ref === 0 ? '#86efac' : '#fca5a5') + '; font-weight: 600; margin-bottom: 0.25rem;';
+    itemsSinRefTitle.textContent = `Items sin item_ref: ${diagnostics.items_sin_ref}`;
+    itemsSinRefDiv.appendChild(itemsSinRefTitle);
+    
+    const itemsSinRefDesc = document.createElement('div');
+    itemsSinRefDesc.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    itemsSinRefDesc.textContent = diagnostics.items_sin_ref === 0 ? '✅ Todos los items tienen item_ref' : '⚠️ Algunos items no tienen item_ref (debería ser 0)';
+    itemsSinRefDiv.appendChild(itemsSinRefDesc);
+    diagnosticsContent.appendChild(itemsSinRefDiv);
+    
+    // Items sin lista_id (debe ser 0)
+    const itemsSinListaDiv = document.createElement('div');
+    itemsSinListaDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: ' + (diagnostics.items_sin_lista === 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)') + '; border-radius: 0.375rem; border: 1px solid ' + (diagnostics.items_sin_lista === 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)') + ';';
+    
+    const itemsSinListaTitle = document.createElement('div');
+    itemsSinListaTitle.style.cssText = 'color: ' + (diagnostics.items_sin_lista === 0 ? '#86efac' : '#fca5a5') + '; font-weight: 600; margin-bottom: 0.25rem;';
+    itemsSinListaTitle.textContent = `Items sin lista_id: ${diagnostics.items_sin_lista}`;
+    itemsSinListaDiv.appendChild(itemsSinListaTitle);
+    
+    const itemsSinListaDesc = document.createElement('div');
+    itemsSinListaDesc.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    itemsSinListaDesc.textContent = diagnostics.items_sin_lista === 0 ? '✅ Todos los items tienen lista_id' : '⚠️ Algunos items no tienen lista_id (debería ser 0)';
+    itemsSinListaDiv.appendChild(itemsSinListaDesc);
+    diagnosticsContent.appendChild(itemsSinListaDiv);
+    
+    // Listas sin items (permitido, informativo)
+    const listasSinItemsDiv = document.createElement('div');
+    listasSinItemsDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: rgba(148, 163, 184, 0.1); border-radius: 0.375rem; border: 1px solid rgba(148, 163, 184, 0.3);';
+    
+    const listasSinItemsTitle = document.createElement('div');
+    listasSinItemsTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.25rem;';
+    listasSinItemsTitle.textContent = `Listas sin items: ${diagnostics.listas_sin_items.length}`;
+    listasSinItemsDiv.appendChild(listasSinItemsTitle);
+    
+    const listasSinItemsDesc = document.createElement('div');
+    listasSinItemsDesc.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    listasSinItemsDesc.textContent = diagnostics.listas_sin_items.length === 0 ? '✅ Todas las listas tienen items' : 'ℹ️ Listas vacías (permitido):';
+    listasSinItemsDiv.appendChild(listasSinItemsDesc);
+    
+    if (diagnostics.listas_sin_items.length > 0) {
+      const listasList = document.createElement('ul');
+      listasList.style.cssText = 'list-style: none; padding-left: 0; margin: 0;';
+      diagnostics.listas_sin_items.forEach(lista => {
+        const li = document.createElement('li');
+        li.style.cssText = 'color: #94a3b8; font-size: 0.875rem; padding: 0.25rem 0;';
+        li.textContent = `• ${lista.nombre} (ID: ${lista.id})`;
+        listasList.appendChild(li);
+      });
+      listasSinItemsDiv.appendChild(listasList);
+    }
+    diagnosticsContent.appendChild(listasSinItemsDiv);
+    
+    // Listas sin clasificaciones (permitido, informativo)
+    const listasSinClassDiv = document.createElement('div');
+    listasSinClassDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: rgba(148, 163, 184, 0.1); border-radius: 0.375rem; border: 1px solid rgba(148, 163, 184, 0.3);';
+    
+    const listasSinClassTitle = document.createElement('div');
+    listasSinClassTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.25rem;';
+    listasSinClassTitle.textContent = `Listas sin clasificaciones: ${diagnostics.listas_sin_clasificaciones.length}`;
+    listasSinClassDiv.appendChild(listasSinClassTitle);
+    
+    const listasSinClassDesc = document.createElement('div');
+    listasSinClassDesc.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+    listasSinClassDesc.textContent = diagnostics.listas_sin_clasificaciones.length === 0 ? '✅ Todas las listas tienen clasificaciones' : 'ℹ️ Listas sin clasificaciones (permitido):';
+    listasSinClassDiv.appendChild(listasSinClassDesc);
+    
+    if (diagnostics.listas_sin_clasificaciones.length > 0) {
+      const listasList = document.createElement('ul');
+      listasList.style.cssText = 'list-style: none; padding-left: 0; margin: 0;';
+      diagnostics.listas_sin_clasificaciones.forEach(lista => {
+        const li = document.createElement('li');
+        li.style.cssText = 'color: #94a3b8; font-size: 0.875rem; padding: 0.25rem 0;';
+        li.textContent = `• ${lista.nombre} (ID: ${lista.id})`;
+        listasList.appendChild(li);
+      });
+      listasSinClassDiv.appendChild(listasList);
+    }
+    diagnosticsContent.appendChild(listasSinClassDiv);
+    
+    // Warnings de campos legacy
+    const totalLegacy = diagnostics.warnings.legacy_category_key + 
+                        diagnostics.warnings.legacy_subtype_key + 
+                        diagnostics.warnings.legacy_tags_jsonb;
+    
+    if (totalLegacy > 0) {
+      const legacyDiv = document.createElement('div');
+      legacyDiv.style.cssText = 'margin-bottom: 1rem; padding: 0.75rem; background: rgba(234, 179, 8, 0.1); border-radius: 0.375rem; border: 1px solid rgba(234, 179, 8, 0.3);';
+      
+      const legacyTitle = document.createElement('div');
+      legacyTitle.style.cssText = 'color: #fde047; font-weight: 600; margin-bottom: 0.25rem;';
+      legacyTitle.textContent = '⚠️ Campos Legacy Poblados (Deprecated)';
+      legacyDiv.appendChild(legacyTitle);
+      
+      const legacyDesc = document.createElement('div');
+      legacyDesc.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+      legacyDesc.textContent = 'Estos campos están deprecated. Usar clasificaciones globales (SOT).';
+      legacyDiv.appendChild(legacyDesc);
+      
+      const legacyList = document.createElement('ul');
+      legacyList.style.cssText = 'list-style: none; padding-left: 0; margin: 0;';
+      
+      if (diagnostics.warnings.legacy_category_key > 0) {
+        const li = document.createElement('li');
+        li.style.cssText = 'color: #fde047; font-size: 0.875rem; padding: 0.25rem 0;';
+        li.textContent = `• category_key: ${diagnostics.warnings.legacy_category_key} listas`;
+        legacyList.appendChild(li);
+      }
+      
+      if (diagnostics.warnings.legacy_subtype_key > 0) {
+        const li = document.createElement('li');
+        li.style.cssText = 'color: #fde047; font-size: 0.875rem; padding: 0.25rem 0;';
+        li.textContent = `• subtype_key: ${diagnostics.warnings.legacy_subtype_key} listas`;
+        legacyList.appendChild(li);
+      }
+      
+      if (diagnostics.warnings.legacy_tags_jsonb > 0) {
+        const li = document.createElement('li');
+        li.style.cssText = 'color: #fde047; font-size: 0.875rem; padding: 0.25rem 0;';
+        li.textContent = `• tags JSONB: ${diagnostics.warnings.legacy_tags_jsonb} listas`;
+        legacyList.appendChild(li);
+      }
+      
+      legacyDiv.appendChild(legacyList);
+      diagnosticsContent.appendChild(legacyDiv);
     }
   }
 
