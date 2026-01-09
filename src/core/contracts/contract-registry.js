@@ -215,6 +215,116 @@ export const CONTRACT_REGISTRY = [
   },
 
   // ============================================================================
+  // ALQUIMIA CONTRACTS
+  // ============================================================================
+  {
+    id: 'alquimia.catalog.v1',
+    name: 'Alquimia Catalog Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato canónico del catálogo de alquimia (listas e items). Define campos canónicos, ordenamiento y validaciones.',
+    dependencies: [],
+    status: 'active',
+    metadata: {
+      entity: 'alquimia_catalog',
+      scope: 'master',
+      fields: ['lista_fields', 'item_fields', 'ordering']
+    }
+  },
+  {
+    id: 'alquimia.alumno.megalist.v2',
+    name: 'Alquimia Alumno Megalist Contract v2',
+    type: 'domain',
+    version: '2.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato de la megalist por alumno. Incluye seed automático de estados "NUNCA" y filtrado por nivel_efectivo.',
+    dependencies: ['alquimia.catalog.v1', 'cleaning.seed.v1'],
+    status: 'active',
+    metadata: {
+      entity: 'alquimia_megalist',
+      scope: 'master',
+      includes_seed: true
+    }
+  },
+  {
+    id: 'cleaning.seed.v1',
+    name: 'Cleaning Seed Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato del servicio de seed de estados "NUNCA" en cleaning_item_state. Idempotente y masivo.',
+    dependencies: [],
+    status: 'active',
+    metadata: {
+      entity: 'cleaning_seed',
+      scope: 'master',
+      idempotent: true,
+      mass_insert: true
+    }
+  },
+  {
+    id: 'cleaning.clean.item.v1',
+    name: 'Clean Item Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato para la operación de limpiar un item. Incluye validaciones, event sourcing y sincronización.',
+    dependencies: ['cleaning.seed.v1'],
+    status: 'active',
+    metadata: {
+      entity: 'cleaning_operation',
+      scope: 'master',
+      event_sourcing: true
+    }
+  },
+  {
+    id: 'alquimia.item.history.v1',
+    name: 'Item History Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato para el historial de un item (dos paneles: técnico colapsado + humano visible).',
+    dependencies: ['alquimia.catalog.v1', 'classification.global.v1'],
+    status: 'active',
+    metadata: {
+      entity: 'item_history',
+      scope: 'master',
+      panels: ['technical', 'human']
+    }
+  },
+  {
+    id: 'alquimia.alumno.report.v1',
+    name: 'Alquimia Alumno Report Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato para el reporte de alquimia del alumno (dos paneles: técnico colapsado + humano visible con clasificaciones).',
+    dependencies: ['alquimia.catalog.v1', 'classification.global.v1'],
+    status: 'active',
+    metadata: {
+      entity: 'alquimia_report',
+      scope: 'master',
+      panels: ['technical', 'human']
+    }
+  },
+  {
+    id: 'classification.global.v1',
+    name: 'Classification Global Contract v1',
+    type: 'domain',
+    version: '1.0.0',
+    location: 'src/core/contracts/alquimia-contracts.js',
+    description: 'Contrato para el consumo de clasificaciones globales (category/subcategory/tags) en Alquimia.',
+    dependencies: [],
+    status: 'active',
+    metadata: {
+      entity: 'classification',
+      scope: 'global',
+      sot: ['pde_classification_terms', 'transmutacion_lista_classifications']
+    }
+  },
+
+  // ============================================================================
   // INTEGRATION CONTRACTS
   // ============================================================================
   {

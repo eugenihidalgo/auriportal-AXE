@@ -13,6 +13,8 @@ import { getMegalistForStudent } from '../core/master/services/alquimia-alumno-m
 import { markCleanStudent } from '../core/master/services/cleaning-engine-service.js';
 import { getDefaultCleaningEventsRepo } from '../infra/repos/cleaning/cleaning-events-repo-pg.js';
 import { ensureCleaningItemStateSeedForStudent } from '../core/master/services/cleaning-state-seed-service.js';
+import { buildHumanPanelForItemHistory } from '../core/master/services/alquimia-history-resolver-service.js';
+import { buildAlquimiaReport } from '../core/master/services/alquimia-report-service.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -291,6 +293,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
     }
     
     // 3) GET /master/api/alquimia-alumno/item-history?student_id=...&domain_type=...&item_ref=...&limit=...
+    // Contrato: ItemHistory v1 - Dos paneles (técnico colapsado + humano visible)
     if (path.match(/^\/master\/api\/alquimia-alumno\/item-history$/) && method === 'GET') {
       const studentId = parseInt(url.searchParams.get('student_id'), 10);
       const domainType = url.searchParams.get('domain_type') || 'transmutation';
@@ -322,21 +325,36 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         limit
       });
       
-      return jsonSuccess({
+      // Panel técnico (colapsado por defecto)
+      const technicalPanel = {
+        visible: false, // Colapsado por defecto en UI
         events: events.map(e => ({
           id: e.id,
           created_at: e.created_at,
+          item_ref: itemRef,
           action_type: e.action_type,
           clean_layer: e.clean_layer,
           actor_type: e.actor_type,
-          actor_ref: e.actor_ref,
-          surface_key: e.surface_key,
-          meta: e.meta
+          actor_ref: e.actor_ref || null,
+          surface_key: e.surface_key || null,
+          execution_key: e.execution_key || null,
+          meta: e.meta || {},
+          delta_completed: e.delta_completed || null,
+          set_remaining: e.set_remaining || null
         }))
+      };
+      
+      // Panel humano (visible por defecto) - Resolver nombres y clasificaciones
+      const humanPanel = await buildHumanPanelForItemHistory(events, itemRef);
+      
+      return jsonSuccess({
+        technical_panel: technicalPanel,
+        human_panel: humanPanel
       }, traceId);
     }
     
     // 4) GET /master/api/alquimia-alumno/report?student_id=...&days=...
+    // Contrato: AlquimiaAlumnoReport v1 - Dos paneles (técnico colapsado + humano visible)
     if (path.match(/^\/master\/api\/alquimia-alumno\/report$/) && method === 'GET') {
       const studentId = parseInt(url.searchParams.get('student_id'), 10);
       const days = Math.min(parseInt(url.searchParams.get('days') || '30', 10), 365);
@@ -351,44 +369,13 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         days
       });
       
-      // Calcular fecha desde
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - days);
+      // Construir reporte completo (dos paneles)
+      const report = await buildAlquimiaReport({
+        student_id: studentId,
+        days
+      });
       
-      // Query directa a cleaning_events
-      const { query } = await import('../../database/pg.js');
-      const result = await query(`
-        SELECT 
-          id,
-          created_at,
-          item_ref,
-          domain_type,
-          action_type,
-          clean_layer,
-          actor_type,
-          actor_ref,
-          surface_key,
-          meta
-        FROM cleaning_events
-        WHERE student_id = $1
-          AND product_key = 'pde'
-          AND created_at >= $2
-        ORDER BY created_at DESC
-      `, [studentId, sinceDate.toISOString()]);
-      
-      const events = result.rows || [];
-      
-      // Separar por actor
-      const masterEvents = events.filter(e => e.actor_type === 'master');
-      const studentEvents = events.filter(e => e.actor_type === 'student');
-      
-      return jsonSuccess({
-        days,
-        since_date: sinceDate.toISOString(),
-        master_events: masterEvents,
-        student_events: studentEvents,
-        total: events.length
-      }, traceId);
+      return jsonSuccess(report, traceId);
     }
     
     // Método no soportado

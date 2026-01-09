@@ -9,6 +9,52 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.61.0] - 2025-01-27
+
+### Added
+- **Contratos Canónicos Alquimia v1**: Sistema completo de contratos para Alquimia General y Alquimia del Alumno
+  - `alquimia.catalog.v1`: Contrato del catálogo (listas e items)
+  - `alquimia.alumno.megalist.v2`: Contrato de megalist por alumno (con seed)
+  - `cleaning.seed.v1`: Contrato de seed de estados "NUNCA"
+  - `cleaning.clean.item.v1`: Contrato de operación de limpieza
+  - `alquimia.item.history.v1`: Contrato de historial (dos paneles)
+  - `alquimia.alumno.report.v1`: Contrato de reporte (dos paneles)
+  - `classification.global.v1`: Contrato de clasificaciones globales
+  - Todos registrados en Contract Registry canónico
+- **Endpoints mejorados** (con dos paneles técnico + humano):
+  - `GET /master/api/alquimia-alumno/item-history`: Panel técnico (colapsado) + Panel humano (visible) con nombres y clasificaciones resueltas
+  - `GET /master/api/alquimia-alumno/report`: Panel técnico (colapsado) + Panel humano (visible) agrupado por lista y clasificaciones
+- **Servicios de resolución batch**:
+  - `alquimia-history-resolver-service.js`: Resolución batch de nombres y clasificaciones
+  - `alquimia-report-service.js`: Construcción de reportes con dos paneles
+- **Documentación canónica completa**:
+  - `CONSTITUTION_ALQUIMIA_AND_CLASSIFICATIONS_V1.md`: Estatuto constitucional
+  - `MASTER_ALQUIMIA_GENERAL_CONTRACTS_V1.md`: Contratos de Alquimia General
+  - `MASTER_ALQUIMIA_ALUMNO_CONTRACTS_V2.md`: Contratos de Alquimia del Alumno
+  - `DIAGNOSTICO_ALQUIMIA_UNIFIED_ASSEMBLY_V1.md`: Ensamblaje unificado
+  - `CONTRACT_OF_CONTRACTS_UPDATE_V1.md`: Actualización del Contract Registry
+  - `RESUMEN_IMPLEMENTACION_ALQUIMIA_V1.md`: Resumen ejecutivo del progreso
+- **Script de verificación de schema**: `scripts/verify-alquimia-schema.js`
+
+### Changed
+- **Endpoints item-history y report**: Mejorados para incluir dos paneles (técnico colapsado + humano visible)
+  - Resolución batch de nombres desde catálogo
+  - Resolución batch de clasificaciones desde SOT global
+  - Agrupación por lista y clasificaciones en reportes
+- **Ordenamiento canónico**: Documentado y aplicado consistentemente
+  - Listas: `ORDER BY orden ASC, nombre ASC`
+  - Items: `ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC`
+- **Contract Registry**: Actualizado con 7 nuevos contratos de Alquimia
+
+### Technical Notes
+- **Backend (API/Contratos)**: 80% completo - Contratos definidos, endpoints mejorados, servicios implementados
+- **Frontend (UI)**: Pendiente - Requiere actualización según plan D10-D11
+- **Tests**: Pendiente - Requiere implementación según plan D13
+- **Legacy fields**: Campos `activo`, `category_key`, `subtype_key`, `tags JSONB` marcados como DEPRECATED pero mantenidos por compatibilidad
+- **critical_multiplier**: No existe en schema, se usa default 2.0 en código
+
+---
+
 ## [5.60.0] - 2026-01-08
 
 ### Added

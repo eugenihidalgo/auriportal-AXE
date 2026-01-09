@@ -9,7 +9,7 @@
 // - Retorna objetos raw de PostgreSQL (sin normalización)
 // - Todos los métodos aceptan client opcional para transacciones
 // - Usa status ('active'/'archived') NO activo (boolean)
-// - LEY ABSOLUTA: ORDER BY nivel ASC, created_at ASC para items
+// - LEY ABSOLUTA: ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC para items
 
 import { query } from '../../../database/pg.js';
 import { AlquimiaCatalogRepo } from '../../core/repos/alquimia-catalog-repo.js';
@@ -309,7 +309,7 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
 
   /**
    * Lista todos los items de una lista
-   * LEY ABSOLUTA: ORDER BY nivel ASC, created_at ASC
+   * LEY ABSOLUTA: ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC
    */
   async listItems(listaId, options = {}, client = null) {
     try {
