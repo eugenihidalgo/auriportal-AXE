@@ -226,6 +226,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       if (!lista) {
         return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
       }
+      
+      // REGLA CANÓNICA: Listas archivadas no son renderizables en UI operativa
+      const isActive = lista.status === 'active' || (lista.status === undefined && lista.activo === true);
+      if (!isActive) {
+        return jsonError('Lista archivada (no renderizable)', 'LISTA_ARCHIVED', 404, traceId);
+      }
 
       // Obtener clasificaciones de la lista
       // CONTRATO: Siempre devolver classification, aunque esté vacía
@@ -278,6 +284,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)$/) && method === 'PUT') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id');
       const id = params.id;
+      
+      // REGLA CANÓNICA: No permitir editar listas archivadas
+      const existingLista = await getListaById(id);
+      if (existingLista && existingLista.status === 'archived') {
+        return jsonError('Lista archivada (no editable)', 'LISTA_ARCHIVED', 404, traceId);
+      }
+      
       const body = await request.json();
 
       const patch = {};
@@ -643,6 +656,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       if (!item) {
         return jsonError('Item no encontrado', 'ITEM_NOT_FOUND', 404, traceId);
       }
+      
+      // REGLA CANÓNICA: Items archivados no son renderizables en UI operativa
+      const isActive = item.status === 'active' || (item.status === undefined && item.activo === true);
+      if (!isActive) {
+        return jsonError('Item archivado (no renderizable)', 'ITEM_ARCHIVED', 404, traceId);
+      }
 
       return jsonSuccess({ item }, traceId);
     }
@@ -651,6 +670,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)$/) && method === 'PUT') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:id');
       const id = params.id;
+      
+      // REGLA CANÓNICA: No permitir editar items archivados
+      const existingItem = await getItemById(id);
+      if (existingItem && existingItem.status === 'archived') {
+        return jsonError('Item archivado (no editable)', 'ITEM_ARCHIVED', 404, traceId);
+      }
+      
       const body = await request.json();
 
       const patch = {};

@@ -214,9 +214,10 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       // Cargar items del catálogo (para resolver item_ref → nombre, nivel, lista_id, metadata)
+      // REGLA CANÓNICA: Solo items activos (status='active') - archivados no son renderizables
       const itemsResult = await query(`
         SELECT * FROM items_transmutaciones
-        WHERE (status = 'active' OR activo = true)
+        WHERE status = 'active'
         ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC
       `);
       const allItems = itemsResult.rows || [];
@@ -265,20 +266,57 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       // Resolver item desde catálogo (SOLO como resolver, NO crea items)
+      // REGLA CANÓNICA: resolveItemsFromCatalog solo devuelve items activos (status='active')
       const item = itemsByRef[state.item_ref];
       
       if (!item) {
-        // Si el estado existe pero el item no → WARNING + NO RENDERIZAR
-        logWarn('AlquimiaAlumnoMegalist', 'Estado sin item en catálogo (ITEM_WITHOUT_RESOLVER)', {
+        // Si el estado existe pero el item no está en itemsByRef, puede ser porque:
+        // 1. Está archivado (status='archived') → NO RENDERIZAR
+        // 2. No existe en catálogo → NO RENDERIZAR
+        // REGLA CANÓNICA: Items archivados no son renderizables en UI operativa
+        const itemCheck = await query(`
+          SELECT status FROM items_transmutaciones WHERE item_ref = $1
+        `, [state.item_ref]);
+        const itemRaw = itemCheck.rows[0];
+        
+        if (itemRaw && itemRaw.status === 'archived') {
+          // Item archivado: no renderizar (historia se conserva en events, pero no aparece en UI)
+          logInfo('AlquimiaAlumnoMegalist', 'Item archivado excluido de megalist', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref
+          });
+          warnings.push({
+            type: 'ITEM_ARCHIVED',
+            item_ref: state.item_ref,
+            domain_type: state.domain_type || 'transmutation',
+            message: `Item archivado: ${state.item_ref} - NO SE RENDERIZA (historia preservada en events)`
+          });
+        } else {
+          // Item no encontrado en catálogo → WARNING + NO RENDERIZAR
+          logWarn('AlquimiaAlumnoMegalist', 'Estado sin item en catálogo (ITEM_WITHOUT_RESOLVER)', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref
+          });
+          warnings.push({
+            type: 'ITEM_WITHOUT_RESOLVER',
+            item_ref: state.item_ref,
+            domain_type: state.domain_type || 'transmutation',
+            message: `Item no encontrado en catálogo: ${state.item_ref} - NO SE RENDERIZA`
+          });
+        }
+        continue; // NO SE RENDERIZA
+      }
+      
+      // Verificación adicional: asegurar que el item está activo (por seguridad)
+      // resolveItemsFromCatalog ya filtra, pero verificamos por seguridad
+      if (item.status !== 'active') {
+        logInfo('AlquimiaAlumnoMegalist', 'Item no activo excluido de megalist', {
           traceId,
           student_id,
-          item_ref: state.item_ref
-        });
-        warnings.push({
-          type: 'ITEM_WITHOUT_RESOLVER',
           item_ref: state.item_ref,
-          domain_type: state.domain_type || 'transmutation',
-          message: `Item no encontrado en catálogo: ${state.item_ref} - NO SE RENDERIZA`
+          status: item.status
         });
         continue; // NO SE RENDERIZA
       }
@@ -302,6 +340,7 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       // Resolver lista desde catálogo (SOLO como resolver)
+      // REGLA CANÓNICA: resolveListasFromCatalog solo devuelve listas activas (status='active')
       const listaId = item.lista_id ?? null;
       let lista = null;
       
@@ -310,18 +349,56 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       if (!lista) {
-        // Si el item existe pero la lista no → WARNING + NO RENDERIZAR
-        logWarn('AlquimiaAlumnoMegalist', 'Item sin lista en catálogo (ITEM_WITHOUT_LIST)', {
+        // Si la lista no está en listasById, puede ser porque:
+        // 1. Está archivada (status='archived') → NO RENDERIZAR
+        // 2. No existe en catálogo → NO RENDERIZAR
+        // REGLA CANÓNICA: Listas archivadas no son renderizables en UI operativa
+        const listaCheck = await query(`
+          SELECT status FROM listas_transmutaciones WHERE id = $1
+        `, [listaId]);
+        const listaRaw = listaCheck.rows[0];
+        
+        if (listaRaw && listaRaw.status === 'archived') {
+          // Lista archivada: no renderizar item (historia se conserva en events, pero no aparece en UI)
+          logInfo('AlquimiaAlumnoMegalist', 'Lista archivada excluida de megalist', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref,
+            lista_id: listaId
+          });
+          warnings.push({
+            type: 'LISTA_ARCHIVED',
+            item_ref: state.item_ref,
+            lista_id: listaId,
+            message: `Lista archivada: ${listaId} - NO SE RENDERIZA (historia preservada en events)`
+          });
+        } else {
+          // Lista no encontrada en catálogo → WARNING + NO RENDERIZAR
+          logWarn('AlquimiaAlumnoMegalist', 'Item sin lista en catálogo (ITEM_WITHOUT_LIST)', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref,
+            lista_id: listaId
+          });
+          warnings.push({
+            type: 'ITEM_WITHOUT_LIST',
+            item_ref: state.item_ref,
+            lista_id: listaId,
+            message: `Lista no encontrada: ${listaId || 'null'} - NO SE RENDERIZA`
+          });
+        }
+        continue; // NO SE RENDERIZA
+      }
+      
+      // Verificación adicional: asegurar que la lista está activa (por seguridad)
+      // resolveListasFromCatalog ya filtra, pero verificamos por seguridad
+      if (lista.status !== 'active') {
+        logInfo('AlquimiaAlumnoMegalist', 'Lista no activa excluida de megalist', {
           traceId,
           student_id,
           item_ref: state.item_ref,
-          lista_id: listaId
-        });
-        warnings.push({
-          type: 'ITEM_WITHOUT_LIST',
-          item_ref: state.item_ref,
           lista_id: listaId,
-          message: `Lista no encontrada: ${listaId || 'null'} - NO SE RENDERIZA`
+          status: lista.status
         });
         continue; // NO SE RENDERIZA
       }

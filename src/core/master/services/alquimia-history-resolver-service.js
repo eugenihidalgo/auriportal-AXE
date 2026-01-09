@@ -28,10 +28,11 @@ export async function resolveItemsFromCatalog(itemRefs) {
     const itemsMap = new Map();
     
     // Query batch para obtener todos los items de una vez
+    // REGLA CANÓNICA: Solo items activos (status='active') - archivados no son renderizables
     const itemsResult = await query(`
       SELECT * FROM items_transmutaciones
       WHERE item_ref = ANY($1::text[])
-        AND (status = 'active' OR activo = true)
+        AND status = 'active'
     `, [itemRefs]);
     
     for (const item of itemsResult.rows || []) {
@@ -73,10 +74,11 @@ export async function resolveListasFromCatalog(listaIds) {
     const listasMap = new Map();
     
     // Query batch para obtener todas las listas de una vez
+    // REGLA CANÓNICA: Solo listas activas (status='active') - archivadas no son renderizables
     const listasResult = await query(`
       SELECT * FROM listas_transmutaciones
       WHERE id = ANY($1::integer[])
-        AND (status = 'active' OR activo = true)
+        AND status = 'active'
     `, [listaIds]);
     
     for (const lista of listasResult.rows || []) {
@@ -240,24 +242,40 @@ export async function buildHumanPanelForItemHistory(events, itemRef) {
   }
   
   try {
-    // 1. Resolver item desde catálogo
-    const itemsMap = await resolveItemsFromCatalog([itemRef]);
-    const item = itemsMap.get(itemRef) || null;
+    // 1. Resolver item desde catálogo (incluye archivados para verificación)
+    // NOTA: resolveItemsFromCatalog solo devuelve activos, necesitamos verificar también archivados
+    const { query } = await import('../../../../database/pg.js');
+    const itemResult = await query(
+      'SELECT * FROM items_transmutaciones WHERE item_ref = $1',
+      [itemRef]
+    );
+    const item = itemResult.rows[0] || null;
     
-    // 2. Resolver lista si existe
+    // REGLA CANÓNICA: Items archivados no son renderizables en panel humano
+    // PERO: la historia (events) se conserva para panel técnico
+    const isArchived = item && item.status === 'archived';
+    
+    // 2. Resolver lista si existe (tanto para activos como archivados)
     let lista = null;
     let listaClassifications = { category: null, subcategory: null, tags: [] };
     
     if (item && item.lista_id) {
-      const listasMap = await resolveListasFromCatalog([item.lista_id]);
-      lista = listasMap.get(item.lista_id) || null;
+      // Para items archivados, necesitamos resolver la lista incluso si está archivada
+      // (para el panel técnico)
+      const listaResult = await query(
+        'SELECT * FROM listas_transmutaciones WHERE id = $1',
+        [item.lista_id]
+      );
+      lista = listaResult.rows[0] || null;
       
-      if (lista) {
+      // Solo resolver clasificaciones si la lista está activa
+      // (clasificaciones no tienen sentido para listas archivadas)
+      if (lista && lista.status === 'active') {
         listaClassifications = await resolveListaClassifications(item.lista_id);
       }
     }
     
-    // 3. Construir eventos resueltos
+    // 3. Construir eventos resueltos (se conservan para panel técnico incluso si item archivado)
     const resolvedEvents = events.map(event => ({
       id: event.id,
       created_at: event.created_at,
@@ -268,7 +286,9 @@ export async function buildHumanPanelForItemHistory(events, itemRef) {
       actor_type: event.actor_type,
       actor_ref: event.actor_ref || null,
       surface_key: event.surface_key || null,
-      clasificaciones: listaClassifications
+      clasificaciones: listaClassifications,
+      // Marcar explícitamente si el item está archivado
+      item_archived: isArchived || false
     }));
     
     return {
@@ -279,7 +299,9 @@ export async function buildHumanPanelForItemHistory(events, itemRef) {
         lista_nombre: lista?.nombre || 'Sin lista',
         descripcion: item?.descripcion || null,
         nivel: item?.nivel || null,
-        clasificaciones: listaClassifications
+        clasificaciones: listaClassifications,
+        // Marcar explícitamente si el item está archivado
+        archived: isArchived || false
       },
       events: resolvedEvents
     };

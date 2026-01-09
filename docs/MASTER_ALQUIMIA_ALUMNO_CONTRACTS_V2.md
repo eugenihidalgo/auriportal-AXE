@@ -243,6 +243,24 @@ Obtiene reporte completo del alumno (dos paneles: técnico + humano).
 }
 ```
 
+## Regla Canónica: Archivado (Soft Delete)
+
+**REGLAS OBLIGATORIAS**:
+1. Solo items/listas con `status='active'` aparecen en megalist
+2. Items/listas archivados NO se renderizan en:
+   - Megalist principal
+   - Panel humano del report/historial
+3. Panel técnico del report/historial:
+   - Conserva eventos históricos de items archivados
+   - Marca explícitamente `item_archived: true` en eventos
+   - Marca `archived: true` en metadata del item
+
+**IMPLEMENTACIÓN**:
+- `ensureCleaningItemStateSeedForStudent()` solo materializa estados para items activos
+- Megalist Service verifica `status='active'` antes de renderizar
+- Report Service excluye items archivados del panel humano
+- History Resolver marca items archivados en panel técnico
+
 ## Seed Canónico
 
 **Contrato**: CleaningSeed v1

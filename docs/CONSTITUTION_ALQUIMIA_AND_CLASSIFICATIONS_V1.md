@@ -40,9 +40,20 @@
 - Diagnóstico de coherencia del catálogo
 
 **Campos Canónicos**:
-- `status = 'active'|'archived'` (soft delete)
+- `status = 'active'|'archived'` (soft delete canónico)
 - `item_ref` como identidad externa para Cleaning Engine
 - Campos legacy (`activo`, `category_key`, `subtype_key`, `tags JSONB`) son DEPRECATED
+
+**Regla Archivado (Soft Delete)**:
+- Solo entidades con `status='active'` son renderizables en UI operativa
+- Entidades archivadas (`status='archived'`) NO aparecen en:
+  - Listados de listas/items
+  - Selectores/combos
+  - Paneles de edición
+  - Megalist de alumno
+  - Panel humano del report/historial
+- Historia (cleaning_events) se conserva: eventos históricos permanecen accesibles en panel técnico
+- Panel técnico puede mostrar items archivados marcados explícitamente como `archived: true`
 
 **No decide**:
 - Estado de limpieza por alumno

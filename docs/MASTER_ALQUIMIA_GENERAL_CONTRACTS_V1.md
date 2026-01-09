@@ -73,6 +73,25 @@ Crea una nueva lista.
 - `prioridad` (optional): Prioridad (1 = máxima)
 - `descripcion` (optional): Descripción
 
+## Regla Canónica: Archivado (Soft Delete)
+
+**REGLAS OBLIGATORIAS**:
+1. Solo entidades con `status='active'` son renderizables en UI operativa
+2. Entidades con `status='archived'` NO se muestran en:
+   - Listados de listas/items
+   - Selectores/combos
+   - Paneles de edición
+   - Megalist de alumno
+   - Panel humano del report
+3. Los eventos históricos (cleaning_events) se conservan incluso si el item está archivado
+4. El panel técnico del report/historial puede mostrar items archivados marcados explícitamente como `archived: true`
+
+**IMPLEMENTACIÓN**:
+- Repositorios solo devuelven `status='active'` por defecto
+- Endpoints `GET /listas/:id` y `GET /items/:id` devuelven 404 si está archivado
+- Endpoints `PUT /listas/:id` y `PUT /items/:id` rechazan updates si está archivado (404)
+- `resolveItemsFromCatalog()` y `resolveListasFromCatalog()` solo devuelven activos
+
 ## Ordenamiento Canónico
 
 **Listas**:

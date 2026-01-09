@@ -70,6 +70,12 @@ async function hasStatusColumn(tableName, queryFn) {
 export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
   /**
    * Lista todas las listas de transmutaciones
+   * 
+   * REGLA CANÓNICA (OBLIGATORIA):
+   * - status='archived' ⇒ NO renderizable en UI operativa
+   * - Solo elementos con status='active' son visibles para la UI
+   * - El fallback a activo=true solo se permite a nivel DB legacy para compatibilidad,
+   *   nunca como criterio visual en UI operativa
    */
   async listListas(options = {}, client = null) {
     const traceId = getRequestId();
@@ -92,10 +98,12 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
       const params = [];
       const conditions = [];
 
+      // REGLA CANÓNICA: onlyActive=true por defecto (UI operativa solo ve activos)
       if (onlyActive) {
         if (hasStatus) {
           conditions.push(`status = 'active'`);
         } else {
+          // Fallback legacy: solo para compatibilidad DB, nunca como criterio visual
           conditions.push(`activo = true`);
         }
       }
@@ -140,6 +148,12 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
 
   /**
    * Obtiene una lista por ID
+   * 
+   * NOTA: Este método NO filtra por status (permite obtener archivadas para operaciones internas).
+   * Para UI operativa, usar listListas({ onlyActive: true }) y filtrar por id.
+   * 
+   * REGLA CANÓNICA:
+   * - Si se necesita verificar si está activa, verificar status='active' en el resultado
    */
   async getListaById(id, client = null) {
     if (!id) return null;
@@ -310,6 +324,12 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
   /**
    * Lista todos los items de una lista
    * LEY ABSOLUTA: ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC
+   * 
+   * REGLA CANÓNICA (OBLIGATORIA):
+   * - status='archived' ⇒ NO renderizable en UI operativa
+   * - Solo elementos con status='active' son visibles para la UI
+   * - El fallback a activo=true solo se permite a nivel DB legacy para compatibilidad,
+   *   nunca como criterio visual en UI operativa
    */
   async listItems(listaId, options = {}, client = null) {
     try {
@@ -325,10 +345,12 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
       let sql = 'SELECT * FROM items_transmutaciones WHERE lista_id = $1';
       const params = [listaId];
 
+      // REGLA CANÓNICA: onlyActive=true por defecto (UI operativa solo ve activos)
       if (onlyActive) {
         if (hasStatus) {
           sql += ` AND status = 'active'`;
         } else {
+          // Fallback legacy: solo para compatibilidad DB, nunca como criterio visual
           sql += ` AND activo = true`;
         }
       }
@@ -354,6 +376,12 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
 
   /**
    * Obtiene un item por ID
+   * 
+   * NOTA: Este método NO filtra por status (permite obtener archivados para operaciones internas).
+   * Para UI operativa, usar listItems(listaId, { onlyActive: true }) y filtrar por id.
+   * 
+   * REGLA CANÓNICA:
+   * - Si se necesita verificar si está activo, verificar status='active' en el resultado
    */
   async getItemById(id, client = null) {
     if (!id) return null;
@@ -369,6 +397,13 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
 
   /**
    * Obtiene un item por item_ref
+   * 
+   * NOTA: Este método NO filtra por status (permite obtener archivados para operaciones internas).
+   * Para UI operativa, verificar status='active' en el resultado antes de renderizar.
+   * 
+   * REGLA CANÓNICA:
+   * - Si se usa para UI operativa, verificar status='active' antes de renderizar
+   * - Items archivados no deben aparecer en UI operativa
    */
   async getItemByRef(itemRef, client = null) {
     if (!itemRef) return null;

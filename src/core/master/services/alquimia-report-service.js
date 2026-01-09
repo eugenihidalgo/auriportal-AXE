@@ -142,7 +142,22 @@ export async function buildAlquimiaReport(options = {}) {
     for (const [itemRef, itemEvents] of Object.entries(eventsByItemRef)) {
       const item = itemsMap.get(itemRef);
       if (!item) {
-        // Item no encontrado en catálogo, agrupar en "Sin clasificar"
+        // Item no encontrado en catálogo O archivado (resolveItemsFromCatalog solo devuelve activos)
+        // REGLA CANÓNICA: No mostrar en panel humano, solo en panel técnico
+        // Verificar si está archivado consultando directamente
+        const { query } = await import('../../../../database/pg.js');
+        const itemCheck = await query(
+          'SELECT * FROM items_transmutaciones WHERE item_ref = $1',
+          [itemRef]
+        );
+        const itemRaw = itemCheck.rows[0] || null;
+        
+        if (itemRaw && itemRaw.status === 'archived') {
+          // Item archivado: no mostrar en panel humano
+          continue;
+        }
+        
+        // Item no encontrado (no archivado, simplemente no existe)
         if (!groupedByLista['_unknown']) {
           groupedByLista['_unknown'] = {
             lista_id: null,
@@ -157,6 +172,12 @@ export async function buildAlquimiaReport(options = {}) {
           last_cleaned_at: itemEvents[0]?.created_at || null
         });
         continue;
+      }
+      
+      // REGLA CANÓNICA: Verificar que el item esté activo (por seguridad)
+      // resolveItemsFromCatalog ya filtra, pero verificamos por seguridad
+      if (item.status !== 'active') {
+        continue; // No mostrar items archivados en panel humano
       }
       
       const listaId = item.lista_id;

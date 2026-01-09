@@ -9,6 +9,49 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.62.0] - 2025-01-27
+
+### Added
+- **Regla Canónica de Archivado (Soft Delete)**: Items/listas archivados NO son renderizables en UI operativa
+  - Script de verificación: `scripts/verify-alquimia-archived-items.js`
+  - Comando npm: `npm run verify:alquimia-archived`
+
+### Changed
+- **Repositorios de Catálogo**: Solo devuelven `status='active'` por defecto
+  - `listListas()`: Filtra solo activas
+  - `listItems()`: Filtra solo activos
+  - `resolveItemsFromCatalog()`: Filtra solo activos
+  - `resolveListasFromCatalog()`: Filtra solo activas
+- **Endpoints Alquimia General**: Devuelven 404 si entidad está archivada
+  - `GET /master/api/alquimia-general/listas/:id`: 404 si archivada
+  - `GET /master/api/alquimia-general/items/:id`: 404 si archivado
+  - `PUT /master/api/alquimia-general/listas/:id`: Rechaza updates si archivada (404)
+  - `PUT /master/api/alquimia-general/items/:id`: Rechaza updates si archivado (404)
+- **Megalist Service**: Excluye items/listas archivados antes de renderizar
+  - Verifica `status='active'` antes de incluir en megalist
+  - Warnings estructurados para items/listas archivados
+- **Report Service**: Excluye items archivados del panel humano
+  - Panel humano solo muestra items activos
+  - Panel técnico conserva eventos históricos de items archivados
+- **History Resolver**: Marca items archivados explícitamente en panel técnico
+  - Campo `archived: true` en metadata del item
+  - Campo `item_archived: true` en eventos
+- **Documentación actualizada**:
+  - `MASTER_ALQUIMIA_GENERAL_CONTRACTS_V1.md`: Regla de archivado añadida
+  - `MASTER_ALQUIMIA_ALUMNO_CONTRACTS_V2.md`: Regla de archivado añadida
+  - `CONSTITUTION_ALQUIMIA_AND_CLASSIFICATIONS_V1.md`: Regla de archivado documentada
+  - `DIAGNOSTICO_ALQUIMIA_UNIFIED_ASSEMBLY_V1.md`: Sección de archivado añadida
+- **Reglas del repo**: Añadida regla constitucional `alquimia-archived-not-renderable`
+
+### Technical Notes
+- **Regla Fundamental**: Diferencia entre Historia (events) y Presencia Viva (renderizable)
+  - Historia: `cleaning_events` es append-only, eventos históricos permanecen accesibles
+  - Presencia Viva: Solo `status='active'` se renderiza en UI operativa
+- **Excepción Permitida**: Panel técnico puede mostrar eventos de items archivados para debugging/auditoría
+- **Verificación**: Ejecutar `npm run verify:alquimia-archived` para validar implementación
+
+---
+
 ## [5.61.0] - 2025-01-27
 
 ### Added

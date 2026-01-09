@@ -37,6 +37,44 @@
    - Panel humano (nombres resueltos, clasificaciones, agrupación)
 ```
 
+## Archivado (Soft Delete) Canónico
+
+### Regla Fundamental
+
+**Diferencia entre Historia y Presencia Viva**:
+
+1. **Historia (events)**: Se conserva siempre
+   - `cleaning_events` es append-only
+   - Eventos históricos permanecen accesibles
+   - Panel técnico puede mostrar eventos de items archivados
+
+2. **Presencia Viva (renderizable)**: Solo entidades activas
+   - Solo `status='active'` se renderiza en UI operativa
+   - Items/listas archivados NO aparecen en:
+     - Listados de Alquimia General
+     - Megalist de Alquimia del Alumno
+     - Panel humano del report/historial
+     - Selectores/combos
+
+### Implementación
+
+**Repositorios**:
+- `listListas()`: Solo `status='active'`
+- `listItems()`: Solo `status='active'`
+- `resolveItemsFromCatalog()`: Solo `status='active'`
+- `resolveListasFromCatalog()`: Solo `status='active'`
+
+**Endpoints**:
+- `GET /listas/:id`: 404 si está archivado
+- `GET /items/:id`: 404 si está archivado
+- `PUT /listas/:id`: 404 si está archivado (previene updates)
+- `PUT /items/:id`: 404 si está archivado (previene updates)
+
+**Servicios**:
+- Megalist Service: Verifica `status='active'` antes de renderizar
+- Report Service: Excluye items archivados del panel humano
+- History Resolver: Marca items archivados en panel técnico (`archived: true`)
+
 ## Legacy Detectado y Plan de Deprecación
 
 ### Campos Legacy

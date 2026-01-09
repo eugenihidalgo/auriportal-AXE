@@ -575,5 +575,30 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Excluir estudiantes pausados del recálculo
       - Log estructurado del recálculo con trace_id
 
+  - id: alquimia-archived-not-renderable
+    title: Items/listas archivados no son renderizables en UI operativa
+    content: >
+      Las entidades archivadas (status='archived') NO DEBEN aparecer en la UI operativa.
+      PROHIBIDO:
+      - Renderizar items/listas con status='archived' en listados operativos
+      - Mostrar items/listas archivados en selectores/combos
+      - Permitir edición de items/listas archivados (deben devolver 404)
+      - Mostrar items/listas archivados en megalist de alumno
+      - Mostrar items/listas archivados en panel humano del report/historial
+      OBLIGATORIO:
+      - Repositorios solo devuelven status='active' por defecto
+      - Endpoints GET devuelven 404 si la entidad está archivada
+      - Endpoints PUT rechazan updates si la entidad está archivada (404)
+      - Megalist Service verifica status='active' antes de renderizar
+      - Report Service excluye items archivados del panel humano
+      - History Resolver marca items archivados en panel técnico (archived: true)
+      EXCEPCIÓN PERMITIDA:
+      - Panel técnico del report/historial puede mostrar eventos de items archivados (historia se conserva)
+      - cleaning_events es append-only: eventos históricos permanecen accesibles
+      REFERENCIAS:
+      - docs/MASTER_ALQUIMIA_GENERAL_CONTRACTS_V1.md
+      - docs/MASTER_ALQUIMIA_ALUMNO_CONTRACTS_V2.md
+      - docs/CONSTITUTION_ALQUIMIA_AND_CLASSIFICATIONS_V1.md
+
 
 
