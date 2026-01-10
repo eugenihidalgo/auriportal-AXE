@@ -450,6 +450,7 @@ export async function markCleanStudent(options, client = null) {
  * @param {string} options.actor_type - Tipo de actor ('master' | 'student' | 'automation')
  * @param {string} [options.actor_ref] - Referencia del actor
  * @param {string} [options.surface_key] - Superficie de origen
+ * @param {boolean} [options.skip_level_filter=false] - Si true, NO filtra por nivel (Master puede limpiar cualquier item)
  * @param {Object} [options.meta={}] - Metadatos adicionales
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
  * @returns {Promise<Object>} Resultado con { updated: number, skipped: number }
@@ -464,6 +465,7 @@ export async function markCleanAllStudents(options, client = null) {
     actor_type,
     actor_ref = null,
     surface_key = null,
+    skip_level_filter = false,
     meta = {}
   } = options;
   
@@ -544,17 +546,22 @@ export async function markCleanAllStudents(options, client = null) {
     for (const studentId of activeStudentIds) {
       try {
         // Verificar si aplica por nivel antes de limpiar
-        const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key);
-        
-        if (nivelEfectivo < itemNivel) {
-          skipped++;
-          skippedBreakdown.not_applicable_level++;
-          continue;
+        // REGLA: Filtro por nivel SOLO cuando item_kind === 'recurrente' y skip_level_filter !== true
+        // Para UNA_VEZ o cuando skip_level_filter === true, NO filtrar por nivel
+        if (!skip_level_filter && itemKind === 'recurrente') {
+          const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key);
+          
+          if (nivelEfectivo < itemNivel) {
+            skipped++;
+            skippedBreakdown.not_applicable_level++;
+            continue;
+          }
         }
         
         const result = await markCleanStudent({
           student_id: studentId,
           item_ref,
+          item_kind: itemKind, // REQUERIDO según contrato canónico
           clean_layer,
           product_key,
           domain_type,
@@ -589,6 +596,7 @@ export async function markCleanAllStudents(options, client = null) {
       item_kind: itemKind,
       item_id: item.id,
       item_nivel: itemNivel,
+      skip_level_filter,
       total: activeStudentIds.length,
       updated,
       skipped,

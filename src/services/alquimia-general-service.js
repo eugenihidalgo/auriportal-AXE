@@ -877,6 +877,7 @@ export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
+      skip_level_filter: true, // REGLA: Master increment-all NO filtra por nivel (puede incrementar cualquier item a cualquier alumno)
       meta: {
         source: 'alquimia-general-service'
       }

@@ -1386,7 +1386,7 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
-      showToastSuccess(`✓ ${student.nombre || student.email} limpiado`);
+      showToastSuccess(`✓ ${student.display_name || student.student_name || student.email} limpiado`);
       
       // Refresh determinista: recargar flotante con mismo clean_layer
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
