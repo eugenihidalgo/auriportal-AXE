@@ -662,5 +662,64 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/CONTRATO_LIMPIEZA_V1.md
       - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
 
+# =========================================
+# CONSTITUCIÓN BACKUPS POSTGRESQL v1
+# =========================================
+
+  - id: backups-postgresql-gitignore-mandatory
+    title: Backups PostgreSQL NUNCA se commitean en git
+    content: >
+      Los backups de PostgreSQL están PROHIBIDOS en git.
+      PROHIBIDO:
+      - Commitear archivos *.dump, *.sql.gz, *.tar.gz
+      - Commitear carpetas .local_backups/ o /var/backups/
+      - Incluir backups en el repositorio bajo cualquier circunstancia
+      OBLIGATORIO:
+      - .gitignore debe incluir: .local_backups/, *.dump, *.sql.gz, *.tar.gz, /var/backups/
+      - Verificar que backups NO están en git antes de commits
+      - Backups se almacenan fuera del repo (preferiblemente /var/backups/aurelinportal/)
+      REFERENCIAS:
+      - .gitignore (líneas de backup)
+
+  - id: backups-postgresql-pre-sprint-mandatory
+    title: Backup obligatorio antes de Sprint constitucional
+    content: >
+      Cualquier "Sprint constitucional" (cambios estructurales, migraciones, cambios SOT) DEBE tener backup verificado antes de empezar.
+      OBLIGATORIO:
+      - Ejecutar backup completo (pg_dump formato custom + globals) antes del sprint
+      - Generar checksums SHA256 del backup
+      - Crear reporte de backup en docs/BACKUP_POSTGRESQL_REPORT_*.md
+      - Verificar que el backup es válido (pg_restore -l)
+      - Commitear SOLO el reporte (NO los backups)
+      PROHIBIDO:
+      - Empezar sprint sin backup verificado
+      - Commitear backups en git
+      - Asumir que "ya hay backup" sin verificar
+      FORMATO BACKUP:
+      - Formato: custom (pg_dump --format=custom)
+      - Flags: --no-owner --no-privileges --verbose
+      - Naming: aurelinportal_${TS}_v${APP_VERSION}.dump
+      - Globals: globals_${TS}.sql (pg_dumpall --globals-only)
+      - Checksums: SHA256SUMS.txt (sha256sum de ambos archivos)
+      REFERENCIAS:
+      - docs/BACKUP_POSTGRESQL_REPORT_*.md (ejemplos)
+
+  - id: backups-postgresql-verification-mandatory
+    title: Verificación obligatoria de backups
+    content: >
+      Un backup NO se considera válido sin verificación.
+      OBLIGATORIO:
+      - Verificar que el dump es legible: pg_restore -l <dump_file> | head -40
+      - Generar checksums SHA256 de todos los archivos de backup
+      - Guardar checksums en SHA256SUMS.txt dentro del directorio de backup
+      - Verificar tamaño de archivos (ls -lh)
+      - Documentar comandos ejecutados (sin secretos) en el reporte
+      PROHIBIDO:
+      - Asumir que un backup es válido "a ojo"
+      - Omitir verificación de checksums
+      - Guardar backups sin documentar su ubicación y checksums
+      REFERENCIAS:
+      - docs/BACKUP_POSTGRESQL_REPORT_*.md (formato de reporte)
+
 
 
