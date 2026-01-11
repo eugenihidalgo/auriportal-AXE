@@ -1,0 +1,74 @@
+[
+  {
+    "table_schema": "public",
+    "table_name": "cleaning_events"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "cleaning_item_state"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_level_state"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_level_history"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_product_memberships"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_domain_policies"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_item_state"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_item_state_audit"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_place_state"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "student_project_state"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "sponsor_student_links"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "sponsors_catalog"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "place_categories"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "places_catalog"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "project_categories"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "projects_catalog"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "students"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "alumnos"
+  }
+]

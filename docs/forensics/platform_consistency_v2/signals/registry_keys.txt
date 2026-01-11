@@ -1,0 +1,71 @@
+SEÑALES REGISTRADAS EN STUDENT_SIGNAL_REGISTRY (src/core/student/signals/student-signal-registry.js)
+====================================================================================================
+
+DOMAIN SIGNALS:
+- student.created
+- student.enrolled
+- student.operational.paused
+- student.operational.resumed
+- student.domain.item.activated
+- student.domain.item.deactivated
+- student.domain.item.cleaned
+- student.domain.bulk_cleaned
+- student.capability.changed
+- student.domain.item.metadata_updated
+- student.project.active_changed
+
+PLACE SIGNALS:
+- place.activated
+- place.deactivated
+- place.cleaned
+- place.cleaned.bulk
+- place.cleaned.all
+- place.deactivated.all
+- place.category.created
+- place.category.updated
+- place.category.reordered
+- place.category.deactivated
+- place.activation_limit.updated
+
+PROJECT SIGNALS:
+- project.activated
+- project.deactivated
+- project.cleaned
+- project.cleaned.bulk
+- project.cleaned.all
+- project.deactivated.all
+- project.category.created
+- project.category.updated
+- project.category.reordered
+- project.category.deactivated
+- project.activation_limit.updated
+
+LEVEL ENGINE SIGNALS (Genéricas):
+- student.level.changed
+- student.level.phase.changed
+- student.level.upgrade.pending
+- student.level.upgrade.locked
+
+LEVEL ENGINE SIGNALS (Backward Compat - PDE):
+- student.pde.level.changed
+- student.pde.phase.changed
+- student.pde.upgrade.pending
+- student.pde.upgrade.locked
+
+OBSERVABILITY SIGNALS:
+- student.coherence.degraded
+- student.coherence.broken
+- student.sot.invariant_violation_detected
+- student.sot.backfill.applied
+
+SEÑALES QUE NO ESTÁN EN EL REGISTRY PERO SE EMITEN:
+====================================================
+- clean.executed (se emite vía pde-signal-emitter.js → dispatchSignal)
+- sponsor.linked (se emite vía dispatchSignal)
+- sponsor.unlinked (se emite vía dispatchSignal)
+
+SISTEMAS DE SEÑALES DETECTADOS:
+================================
+1. emitStudentSignal() → usa student-signal-registry.js (registry canónico)
+2. dispatchSignal() → usa signal-dispatcher.js (NO usa student-signal-registry)
+3. emitSignal() → usa pde-signal-emitter.js (wrapper legacy que internamente usa dispatchSignal)

@@ -111,6 +111,13 @@ coverage/
 *.old
 *.orig
 
+# Backups PostgreSQL (NO commitear nunca)
+.local_backups/
+*.dump
+*.sql.gz
+*.tar.gz
+/var/backups/
+
 
 
 

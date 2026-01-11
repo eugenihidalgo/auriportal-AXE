@@ -1,0 +1,86 @@
+[
+  {
+    "table_name": "cleaning_events",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "cleaning_item_state",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_level_history",
+    "column_name": "student_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "fk_references": "students.id"
+  },
+  {
+    "table_name": "student_level_state",
+    "column_name": "student_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "fk_references": "students.id"
+  },
+  {
+    "table_name": "student_product_memberships",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_domain_policies",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_item_state",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_item_state_audit",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_place_state",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_project_state",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "sponsor_student_links",
+    "column_name": "student_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "fk_references": "alumnos.id"
+  },
+  {
+    "table_name": "student_operational_state",
+    "column_name": "student_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "fk_references": "students.id"
+  }
+]
