@@ -1,0 +1,676 @@
+{
+  "name": "tables",
+  "success": true,
+  "rows": [
+    {
+      "table_name": "admin_favoritos"
+    },
+    {
+      "table_name": "altares"
+    },
+    {
+      "table_name": "altares_items"
+    },
+    {
+      "table_name": "alumnos"
+    },
+    {
+      "table_name": "alumnos_apadrinados"
+    },
+    {
+      "table_name": "alumnos_disponibilidad"
+    },
+    {
+      "table_name": "amistades"
+    },
+    {
+      "table_name": "analytics_eventos"
+    },
+    {
+      "table_name": "analytics_events"
+    },
+    {
+      "table_name": "analytics_resumen_diario"
+    },
+    {
+      "table_name": "arquetipos"
+    },
+    {
+      "table_name": "arquetipos_alumnos"
+    },
+    {
+      "table_name": "aspectos_energeticos"
+    },
+    {
+      "table_name": "aspectos_energeticos_alumnos"
+    },
+    {
+      "table_name": "aspectos_energeticos_registros"
+    },
+    {
+      "table_name": "aspectos_indeseables"
+    },
+    {
+      "table_name": "aspectos_indeseables_alumnos"
+    },
+    {
+      "table_name": "aspectos_karmicos"
+    },
+    {
+      "table_name": "aspectos_karmicos_alumnos"
+    },
+    {
+      "table_name": "aspectos_practica"
+    },
+    {
+      "table_name": "assembly_check_results"
+    },
+    {
+      "table_name": "assembly_check_runs"
+    },
+    {
+      "table_name": "assembly_checks"
+    },
+    {
+      "table_name": "audit_events"
+    },
+    {
+      "table_name": "audit_log"
+    },
+    {
+      "table_name": "auribosses"
+    },
+    {
+      "table_name": "auribosses_alumnos"
+    },
+    {
+      "table_name": "auriclock_registro"
+    },
+    {
+      "table_name": "aurimapa_alumnos"
+    },
+    {
+      "table_name": "aurimapa_nodos"
+    },
+    {
+      "table_name": "automation_dedup"
+    },
+    {
+      "table_name": "automation_definitions"
+    },
+    {
+      "table_name": "automation_jobs"
+    },
+    {
+      "table_name": "automation_locks"
+    },
+    {
+      "table_name": "automation_rules"
+    },
+    {
+      "table_name": "automation_run_steps"
+    },
+    {
+      "table_name": "automation_runs"
+    },
+    {
+      "table_name": "avatar_alumnos"
+    },
+    {
+      "table_name": "avatar_estados"
+    },
+    {
+      "table_name": "caminos_pantallas"
+    },
+    {
+      "table_name": "carta_astral"
+    },
+    {
+      "table_name": "circulos_auri"
+    },
+    {
+      "table_name": "circulos_auri_metricas"
+    },
+    {
+      "table_name": "circulos_auri_miembros"
+    },
+    {
+      "table_name": "cleaning_events"
+    },
+    {
+      "table_name": "cleaning_item_state"
+    },
+    {
+      "table_name": "comunicados_eugeni"
+    },
+    {
+      "table_name": "conexiones_pantallas"
+    },
+    {
+      "table_name": "content_overrides"
+    },
+    {
+      "table_name": "context_mappings"
+    },
+    {
+      "table_name": "creacion_objetivos"
+    },
+    {
+      "table_name": "creacion_problemas_iniciales"
+    },
+    {
+      "table_name": "creacion_version_futura"
+    },
+    {
+      "table_name": "cumpleaños_eventos"
+    },
+    {
+      "table_name": "decretos"
+    },
+    {
+      "table_name": "diario_practicas"
+    },
+    {
+      "table_name": "disenohumano"
+    },
+    {
+      "table_name": "emocional_ano"
+    },
+    {
+      "table_name": "energy_events"
+    },
+    {
+      "table_name": "energy_subject_state"
+    },
+    {
+      "table_name": "energy_subject_stats_rolling"
+    },
+    {
+      "table_name": "eventos_globales"
+    },
+    {
+      "table_name": "feature_flags"
+    },
+    {
+      "table_name": "frases_nivel"
+    },
+    {
+      "table_name": "historias"
+    },
+    {
+      "table_name": "historias_alumnos"
+    },
+    {
+      "table_name": "ideas_practicas"
+    },
+    {
+      "table_name": "informes_semanales"
+    },
+    {
+      "table_name": "interactive_resources"
+    },
+    {
+      "table_name": "items_transmutaciones"
+    },
+    {
+      "table_name": "items_transmutaciones_alumnos"
+    },
+    {
+      "table_name": "level_definitions"
+    },
+    {
+      "table_name": "level_gates"
+    },
+    {
+      "table_name": "level_lines"
+    },
+    {
+      "table_name": "limpieza_hogar"
+    },
+    {
+      "table_name": "limpieza_hogar_alumnos"
+    },
+    {
+      "table_name": "limpiezas_master_historial"
+    },
+    {
+      "table_name": "listas_transmutaciones"
+    },
+    {
+      "table_name": "logros"
+    },
+    {
+      "table_name": "logros_definicion"
+    },
+    {
+      "table_name": "maestro_conversaciones"
+    },
+    {
+      "table_name": "maestro_insights"
+    },
+    {
+      "table_name": "master_notifications"
+    },
+    {
+      "table_name": "mensajes_especiales"
+    },
+    {
+      "table_name": "misiones"
+    },
+    {
+      "table_name": "misiones_alumnos"
+    },
+    {
+      "table_name": "modulos_sistema"
+    },
+    {
+      "table_name": "musicas_meditacion"
+    },
+    {
+      "table_name": "navigation_audit_log"
+    },
+    {
+      "table_name": "navigation_definitions"
+    },
+    {
+      "table_name": "navigation_drafts"
+    },
+    {
+      "table_name": "navigation_versions"
+    },
+    {
+      "table_name": "nivel_overrides"
+    },
+    {
+      "table_name": "niveles_fases"
+    },
+    {
+      "table_name": "notas_master"
+    },
+    {
+      "table_name": "notificaciones_preferencias"
+    },
+    {
+      "table_name": "origin_audit_log"
+    },
+    {
+      "table_name": "origin_definitions"
+    },
+    {
+      "table_name": "pantallas"
+    },
+    {
+      "table_name": "pattern_definitions"
+    },
+    {
+      "table_name": "pausas"
+    },
+    {
+      "table_name": "pause_profiles"
+    },
+    {
+      "table_name": "pde_automation_audit_log"
+    },
+    {
+      "table_name": "pde_automation_executions"
+    },
+    {
+      "table_name": "pde_automations"
+    },
+    {
+      "table_name": "pde_catalog_registry"
+    },
+    {
+      "table_name": "pde_classification_terms"
+    },
+    {
+      "table_name": "pde_context_audit_log"
+    },
+    {
+      "table_name": "pde_contexts"
+    },
+    {
+      "table_name": "pde_daily_item_clean_log"
+    },
+    {
+      "table_name": "pde_motors"
+    },
+    {
+      "table_name": "pde_package_audit_log"
+    },
+    {
+      "table_name": "pde_package_drafts"
+    },
+    {
+      "table_name": "pde_package_versions"
+    },
+    {
+      "table_name": "pde_packages"
+    },
+    {
+      "table_name": "pde_packages_backup_before_legacy_delete"
+    },
+    {
+      "table_name": "pde_resolver_audit_log"
+    },
+    {
+      "table_name": "pde_resolvers"
+    },
+    {
+      "table_name": "pde_signal_audit_log"
+    },
+    {
+      "table_name": "pde_signal_emissions"
+    },
+    {
+      "table_name": "pde_signals"
+    },
+    {
+      "table_name": "pde_source_templates"
+    },
+    {
+      "table_name": "pde_transmutation_categories"
+    },
+    {
+      "table_name": "pde_transmutation_item_groups"
+    },
+    {
+      "table_name": "pde_transmutation_subtypes"
+    },
+    {
+      "table_name": "pde_transmutation_tags"
+    },
+    {
+      "table_name": "pde_widget_audit_log"
+    },
+    {
+      "table_name": "pde_widget_drafts"
+    },
+    {
+      "table_name": "pde_widget_versions"
+    },
+    {
+      "table_name": "pde_widgets"
+    },
+    {
+      "table_name": "phase_definitions"
+    },
+    {
+      "table_name": "place_categories"
+    },
+    {
+      "table_name": "places_catalog"
+    },
+    {
+      "table_name": "portal_messages"
+    },
+    {
+      "table_name": "post_practice_flows"
+    },
+    {
+      "table_name": "practicas"
+    },
+    {
+      "table_name": "practicas_audio"
+    },
+    {
+      "table_name": "practicas_compasion"
+    },
+    {
+      "table_name": "practicas_conjuntas"
+    },
+    {
+      "table_name": "practicas_horario"
+    },
+    {
+      "table_name": "practice_signals"
+    },
+    {
+      "table_name": "preparaciones_practica"
+    },
+    {
+      "table_name": "progreso_pedagogico"
+    },
+    {
+      "table_name": "project_categories"
+    },
+    {
+      "table_name": "projects_catalog"
+    },
+    {
+      "table_name": "protecciones_energeticas"
+    },
+    {
+      "table_name": "quests"
+    },
+    {
+      "table_name": "quests_alumnos"
+    },
+    {
+      "table_name": "racha_fases"
+    },
+    {
+      "table_name": "recorrido_audit_log"
+    },
+    {
+      "table_name": "recorrido_drafts"
+    },
+    {
+      "table_name": "recorrido_events"
+    },
+    {
+      "table_name": "recorrido_runs"
+    },
+    {
+      "table_name": "recorrido_step_results"
+    },
+    {
+      "table_name": "recorrido_versions"
+    },
+    {
+      "table_name": "recorridos"
+    },
+    {
+      "table_name": "reflexiones"
+    },
+    {
+      "table_name": "respuestas"
+    },
+    {
+      "table_name": "schema_migrations"
+    },
+    {
+      "table_name": "screen_template_audit_log"
+    },
+    {
+      "table_name": "screen_template_drafts"
+    },
+    {
+      "table_name": "screen_template_versions"
+    },
+    {
+      "table_name": "screen_templates"
+    },
+    {
+      "table_name": "secciones_limpieza"
+    },
+    {
+      "table_name": "sellos_alumnos"
+    },
+    {
+      "table_name": "sellos_ascension"
+    },
+    {
+      "table_name": "signal_aggregates"
+    },
+    {
+      "table_name": "signal_definitions"
+    },
+    {
+      "table_name": "skilltree_nodos"
+    },
+    {
+      "table_name": "skilltree_progreso"
+    },
+    {
+      "table_name": "sorpresas"
+    },
+    {
+      "table_name": "sorpresas_alumnos"
+    },
+    {
+      "table_name": "sponsor_special_care"
+    },
+    {
+      "table_name": "sponsor_special_care_lists"
+    },
+    {
+      "table_name": "sponsor_student_links"
+    },
+    {
+      "table_name": "sponsors_catalog"
+    },
+    {
+      "table_name": "student_activation_limits"
+    },
+    {
+      "table_name": "student_domain_policies"
+    },
+    {
+      "table_name": "student_item_state"
+    },
+    {
+      "table_name": "student_item_state_audit"
+    },
+    {
+      "table_name": "student_level_history"
+    },
+    {
+      "table_name": "student_level_state"
+    },
+    {
+      "table_name": "student_modes"
+    },
+    {
+      "table_name": "student_operational_state"
+    },
+    {
+      "table_name": "student_patterns"
+    },
+    {
+      "table_name": "student_place_state"
+    },
+    {
+      "table_name": "student_product_memberships"
+    },
+    {
+      "table_name": "student_progress_snapshot"
+    },
+    {
+      "table_name": "student_project_state"
+    },
+    {
+      "table_name": "student_te_one_time_state"
+    },
+    {
+      "table_name": "student_te_recurrent_state"
+    },
+    {
+      "table_name": "students"
+    },
+    {
+      "table_name": "superprioritarios"
+    },
+    {
+      "table_name": "tarot_cartas"
+    },
+    {
+      "table_name": "tarot_interpretaciones"
+    },
+    {
+      "table_name": "tarot_sesiones"
+    },
+    {
+      "table_name": "tecnicas_limpieza"
+    },
+    {
+      "table_name": "tecnicas_limpieza_classifications"
+    },
+    {
+      "table_name": "tecnicas_post_practica"
+    },
+    {
+      "table_name": "theme_audit_log"
+    },
+    {
+      "table_name": "theme_bindings"
+    },
+    {
+      "table_name": "theme_definitions"
+    },
+    {
+      "table_name": "theme_drafts"
+    },
+    {
+      "table_name": "theme_rules"
+    },
+    {
+      "table_name": "theme_versions"
+    },
+    {
+      "table_name": "themes"
+    },
+    {
+      "table_name": "tokens_auri"
+    },
+    {
+      "table_name": "tokens_transacciones"
+    },
+    {
+      "table_name": "tonos_meditacion"
+    },
+    {
+      "table_name": "transmutacion_lista_classifications"
+    },
+    {
+      "table_name": "transmutaciones_apadrinados"
+    },
+    {
+      "table_name": "transmutaciones_apadrinados_estado"
+    },
+    {
+      "table_name": "ui_active_config"
+    },
+    {
+      "table_name": "ui_conversation_scripts"
+    },
+    {
+      "table_name": "ui_layers"
+    },
+    {
+      "table_name": "ui_screens"
+    },
+    {
+      "table_name": "ui_themes"
+    },
+    {
+      "table_name": "ute_assignments"
+    },
+    {
+      "table_name": "ute_definitions"
+    },
+    {
+      "table_name": "ute_executions"
+    },
+    {
+      "table_name": "ute_student_state"
+    },
+    {
+      "table_name": "whisper_control"
+    },
+    {
+      "table_name": "whisper_transcripciones"
+    }
+  ],
+  "count": 223
+}

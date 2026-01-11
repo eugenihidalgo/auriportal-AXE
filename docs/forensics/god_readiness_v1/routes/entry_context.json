@@ -1,0 +1,21 @@
+{
+  "contexts": {
+    "STUDENT": "STUDENT",
+    "MASTER": "MASTER",
+    "ADMIN_LEGACY": "ADMIN_LEGACY"
+  },
+  "canonical_hosts": {
+    "STUDENT": [
+      "pdeeugenihidalgo.org",
+      "www.pdeeugenihidalgo.org",
+      "portal.pdeeugenihidalgo.org"
+    ],
+    "MASTER": [
+      "master.pdeeugenihidalgo.org"
+    ],
+    "ADMIN_LEGACY": [
+      "admin.pdeeugenihidalgo.org",
+      "controlauriportal.eugenihidalgo.work"
+    ]
+  }
+}

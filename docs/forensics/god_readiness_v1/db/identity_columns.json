@@ -1,0 +1,517 @@
+{
+  "name": "identity_columns",
+  "success": true,
+  "rows": [
+    {
+      "table_name": "altares",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "altares_items",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "alumnos_apadrinados",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "alumnos_disponibilidad",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "analytics_eventos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "arquetipos_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "aspectos_energeticos_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "aspectos_energeticos_registros",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "aspectos_indeseables_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "aspectos_karmicos_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "audit_events",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "auribosses_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "auriclock_registro",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "aurimapa_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "automation_locks",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "automation_runs",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "avatar_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "carta_astral",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "circulos_auri_miembros",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "cleaning_events",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "cleaning_item_state",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "comunicados_eugeni",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "content_overrides",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "creacion_objetivos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "creacion_problemas_iniciales",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "creacion_version_futura",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "cumpleaños_eventos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "diario_practicas",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "disenohumano",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "emocional_ano",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "energy_events",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "energy_subject_state",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "energy_subject_stats_rolling",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "historias_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "informes_semanales",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "items_transmutaciones_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "limpieza_hogar_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "limpiezas_master_historial",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "logros",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "maestro_conversaciones",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "maestro_insights",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "mensajes_especiales",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "misiones_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "nivel_overrides",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "notas_master",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "notificaciones_preferencias",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "pausas",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "pde_automation_executions",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "udt_name": "uuid"
+    },
+    {
+      "table_name": "pde_daily_item_clean_log",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "portal_messages",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "practicas",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "practicas_audio",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "practicas_compasion",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "practice_signals",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "progreso_pedagogico",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "quests_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "reflexiones",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "respuestas",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "sellos_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "signal_aggregates",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "skilltree_progreso",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "sorpresas_alumnos",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "sponsor_student_links",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_activation_limits",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_domain_policies",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_item_state",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_item_state_audit",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_level_history",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "udt_name": "uuid"
+    },
+    {
+      "table_name": "student_level_state",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "udt_name": "uuid"
+    },
+    {
+      "table_name": "student_modes",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_operational_state",
+      "column_name": "student_id",
+      "data_type": "uuid",
+      "udt_name": "uuid"
+    },
+    {
+      "table_name": "student_patterns",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_place_state",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_product_memberships",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_progress_snapshot",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "student_project_state",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "students",
+      "column_name": "legacy_alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "superprioritarios",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "tarot_sesiones",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "tokens_auri",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "tokens_transacciones",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "transmutaciones_apadrinados",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "transmutaciones_apadrinados_estado",
+      "column_name": "alumno_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "ute_executions",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    },
+    {
+      "table_name": "ute_student_state",
+      "column_name": "student_id",
+      "data_type": "integer",
+      "udt_name": "int4"
+    }
+  ],
+  "count": 85
+}

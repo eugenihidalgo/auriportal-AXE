@@ -1,0 +1,2027 @@
+{
+  "total": 168,
+  "api": [
+    {
+      "key": "api-energy-clean",
+      "path": "/admin/api/energy/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-energy-illuminate",
+      "path": "/admin/api/energy/illuminate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-registry",
+      "path": "/admin/api/registry",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-acs-runtime-report",
+      "path": "/admin/api/acs/runtime-report",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-navigation",
+      "path": "/admin/api/navigation",
+      "type": "api"
+    },
+    {
+      "key": "api-recorridos",
+      "path": "/admin/api/recorridos",
+      "type": "api"
+    },
+    {
+      "key": "api-themes-v3",
+      "path": "/admin/api/themes-v3",
+      "type": "api"
+    },
+    {
+      "key": "api-themes",
+      "path": "/admin/api/themes",
+      "type": "api"
+    },
+    {
+      "key": "api-themes-diag",
+      "path": "/admin/api/themes/__diag",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-bindings",
+      "path": "/admin/api/theme-bindings",
+      "type": "api"
+    },
+    {
+      "key": "api-themes-catalog",
+      "path": "/admin/api/themes/catalog",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-capabilities",
+      "path": "/admin/api/theme-studio-canon/capabilities",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-themes",
+      "path": "/admin/api/theme-studio-canon/themes",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-theme",
+      "path": "/admin/api/theme-studio-canon/theme/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-validate",
+      "path": "/admin/api/theme-studio-canon/theme/validate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-save-draft",
+      "path": "/admin/api/theme-studio-canon/theme/save-draft",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-publish",
+      "path": "/admin/api/theme-studio-canon/theme/publish",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-preview",
+      "path": "/admin/api/theme-studio-canon/preview",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-screen-templates",
+      "path": "/api/admin/screen-templates",
+      "type": "api"
+    },
+    {
+      "key": "ollama-health",
+      "path": "/admin/ollama/health",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-packages",
+      "path": "/admin/api/packages",
+      "type": "api"
+    },
+    {
+      "key": "api-widgets",
+      "path": "/admin/api/widgets",
+      "type": "api"
+    },
+    {
+      "key": "api-source-templates",
+      "path": "/admin/api/source-templates",
+      "type": "api"
+    },
+    {
+      "key": "api-classifications",
+      "path": "/admin/api/classifications",
+      "type": "api"
+    },
+    {
+      "key": "api-packages-sources",
+      "path": "/admin/api/packages/sources",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-contexts",
+      "path": "/admin/api/contexts",
+      "type": "api"
+    },
+    {
+      "key": "api-senales",
+      "path": "/admin/api/senales",
+      "type": "api"
+    },
+    {
+      "key": "api-automation-definitions-list",
+      "path": "/admin/api/automations",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-definitions-detail",
+      "path": "/admin/api/automations/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-definitions-create",
+      "path": "/admin/api/automations",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-update",
+      "path": "/admin/api/automations/:id",
+      "type": "api",
+      "method": "PUT"
+    },
+    {
+      "key": "api-automation-definitions-activate",
+      "path": "/admin/api/automations/:id/activate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-deactivate",
+      "path": "/admin/api/automations/:id/deactivate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-execute-dry-run",
+      "path": "/admin/api/automations/:id/execute/dry-run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-execute-live-run",
+      "path": "/admin/api/automations/:id/execute/live-run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automations",
+      "path": "/admin/api/automations",
+      "type": "api"
+    },
+    {
+      "key": "api-automations-preview",
+      "path": "/admin/api/automations/preview",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-runs",
+      "path": "/admin/api/automation-runs",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-runs-detail",
+      "path": "/admin/api/automation-runs/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-runs-steps",
+      "path": "/admin/api/automation-runs/:id/steps",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-actions-catalog",
+      "path": "/admin/api/actions/catalog",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-classification",
+      "path": "/admin/api/transmutaciones/classification",
+      "type": "api"
+    },
+    {
+      "key": "api-transmutaciones-lists-classification",
+      "path": "/admin/api/transmutaciones/lists/:list_id/classification",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-context-mappings",
+      "path": "/admin/api/context-mappings",
+      "type": "api"
+    },
+    {
+      "key": "api-interactive-resources",
+      "path": "/admin/api/interactive-resources",
+      "type": "api"
+    },
+    {
+      "key": "api-tecnicas-limpieza",
+      "path": "/admin/api/tecnicas-limpieza",
+      "type": "api"
+    },
+    {
+      "key": "api-transmutaciones-energeticas",
+      "path": "/admin/api/transmutaciones/energeticas",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-list",
+      "path": "/admin/api/transmutaciones/proyectos",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-create",
+      "path": "/admin/api/transmutaciones/proyectos",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar",
+      "path": "/admin/api/transmutaciones/proyectos/:id/limpiar",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar-todos",
+      "path": "/admin/api/transmutaciones/proyectos/limpiar-todos",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar-seleccionados",
+      "path": "/admin/api/transmutaciones/proyectos/limpiar-seleccionados",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-recurrencia",
+      "path": "/admin/api/transmutaciones/proyectos/:id/recurrencia",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-system-diagnostics",
+      "path": "/admin/api/system/diagnostics",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-robustness-report",
+      "path": "/admin/api/system/robustness-report",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-status",
+      "path": "/admin/api/assembly/status",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-run",
+      "path": "/admin/api/assembly/run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-assembly-runs",
+      "path": "/admin/api/assembly/runs",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-run-detail",
+      "path": "/admin/api/assembly/runs/:run_id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-initialize",
+      "path": "/admin/api/assembly/initialize",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-resolvers",
+      "path": "/admin/api/resolvers",
+      "type": "api"
+    },
+    {
+      "key": "api-feature-flags-list",
+      "path": "/admin/api/feature-flags",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-feature-flags-enable",
+      "path": "/admin/api/feature-flags/:key/enable",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-feature-flags-disable",
+      "path": "/admin/api/feature-flags/:key/disable",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-feature-flags-reset",
+      "path": "/admin/api/feature-flags/:key/reset",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-list",
+      "path": "/admin/api/students/search",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-detail",
+      "path": "/admin/api/students/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domain-items",
+      "path": "/admin/api/students/:id/domains/:domain_key/items",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domain-clean",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/:item_id/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domain-bulk-clean",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/bulk-clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domain-policy",
+      "path": "/admin/api/students/:id/domains/:domain_key/policy",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-students-domain-recurrence",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/:item_id/recurrence",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-students-domains-transmutation",
+      "path": "/admin/api/students/:id/domains/transmutation",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domains-transmutation-clean",
+      "path": "/admin/api/students/:id/domains/transmutation/items/:item_ref/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects",
+      "path": "/admin/api/students/:id/domains/projects",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domains-projects-activate",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref/activate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects-clean",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects-update",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-transmutations-item-students",
+      "path": "/admin/api/transmutations/:item_ref/students",
+      "type": "api",
+      "method": "GET"
+    }
+  ],
+  "island": [
+    {
+      "key": "assembly-check-page",
+      "path": "/admin/system/assembly",
+      "type": "island"
+    },
+    {
+      "key": "theme-studio-v3",
+      "path": "/admin/themes/studio-v3",
+      "type": "island"
+    },
+    {
+      "key": "theme-studio-v2",
+      "path": "/admin/themes/studio",
+      "type": "island"
+    },
+    {
+      "key": "theme-studio-v1",
+      "path": "/admin/theme-studio",
+      "type": "island"
+    },
+    {
+      "key": "theme-studio-canon",
+      "path": "/admin/theme-studio-canon",
+      "type": "island"
+    },
+    {
+      "key": "theme-bindings-ui",
+      "path": "/admin/theme-bindings",
+      "type": "island"
+    },
+    {
+      "key": "theme-diagnostics-ui",
+      "path": "/admin/theme-diagnostics",
+      "type": "island"
+    },
+    {
+      "key": "theme-docs",
+      "path": "/admin/theme-docs",
+      "type": "island"
+    },
+    {
+      "key": "navigation-pages",
+      "path": "/admin/navigation",
+      "type": "island"
+    },
+    {
+      "key": "navigation-new",
+      "path": "/admin/navigation/new",
+      "type": "island"
+    },
+    {
+      "key": "catalog-registry",
+      "path": "/admin/pde/catalog-registry",
+      "type": "island"
+    },
+    {
+      "key": "theme-preview-canonical",
+      "path": "/admin/themes/preview-canonical",
+      "type": "island",
+      "method": "GET"
+    },
+    {
+      "key": "recorridos-preview",
+      "path": "/admin/recorridos/preview",
+      "type": "island",
+      "method": "GET"
+    },
+    {
+      "key": "packages-creator",
+      "path": "/admin/packages",
+      "type": "island"
+    },
+    {
+      "key": "packages-creator-v2",
+      "path": "/admin/pde/packages-v2",
+      "type": "island"
+    },
+    {
+      "key": "widgets-creator",
+      "path": "/admin/widgets",
+      "type": "island"
+    },
+    {
+      "key": "widgets-creator-v2",
+      "path": "/admin/pde/widgets-v2",
+      "type": "island"
+    },
+    {
+      "key": "contexts-manager",
+      "path": "/admin/contexts",
+      "type": "island"
+    },
+    {
+      "key": "senales-manager",
+      "path": "/admin/senales",
+      "type": "island"
+    },
+    {
+      "key": "automation-definitions-list",
+      "path": "/admin/automations",
+      "type": "island"
+    },
+    {
+      "key": "automation-definitions-detail",
+      "path": "/admin/automations/:id",
+      "type": "island"
+    },
+    {
+      "key": "automation-definitions-create",
+      "path": "/admin/automations/new",
+      "type": "island"
+    },
+    {
+      "key": "automation-definitions-edit",
+      "path": "/admin/automations/:id/edit",
+      "type": "island"
+    },
+    {
+      "key": "feature-flags-ui",
+      "path": "/admin/feature-flags",
+      "type": "island"
+    },
+    {
+      "key": "automation-runs-list",
+      "path": "/admin/automations/runs",
+      "type": "island"
+    },
+    {
+      "key": "automation-runs-detail",
+      "path": "/admin/automations/runs/:id",
+      "type": "island"
+    },
+    {
+      "key": "resolvers-studio",
+      "path": "/admin/resolvers",
+      "type": "island"
+    },
+    {
+      "key": "admin-login",
+      "path": "/admin/login",
+      "type": "island"
+    },
+    {
+      "key": "admin-logout",
+      "path": "/admin/logout",
+      "type": "island",
+      "method": "POST"
+    },
+    {
+      "key": "admin-dashboard",
+      "path": "/admin",
+      "type": "island"
+    },
+    {
+      "key": "admin-dashboard-alias",
+      "path": "/admin/dashboard",
+      "type": "island"
+    },
+    {
+      "key": "modo-maestro",
+      "path": "/admin/modo-maestro",
+      "type": "island"
+    },
+    {
+      "key": "transmutaciones-proyectos",
+      "path": "/admin/transmutaciones/proyectos",
+      "type": "island"
+    },
+    {
+      "key": "transmutaciones-energeticas",
+      "path": "/admin/pde/transmutaciones-energeticas",
+      "type": "island"
+    },
+    {
+      "key": "tecnicas-limpieza",
+      "path": "/admin/tecnicas-limpieza",
+      "type": "island"
+    },
+    {
+      "key": "admin-students-detail",
+      "path": "/admin/students/:id",
+      "type": "island"
+    }
+  ],
+  "legacy": [
+    {
+      "key": "alumnos",
+      "path": "/admin/alumnos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "progreso-v4",
+      "path": "/admin/progreso-v4",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "comunicacion-directa",
+      "path": "/admin/comunicacion-directa",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "respuestas",
+      "path": "/admin/respuestas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "email",
+      "path": "/admin/email",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "transmutaciones-personas",
+      "path": "/admin/transmutaciones/personas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "transmutaciones-lugares",
+      "path": "/admin/transmutaciones/lugares",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "preparaciones-practica",
+      "path": "/admin/preparaciones-practica",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "tecnicas-post-practica",
+      "path": "/admin/tecnicas-post-practica",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "protecciones-energeticas",
+      "path": "/admin/protecciones-energeticas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "decretos",
+      "path": "/admin/decretos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "motors",
+      "path": "/admin/motors",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "motors-api",
+      "path": "/admin/pde/motors",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "frases",
+      "path": "/admin/frases",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "tarot",
+      "path": "/admin/tarot",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "iad-alumnos",
+      "path": "/admin/iad-alumnos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "recorridos",
+      "path": "/admin/recorridos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "recorridos-new",
+      "path": "/admin/recorridos/new",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "recorrido-pedagogico",
+      "path": "/admin/recorrido-pedagogico",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion-workflow",
+      "path": "/admin/configuracion-workflow",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion-caminos",
+      "path": "/admin/configuracion-caminos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "editor-pantallas",
+      "path": "/admin/editor-pantallas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "screen-templates",
+      "path": "/admin/screen-templates",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion-aspectos",
+      "path": "/admin/configuracion-aspectos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "sellos",
+      "path": "/admin/sellos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "recursos-tecnicos-musicas",
+      "path": "/admin/recursos-tecnicos/musicas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "recursos-tecnicos-tonos",
+      "path": "/admin/recursos-tecnicos/tonos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "niveles-energeticos",
+      "path": "/admin/niveles-energeticos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion-racha",
+      "path": "/admin/configuracion-racha",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "logros",
+      "path": "/admin/logros",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "analytics",
+      "path": "/admin/analytics",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "analytics-resumen",
+      "path": "/admin/analytics-resumen",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "system-capabilities",
+      "path": "/admin/system/capabilities",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion-favoritos",
+      "path": "/admin/configuracion-favoritos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "modulos",
+      "path": "/admin/modulos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "configuracion",
+      "path": "/admin/configuracion",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "logs",
+      "path": "/admin/logs",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-overview",
+      "path": "/admin/master-insight/overview",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-alertas",
+      "path": "/admin/master-insight/alertas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-sugerencias",
+      "path": "/admin/master-insight/sugerencias",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-salud-energetica",
+      "path": "/admin/master-insight/salud-energetica",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-patrones",
+      "path": "/admin/master-insight/patrones",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-lugares",
+      "path": "/admin/master-insight/lugares",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-proyectos",
+      "path": "/admin/master-insight/proyectos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-apadrinados",
+      "path": "/admin/master-insight/apadrinados",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-ritmos",
+      "path": "/admin/master-insight/ritmos",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-eventos-especiales",
+      "path": "/admin/master-insight/eventos-especiales",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-historial",
+      "path": "/admin/master-insight/historial",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "master-insight-configuracion",
+      "path": "/admin/master-insight/configuracion",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "themes-ui",
+      "path": "/admin/themes/ui",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "themes-apariencia",
+      "path": "/admin/apariencia/temas",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "themes-api",
+      "path": "/admin/themes",
+      "type": "legacy",
+      "disabled": true,
+      "disabledReason": "LEGACY_NOT_MIGRATED"
+    },
+    {
+      "key": "test-html",
+      "path": "/admin/test-html",
+      "type": "legacy"
+    }
+  ],
+  "routes": [
+    {
+      "key": "api-energy-clean",
+      "path": "/admin/api/energy/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-energy-illuminate",
+      "path": "/admin/api/energy/illuminate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-registry",
+      "path": "/admin/api/registry",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-acs-runtime-report",
+      "path": "/admin/api/acs/runtime-report",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-navigation",
+      "path": "/admin/api/navigation",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-recorridos",
+      "path": "/admin/api/recorridos",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-themes-v3",
+      "path": "/admin/api/themes-v3",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-themes",
+      "path": "/admin/api/themes",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-themes-diag",
+      "path": "/admin/api/themes/__diag",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-bindings",
+      "path": "/admin/api/theme-bindings",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-themes-catalog",
+      "path": "/admin/api/themes/catalog",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-capabilities",
+      "path": "/admin/api/theme-studio-canon/capabilities",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-themes",
+      "path": "/admin/api/theme-studio-canon/themes",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-theme",
+      "path": "/admin/api/theme-studio-canon/theme/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-theme-studio-canon-validate",
+      "path": "/admin/api/theme-studio-canon/theme/validate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-save-draft",
+      "path": "/admin/api/theme-studio-canon/theme/save-draft",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-publish",
+      "path": "/admin/api/theme-studio-canon/theme/publish",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-theme-studio-canon-preview",
+      "path": "/admin/api/theme-studio-canon/preview",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-screen-templates",
+      "path": "/api/admin/screen-templates",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "ollama-health",
+      "path": "/admin/ollama/health",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-packages",
+      "path": "/admin/api/packages",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-widgets",
+      "path": "/admin/api/widgets",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-source-templates",
+      "path": "/admin/api/source-templates",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-classifications",
+      "path": "/admin/api/classifications",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-packages-sources",
+      "path": "/admin/api/packages/sources",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-contexts",
+      "path": "/admin/api/contexts",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-senales",
+      "path": "/admin/api/senales",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-automation-definitions-list",
+      "path": "/admin/api/automations",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-definitions-detail",
+      "path": "/admin/api/automations/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-definitions-create",
+      "path": "/admin/api/automations",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-update",
+      "path": "/admin/api/automations/:id",
+      "type": "api",
+      "method": "PUT"
+    },
+    {
+      "key": "api-automation-definitions-activate",
+      "path": "/admin/api/automations/:id/activate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-deactivate",
+      "path": "/admin/api/automations/:id/deactivate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-execute-dry-run",
+      "path": "/admin/api/automations/:id/execute/dry-run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-definitions-execute-live-run",
+      "path": "/admin/api/automations/:id/execute/live-run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automations",
+      "path": "/admin/api/automations",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-automations-preview",
+      "path": "/admin/api/automations/preview",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-automation-runs",
+      "path": "/admin/api/automation-runs",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-runs-detail",
+      "path": "/admin/api/automation-runs/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-automation-runs-steps",
+      "path": "/admin/api/automation-runs/:id/steps",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-actions-catalog",
+      "path": "/admin/api/actions/catalog",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-classification",
+      "path": "/admin/api/transmutaciones/classification",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-transmutaciones-lists-classification",
+      "path": "/admin/api/transmutaciones/lists/:list_id/classification",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-context-mappings",
+      "path": "/admin/api/context-mappings",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-interactive-resources",
+      "path": "/admin/api/interactive-resources",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-tecnicas-limpieza",
+      "path": "/admin/api/tecnicas-limpieza",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "api-transmutaciones-energeticas",
+      "path": "/admin/api/transmutaciones/energeticas",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-list",
+      "path": "/admin/api/transmutaciones/proyectos",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-create",
+      "path": "/admin/api/transmutaciones/proyectos",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar",
+      "path": "/admin/api/transmutaciones/proyectos/:id/limpiar",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar-todos",
+      "path": "/admin/api/transmutaciones/proyectos/limpiar-todos",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-limpiar-seleccionados",
+      "path": "/admin/api/transmutaciones/proyectos/limpiar-seleccionados",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-transmutaciones-proyectos-recurrencia",
+      "path": "/admin/api/transmutaciones/proyectos/:id/recurrencia",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-system-diagnostics",
+      "path": "/admin/api/system/diagnostics",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-robustness-report",
+      "path": "/admin/api/system/robustness-report",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-status",
+      "path": "/admin/api/assembly/status",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-run",
+      "path": "/admin/api/assembly/run",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-assembly-runs",
+      "path": "/admin/api/assembly/runs",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-run-detail",
+      "path": "/admin/api/assembly/runs/:run_id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-assembly-initialize",
+      "path": "/admin/api/assembly/initialize",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "assembly-check-page",
+      "path": "/admin/system/assembly",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "api-resolvers",
+      "path": "/admin/api/resolvers",
+      "type": "api",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-studio-v3",
+      "path": "/admin/themes/studio-v3",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-studio-v2",
+      "path": "/admin/themes/studio",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-studio-v1",
+      "path": "/admin/theme-studio",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-studio-canon",
+      "path": "/admin/theme-studio-canon",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-bindings-ui",
+      "path": "/admin/theme-bindings",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-diagnostics-ui",
+      "path": "/admin/theme-diagnostics",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-docs",
+      "path": "/admin/theme-docs",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "navigation-pages",
+      "path": "/admin/navigation",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "navigation-new",
+      "path": "/admin/navigation/new",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "catalog-registry",
+      "path": "/admin/pde/catalog-registry",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "theme-preview-canonical",
+      "path": "/admin/themes/preview-canonical",
+      "type": "island",
+      "method": "GET"
+    },
+    {
+      "key": "recorridos-preview",
+      "path": "/admin/recorridos/preview",
+      "type": "island",
+      "method": "GET"
+    },
+    {
+      "key": "packages-creator",
+      "path": "/admin/packages",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "packages-creator-v2",
+      "path": "/admin/pde/packages-v2",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "widgets-creator",
+      "path": "/admin/widgets",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "widgets-creator-v2",
+      "path": "/admin/pde/widgets-v2",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "contexts-manager",
+      "path": "/admin/contexts",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "senales-manager",
+      "path": "/admin/senales",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-definitions-list",
+      "path": "/admin/automations",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-definitions-detail",
+      "path": "/admin/automations/:id",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-definitions-create",
+      "path": "/admin/automations/new",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-definitions-edit",
+      "path": "/admin/automations/:id/edit",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "api-feature-flags-list",
+      "path": "/admin/api/feature-flags",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-feature-flags-enable",
+      "path": "/admin/api/feature-flags/:key/enable",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-feature-flags-disable",
+      "path": "/admin/api/feature-flags/:key/disable",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-feature-flags-reset",
+      "path": "/admin/api/feature-flags/:key/reset",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "feature-flags-ui",
+      "path": "/admin/feature-flags",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-runs-list",
+      "path": "/admin/automations/runs",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "automation-runs-detail",
+      "path": "/admin/automations/runs/:id",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "resolvers-studio",
+      "path": "/admin/resolvers",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "admin-login",
+      "path": "/admin/login",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "admin-logout",
+      "path": "/admin/logout",
+      "type": "island",
+      "method": "POST"
+    },
+    {
+      "key": "admin-dashboard",
+      "path": "/admin",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "admin-dashboard-alias",
+      "path": "/admin/dashboard",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "alumnos",
+      "path": "/admin/alumnos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "progreso-v4",
+      "path": "/admin/progreso-v4",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "modo-maestro",
+      "path": "/admin/modo-maestro",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "comunicacion-directa",
+      "path": "/admin/comunicacion-directa",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "respuestas",
+      "path": "/admin/respuestas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "email",
+      "path": "/admin/email",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "transmutaciones-personas",
+      "path": "/admin/transmutaciones/personas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "transmutaciones-lugares",
+      "path": "/admin/transmutaciones/lugares",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "transmutaciones-proyectos",
+      "path": "/admin/transmutaciones/proyectos",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "transmutaciones-energeticas",
+      "path": "/admin/pde/transmutaciones-energeticas",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "tecnicas-limpieza",
+      "path": "/admin/tecnicas-limpieza",
+      "type": "island",
+      "method": "ALL"
+    },
+    {
+      "key": "preparaciones-practica",
+      "path": "/admin/preparaciones-practica",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "tecnicas-post-practica",
+      "path": "/admin/tecnicas-post-practica",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "protecciones-energeticas",
+      "path": "/admin/protecciones-energeticas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "decretos",
+      "path": "/admin/decretos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "motors",
+      "path": "/admin/motors",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "motors-api",
+      "path": "/admin/pde/motors",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "frases",
+      "path": "/admin/frases",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "tarot",
+      "path": "/admin/tarot",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "iad-alumnos",
+      "path": "/admin/iad-alumnos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "recorridos",
+      "path": "/admin/recorridos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "recorridos-new",
+      "path": "/admin/recorridos/new",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "recorrido-pedagogico",
+      "path": "/admin/recorrido-pedagogico",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion-workflow",
+      "path": "/admin/configuracion-workflow",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion-caminos",
+      "path": "/admin/configuracion-caminos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "editor-pantallas",
+      "path": "/admin/editor-pantallas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "screen-templates",
+      "path": "/admin/screen-templates",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion-aspectos",
+      "path": "/admin/configuracion-aspectos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "sellos",
+      "path": "/admin/sellos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "recursos-tecnicos-musicas",
+      "path": "/admin/recursos-tecnicos/musicas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "recursos-tecnicos-tonos",
+      "path": "/admin/recursos-tecnicos/tonos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "niveles-energeticos",
+      "path": "/admin/niveles-energeticos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion-racha",
+      "path": "/admin/configuracion-racha",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "logros",
+      "path": "/admin/logros",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "analytics",
+      "path": "/admin/analytics",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "analytics-resumen",
+      "path": "/admin/analytics-resumen",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "system-capabilities",
+      "path": "/admin/system/capabilities",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion-favoritos",
+      "path": "/admin/configuracion-favoritos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "modulos",
+      "path": "/admin/modulos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "configuracion",
+      "path": "/admin/configuracion",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "logs",
+      "path": "/admin/logs",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-overview",
+      "path": "/admin/master-insight/overview",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-alertas",
+      "path": "/admin/master-insight/alertas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-sugerencias",
+      "path": "/admin/master-insight/sugerencias",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-salud-energetica",
+      "path": "/admin/master-insight/salud-energetica",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-patrones",
+      "path": "/admin/master-insight/patrones",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-lugares",
+      "path": "/admin/master-insight/lugares",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-proyectos",
+      "path": "/admin/master-insight/proyectos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-apadrinados",
+      "path": "/admin/master-insight/apadrinados",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-ritmos",
+      "path": "/admin/master-insight/ritmos",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-eventos-especiales",
+      "path": "/admin/master-insight/eventos-especiales",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-historial",
+      "path": "/admin/master-insight/historial",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "master-insight-configuracion",
+      "path": "/admin/master-insight/configuracion",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "themes-ui",
+      "path": "/admin/themes/ui",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "themes-apariencia",
+      "path": "/admin/apariencia/temas",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "themes-api",
+      "path": "/admin/themes",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "test-html",
+      "path": "/admin/test-html",
+      "type": "legacy",
+      "method": "ALL"
+    },
+    {
+      "key": "api-students-list",
+      "path": "/admin/api/students/search",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-detail",
+      "path": "/admin/api/students/:id",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domain-items",
+      "path": "/admin/api/students/:id/domains/:domain_key/items",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domain-clean",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/:item_id/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domain-bulk-clean",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/bulk-clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domain-policy",
+      "path": "/admin/api/students/:id/domains/:domain_key/policy",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-students-domain-recurrence",
+      "path": "/admin/api/students/:id/domains/:domain_key/items/:item_id/recurrence",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-students-domains-transmutation",
+      "path": "/admin/api/students/:id/domains/transmutation",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domains-transmutation-clean",
+      "path": "/admin/api/students/:id/domains/transmutation/items/:item_ref/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects",
+      "path": "/admin/api/students/:id/domains/projects",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "api-students-domains-projects-activate",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref/activate",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects-clean",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref/clean",
+      "type": "api",
+      "method": "POST"
+    },
+    {
+      "key": "api-students-domains-projects-update",
+      "path": "/admin/api/students/:id/domains/projects/items/:item_ref",
+      "type": "api",
+      "method": "PATCH"
+    },
+    {
+      "key": "api-transmutations-item-students",
+      "path": "/admin/api/transmutations/:item_ref/students",
+      "type": "api",
+      "method": "GET"
+    },
+    {
+      "key": "admin-students-detail",
+      "path": "/admin/students/:id",
+      "type": "island",
+      "method": "ALL"
+    }
+  ]
+}

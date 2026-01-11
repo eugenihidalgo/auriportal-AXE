@@ -1,0 +1,89 @@
+{
+  "cleaning-engine-service.js": {
+    "path": "src/core/master/services/cleaning-engine-service.js",
+    "operations": [
+      "markCleanStudent",
+      "markCleanAllStudents",
+      "setRemainingShared"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "evento",
+      "proyección",
+      "sync student_item_state"
+    ]
+  },
+  "place-service.js": {
+    "path": "src/services/place-service.js",
+    "operations": [
+      "activate",
+      "deactivate",
+      "clean",
+      "cleanBulk",
+      "cleanAll"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "evento",
+      "proyección state"
+    ]
+  },
+  "project-service.js": {
+    "path": "src/services/project-service.js",
+    "operations": [
+      "activate",
+      "deactivate",
+      "clean",
+      "cleanBulk",
+      "cleanAll"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "evento",
+      "proyección state"
+    ]
+  },
+  "sponsor-service.js": {
+    "path": "src/core/master/services/sponsor-service.js",
+    "operations": [
+      "link",
+      "unlink",
+      "care",
+      "extendCare",
+      "endCare"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "evento",
+      "proyección state"
+    ]
+  },
+  "level-engine-service.js": {
+    "path": "src/core/master/services/level-engine-service.js",
+    "operations": [
+      "recomputeLevel",
+      "recomputePhase"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "cálculo",
+      "actualización state",
+      "emisión señal"
+    ]
+  },
+  "student-domain-integration-service.js": {
+    "path": "src/core/student/domains/student-domain-integration-service.js",
+    "operations": [
+      "activateItem",
+      "deactivateItem",
+      "cleanItem",
+      "updateMetadata"
+    ],
+    "has_transactions": "unknown (requiere análisis de código)",
+    "steps": [
+      "evento",
+      "proyección",
+      "señal"
+    ]
+  }
+}

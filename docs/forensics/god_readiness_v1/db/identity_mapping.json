@@ -1,0 +1,13 @@
+{
+  "has_legacy_alumno_id": true,
+  "students_columns_with_alumno": [
+    "legacy_alumno_id"
+  ],
+  "alumnos_count": "17",
+  "students_count": "5",
+  "students_with_legacy": "5",
+  "students_without_legacy": "0",
+  "alumnos_without_students": "12",
+  "students_without_alumnos": "0",
+  "duplicates": []
+}

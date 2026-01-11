@@ -1,0 +1,39 @@
+{
+  "master_api": {
+    "envelope": "jsonSuccess/jsonError",
+    "headers": [
+      "Content-Type: application/json",
+      "X-Trace-Id"
+    ],
+    "example_success": {
+      "success": true,
+      "data": {}
+    },
+    "example_error": {
+      "success": false,
+      "error": "message"
+    }
+  },
+  "admin_api": {
+    "envelope": "jsonSuccess/jsonError",
+    "headers": [
+      "Content-Type: application/json",
+      "X-Trace-Id"
+    ],
+    "example_success": {
+      "success": true,
+      "data": {}
+    },
+    "example_error": {
+      "success": false,
+      "error": "message"
+    }
+  },
+  "client": {
+    "envelope": "HTML Response",
+    "headers": [
+      "Content-Type: text/html"
+    ],
+    "example": "<html>...</html>"
+  }
+}

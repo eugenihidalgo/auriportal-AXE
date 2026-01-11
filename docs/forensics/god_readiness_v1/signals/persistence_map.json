@@ -1,0 +1,15 @@
+{
+  "note": "Basado en análisis de código",
+  "tables": [
+    {
+      "name": "pde_signal_emissions",
+      "description": "Tabla principal de emisiones de señales PDE",
+      "source": "pde-signal-emitter.js usa esta tabla"
+    },
+    {
+      "name": "student_signal_audit",
+      "description": "Auditoría de señales del dominio Alumno",
+      "source": "student-signal-emitter.js registra aquí"
+    }
+  ]
+}

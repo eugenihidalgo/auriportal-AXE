@@ -1,0 +1,16 @@
+{
+  "master": {
+    "path": "public/js/master/inject_master.js",
+    "context_check": "window.__AP_CONTEXT__ === 'MASTER'",
+    "description": "Entry gate canónico para MASTER"
+  },
+  "client": {
+    "path": "public/js/inject_main.js",
+    "context_check": "window.__AP_CONTEXT__ !== 'MASTER'",
+    "description": "Entry gate legacy para CLIENT (con guard para no ejecutar en MASTER)"
+  },
+  "admin": {
+    "path": "N/A (no existe inject_admin.js)",
+    "description": "Admin usa admin-panel-v4.js directamente"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "emitStudentSignal": {
+    "file": "src/core/student/signals/student-signal-emitter.js",
+    "description": "Sistema canónico para señales del dominio Alumno",
+    "usage": [
+      "src/core/student/domains/student-domain-integration-service.js",
+      "src/core/student/coherence/student-coherence-checker.js"
+    ]
+  },
+  "dispatchSignal": {
+    "file": "src/core/signals/signal-dispatcher.js",
+    "description": "Dispatcher genérico para señales",
+    "usage": [
+      "src/core/master/services/level-engine-service.js",
+      "src/services/tags-sot-service.js",
+      "src/services/ute-core-service.js",
+      "src/endpoints/master-api-classifications.js",
+      "src/endpoints/master-api-tags.js",
+      "src/core/automations/automation-execution-service.js",
+      "src/core/master/services/sponsor-service.js",
+      "src/services/project-service.js",
+      "src/services/place-service.js"
+    ]
+  },
+  "emitSignal (pde-signal-emitter)": {
+    "file": "src/services/pde-signal-emitter.js",
+    "description": "Emisor PDE (wrapper sobre dispatchSignal)",
+    "usage": [
+      "src/services/alquimia-general-service.js",
+      "src/core/master/services/cleaning-engine-service.js",
+      "src/core/packages/package-engine.js",
+      "src/endpoints/admin-signals-api.js"
+    ]
+  }
+}

@@ -1,0 +1,588 @@
+{
+  "name": "foreign_keys",
+  "success": true,
+  "rows": [
+    {
+      "source_table": "altares",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "altares_alumno_id_fkey"
+    },
+    {
+      "source_table": "altares_items",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "altares_items_alumno_id_fkey"
+    },
+    {
+      "source_table": "alumnos_apadrinados",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "alumnos_apadrinados_alumno_id_fkey"
+    },
+    {
+      "source_table": "alumnos_disponibilidad",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "alumnos_disponibilidad_alumno_id_fkey"
+    },
+    {
+      "source_table": "amistades",
+      "source_column": "alumno1",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "amistades_alumno1_fkey"
+    },
+    {
+      "source_table": "amistades",
+      "source_column": "alumno2",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "amistades_alumno2_fkey"
+    },
+    {
+      "source_table": "amistades",
+      "source_column": "iniciado_por",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "amistades_iniciado_por_fkey"
+    },
+    {
+      "source_table": "analytics_eventos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "analytics_eventos_alumno_id_fkey"
+    },
+    {
+      "source_table": "arquetipos_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "arquetipos_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "aspectos_energeticos_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "aspectos_energeticos_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "aspectos_energeticos_registros",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "aspectos_energeticos_registros_alumno_id_fkey"
+    },
+    {
+      "source_table": "aspectos_indeseables_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "aspectos_indeseables_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "aspectos_karmicos_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "aspectos_karmicos_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "auribosses_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "auribosses_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "auriclock_registro",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "auriclock_registro_alumno_id_fkey"
+    },
+    {
+      "source_table": "aurimapa_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "aurimapa_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "automation_locks",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "automation_locks_alumno_id_fkey"
+    },
+    {
+      "source_table": "automation_runs",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "automation_runs_alumno_id_fkey"
+    },
+    {
+      "source_table": "avatar_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "avatar_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "carta_astral",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "carta_astral_alumno_id_fkey"
+    },
+    {
+      "source_table": "circulos_auri_miembros",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "circulos_auri_miembros_alumno_id_fkey"
+    },
+    {
+      "source_table": "cleaning_events",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "cleaning_events_student_id_fkey"
+    },
+    {
+      "source_table": "cleaning_item_state",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "cleaning_item_state_student_id_fkey"
+    },
+    {
+      "source_table": "comunicados_eugeni",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "comunicados_eugeni_alumno_id_fkey"
+    },
+    {
+      "source_table": "content_overrides",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "content_overrides_alumno_id_fkey"
+    },
+    {
+      "source_table": "creacion_objetivos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "creacion_objetivos_alumno_id_fkey"
+    },
+    {
+      "source_table": "creacion_problemas_iniciales",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "creacion_problemas_iniciales_alumno_id_fkey"
+    },
+    {
+      "source_table": "creacion_version_futura",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "creacion_version_futura_alumno_id_fkey"
+    },
+    {
+      "source_table": "cumpleaños_eventos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "cumpleaños_eventos_alumno_id_fkey"
+    },
+    {
+      "source_table": "diario_practicas",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "diario_practicas_alumno_id_fkey"
+    },
+    {
+      "source_table": "disenohumano",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "disenohumano_alumno_id_fkey"
+    },
+    {
+      "source_table": "emocional_ano",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "emocional_ano_alumno_id_fkey"
+    },
+    {
+      "source_table": "historias_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "historias_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "informes_semanales",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "informes_semanales_alumno_id_fkey"
+    },
+    {
+      "source_table": "items_transmutaciones_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "items_transmutaciones_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "limpieza_hogar_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "limpieza_hogar_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "limpiezas_master_historial",
+      "source_column": "master_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "limpiezas_master_historial_master_id_fkey"
+    },
+    {
+      "source_table": "logros",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "logros_alumno_id_fkey"
+    },
+    {
+      "source_table": "maestro_conversaciones",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "maestro_conversaciones_alumno_id_fkey"
+    },
+    {
+      "source_table": "maestro_insights",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "maestro_insights_alumno_id_fkey"
+    },
+    {
+      "source_table": "mensajes_especiales",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "mensajes_especiales_alumno_id_fkey"
+    },
+    {
+      "source_table": "misiones_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "misiones_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "nivel_overrides",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "nivel_overrides_student_id_fkey"
+    },
+    {
+      "source_table": "notas_master",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "notas_master_alumno_id_fkey"
+    },
+    {
+      "source_table": "notificaciones_preferencias",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "notificaciones_preferencias_alumno_id_fkey"
+    },
+    {
+      "source_table": "pausas",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "pausas_alumno_id_fkey"
+    },
+    {
+      "source_table": "pde_daily_item_clean_log",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "pde_daily_item_clean_log_student_id_fkey"
+    },
+    {
+      "source_table": "portal_messages",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "portal_messages_alumno_id_fkey"
+    },
+    {
+      "source_table": "practicas",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practicas_alumno_id_fkey"
+    },
+    {
+      "source_table": "practicas_audio",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practicas_audio_alumno_id_fkey"
+    },
+    {
+      "source_table": "practicas_compasion",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practicas_compasion_alumno_id_fkey"
+    },
+    {
+      "source_table": "practicas_conjuntas",
+      "source_column": "alumno1_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practicas_conjuntas_alumno1_id_fkey"
+    },
+    {
+      "source_table": "practicas_conjuntas",
+      "source_column": "alumno2_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practicas_conjuntas_alumno2_id_fkey"
+    },
+    {
+      "source_table": "practice_signals",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "practice_signals_alumno_id_fkey"
+    },
+    {
+      "source_table": "progreso_pedagogico",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "progreso_pedagogico_alumno_id_fkey"
+    },
+    {
+      "source_table": "quests_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "quests_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "reflexiones",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "reflexiones_alumno_id_fkey"
+    },
+    {
+      "source_table": "respuestas",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "respuestas_alumno_id_fkey"
+    },
+    {
+      "source_table": "sellos_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "sellos_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "signal_aggregates",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "signal_aggregates_alumno_id_fkey"
+    },
+    {
+      "source_table": "skilltree_progreso",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "skilltree_progreso_alumno_id_fkey"
+    },
+    {
+      "source_table": "sorpresas_alumnos",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "sorpresas_alumnos_alumno_id_fkey"
+    },
+    {
+      "source_table": "sponsor_student_links",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "sponsor_student_links_student_id_fkey"
+    },
+    {
+      "source_table": "student_activation_limits",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_activation_limits_student_id_fkey"
+    },
+    {
+      "source_table": "student_domain_policies",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_domain_policies_student_id_fkey"
+    },
+    {
+      "source_table": "student_item_state",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_item_state_student_id_fkey"
+    },
+    {
+      "source_table": "student_item_state_audit",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_item_state_audit_student_id_fkey"
+    },
+    {
+      "source_table": "student_level_history",
+      "source_column": "student_id",
+      "target_table": "students",
+      "target_column": "id",
+      "constraint_name": "student_level_history_student_id_fkey"
+    },
+    {
+      "source_table": "student_level_state",
+      "source_column": "student_id",
+      "target_table": "students",
+      "target_column": "id",
+      "constraint_name": "student_level_state_student_id_fkey"
+    },
+    {
+      "source_table": "student_modes",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_modes_alumno_id_fkey"
+    },
+    {
+      "source_table": "student_operational_state",
+      "source_column": "student_id",
+      "target_table": "students",
+      "target_column": "id",
+      "constraint_name": "student_operational_state_student_id_fkey"
+    },
+    {
+      "source_table": "student_patterns",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_patterns_alumno_id_fkey"
+    },
+    {
+      "source_table": "student_place_state",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_place_state_student_id_fkey"
+    },
+    {
+      "source_table": "student_product_memberships",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_product_memberships_student_id_fkey"
+    },
+    {
+      "source_table": "student_progress_snapshot",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_progress_snapshot_student_id_fkey"
+    },
+    {
+      "source_table": "student_project_state",
+      "source_column": "student_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "student_project_state_student_id_fkey"
+    },
+    {
+      "source_table": "students",
+      "source_column": "legacy_alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "students_legacy_alumno_id_fkey"
+    },
+    {
+      "source_table": "superprioritarios",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "superprioritarios_alumno_id_fkey"
+    },
+    {
+      "source_table": "tarot_sesiones",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "tarot_sesiones_alumno_id_fkey"
+    },
+    {
+      "source_table": "tokens_auri",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "tokens_auri_alumno_id_fkey"
+    },
+    {
+      "source_table": "tokens_transacciones",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "tokens_transacciones_alumno_id_fkey"
+    },
+    {
+      "source_table": "transmutaciones_apadrinados",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "transmutaciones_apadrinados_alumno_id_fkey"
+    },
+    {
+      "source_table": "transmutaciones_apadrinados_estado",
+      "source_column": "alumno_id",
+      "target_table": "alumnos",
+      "target_column": "id",
+      "constraint_name": "transmutaciones_apadrinados_estado_alumno_id_fkey"
+    }
+  ],
+  "count": 83
+}

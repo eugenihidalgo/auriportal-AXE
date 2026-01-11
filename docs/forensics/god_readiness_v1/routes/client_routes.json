@@ -1,0 +1,40 @@
+{
+  "note": "CLIENT usa router.js legacy, no tiene registry canónico",
+  "routes": [
+    {
+      "path": "/",
+      "handler": "enterHandler",
+      "description": "Pantalla principal de entrada"
+    },
+    {
+      "path": "/enter",
+      "handler": "enterHandler",
+      "description": "Pantalla de entrada"
+    },
+    {
+      "path": "/onboarding-complete",
+      "handler": "onboardingCompleteHandler",
+      "description": "Finalización de onboarding"
+    },
+    {
+      "path": "/typeform-webhook",
+      "handler": "typeformWebhookHandler",
+      "description": "Webhook de Typeform"
+    },
+    {
+      "path": "/topics",
+      "handler": "topicListHandler",
+      "description": "Lista de temas"
+    },
+    {
+      "path": "/topic/:id",
+      "handler": "topicScreenHandler",
+      "description": "Pantalla de tema"
+    },
+    {
+      "path": "/aprender",
+      "handler": "aprenderHandler",
+      "description": "Redirección a temas"
+    }
+  ]
+}
