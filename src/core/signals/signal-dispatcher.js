@@ -60,11 +60,11 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
   };
 
   // ═══════════════════════════════════════════════════════════════
-  // VALIDACIÓN DE REGISTRY (Sprint 1 - preparación)
+  // VALIDACIÓN DE REGISTRY (Capa 1 - OBLIGATORIA)
   // ═══════════════════════════════════════════════════════════════
-  // Validación opcional pero por defecto ON para señales de alumno
-  // Por ahora fail-open (log WARN + unregistered:true)
-  // En Sprint 2 se puede pasar a fail-hard en GOD/Master new path
+  // Validación obligatoria para señales de dominio (student., place., project., sponsor.)
+  // Fail-open CONTROLADO: log estructurado + métrica + flag unregistered
+  // NO bloquea la emisión (fail-open), pero registra la violación
   let unregistered = false;
   if (validateRegistry) {
     const signalKey = normalizedEnvelope.signal_key;
@@ -77,11 +77,38 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
     
     if (requiresRegistry) {
       if (!isValidSignal(signalKey)) {
-        logWarn('SignalDispatcher', 'Señal no registrada en registry', {
+        // Log estructurado con contexto completo
+        logWarn('SignalDispatcher', 'Señal no registrada en registry (fail-open controlado)', {
           signal_key: signalKey,
           trace_id: traceId,
-          note: 'Sprint 1: fail-open, en Sprint 2 puede pasar a fail-hard'
+          payload_keys: Object.keys(normalizedEnvelope.payload || {}),
+          runtime_keys: Object.keys(normalizedEnvelope.runtime || {}),
+          note: 'Capa 1: fail-open controlado. Registrar en student-signal-registry.js'
         });
+        
+        // Métrica: registrar señal no registrada (para observabilidad)
+        try {
+          // Intentar registrar métrica en DB (fail-open si falla)
+          const { query } = await import('../../../database/pg.js');
+          await query(`
+            INSERT INTO pde_metrics (
+              metric_key,
+              metric_value,
+              metadata,
+              created_at
+            ) VALUES ($1, $2, $3, NOW())
+            ON CONFLICT DO NOTHING
+          `, [
+            'signal.unregistered',
+            1,
+            JSON.stringify({ signal_key: signalKey, trace_id: traceId })
+          ]).catch(() => {
+            // Fail-open: si falla la métrica, continuar
+          });
+        } catch (e) {
+          // Fail-open: continuar aunque falle la métrica
+        }
+        
         unregistered = true;
       }
     }

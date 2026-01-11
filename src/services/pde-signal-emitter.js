@@ -1,5 +1,8 @@
 // src/services/pde-signal-emitter.js
-// Servicio canónico para emitir señales (LEGACY WRAPPER)
+// Servicio canónico para emitir señales (LEGACY WRAPPER - DEPRECATED)
+//
+// ⚠️ DEPRECATED: Este wrapper se mantiene solo para compatibilidad.
+// ⚠️ NUEVO CÓDIGO: Usar directamente dispatchSignal() desde signal-dispatcher.js
 //
 // Este archivo mantiene la API legacy para compatibilidad.
 // Internamente usa el signal-dispatcher canónico.
@@ -8,6 +11,11 @@
 // 1. Fail-open absoluto: si falla la persistencia, la señal se emite igual
 // 2. Idempotencia: el motor de automatizaciones maneja dedupe
 // 3. Auditoría completa: todas las emisiones se registran
+//
+// MIGRACIÓN:
+// - Reemplazar: import { emitSignal } from './pde-signal-emitter.js'
+// - Por: import { dispatchSignal } from '../core/signals/signal-dispatcher.js'
+// - Usar: await dispatchSignal({ signal_key, payload, runtime, context }, { source })
 
 import { dispatchSignal } from '../core/signals/signal-dispatcher.js';
 import { query } from '../../database/pg.js';
@@ -15,8 +23,11 @@ import { query } from '../../database/pg.js';
 /**
  * Emite una señal y dispara automatizaciones
  * 
+ * ⚠️ DEPRECATED: Usar directamente dispatchSignal() desde signal-dispatcher.js
+ * 
  * LEGACY API - Usa signal-dispatcher internamente
  * 
+ * @deprecated Usar dispatchSignal() directamente. Este wrapper se mantiene solo para compatibilidad.
  * @param {string} signalKey - Clave de la señal
  * @param {Object} payload - Payload de la señal
  * @param {Object} runtime - Runtime context (student_id, day_key, trace_id, step_id, etc.)

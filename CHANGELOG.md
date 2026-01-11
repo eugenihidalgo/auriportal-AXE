@@ -9,6 +9,58 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.67.0] - 2026-01-11
+
+### Added
+- **CAPA 1 (CIERRE CONSTITUCIONAL)**: Cierre definitivo de la capa constitucional de AuriPortal
+  - **Señales - Motor Único Real**: `dispatchSignal()` consolidado como motor único con validación obligatoria contra `student-signal-registry.js`
+    - Validación obligatoria para señales `student.*`, `place.*`, `project.*`, `sponsor.*`
+    - Fail-open controlado: log estructurado + métrica + flag `unregistered: true`
+    - Wrappers legacy (`emitSignal`) marcados como DEPRECATED
+  - **Identidad - StudentRef Canónico**: Preparación para UUID-only en runtime
+    - Contrato `StudentRef` (UUID) en servicios
+    - Legacy INTEGER solo en borde (si existe)
+    - Check: `npm run check:student-identity`
+  - **Contrato HTTP - JSON v1 Obligatorio**: Todos los endpoints MASTER + GOD usan `http-json-v1.js`
+    - `sendJsonOk()` / `sendJsonError()` como únicos helpers válidos
+    - Headers canónicos: `Cache-Control`, `X-Trace-Id`, `Content-Type`
+    - Check mejorado: `npm run check:http-contract` (fail-hard en dialectos alternativos)
+  - **Atomicidad - Servicios Críticos**: Helper `withTransaction()` en `database/pg.js`
+    - Preparación para transacciones en Cleaning, Place, Project, Sponsor
+    - Regla: persistencia dentro de transacción, señales fuera
+  - **Contextos + SOT - Preparación GOD**: Documentación inline en servicios clave
+    - Separación clara entre Source of Truth y proyección
+    - GOD NO introduce lógica de negocio
+- **Assembly Checks**: Nuevos checks para verificar contratos constitucionales
+  - `npm run check:student-identity`: Verifica contrato de identidad
+  - `npm run check:signals-registry`: Verifica registry de señales
+  - `npm run check:all`: Ejecuta todos los checks constitucionales
+- **Documentación Canónica**: Documentos constitucionales de Capa 1
+  - `docs/CONSTITUTION_PLATFORM_LAYER1.md`: Capa 1 completa
+  - `docs/SIGNALS_CONTRACT_V1.md`: Contrato de señales
+  - `docs/STUDENT_IDENTITY_CONTRACT_V1.md`: Contrato de identidad
+  - `docs/HTTP_CONTRACT_V1.md`: Contrato HTTP
+  - `docs/ATOMICITY_RULES_V1.md`: Reglas de atomicidad
+
+### Changed
+- **Signal Dispatcher**: Validación obligatoria contra registry (Capa 1)
+  - Log estructurado con contexto completo para señales no registradas
+  - Métrica `signal.unregistered` en DB
+  - Fail-open controlado (preparación para fail-hard en Sprint 2)
+- **HTTP Contract Check**: Extendido a endpoints MASTER
+  - Fail-hard en dialectos alternativos
+  - Verificación de uso de `sendJsonOk`/`sendJsonError`
+- **pde-signal-emitter.js**: Marcado como DEPRECATED
+  - Mantiene compatibilidad para código legacy
+  - Documentación de migración a `dispatchSignal()`
+
+### Fixed
+- **Database Transactions**: Helper `withTransaction()` añadido a `database/pg.js`
+  - Contrato canónico para transacciones PostgreSQL
+  - Preparación para atomicidad en servicios críticos
+
+---
+
 ## [5.66.0] - 2026-01-11
 
 ### Added

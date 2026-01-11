@@ -103,33 +103,56 @@ function checkGodEndpoints() {
 }
 
 /**
- * Lista archivos MASTER que usan helpers antiguos (solo reporte)
+ * Verifica que endpoints MASTER usan http-json-v1.js (Capa 1 - OBLIGATORIO)
  */
-function listMasterFilesUsingOldHelpers() {
+function checkMasterEndpoints() {
   const masterEndpointDir = join(projectRoot, 'src/endpoints');
   const masterEndpoints = findFilesUsingOldHelpers(
     masterEndpointDir,
     /master-api-.*\.js$/
   ).filter(f => f.includes('master-api-'));
   
-  const usingOldHelpers = [];
+  const issues = [];
   
   for (const file of masterEndpoints) {
     const fullPath = join(projectRoot, file);
     try {
       const content = readFileSync(fullPath, 'utf-8');
       
-      // Buscar uso de helpers antiguos (json-response.js, new Response manual, etc.)
-      if (content.includes('jsonOk') || content.includes('jsonError') || 
-          (content.includes('new Response') && content.includes('JSON.stringify') && !content.includes('http-json-v1'))) {
-        usingOldHelpers.push(file);
+      // Verificar que importa http-json-v1
+      if (!content.includes('http-json-v1')) {
+        // Buscar uso de helpers antiguos o dialectos alternativos
+        if (content.includes('jsonOk') || content.includes('jsonError') || 
+            (content.includes('new Response') && content.includes('JSON.stringify') && !content.includes('http-json-v1'))) {
+          issues.push({
+            file,
+            issue: 'No usa http-json-v1.js (usa helpers antiguos o dialectos alternativos)',
+            severity: 'error'
+          });
+        }
+      } else {
+        // Verificar que usa sendJsonOk o sendJsonError
+        if (!content.includes('sendJsonOk') && !content.includes('sendJsonError')) {
+          issues.push({
+            file,
+            issue: 'Importa http-json-v1 pero no usa sendJsonOk/sendJsonError',
+            severity: 'warning'
+          });
+        }
       }
     } catch (e) {
-      // Skip errores
+      issues.push({
+        file,
+        issue: `Error leyendo archivo: ${e.message}`,
+        severity: 'error'
+      });
     }
   }
   
-  return usingOldHelpers;
+  return {
+    checked: masterEndpoints.length,
+    issues
+  };
 }
 
 // Ejecutar checks
@@ -149,16 +172,23 @@ if (godCheck.issues.length > 0) {
   console.log('[HTTP_CONTRACT_CHECK] ✅ Todos los endpoints GOD usan http-json-v1.js\n');
 }
 
-const masterOldHelpers = listMasterFilesUsingOldHelpers();
-if (masterOldHelpers.length > 0) {
-  console.log(`[HTTP_CONTRACT_CHECK] 📋 ${masterOldHelpers.length} archivo(s) MASTER todavía usan helpers antiguos (solo reporte):`);
-  for (const file of masterOldHelpers.slice(0, 10)) { // Mostrar solo los primeros 10
-    console.log(`  - ${file}`);
+const masterCheck = checkMasterEndpoints();
+console.log(`[HTTP_CONTRACT_CHECK] Endpoints MASTER verificados: ${masterCheck.checked}`);
+
+if (masterCheck.issues.length > 0) {
+  console.log(`\n[HTTP_CONTRACT_CHECK] ⚠️  ${masterCheck.issues.length} problema(s) encontrado(s):`);
+  for (const issue of masterCheck.issues) {
+    const icon = issue.severity === 'error' ? '❌' : '⚠️';
+    console.log(`  ${icon} ${issue.file}: ${issue.issue}`);
   }
-  if (masterOldHelpers.length > 10) {
-    console.log(`  ... y ${masterOldHelpers.length - 10} más`);
+  // Capa 1: Fail-hard en dialectos alternativos
+  const errors = masterCheck.issues.filter(i => i.severity === 'error');
+  if (errors.length > 0) {
+    console.log(`\n[HTTP_CONTRACT_CHECK] ❌ ${errors.length} error(es) crítico(s) - FAIL`);
+    process.exit(1);
   }
-  console.log('');
+} else {
+  console.log('[HTTP_CONTRACT_CHECK] ✅ Todos los endpoints MASTER usan http-json-v1.js\n');
 }
 
 console.log('[HTTP_CONTRACT_CHECK] ✅ Check completado');

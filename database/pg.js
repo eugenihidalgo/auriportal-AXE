@@ -118,6 +118,44 @@ export async function query(text, params) {
 }
 
 /**
+ * Ejecuta una función dentro de una transacción PostgreSQL
+ * 
+ * CONTRATO:
+ * - Obtiene un cliente del pool
+ * - Inicia transacción (BEGIN)
+ * - Ejecuta la función callback con el cliente
+ * - Si la función retorna exitosamente, hace COMMIT
+ * - Si la función lanza error, hace ROLLBACK
+ * - Siempre libera el cliente al pool
+ * 
+ * USO:
+ *   const result = await withTransaction(async (client) => {
+ *     await client.query('INSERT INTO ...');
+ *     await client.query('UPDATE ...');
+ *     return { success: true };
+ *   });
+ * 
+ * @param {Function} fn - Función async que recibe el cliente y retorna el resultado
+ * @returns {Promise<any>} Resultado de la función
+ */
+export async function withTransaction(fn) {
+  const pool = getPool();
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Crea todas las tablas necesarias según la arquitectura v4
  */
 export async function createTables() {
