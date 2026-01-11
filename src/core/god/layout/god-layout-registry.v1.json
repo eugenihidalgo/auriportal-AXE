@@ -1,0 +1,17 @@
+{
+  "schema": "auri.god.layout_registry.v1",
+  "version": "1.0.0",
+  "generated_at": "2026-01-11",
+  "required_scripts": [
+    {
+      "id": "god-script-loader-base",
+      "guard_id": "GOD_LOADER",
+      "path": "/js/god/god-script-loader.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "GOD Script Loader Base"
+    }
+  ]
+}

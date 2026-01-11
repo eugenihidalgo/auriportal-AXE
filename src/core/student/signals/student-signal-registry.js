@@ -654,6 +654,118 @@ export const STUDENT_SIGNAL_REGISTRY = {
       pending_requirements: 'Array con keys de gates pendientes',
       trace_id: 'ID de traza'
     }
+  },
+  
+  // ============================================
+  // SPONSOR SIGNALS (Sistema de Apadrinados v1)
+  // ============================================
+  'sponsor.created': {
+    key: 'sponsor.created',
+    description: 'Se emite cuando se crea un nuevo apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target {target_type, target_id}',
+      display_name: 'Nombre del sponsor',
+      student_ids: 'Array de IDs de estudiantes vinculados',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.updated': {
+    key: 'sponsor.updated',
+    description: 'Se emite cuando se actualiza un apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      changes: 'Array de campos actualizados',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.archived': {
+    key: 'sponsor.archived',
+    description: 'Se emite cuando se archiva un apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.linked': {
+    key: 'sponsor.linked',
+    description: 'Se emite cuando se vincula un estudiante a un apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      student_id: 'UUID del estudiante',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.unlinked': {
+    key: 'sponsor.unlinked',
+    description: 'Se emite cuando se desvincula un estudiante de un apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      student_id: 'UUID del estudiante',
+      reason: 'Razón de desvinculación (opcional)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.special_care.started': {
+    key: 'sponsor.special_care.started',
+    description: 'Se emite cuando se inicia un cuidado especial para un apadrinado',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      care_id: 'UUID del cuidado especial',
+      category_term_id: 'ID del término de categoría',
+      duration_days: 'Duración en días',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.special_care.extended': {
+    key: 'sponsor.special_care.extended',
+    description: 'Se emite cuando se extiende un cuidado especial',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      care_id: 'UUID del cuidado especial',
+      additional_days: 'Días adicionales',
+      trace_id: 'ID de traza'
+    }
+  },
+  'sponsor.special_care.ended': {
+    key: 'sponsor.special_care.ended',
+    description: 'Se emite cuando termina un cuidado especial',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      sponsor_id: 'UUID del sponsor',
+      target_ref: 'Referencia del target',
+      care_id: 'UUID del cuidado especial',
+      trace_id: 'ID de traza'
+    }
   }
 };
 

@@ -1,64 +1,42 @@
 /**
- * inject_main.js
- * LEGACY GLOBAL INJECTOR
+ * inject_god.js
+ * GOD ENTRY GATE v1 - AuriPortal God
  * 
  * ╔══════════════════════════════════════════════════════════════════════════════╗
- * ║ ⚠️  AISLAMIENTO CONSTITUCIONAL v1.4.3                                         ║
+ * ║ ⚠️  ENTRY GATE CANÓNICO v1                                                    ║
  * ║                                                                              ║
- * ║ LEGACY GLOBAL INJECTOR                                                       ║
- * ║ MASTER y GOD domains are sovereign and MUST NOT execute this file           ║
- * ║                                                                              ║
- * ║ PROHIBIDO ejecutarse en dominio MASTER o GOD.                                ║
- * ║ Cualquier lógica nueva debe ir a inject_master.js o inject_god.js            ║
+ * ║ GOD ENTRY GATE                                                               ║
+ * ║ GOD domain is sovereign and MUST execute this file only                     ║
  * ║                                                                              ║
  * ║ CONTRATO: Domain Context Contract v1                                         ║
- * ║ Master y GOD son dominios soberanos con su propio entry gate                ║
+ * ║ GOD es un dominio soberano con su propio entry gate                         ║
  * ║                                                                              ║
- * ║ GUARD DURA: Este archivo NUNCA se ejecuta en MASTER o GOD, bajo ninguna     ║
- * ║ circunstancia (ni directa, ni indirecta, ni por caché, ni por navegación)   ║
+ * ║ GUARD DURA: Este archivo SOLO se ejecuta en GOD, bajo ninguna               ║
+ * ║ circunstancia debe ejecutarse en otros dominios                             ║
  * ╚══════════════════════════════════════════════════════════════════════════════╝
  */
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GUARD CONSTITUCIONAL DURA v1.4.4 - AISLAMIENTO ABSOLUTO DE MASTER Y GOD
+// GUARD CONSTITUCIONAL DURA v1 - AISLAMIENTO ABSOLUTO
 // ═══════════════════════════════════════════════════════════════════════════════
 // Este guard DEBE ejecutarse ANTES de cualquier otra lógica.
-// Si el contexto es MASTER o GOD, abortar inmediatamente sin ejecutar nada.
+// Si el contexto NO es GOD, abortar inmediatamente sin ejecutar nada.
 
 (function() {
   'use strict';
   
-  // Verificar contexto MASTER o GOD (temprano, antes de cualquier lógica)
-  if (typeof window !== 'undefined' && (window.__AP_CONTEXT__ === 'MASTER' || window.__AP_CONTEXT__ === 'GOD')) {
-    // ABORTAR: Este archivo NO debe ejecutarse en MASTER o GOD
+  // Verificar contexto GOD (temprano, antes de cualquier lógica)
+  if (typeof window === 'undefined' || window.__AP_CONTEXT__ !== 'GOD') {
+    // ABORTAR: Este archivo SOLO debe ejecutarse en GOD
     // No loguear (evitar ruido en consola)
     // No ejecutar código adicional
     return; // IIFE return - aborta la ejecución del módulo
   }
   
-  // Si llegamos aquí, NO es contexto MASTER ni GOD
-  // Continuar con lógica legacy/global si existe
-  
-  // Archivo vacío para evitar errores 500 cuando extensiones del navegador intentan cargarlo
-  // Este archivo es inyectado por extensiones del navegador y no debe contener código funcional
-  
+  // Si llegamos aquí, es contexto GOD
+  // Cargar el script loader por contrato
+  import('/js/god/god-script-loader.js').catch((error) => {
+    console.error('[inject_god] Error cargando god-script-loader:', error);
+    // Fail-closed: si falla el loader, no continuar
+  });
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

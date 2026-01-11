@@ -17,6 +17,8 @@ import { runAutomationsForSignal } from '../automations/automation-engine-v2.js'
 import { isFeatureEnabled } from '../flags/feature-flags.js';
 import { query } from '../../../database/pg.js';
 import { randomUUID } from 'crypto';
+import { isValidSignal } from '../student/signals/student-signal-registry.js';
+import { logWarn } from '../observability/logger.js';
 
 /**
  * Dispatchea una señal normalizada y ejecuta automatizaciones
@@ -32,7 +34,7 @@ import { randomUUID } from 'crypto';
  * @returns {Promise<Object>} Resultado del dispatch
  */
 export async function dispatchSignal(signalEnvelope, options = {}) {
-  const { dryRun = false, source = {} } = options;
+  const { dryRun = false, source = {}, validateRegistry = true } = options;
   
   if (!signalEnvelope || !signalEnvelope.signal_key) {
     console.warn('[AXE][SIGNAL_DISPATCHER] Intento de dispatch sin signal_key');
@@ -57,7 +59,35 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
     context: signalEnvelope.context || {}
   };
 
-  console.log(`[SIGNAL_DISPATCHER] Dispatch signal=${normalizedEnvelope.signal_key} trace_id=${traceId} dryRun=${dryRun}`);
+  // ═══════════════════════════════════════════════════════════════
+  // VALIDACIÓN DE REGISTRY (Sprint 1 - preparación)
+  // ═══════════════════════════════════════════════════════════════
+  // Validación opcional pero por defecto ON para señales de alumno
+  // Por ahora fail-open (log WARN + unregistered:true)
+  // En Sprint 2 se puede pasar a fail-hard en GOD/Master new path
+  let unregistered = false;
+  if (validateRegistry) {
+    const signalKey = normalizedEnvelope.signal_key;
+    
+    // Validar señales que empiecen por student., place., project., sponsor.
+    const requiresRegistry = signalKey.startsWith('student.') || 
+                             signalKey.startsWith('place.') || 
+                             signalKey.startsWith('project.') || 
+                             signalKey.startsWith('sponsor.');
+    
+    if (requiresRegistry) {
+      if (!isValidSignal(signalKey)) {
+        logWarn('SignalDispatcher', 'Señal no registrada en registry', {
+          signal_key: signalKey,
+          trace_id: traceId,
+          note: 'Sprint 1: fail-open, en Sprint 2 puede pasar a fail-hard'
+        });
+        unregistered = true;
+      }
+    }
+  }
+
+  console.log(`[SIGNAL_DISPATCHER] Dispatch signal=${normalizedEnvelope.signal_key} trace_id=${traceId} dryRun=${dryRun} ${unregistered ? '[UNREGISTERED]' : ''}`);
 
   // 1. Persistir emisión de señal (fail-open: si falla, continuar)
   let signalId = randomUUID(); // Generar ID único para la señal
@@ -140,7 +170,8 @@ export async function dispatchSignal(signalEnvelope, options = {}) {
     signal_id: signalId,
     trace_id: traceId,
     day_key: dayKey,
-    dry_run: dryRun
+    dry_run: dryRun,
+    ...(unregistered && { unregistered: true })
   };
 }
 

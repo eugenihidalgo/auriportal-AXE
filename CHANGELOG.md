@@ -9,6 +9,44 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.66.0] - 2026-01-11
+
+### Added
+- **GOD DOMAIN v1**: Implementación canónica del dominio GOD (god.pdeeugenihidalgo.org)
+  - Entry Context: Extendido `entry-context-resolver.js` para reconocer GOD
+  - Entry Gate: `inject_god.js` como único punto de entrada GOD
+  - Script Loader: `god-script-loader.js` con carga por contrato (DOM API only)
+  - Layout Registry: `god-layout-registry.v1.json` con `required_scripts`
+  - Router Resolver: `god-router-resolver.js` con resolución estricta (registry-driven)
+  - Route Registry: `god-route-registry.js` con rutas mínimas (home, health, me)
+  - Endpoints: `god-home.js`, `god-api-health.js`, `god-api-me.js`
+- **HTTP Contract v1**: Helper canónico `http-json-v1.js` para respuestas JSON
+  - `sendJsonOk()`: Envelope canónico { ok: true, data, trace_id }
+  - `sendJsonError()`: Envelope canónico { ok: false, error: { message, code }, trace_id }
+  - Headers obligatorios: Content-Type, Cache-Control, Pragma, Expires, X-Trace-Id
+  - Aplicado a endpoints GOD (health, me)
+  - Check script: `scripts/check-http-contract.js` para verificar uso
+- **Signals Registry Validation**: Validación opcional en `dispatchSignal()`
+  - Validación por defecto ON para señales student., place., project., sponsor.
+  - Fail-open (log WARN + unregistered:true) por ahora
+  - Registry completado: Añadidas señales sponsor.* (created, updated, archived, linked, unlinked, special_care.*)
+- **Students UUID-only**: Repositorio y servicio para students (mundo nuevo)
+  - `src/core/student/repos/students-repo.js`: Repositorio canónico
+  - `src/infra/repos/students-repo-pg.js`: Implementación PostgreSQL
+  - `src/core/student/services/students-service.js`: Servicio canónico
+  - Migración: `migrations/v5.66.0-students-email-unique-ci.sql` (email, apodo, índice único case-insensitive)
+  - Seed script: `scripts/seed-initial-students.js` (idempotente, Eugeni y Carla)
+- **Assembly Checks**: Checks para verificar estructura GOD
+  - `scripts/check-god-ui-assembly.js`: Verifica inject_god, registry, loader, router
+  - `npm run check:god-ui`: Comando npm para ejecutar checks
+  - `npm run check:http-contract`: Comando npm para verificar contrato HTTP
+
+### Changed
+- **inject_main.js**: Extendido guard para excluir también GOD (además de MASTER)
+- **Signal Dispatcher**: Validación opcional de registry (preparación Sprint 2)
+
+---
+
 ## [5.65.2] - 2026-01-09
 
 ### Fixed

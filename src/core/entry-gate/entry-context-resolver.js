@@ -18,6 +18,7 @@
  * CONTEXTOS:
  * - STUDENT: Portal del alumno (pdeeugenihidalgo.org)
  * - MASTER: Dominio canónico Master (master.pdeeugenihidalgo.org)
+ * - GOD: Dominio canónico Alumno (god.pdeeugenihidalgo.org)
  * - ADMIN_LEGACY: Admin legacy operativo (admin.pdeeugenihidalgo.org)
  * 
  * RESPONSABILIDADES:
@@ -34,6 +35,7 @@ import { logInfo, logWarn, logError } from '../observability/logger.js';
 export const ENTRY_CONTEXT = {
   STUDENT: 'STUDENT',
   MASTER: 'MASTER',
+  GOD: 'GOD',
   ADMIN_LEGACY: 'ADMIN_LEGACY'
 };
 
@@ -49,6 +51,9 @@ const CANONICAL_HOSTS = {
   // MASTER - Dominio canónico Master
   'master.pdeeugenihidalgo.org': ENTRY_CONTEXT.MASTER,
   
+  // GOD - Dominio canónico Alumno
+  'god.pdeeugenihidalgo.org': ENTRY_CONTEXT.GOD,
+  
   // ADMIN_LEGACY - Admin legacy operativo
   'admin.pdeeugenihidalgo.org': ENTRY_CONTEXT.ADMIN_LEGACY,
   
@@ -61,7 +66,7 @@ const CANONICAL_HOSTS = {
  * 
  * @param {Request} request - Request HTTP
  * @returns {Object} { context, host, recognized }
- *   - context: ENTRY_CONTEXT (STUDENT | MASTER | ADMIN_LEGACY)
+ *   - context: ENTRY_CONTEXT (STUDENT | MASTER | GOD | ADMIN_LEGACY)
  *   - host: host original
  *   - recognized: boolean (si el host es reconocido)
  */
@@ -121,7 +126,7 @@ export function isValidContext(context) {
  * Si no es reconocido, lanza error explícito
  * 
  * @param {Request} request - Request HTTP
- * @returns {string} Contexto canónico (STUDENT | MASTER | ADMIN_LEGACY)
+ * @returns {string} Contexto canónico (STUDENT | MASTER | GOD | ADMIN_LEGACY)
  * @throws {Error} Si el host no es reconocido
  */
 export function requireEntryContext(request) {
@@ -157,6 +162,16 @@ export function isMasterContext(context) {
  */
 export function isStudentContext(context) {
   return context === ENTRY_CONTEXT.STUDENT;
+}
+
+/**
+ * Verifica si el contexto es GOD
+ * 
+ * @param {string} context - Contexto a verificar
+ * @returns {boolean}
+ */
+export function isGodContext(context) {
+  return context === ENTRY_CONTEXT.GOD;
 }
 
 /**

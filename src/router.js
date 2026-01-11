@@ -39,7 +39,9 @@ import { ADMIN_ROUTES, validateAdminRouteRegistry } from './core/admin/admin-rou
 import { resolveAdminRoute, createAdmin404Response } from './core/admin/admin-router-resolver.js';
 import { MASTER_ROUTES, validateMasterRouteRegistry } from './core/master/registry/master-route-registry.js';
 import { resolveMasterRoute, createMaster404Response } from './core/master/router/master-router-resolver.js';
-import { resolveEntryContext, ENTRY_CONTEXT, isMasterContext, isStudentContext, isAdminLegacyContext } from './core/entry-gate/entry-context-resolver.js';
+import { GOD_ROUTES, validateGodRouteRegistry } from './core/god/registry/god-route-registry.js';
+import { resolveGodRoute, createGod404Response } from './core/god/router/god-router-resolver.js';
+import { resolveEntryContext, ENTRY_CONTEXT, isMasterContext, isStudentContext, isAdminLegacyContext, isGodContext } from './core/entry-gate/entry-context-resolver.js';
 
 // Validar los registries al arrancar (solo una vez)
 // Si hay error, el servidor NO arranca (esto es deseado)
@@ -60,6 +62,19 @@ try {
   console.log('[Router] ✅ Master Route Registry válido');
 } catch (error) {
   console.error('[Router] ❌ ERROR CRÍTICO: Master Route Registry inválido');
+  console.error('[Router] El servidor NO puede arrancar hasta que se corrija el registry');
+  console.error('[Router] Error:', error.message);
+  // En producción, podríamos lanzar el error para detener el servidor
+  // Por ahora, solo logueamos para no romper el arranque en desarrollo
+  // throw error;
+}
+
+// Validar God Route Registry
+try {
+  validateGodRouteRegistry();
+  console.log('[Router] ✅ God Route Registry válido');
+} catch (error) {
+  console.error('[Router] ❌ ERROR CRÍTICO: God Route Registry inválido');
   console.error('[Router] El servidor NO puede arrancar hasta que se corrija el registry');
   console.error('[Router] Error:', error.message);
   // En producción, podríamos lanzar el error para detener el servidor
@@ -560,6 +575,61 @@ async function routerFunction(request, env, ctx) {
       
       // Otras rutas Master también devuelven JSON 404
       return createMaster404Response(path, request.method);
+    }
+  }
+  
+  // ============================================
+  // GOD ROUTER - Gobernado por God Route Registry
+  // ============================================
+  // ENTRY GATE: Solo se ejecuta si el contexto es GOD
+  // IMPORTANTE: NO procesar si es ruta pública (ya verificado arriba)
+  // IMPORTANTE: NO procesar rutas /admin/* o /master/* (van a otros routers)
+  if (isGodContext(entryContext) && 
+      (path === '/' || path.startsWith('/god/')) && 
+      !isPublicRoute && 
+      !path.startsWith('/admin/') &&
+      !path.startsWith('/master/')) {
+    const traceId = (await import('./core/observability/request-context.js')).getRequestId() || `router-${Date.now()}`;
+    console.log(`[GOD_ROUTER][EntryGate] Contexto GOD detectado - Resolviendo ruta: ${path} (${request.method}) trace_id=${traceId}`);
+    
+    // Para GOD, no hay autenticación admin (es dominio de alumnos)
+    // La autenticación se implementará en fases futuras
+    
+    let resolved;
+    try {
+      resolved = await resolveGodRoute(path, request.method);
+    } catch (resolveError) {
+      console.error(`[GOD_ROUTER] ERROR en resolveGodRoute:`, resolveError.message);
+      throw resolveError;
+    }
+    
+    if (resolved) {
+      // Ruta encontrada en el registry, ejecutar handler
+      console.log(`[GOD_ROUTER] ✅ Ruta resuelta: ${resolved.route.key} (${resolved.type})`);
+      try {
+        const handlerResult = await resolved.handler(request, env, {});
+        
+        if (!handlerResult || !(handlerResult instanceof Response)) {
+          throw new Error(`Handler ${resolved.route.key} devolvió resultado inválido: ${typeof handlerResult}`);
+        }
+        
+        console.log(`[GOD_ROUTER] ✅ Respuesta válida, retornando`);
+        return handlerResult;
+      } catch (handlerError) {
+        console.error(`[GOD_ROUTER] ❌ Error ejecutando handler:`, handlerError.message);
+        throw handlerError;
+      }
+    } else {
+      // Ruta NO encontrada en el registry
+      console.error(`[GOD_ROUTER] Ruta no encontrada: ${path} trace_id=${traceId}`);
+      
+      // Rutas /god/api/** SIEMPRE devuelven JSON
+      if (path.startsWith('/god/api/')) {
+        return createGod404Response(path, request.method);
+      }
+      
+      // Otras rutas God también devuelven JSON 404
+      return createGod404Response(path, request.method);
     }
   }
   
