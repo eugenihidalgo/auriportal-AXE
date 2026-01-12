@@ -651,10 +651,13 @@ export async function incrementAllStudents(options, client = null) {
     options.item_kind = 'una_vez'; // Fallback legacy solo por compatibilidad temporal
   }
   
+  // REGLA: incrementAll desde Alquimia General debe pasar skip_level_filter para ignorar nivel
+  // Asegurar que skip_level_filter se pasa correctamente a markCleanAllStudents
   return await markCleanAllStudents({
     ...options,
     item_kind: options.item_kind, // Asegurar que se pasa explícitamente
-    clean_layer: options.clean_layer || 'shared' // Usar clean_layer de options si viene
+    clean_layer: options.clean_layer || 'shared', // Usar clean_layer de options si viene
+    skip_level_filter: options.skip_level_filter !== undefined ? options.skip_level_filter : true // Por defecto true para incrementAll (Alquimia General ignora nivel)
   }, client);
 }
 

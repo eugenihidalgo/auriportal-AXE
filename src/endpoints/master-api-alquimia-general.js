@@ -961,7 +961,34 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         }, traceId);
       }
 
-      return jsonSuccess({ state }, traceId);
+      // CONTRATO: Backend SIEMPRE entrega display_name
+      // Calcular display_name del estudiante para el toast
+      let displayName = null;
+      try {
+        const { calculateStudentDisplayName } = await import('../core/helpers/student-display-name-helper.js');
+        const { query } = await import('../../database/pg.js');
+        const studentResult = await query(
+          'SELECT id, apodo, nombre_completo, email FROM alumnos WHERE id = $1 LIMIT 1',
+          [studentId]
+        );
+        if (studentResult.rows[0]) {
+          displayName = await calculateStudentDisplayName(studentResult.rows[0]);
+        }
+      } catch (nameError) {
+        logWarn('MasterApiAlquimiaGeneral', 'Error calculando display_name (fail-open)', {
+          traceId,
+          student_id: studentId,
+          error: nameError.message
+        });
+      }
+
+      return jsonSuccess({ 
+        state,
+        student: {
+          student_id: studentId,
+          display_name: displayName
+        }
+      }, traceId);
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (recurrente)

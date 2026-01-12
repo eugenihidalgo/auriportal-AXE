@@ -118,6 +118,22 @@ export const STUDENT_SIGNAL_REGISTRY = {
       trace_id: 'ID de traza'
     }
   },
+  'clean.executed': {
+    key: 'clean.executed',
+    description: 'Se emite cuando se ejecuta una limpieza (mark_clean) desde Cleaning Engine',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_id: 'ID legacy del alumno (legacy_alumno_id)',
+      item_ref: 'Referencia del ítem',
+      domain: 'Tipo de dominio (transmutation, etc.)',
+      product_key: 'Clave del producto (pde, etc.)',
+      clean_layer: 'Capa de limpieza (shared, pde)',
+      actor_type: 'Tipo de actor (master, student, automation)',
+      trace_id: 'ID de traza'
+    }
+  },
   'student.domain.bulk_cleaned': {
     key: 'student.domain.bulk_cleaned',
     description: 'Se emite cuando se realiza una limpieza masiva en un dominio',

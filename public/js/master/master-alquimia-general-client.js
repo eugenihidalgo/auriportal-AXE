@@ -1386,7 +1386,9 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
-      showToastSuccess(`✓ ${student.display_name || student.student_name || student.email} limpiado`);
+      // CONTRATO: Backend SIEMPRE entrega display_name en result.student.display_name
+      const displayName = result.data?.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
+      showToastSuccess(`✓ ${displayName} limpiado`);
       
       // Refresh determinista: recargar flotante con mismo clean_layer
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
