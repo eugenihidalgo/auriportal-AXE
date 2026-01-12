@@ -1020,58 +1020,76 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       };
 
       // CAMBIADO: Llamar directamente al Cleaning Engine con UUID
-      const { markCleanStudent: cleaningMarkClean } = await import('../core/master/services/cleaning-engine-service.js');
-      const state = await cleaningMarkClean(options);
-      if (!state) {
-        // Puede ser null si está pausado (no es error, pero Master no debería estar bloqueado por nivel)
-        return jsonSuccess({ 
-          state: null, 
-          message: 'Alumno en pausa' 
-        }, traceId);
-      }
-
-      // CONTRATO: Backend SIEMPRE entrega display_name y student_uuid
-      // Calcular display_name del estudiante para el toast
-      let displayName = null;
       try {
-        const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
-        const { query } = await import('../../database/pg.js');
-        // Obtener datos del estudiante desde students (UUID canónico)
-        const studentResult = await query(
-          `SELECT s.id as student_uuid, s.legacy_alumno_id, a.apodo, a.nombre_completo, a.email
-           FROM students s
-           LEFT JOIN alumnos a ON a.id = s.legacy_alumno_id
-           WHERE s.id = $1 AND s.deleted_at IS NULL
-           LIMIT 1`,
-          [studentUuid]
-        );
-        if (studentResult.rows[0]) {
-          const row = studentResult.rows[0];
-          displayName = (await calculateStudentDisplayNames([{
-            student_uuid: row.student_uuid,
-            apodo: row.apodo,
-            nombre_completo: row.nombre_completo,
-            email: row.email
-          }]))[0]?.display_name || null;
+        const { markCleanStudent: cleaningMarkClean } = await import('../core/master/services/cleaning-engine-service.js');
+        const state = await cleaningMarkClean(options);
+        if (!state) {
+          // Puede ser null si está pausado (no es error, pero Master no debería estar bloqueado por nivel)
+          return jsonSuccess({ 
+            state: null, 
+            message: 'Alumno en pausa' 
+          }, traceId);
         }
-      }
-      catch (nameError) {
-        logWarn('MasterApiAlquimiaGeneral', 'Error calculando display_name (fail-open)', {
-          traceId,
-          student_uuid: studentUuid,
-          error: nameError.message
-        });
-      }
 
-      return jsonSuccess({ 
-        state,
-        applied_layer: cleanLayer, // Forensics: indicar capa aplicada
-        item_kind: body.item_kind,
-        student: {
-          student_uuid: studentUuid, // CAMBIADO: retornar UUID canónico
-          display_name: displayName
+        // CONTRATO: Backend SIEMPRE entrega display_name y student_uuid
+        // Calcular display_name del estudiante para el toast
+        let displayName = null;
+        try {
+          const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
+          const { query } = await import('../../database/pg.js');
+          // Obtener datos del estudiante desde students (UUID canónico)
+          const studentResult = await query(
+            `SELECT s.id as student_uuid, s.legacy_alumno_id, a.apodo, a.nombre_completo, a.email
+             FROM students s
+             LEFT JOIN alumnos a ON a.id = s.legacy_alumno_id
+             WHERE s.id = $1 AND s.deleted_at IS NULL
+             LIMIT 1`,
+            [studentUuid]
+          );
+          if (studentResult.rows[0]) {
+            const row = studentResult.rows[0];
+            displayName = (await calculateStudentDisplayNames([{
+              student_uuid: row.student_uuid,
+              apodo: row.apodo,
+              nombre_completo: row.nombre_completo,
+              email: row.email
+            }]))[0]?.display_name || null;
+          }
         }
-      }, traceId);
+        catch (nameError) {
+          logWarn('MasterApiAlquimiaGeneral', 'Error calculando display_name (fail-open)', {
+            traceId,
+            student_uuid: studentUuid,
+            error: nameError.message
+          });
+        }
+
+        return jsonSuccess({ 
+          state,
+          applied_layer: cleanLayer, // Forensics: indicar capa aplicada
+          item_kind: body.item_kind,
+          student: {
+            student_uuid: studentUuid, // CAMBIADO: retornar UUID canónico
+            display_name: displayName
+          }
+        }, traceId);
+      } catch (engineError) {
+        // Capturar errores del cleaning engine y devolverlos como JSON estable
+        logError('MasterApiAlquimiaGeneral', 'Error en cleaning engine', {
+          traceId,
+          error: engineError.message,
+          stack: engineError.stack,
+          clean_layer: cleanLayer,
+          item_ref: itemRef,
+          student_uuid: studentUuid
+        });
+        return jsonError(
+          engineError.message || 'Error ejecutando limpieza',
+          engineError.code || 'CLEANING_ENGINE_ERROR',
+          400,
+          traceId
+        );
+      }
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (recurrente)

@@ -1483,15 +1483,24 @@
     remainingDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     
     if (layerView === 'combo' && itemKind === 'una_vez') {
-      // COMBO UNA_VEZ: usar proyección COMBO del backend
-      const comboRemaining = student.combo?.remaining ?? 0;
+      // COMBO UNA_VEZ: mostrar faltan/excedente según combo_count vs required_count
+      const comboCleanCount = student.combo?.clean_count ?? 0;
+      const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
       const sharedRemaining = student.shared?.remaining ?? 0;
       const pdeRemaining = student.pde?.remaining ?? 0;
       
-      if (comboRemaining > 0) {
-        remainingDiv.textContent = `Restan: ${comboRemaining} (S:${sharedRemaining} P:${pdeRemaining})`;
+      if (comboCleanCount < requiredCount) {
+        // Antes de completar: mostrar faltan
+        const faltan = requiredCount - comboCleanCount;
+        remainingDiv.textContent = `Faltan: ${faltan} (S:${sharedRemaining} P:${pdeRemaining})`;
       } else {
-        remainingDiv.textContent = `Completado (S:${sharedRemaining} P:${pdeRemaining})`;
+        // Completado o potenciado: mostrar excedente
+        const excedente = comboCleanCount - requiredCount;
+        if (excedente > 0) {
+          remainingDiv.textContent = `De más: ${excedente} (S:${sharedRemaining} P:${pdeRemaining})`;
+        } else {
+          remainingDiv.textContent = `Completado (S:${sharedRemaining} P:${pdeRemaining})`;
+        }
       }
     } else if (layerView === 'combo' && itemKind === 'recurrente') {
       // COMBO RECURRENTE: mostrar ambos remaining desde backend
@@ -1508,11 +1517,24 @@
           : (student.shared?.days_since_last_clean);
         remainingDiv.textContent = days !== null ? `${days}d` : 'Nunca';
       } else {
-        // UNA_VEZ: usar remaining de la capa seleccionada
-        const remaining = layerView === 'pde'
-          ? (student.pde?.remaining ?? null)
-          : (student.shared?.remaining ?? null);
-        remainingDiv.textContent = remaining !== null ? remaining.toString() : 'N/A';
+        // UNA_VEZ: mostrar faltan/excedente según clean_count vs required_count
+        const layerData = layerView === 'pde' ? student.pde : student.shared;
+        const cleanCount = layerData?.clean_count ?? 0;
+        const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
+        
+        if (cleanCount < requiredCount) {
+          // Antes de completar: mostrar faltan
+          const faltan = requiredCount - cleanCount;
+          remainingDiv.textContent = `Faltan: ${faltan}`;
+        } else {
+          // Completado o potenciado: mostrar excedente
+          const excedente = cleanCount - requiredCount;
+          if (excedente > 0) {
+            remainingDiv.textContent = `De más: ${excedente}`;
+          } else {
+            remainingDiv.textContent = 'Completado';
+          }
+        }
       }
     }
     row.appendChild(remainingDiv);
@@ -1716,14 +1738,15 @@
       };
       
       // Log forense: verificar que clean_layer es correcto
-      console.log('[MasterAlquimiaGeneral] [FORENSIC] Payload limpieza', {
-        student_uuid: student.student_uuid,
-        item_ref: item.item_ref,
+      console.log('[AG][ACTION]', {
+        actionType: 'mark-clean-student',
         item_kind: itemKind,
         clean_layer: cleanLayer,
-        layerView: state.modal.layerView
+        student_uuid: student.student_uuid,
+        item_ref: item.item_ref,
+        layerView: state.modal.layerView,
+        viewMode: 'flotante'
       });
-      
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
         method: 'POST',
@@ -1733,10 +1756,30 @@
         body: JSON.stringify(payload)
       });
 
+      // Verificar respuesta HTTP
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[AG][ACTION] HTTP Error', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        showToastError(`ERROR HTTP ${response.status}: ${response.statusText}. Trace en consola.`);
+        return;
+      }
+
       const result = await response.json();
       
       if (!result.ok) {
-        throw new Error(result.error || 'Error limpiando estudiante');
+        const errorMsg = result.error || 'Error limpiando estudiante';
+        const traceId = result.trace_id || 'N/A';
+        console.error('[AG][ACTION] Backend Error', {
+          error: errorMsg,
+          trace_id: traceId,
+          result
+        });
+        showToastError(`ERROR: ${errorMsg} (trace_id=${traceId})`);
+        return;
       }
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
