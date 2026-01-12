@@ -660,7 +660,22 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Si hay fallback legacy (incrementAllStudents), debe tener warning fuerte + TODO deprecación
       REFERENCIAS:
       - docs/CONTRATO_LIMPIEZA_V1.md
+      - docs/ALQUIMIA_CANONICA_V1.md
       - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
+  - id: alquimia-canonical-documentation
+    title: Documentación canónica de Alquimia obligatoria
+    content: >
+      ALQUIMIA_CANONICA_V1.md es la referencia definitiva para el sistema de Alquimia.
+      OBLIGATORIO:
+      - Consultar ALQUIMIA_CANONICA_V1.md antes de modificar Alquimia
+      - Actualizar ALQUIMIA_CANONICA_V1.md al cambiar comportamiento canónico
+      - Seguir exactamente las reglas documentadas (no inventar nuevas)
+      PROHIBIDO:
+      - Modificar Alquimia sin actualizar documentación canónica
+      - Contradecir reglas documentadas en ALQUIMIA_CANONICA_V1.md
+      REFERENCIAS:
+      - docs/ALQUIMIA_CANONICA_V1.md (documentación canónica completa)
 
 # =========================================
 # CONSTITUCIÓN BACKUPS POSTGRESQL v1
