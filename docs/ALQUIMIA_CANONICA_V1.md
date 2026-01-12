@@ -631,13 +631,76 @@ showToastSuccess(`✓ ${displayName} limpiado`);
 
 ---
 
+## 13) ELIMINACIÓN TOTAL DEL LEGACY DE ALUMNOS
+
+### 13.1 Estado Final: UUID-Only
+
+**A partir de v5.70.0, Alquimia funciona 100% UUID-only:**
+
+- ✅ **NO existe `legacy_alumno_id` en runtime de Alquimia**
+- ✅ **NO se escribe ni se lee `student_item_state`**
+- ✅ **NO se hacen JOINs con `alumnos` en el motor**
+- ✅ **Cleaning Engine NO resuelve legacy IDs**
+
+### 13.2 Tablas Legacy (Históricas)
+
+**`student_item_state`:**
+- ❌ NO se escribe
+- ❌ NO se lee
+- ❌ NO se sincroniza
+- ✅ Solo histórica (no usada en runtime)
+
+**`alumnos`:**
+- ❌ NO se hace JOIN en el motor
+- ❌ NO se consulta directamente
+- ✅ Solo histórica (para display_name encapsulado)
+
+### 13.3 Cleaning Engine UUID-Only
+
+**Funciones eliminadas:**
+- ❌ `syncToStudentItemState()` - Eliminada completamente
+- ❌ Resolución de `legacy_alumno_id` - Eliminada del Cleaning Engine
+
+**Funciones actualizadas:**
+- ✅ `markCleanStudent()` - Acepta SOLO `student_uuid` (UUID)
+- ✅ `markCleanAllStudents()` - Obtiene estudiantes desde `students` (UUID)
+- ✅ `setRemainingShared()` - Acepta SOLO `student_uuid` (UUID)
+- ✅ `isStudentPaused()` - Acepta `student_uuid` (UUID)
+- ✅ `getStudentEffectiveLevel()` - Acepta `student_uuid` (UUID) directamente
+
+**Guard constitucional:**
+- ✅ Si algún código intenta usar `legacy_alumno_id` → error explícito
+- ✅ Mensaje: `"LEGACY alumno_id is forbidden in UUID-only Alquimia runtime"`
+
+### 13.4 Repositorios UUID-Only
+
+**Repositorios de cleaning:**
+- ✅ Aceptan `student_uuid` en la interfaz
+- ✅ Resuelven internamente `legacy_alumno_id` para escribir en tablas legacy
+- ✅ NO exponen `legacy_alumno_id` en la interfaz
+
+**Repositorios legacy limpiados:**
+- ✅ `master-student-transmutation-read-repo-pg.js` - Eliminado JOIN con `alumnos` y `student_item_state`
+- ✅ Usa SOLO `students` (UUID) y `cleaning_item_state`
+
+### 13.5 Señales UUID-Only
+
+**Señal `clean.executed`:**
+- ✅ Emite SOLO `student_uuid` (UUID canónico)
+- ❌ Eliminado `student_id` (legacy INTEGER)
+- ❌ Eliminado `alumno_id` (legacy)
+
+---
+
 ## REFERENCIAS
 
 - **Contrato Limpieza v1:** `docs/CONTRATO_LIMPIEZA_V1.md`
 - **Reporte Forense:** `docs/REPORTE_FORENSE_ALQUIMIA_V1_20260112.md`
+- **Documentación UUID-Only:** `docs/ALQUIMIA_UUID_ONLY_V1.md`
 - **Cleaning Engine Service:** `src/core/master/services/cleaning-engine-service.js`
 - **Signal Registry:** `src/core/student/signals/student-signal-registry.js`
 - **Migración Cleaning Engine:** `database/migrations/v5.59.0-cleaning-engine-v1.sql`
+- **Commit v5.70.0:** (pendiente) - "refactor(alquimia): remove legacy alumno_id and student_item_state (UUID-only)"
 
 ---
 

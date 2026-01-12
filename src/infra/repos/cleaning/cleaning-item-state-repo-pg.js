@@ -20,15 +20,43 @@ let defaultInstance = null;
  */
 export class CleaningItemStateRepoPg {
   /**
+   * Helper privado: Resuelve legacy_alumno_id desde student_uuid
+   * UUID-ONLY: Los repositorios resuelven internamente legacy_id para escribir en tablas legacy
+   */
+  async _resolveLegacyId(studentUuid, client = null) {
+    if (!studentUuid) return null;
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(
+      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+      [studentUuid]
+    );
+    return result.rows[0]?.legacy_alumno_id || null;
+  }
+
+  /**
    * Obtiene el estado de limpieza para un item específico de un alumno.
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id
    * 
    * @param {Object} options - Opciones de búsqueda
+   * @param {string} [options.student_uuid] - UUID canónico del estudiante
+   * @param {number} [options.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object|null>} Estado o null si no existe
    */
   async getState(options, client = null) {
-    if (!options || !options.student_id || !options.item_ref) {
+    if (!options || !options.item_ref) {
       return null;
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente
+    let legacyStudentId = options.student_id;
+    if (!legacyStudentId && options.student_uuid) {
+      legacyStudentId = await this._resolveLegacyId(options.student_uuid, client);
+      if (!legacyStudentId) {
+        return null; // No existe legacy_id para este UUID
+      }
+    } else if (!legacyStudentId) {
+      return null; // No se proporcionó ni student_uuid ni student_id
     }
 
     const queryFn = client ? client.query.bind(client) : query;
@@ -40,7 +68,7 @@ export class CleaningItemStateRepoPg {
         AND domain_type = $3
         AND item_ref = $4
     `, [
-      options.student_id,
+      legacyStudentId,
       options.product_key || 'pde',
       options.domain_type,
       options.item_ref
@@ -51,14 +79,28 @@ export class CleaningItemStateRepoPg {
 
   /**
    * Aplica una limpieza recurrente (marca last_cleaned_at e incrementa clean_count).
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id
    * 
    * @param {Object} options - Opciones
+   * @param {string} [options.student_uuid] - UUID canónico del estudiante
+   * @param {number} [options.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object>} Estado actualizado
    */
   async upsertApplyRecurrent(options, client = null) {
-    if (!options || !options.student_id || !options.item_ref || !options.clean_layer || !options.cleaned_at) {
-      throw new Error('student_id, item_ref, clean_layer y cleaned_at son requeridos');
+    if (!options || !options.item_ref || !options.clean_layer || !options.cleaned_at) {
+      throw new Error('student_uuid (o student_id), item_ref, clean_layer y cleaned_at son requeridos');
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente
+    let legacyStudentId = options.student_id;
+    if (!legacyStudentId && options.student_uuid) {
+      legacyStudentId = await this._resolveLegacyId(options.student_uuid, client);
+      if (!legacyStudentId) {
+        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${options.student_uuid}`);
+      }
+    } else if (!legacyStudentId) {
+      throw new Error('student_uuid o student_id es requerido');
     }
 
     const queryFn = client ? client.query.bind(client) : query;
@@ -88,7 +130,7 @@ export class CleaningItemStateRepoPg {
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
-      options.student_id,
+      legacyStudentId,
       productKey,
       domainType,
       options.item_ref,
@@ -96,7 +138,8 @@ export class CleaningItemStateRepoPg {
     ]);
 
     logInfo('CleaningItemStateRepo', 'Limpieza recurrente aplicada', {
-      student_id: options.student_id,
+      student_uuid: options.student_uuid,
+      student_id: legacyStudentId,
       item_ref: options.item_ref,
       clean_layer: options.clean_layer
     });
@@ -107,14 +150,28 @@ export class CleaningItemStateRepoPg {
   /**
    * Incrementa completed y decrementa remaining para una_vez en capa SHARED.
    * Respeta clamp: remaining no puede ser negativo.
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id
    * 
    * @param {Object} options - Opciones
+   * @param {string} [options.student_uuid] - UUID canónico del estudiante
+   * @param {number} [options.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object>} Estado actualizado
    */
   async upsertApplyOneTimeIncrementShared(options, client = null) {
-    if (!options || !options.student_id || !options.item_ref) {
-      throw new Error('student_id e item_ref son requeridos');
+    if (!options || !options.item_ref) {
+      throw new Error('student_uuid (o student_id) e item_ref son requeridos');
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente
+    let legacyStudentId = options.student_id;
+    if (!legacyStudentId && options.student_uuid) {
+      legacyStudentId = await this._resolveLegacyId(options.student_uuid, client);
+      if (!legacyStudentId) {
+        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${options.student_uuid}`);
+      }
+    } else if (!legacyStudentId) {
+      throw new Error('student_uuid o student_id es requerido');
     }
 
     const queryFn = client ? client.query.bind(client) : query;
@@ -151,7 +208,7 @@ export class CleaningItemStateRepoPg {
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
-      options.student_id,
+      legacyStudentId,
       productKey,
       domainType,
       options.item_ref,
@@ -159,7 +216,8 @@ export class CleaningItemStateRepoPg {
     ]);
 
     logInfo('CleaningItemStateRepo', 'Incremento una_vez SHARED aplicado', {
-      student_id: options.student_id,
+      student_uuid: options.student_uuid,
+      student_id: legacyStudentId,
       item_ref: options.item_ref,
       remaining: result.rows[0]?.shared_remaining,
       completed: result.rows[0]?.shared_completed
@@ -170,14 +228,28 @@ export class CleaningItemStateRepoPg {
 
   /**
    * Establece remaining directamente para una_vez en capa SHARED.
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id
    * 
    * @param {Object} options - Opciones
+   * @param {string} [options.student_uuid] - UUID canónico del estudiante
+   * @param {number} [options.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object>} Estado actualizado
    */
   async upsertApplyOneTimeSetRemainingShared(options, client = null) {
-    if (!options || !options.student_id || !options.item_ref || options.remaining === undefined) {
-      throw new Error('student_id, item_ref y remaining son requeridos');
+    if (!options || !options.item_ref || options.remaining === undefined) {
+      throw new Error('student_uuid (o student_id), item_ref y remaining son requeridos');
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente
+    let legacyStudentId = options.student_id;
+    if (!legacyStudentId && options.student_uuid) {
+      legacyStudentId = await this._resolveLegacyId(options.student_uuid, client);
+      if (!legacyStudentId) {
+        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${options.student_uuid}`);
+      }
+    } else if (!legacyStudentId) {
+      throw new Error('student_uuid o student_id es requerido');
     }
 
     const queryFn = client ? client.query.bind(client) : query;
@@ -202,7 +274,7 @@ export class CleaningItemStateRepoPg {
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
-      options.student_id,
+      legacyStudentId,
       productKey,
       domainType,
       options.item_ref,
@@ -210,7 +282,8 @@ export class CleaningItemStateRepoPg {
     ]);
 
     logInfo('CleaningItemStateRepo', 'Remaining establecido SHARED', {
-      student_id: options.student_id,
+      student_uuid: options.student_uuid,
+      student_id: legacyStudentId,
       item_ref: options.item_ref,
       remaining: result.rows[0]?.shared_remaining
     });

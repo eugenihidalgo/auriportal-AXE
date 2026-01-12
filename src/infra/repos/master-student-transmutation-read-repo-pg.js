@@ -160,48 +160,27 @@ export class MasterStudentTransmutationReadRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     const domainType = 'transmutation';
 
-    // Obtener TODOS los estudiantes, con su estado desde cleaning_item_state
-    // LEFT JOIN para incluir estudiantes sin estado aún
-    // Filtrar estudiantes en pausa (usando tabla pausas)
-    // WARNING: Acceso directo a tabla alumnos (legacy) - debe migrarse a students
-    // Fail-open: logging opcional, no bloquea ejecución
-    try {
-      const { logWarn } = await import('../../../core/observability/logger.js');
-      const { getRequestId } = await import('../../../core/observability/request-context.js');
-      const traceId = getRequestId();
-      logWarn('MasterStudentTransmutationReadRepo', 'Acceso directo a tabla alumnos (legacy)', {
-        traceId,
-        method: 'getStudentsForItemFromCleaningEngine',
-        note: 'Debe migrarse a students table con student_uuid'
-      });
-    } catch (loggerError) {
-      // Fail-open: si el logger falla, continuar sin logging
-      console.warn('[LEGACY][STUDENT][WARN] Acceso directo a tabla alumnos (legacy) - getStudentsForItemFromCleaningEngine');
-    }
-    
-    // CAMBIADO: JOIN con students para obtener student_uuid (canónico)
+    // UUID-ONLY: Obtener estudiantes desde students (UUID canónico)
+    // JOIN con cleaning_item_state usando legacy_alumno_id resuelto internamente
+    // NO hacer JOIN con alumnos directamente
     let sql = `
       SELECT 
         s.id as student_uuid,
-        a.id as legacy_student_id,
-        COALESCE(a.nombre_completo, a.apodo, a.email) as student_name,
-        a.email as student_email,
-        a.apodo,
-        a.nombre_completo,
+        s.legacy_alumno_id as legacy_student_id,
         c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
         c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'} as clean_count,
         c.shared_remaining,
         c.shared_completed,
         c.pde_completed
-      FROM alumnos a
-      INNER JOIN students s ON s.legacy_alumno_id = a.id AND s.deleted_at IS NULL
-      LEFT JOIN cleaning_item_state c ON c.student_id = a.id
+      FROM students s
+      LEFT JOIN cleaning_item_state c ON c.student_id = s.legacy_alumno_id
         AND c.product_key = $1
         AND c.domain_type = $2
         AND c.item_ref = $3
-      LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
-      WHERE p.id IS NULL  -- Excluir alumnos en pausa
-      ORDER BY a.nombre_completo ASC, a.email ASC
+      LEFT JOIN pausas p ON p.alumno_id = s.legacy_alumno_id AND p.fin IS NULL
+      WHERE s.deleted_at IS NULL
+        AND p.id IS NULL  -- Excluir estudiantes en pausa
+      ORDER BY s.id ASC
     `;
 
     const params = [productKey, domainType, itemRef];
@@ -218,18 +197,45 @@ export class MasterStudentTransmutationReadRepoPg {
       ? { reviewed: 0, pending: 0, important: 0, never: 0 }
       : { incomplete: 0, complete: 0 };
 
+    // UUID-ONLY: Obtener display_name desde alumnos solo si es necesario (para compatibilidad)
+    // En el futuro, esto debería venir de students directamente
     for (const row of result.rows) {
+      // Resolver display_name desde alumnos (solo para compatibilidad, no decisor)
+      let studentName = null;
+      let studentEmail = null;
+      let apodo = null;
+      let nombreCompleto = null;
+      
+      if (row.legacy_student_id) {
+        try {
+          const alumnoResult = await queryFn(
+            'SELECT email, apodo, nombre_completo FROM alumnos WHERE id = $1 LIMIT 1',
+            [row.legacy_student_id]
+          );
+          if (alumnoResult.rows[0]) {
+            const alumno = alumnoResult.rows[0];
+            studentEmail = alumno.email;
+            apodo = alumno.apodo;
+            nombreCompleto = alumno.nombre_completo;
+            studentName = alumno.nombre_completo || alumno.apodo || alumno.email || 'Sin nombre';
+          }
+        } catch (error) {
+          // Fail-open: si no se puede obtener, usar valores por defecto
+          studentName = 'Sin nombre';
+        }
+      }
+      
       if (tipo === 'recurrente') {
         const daysSinceLastClean = row.last_cleaned_at 
           ? Math.floor((new Date().getTime() - new Date(row.last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
           : null;
 
         students.push({
-          student_uuid: row.student_uuid, // CAMBIADO: usar UUID canónico
-          student_name: row.student_name || row.student_email || 'Sin nombre',
-          student_email: row.student_email,
-          apodo: row.apodo,
-          nombre_completo: row.nombre_completo,
+          student_uuid: row.student_uuid, // UUID canónico
+          student_name: studentName || 'Sin nombre',
+          student_email: studentEmail,
+          apodo: apodo,
+          nombre_completo: nombreCompleto,
           days_since_last_clean: daysSinceLastClean,
           last_cleaned_at: row.last_cleaned_at,
           clean_count: row.clean_count || 0
@@ -263,12 +269,13 @@ export class MasterStudentTransmutationReadRepoPg {
       }
     }
 
-    // Obtener total (sin limit/offset, excluyendo pausados)
+    // UUID-ONLY: Obtener total desde students (excluyendo pausados)
     const totalResult = await queryFn(
       `SELECT COUNT(*) as total 
-       FROM alumnos a
-       LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
-       WHERE p.id IS NULL`,
+       FROM students s
+       LEFT JOIN pausas p ON p.alumno_id = s.legacy_alumno_id AND p.fin IS NULL
+       WHERE s.deleted_at IS NULL
+         AND p.id IS NULL`,
       []
     );
     const total = parseInt(totalResult.rows[0]?.total || '0', 10);

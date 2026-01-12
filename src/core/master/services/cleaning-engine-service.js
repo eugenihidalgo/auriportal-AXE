@@ -1,12 +1,11 @@
 // src/core/master/services/cleaning-engine-service.js
-// Cleaning Engine v1 - Single Decider para limpiezas
+// Cleaning Engine v1 - Single Decider para limpiezas (UUID-only)
 //
 // RESPONSABILIDADES:
 // - Validar inputs (item_ref existente, item tipo, required_count para una_vez, etc.)
 // - Resolver alumno paused (y excluir)
 // - Insert event (idempotente)
 // - Aplicar a proyección cleaning_item_state
-// - Si clean_layer='shared', sincronizar a student_item_state (compat)
 // - Emitir señales (fail-open)
 //
 // REGLAS CONSTITUCIONALES:
@@ -15,6 +14,7 @@
 // - UI solo muestra, no decide
 // - Exclusión obligatoria de alumnos en PAUSA
 // - Idempotencia vía execution_key
+// - UUID-only: NO se resuelve legacy_alumno_id, NO se sincroniza student_item_state
 
 import { getDefaultCleaningEventsRepo } from '../../../infra/repos/cleaning/cleaning-events-repo-pg.js';
 import { getDefaultCleaningItemStateRepo } from '../../../infra/repos/cleaning/cleaning-item-state-repo-pg.js';
@@ -28,29 +28,41 @@ import { randomUUID } from 'crypto';
 
 /**
  * Genera execution_key para idempotencia
- * Formato: {action_type}:{item_ref}:{student_id}:{timestamp_day}
+ * Formato: {action_type}:{item_ref}:{student_uuid}:{timestamp_day}
  */
-function generateExecutionKey(actionType, itemRef, studentId, timestamp = new Date()) {
+function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date()) {
   const day = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
-  return `${actionType}:${itemRef}:${studentId}:${day}`;
+  return `${actionType}:${itemRef}:${studentUuid}:${day}`;
 }
 
 /**
  * Verifica si un alumno está en pausa
  * 
- * @param {number} studentId - ID del alumno (legacy alumnos.id)
+ * @param {string} studentUuid - UUID canónico del estudiante
  * @returns {Promise<boolean>} true si está en pausa
  */
-async function isStudentPaused(studentId) {
-  if (!studentId) return false;
+async function isStudentPaused(studentUuid) {
+  if (!studentUuid) return false;
   
   try {
+    // Resolver legacy_id internamente en el repositorio (tabla pausas usa alumno_id)
+    const { query } = await import('../../../../database/pg.js');
+    const studentResult = await query(
+      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+      [studentUuid]
+    );
+    
+    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
+      return false; // Si no hay legacy_id, asumir no pausado
+    }
+    
+    const legacyAlumnoId = studentResult.rows[0].legacy_alumno_id;
     const pausaRepo = getDefaultPausaRepo();
-    const pausaActiva = await pausaRepo.getPausaActiva(studentId);
+    const pausaActiva = await pausaRepo.getPausaActiva(legacyAlumnoId);
     return !!pausaActiva;
   } catch (error) {
     logWarn('CleaningEngine', 'Error verificando pausa (fail-open: no pausado)', {
-      student_id: studentId,
+      student_uuid: studentUuid,
       error: error.message
     });
     // Fail-open: si no se puede verificar, asumir no pausado
@@ -61,32 +73,15 @@ async function isStudentPaused(studentId) {
 /**
  * Obtiene nivel efectivo del alumno desde Level Engine
  * 
- * @param {number} studentId - ID del alumno (legacy alumnos.id)
+ * @param {string} studentUuid - UUID canónico del estudiante
  * @param {string} lineKey - Clave de línea (default: 'pde')
  * @returns {Promise<number>} Nivel efectivo (default: 1 si no existe)
  */
-export async function getStudentEffectiveLevel(studentId, lineKey = 'pde') {
-  if (!studentId) return 1;
+export async function getStudentEffectiveLevel(studentUuid, lineKey = 'pde') {
+  if (!studentUuid) return 1;
   
   try {
-    // Obtener UUID del alumno desde tabla students (si existe link)
-    const { query } = await import('../../../../database/pg.js');
-    const studentResult = await query(
-      'SELECT id FROM students WHERE legacy_alumno_id = $1 LIMIT 1',
-      [studentId]
-    );
-    
-    if (!studentResult.rows[0]) {
-      // Si no hay link a students, usar nivel 1 por defecto
-      logWarn('CleaningEngine', 'Student UUID no encontrado, usando nivel 1', {
-        legacy_student_id: studentId
-      });
-      return 1;
-    }
-    
-    const studentUuid = studentResult.rows[0].id;
-    
-    // Obtener estado desde Level Engine
+    // Obtener estado desde Level Engine directamente con UUID
     const levelStateRepo = getDefaultStudentLevelStateRepo();
     const state = await levelStateRepo.getByStudentAndLine(studentUuid, lineKey);
     
@@ -97,7 +92,7 @@ export async function getStudentEffectiveLevel(studentId, lineKey = 'pde') {
     return state.current_level_number;
   } catch (error) {
     logWarn('CleaningEngine', 'Error obteniendo nivel efectivo (fail-open: nivel 1)', {
-      student_id: studentId,
+      student_uuid: studentUuid,
       error: error.message
     });
     // Fail-open: si no se puede obtener, usar nivel 1
@@ -105,58 +100,12 @@ export async function getStudentEffectiveLevel(studentId, lineKey = 'pde') {
   }
 }
 
-/**
- * Sincroniza estado SHARED a student_item_state (compatibilidad)
- * 
- * @param {Object} options - Opciones
- * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
- */
-async function syncToStudentItemState(options, client = null) {
-  if (options.clean_layer !== 'shared') {
-    return; // Solo sincronizar SHARED
-  }
-  
-  try {
-    const studentRepo = getDefaultMasterStudentTransmutationReadRepo();
-    const domainKey = 'transmutaciones_energeticas';
-    
-    if (options.item_kind === 'recurrente') {
-      // Para recurrentes: actualizar last_cleaned_at y clean_count
-      // Nota: student_item_state usa item_id, no item_ref
-      // Necesitamos resolver item_ref -> item_id
-      const catalogRepo = getDefaultAlquimiaCatalogRepo();
-      const item = await catalogRepo.getItemByRef(options.item_ref);
-      
-      if (!item || !item.id) {
-        logWarn('CleaningEngine', 'Item no encontrado para sync (skip)', {
-          item_ref: options.item_ref
-        });
-        return;
-      }
-      
-      // Usar método existente del repo (si existe) o query directa
-      // Por ahora, solo logueamos que debería sincronizarse
-      logInfo('CleaningEngine', 'Sync a student_item_state (recurrente) - pendiente implementación directa', {
-        student_id: options.student_id,
-        item_id: item.id,
-        item_ref: options.item_ref
-      });
-    } else {
-      // Para una_vez: actualizar remaining y completed
-      logInfo('CleaningEngine', 'Sync a student_item_state (una_vez) - pendiente implementación directa', {
-        student_id: options.student_id,
-        item_ref: options.item_ref
-      });
-    }
-  } catch (error) {
-    // Fail-open: no fallar si sync falla
-    logWarn('CleaningEngine', 'Error en sync a student_item_state (fail-open)', {
-      error: error.message,
-      student_id: options.student_id,
-      item_ref: options.item_ref
-    });
-  }
-}
+// ============================================================================
+// UUID-ONLY: syncToStudentItemState() ELIMINADA COMPLETAMENTE
+// ============================================================================
+// REGLA CONSTITUCIONAL: Alquimia es UUID-only, NO se sincroniza student_item_state
+// student_item_state es tabla histórica, no se usa en runtime
+// ============================================================================
 
 /**
  * Marca limpio un alumno específico (recurrente o una_vez)
@@ -190,6 +139,23 @@ export async function markCleanStudent(options, client = null) {
     meta = {}
   } = options;
   
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: UUID-only Alquimia
+  // ============================================================================
+  // PROHIBIDO: usar legacy_alumno_id en runtime de Alquimia
+  if (options.legacy_alumno_id || options.student_id) {
+    const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
+    error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
+    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en runtime UUID-only', {
+      traceId,
+      student_uuid,
+      legacy_alumno_id: options.legacy_alumno_id,
+      student_id: options.student_id
+    });
+    throw error;
+  }
+  // ============================================================================
+
   // Validar campos requeridos según contrato canónico
   if (!student_uuid || !item_ref || !actor_type || !options.item_kind || !options.surface_key) {
     const missing = [];
@@ -200,18 +166,16 @@ export async function markCleanStudent(options, client = null) {
     if (!options.surface_key) missing.push('surface_key');
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
   }
-
-  // Resolver legacy_id internamente (solo para tablas legacy)
-  const identityRepo = getDefaultStudentIdentityRepo();
-  const student_id = await identityRepo.resolveLegacyId(student_uuid, client);
   
-  if (!student_id) {
-    throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(student_uuid)) {
+    throw new Error(`student_uuid debe ser un UUID válido: ${student_uuid}`);
   }
   
   try {
-    // 1. Verificar si alumno está en pausa
-    const isPaused = await isStudentPaused(student_id);
+    // 1. Verificar si alumno está en pausa (UUID-only)
+    const isPaused = await isStudentPaused(student_uuid);
     if (isPaused) {
       logInfo('CleaningEngine', 'Alumno en pausa, excluido', {
         traceId,
@@ -233,7 +197,7 @@ export async function markCleanStudent(options, client = null) {
     // EXCEPCIÓN: Master desde alquimia_general NO valida nivel (puede limpiar cualquier item)
     // EXCEPCIÓN: Master Override en alquimia_alumno (guards estrictos)
     const isMasterFromGeneral = actor_type === 'master' && surface_key === 'master.alquimia_general';
-    const nivelEfectivo = await getStudentEffectiveLevel(student_id);
+    const nivelEfectivo = await getStudentEffectiveLevel(student_uuid);
     let nivelCapAplicar = nivelEfectivo;
     let overrideAplicado = false;
     
@@ -265,7 +229,7 @@ export async function markCleanStudent(options, client = null) {
       if (item.nivel && item.nivel > nivelCapAplicar) {
         logInfo('CleaningEngine', 'Item no aplica por nivel', {
           traceId,
-          student_id,
+          student_uuid,
           item_ref,
           item_nivel: item.nivel,
           nivel_efectivo: nivelEfectivo,
@@ -277,7 +241,7 @@ export async function markCleanStudent(options, client = null) {
     } else {
       logInfo('CleaningEngine', 'Master desde alquimia_general: bypass de validación de nivel', {
         traceId,
-        student_id,
+        student_uuid,
         item_ref,
         item_nivel: item.nivel,
         nivel_efectivo: nivelEfectivo
@@ -299,7 +263,7 @@ export async function markCleanStudent(options, client = null) {
     if (options.item_kind !== lista.tipo) {
       logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo', {
         traceId,
-        student_id,
+        student_uuid,
         item_ref,
         item_kind_provided: options.item_kind,
         lista_tipo: lista.tipo
@@ -309,20 +273,36 @@ export async function markCleanStudent(options, client = null) {
     
     const itemKind = options.item_kind; // Usar siempre el proporcionado (sin fallback)
     
-    // 5. Generar execution_key para idempotencia
-    const executionKey = generateExecutionKey('mark_clean', item_ref, student_id);
+    // Resolver legacy_id SOLO para escribir en tablas legacy (repositorios lo hacen internamente)
+    // Los repositorios de cleaning necesitan legacy_id para escribir en cleaning_events y cleaning_item_state
+    const { query } = await import('../../../../database/pg.js');
+    const queryFn = client ? client.query.bind(client) : query;
+    const studentResult = await queryFn(
+      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+      [student_uuid]
+    );
     
-    // 6. Insertar evento
+    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
+      throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
+    }
+    
+    const legacyStudentId = studentResult.rows[0].legacy_alumno_id; // Solo para escribir en tablas legacy
+    
+    // 5. Generar execution_key para idempotencia (usar UUID para el key)
+    const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid);
+    
+    // 6. Insertar evento (repositorio resuelve legacy_id internamente)
     const eventsRepo = getDefaultCleaningEventsRepo();
     const eventData = {
       trace_id: traceId,
       execution_key: executionKey,
-      student_id,
+      student_uuid, // UUID canónico
+      student_id: legacyStudentId, // Legacy ID solo para escribir en tabla legacy
       product_key,
       domain_type,
       item_ref,
       clean_layer,
-      item_kind: itemKind, // Usar itemKind (definido arriba)
+      item_kind: itemKind,
       action_type: 'mark_clean',
       delta_completed: itemKind === 'una_vez' ? 1 : null,
       set_remaining: null,
@@ -348,27 +328,27 @@ export async function markCleanStudent(options, client = null) {
       logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,
-        student_id,
+        student_uuid,
         item_ref
       });
-      // Devolver estado actual
+      // Devolver estado actual (repositorio resuelve legacy_id internamente)
       const stateRepo = getDefaultCleaningItemStateRepo();
       return await stateRepo.getState({
-        student_id,
+        student_uuid,
         product_key,
         domain_type,
         item_ref
       }, client);
     }
     
-    // 7. Aplicar a proyección cleaning_item_state
+    // 7. Aplicar a proyección cleaning_item_state (repositorio resuelve legacy_id internamente)
     const stateRepo = getDefaultCleaningItemStateRepo();
     let state;
     
     if (itemKind === 'recurrente') {
       // Recurrente: actualizar last_cleaned_at y clean_count
       state = await stateRepo.upsertApplyRecurrent({
-        student_id,
+        student_uuid,
         product_key,
         domain_type,
         item_ref,
@@ -379,7 +359,7 @@ export async function markCleanStudent(options, client = null) {
       // Una vez: incrementar completed y decrementar remaining
       const requiredCount = item.veces_limpiar || 1;
       state = await stateRepo.upsertApplyOneTimeIncrementShared({
-        student_id,
+        student_uuid,
         product_key,
         domain_type,
         item_ref,
@@ -387,24 +367,19 @@ export async function markCleanStudent(options, client = null) {
       }, client);
     }
     
-    // 8. Sincronizar a student_item_state si clean_layer='shared' (compat)
-    if (clean_layer === 'shared') {
-      await syncToStudentItemState({
-        ...options,
-        item_kind: itemKind, // Usar variable local itemKind (camelCase)
-        item_id: item.id
-      }, client);
-    }
+    // ============================================================================
+    // UUID-ONLY: syncToStudentItemState() ELIMINADA
+    // NO se sincroniza student_item_state (tabla histórica)
+    // ============================================================================
     
-    // 9. Emitir señales (fail-open)
+    // 8. Emitir señales (fail-open) - UUID-only
     try {
       const { emitSignal } = await import('../../services/pde-signal-emitter.js');
       
       await emitSignal('clean.executed', {
         signal: 'clean.executed',
         scope: 'student',
-        student_uuid, // CAMBIADO: emitir UUID canónico
-        student_id, // Legacy ID en payload para compatibilidad (si necesario)
+        student_uuid, // UUID canónico (único identificador)
         item_id: item.id,
         item_ref,
         domain: domain_type,
@@ -421,14 +396,14 @@ export async function markCleanStudent(options, client = null) {
       logWarn('CleaningEngine', 'Error emitiendo señales (fail-open)', {
         traceId,
         error: signalError.message,
-        student_id,
+        student_uuid,
         item_ref
       });
     }
     
     logInfo('CleaningEngine', 'Limpieza aplicada correctamente', {
       traceId,
-      student_id,
+      student_uuid,
       item_ref,
       clean_layer,
       item_kind
@@ -441,7 +416,7 @@ export async function markCleanStudent(options, client = null) {
       error: error.message,
       code: error.code,
       stack: error.stack,
-      student_id,
+      student_uuid,
       item_ref
     });
     throw error;
@@ -523,26 +498,33 @@ export async function markCleanAllStudents(options, client = null) {
       });
     }
     
-    // 3. Obtener todos los alumnos (no paused)
+    // 3. Obtener todos los estudiantes desde students (UUID canónico)
+    // UUID-ONLY: NO consultar alumnos directamente
     const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
-    const alumnosResult = await queryFn('SELECT id FROM alumnos', []);
-    const allStudentIds = alumnosResult.rows.map(row => row.id);
+    const studentsResult = await queryFn(`
+      SELECT id as student_uuid, legacy_alumno_id
+      FROM students
+      WHERE deleted_at IS NULL
+    `, []);
     
-    // 4. Filtrar alumnos no pausados
-    const activeStudentIds = [];
-    for (const studentId of allStudentIds) {
-      const isPaused = await isStudentPaused(studentId);
+    // 4. Filtrar estudiantes no pausados (UUID-only)
+    const activeStudentUuids = [];
+    for (const row of studentsResult.rows) {
+      const isPaused = await isStudentPaused(row.student_uuid);
       if (!isPaused) {
-        activeStudentIds.push(studentId);
+        activeStudentUuids.push({
+          uuid: row.student_uuid,
+          legacy_id: row.legacy_alumno_id // Solo para referencia, no se usa en runtime
+        });
       }
     }
     
     // 5. Obtener nivel del item para verificación
     const itemNivel = item.nivel || 999;
     
-    // 6. Aplicar limpieza a cada alumno activo con breakdown de razones
+    // 6. Aplicar limpieza a cada estudiante activo con breakdown de razones
     let updated = 0;
     let skipped = 0;
     const skippedBreakdown = {
@@ -555,13 +537,13 @@ export async function markCleanAllStudents(options, client = null) {
       other: 0
     };
     
-    for (const { uuid: studentUuid, legacy_id: studentId } of activeStudentUuids) {
+    for (const { uuid: studentUuid } of activeStudentUuids) {
       try {
         // Verificar si aplica por nivel antes de limpiar
         // REGLA: Filtro por nivel SOLO cuando item_kind === 'recurrente' y skip_level_filter !== true
         // Para UNA_VEZ o cuando skip_level_filter === true, NO filtrar por nivel
         if (!skip_level_filter && itemKind === 'recurrente') {
-          const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key); // getStudentEffectiveLevel usa legacy_id
+          const nivelEfectivo = await getStudentEffectiveLevel(studentUuid, product_key);
           
           if (nivelEfectivo < itemNivel) {
             skipped++;
@@ -571,9 +553,9 @@ export async function markCleanAllStudents(options, client = null) {
         }
         
         const result = await markCleanStudent({
-          student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
+          student_uuid: studentUuid,
           item_ref,
-          item_kind: itemKind, // REQUERIDO según contrato canónico
+          item_kind: itemKind,
           clean_layer,
           product_key,
           domain_type,
@@ -587,12 +569,12 @@ export async function markCleanAllStudents(options, client = null) {
           updated++;
         } else {
           skipped++;
-          skippedBreakdown.no_change++; // Ya estaba limpio o idempotencia
+          skippedBreakdown.no_change++;
         }
       } catch (error) {
         logWarn('CleaningEngine', 'Error en markCleanStudent individual (continuando)', {
           traceId,
-          student_id: studentId,
+          student_uuid: studentUuid,
           item_ref,
           error: error.message
         });
@@ -609,7 +591,7 @@ export async function markCleanAllStudents(options, client = null) {
       item_id: item.id,
       item_nivel: itemNivel,
       skip_level_filter,
-      total: activeStudentIds.length,
+      total: activeStudentUuids.length,
       updated,
       skipped,
       skipped_breakdown: skippedBreakdown
@@ -618,7 +600,7 @@ export async function markCleanAllStudents(options, client = null) {
     return { 
       updated, 
       skipped, 
-      total: activeStudentIds.length,
+      total: activeStudentUuids.length,
       skipped_breakdown: skippedBreakdown
     };
   } catch (error) {
@@ -677,7 +659,7 @@ export async function incrementAllStudents(options, client = null) {
  * Establece remaining directamente para un alumno (una_vez, solo SHARED)
  * 
  * @param {Object} options - Opciones
- * @param {number} options.student_id - ID del alumno
+ * @param {string} options.student_uuid - UUID canónico del estudiante
  * @param {string} options.item_ref - Referencia del item
  * @param {number} options.remaining - Nuevo valor de remaining
  * @param {string} [options.product_key='pde'] - Clave del producto
@@ -692,7 +674,7 @@ export async function incrementAllStudents(options, client = null) {
 export async function setRemainingShared(options, client = null) {
   const traceId = getRequestId();
   const {
-    student_id,
+    student_uuid,
     item_ref,
     remaining,
     product_key = 'pde',
@@ -703,17 +685,39 @@ export async function setRemainingShared(options, client = null) {
     meta = {}
   } = options;
   
-  if (!student_id || !item_ref || remaining === undefined || !actor_type) {
-    throw new Error('student_id, item_ref, remaining y actor_type son requeridos');
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: UUID-only Alquimia
+  // ============================================================================
+  if (options.student_id || options.legacy_alumno_id) {
+    const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
+    error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
+    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en setRemainingShared', {
+      traceId,
+      student_uuid,
+      student_id: options.student_id,
+      legacy_alumno_id: options.legacy_alumno_id
+    });
+    throw error;
+  }
+  // ============================================================================
+  
+  if (!student_uuid || !item_ref || remaining === undefined || !actor_type) {
+    throw new Error('student_uuid, item_ref, remaining y actor_type son requeridos');
+  }
+  
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(student_uuid)) {
+    throw new Error(`student_uuid debe ser un UUID válido: ${student_uuid}`);
   }
   
   try {
-    // 1. Verificar si alumno está en pausa
-    const isPaused = await isStudentPaused(student_id);
+    // 1. Verificar si alumno está en pausa (UUID-only)
+    const isPaused = await isStudentPaused(student_uuid);
     if (isPaused) {
       logInfo('CleaningEngine', 'Alumno en pausa, excluido', {
         traceId,
-        student_id,
+        student_uuid,
         item_ref
       });
       return null;
@@ -733,19 +737,34 @@ export async function setRemainingShared(options, client = null) {
       throw new Error(`setRemainingShared solo aplica a items una_vez`);
     }
     
-    // 4. Generar execution_key para idempotencia
-    const executionKey = generateExecutionKey('set_remaining', item_ref, student_id);
+    // Resolver legacy_id SOLO para escribir en tablas legacy (repositorios lo hacen internamente)
+    const { query } = await import('../../../../database/pg.js');
+    const queryFn = client ? client.query.bind(client) : query;
+    const studentResult = await queryFn(
+      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+      [student_uuid]
+    );
     
-    // 5. Insertar evento
+    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
+      throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
+    }
+    
+    const legacyStudentId = studentResult.rows[0].legacy_alumno_id; // Solo para escribir en tablas legacy
+    
+    // 4. Generar execution_key para idempotencia (usar UUID)
+    const executionKey = generateExecutionKey('set_remaining', item_ref, student_uuid);
+    
+    // 5. Insertar evento (repositorio resuelve legacy_id internamente)
     const eventsRepo = getDefaultCleaningEventsRepo();
     const eventData = {
       trace_id: traceId,
       execution_key: executionKey,
-      student_id,
+      student_uuid,
+      student_id: legacyStudentId, // Legacy ID solo para escribir en tabla legacy
       product_key,
       domain_type,
       item_ref,
-      clean_layer: 'shared', // Solo SHARED para set_remaining
+      clean_layer: 'shared',
       item_kind: 'una_vez',
       action_type: 'set_remaining',
       delta_completed: null,
@@ -766,39 +785,37 @@ export async function setRemainingShared(options, client = null) {
       logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,
-        student_id,
+        student_uuid,
         item_ref
       });
-      // Devolver estado actual
+      // Devolver estado actual (repositorio resuelve legacy_id internamente)
       const stateRepo = getDefaultCleaningItemStateRepo();
       return await stateRepo.getState({
-        student_id,
+        student_uuid,
         product_key,
         domain_type,
         item_ref
       }, client);
     }
     
-    // 6. Aplicar a proyección
+    // 6. Aplicar a proyección (repositorio resuelve legacy_id internamente)
     const stateRepo = getDefaultCleaningItemStateRepo();
     const state = await stateRepo.upsertApplyOneTimeSetRemainingShared({
-      student_id,
+      student_uuid,
       product_key,
       domain_type,
       item_ref,
       remaining
     }, client);
     
-    // 7. Sincronizar a student_item_state (compat)
-    await syncToStudentItemState({
-      ...options,
-      item_kind: 'una_vez',
-      item_id: item.id
-    }, client);
+    // ============================================================================
+    // UUID-ONLY: syncToStudentItemState() ELIMINADA
+    // NO se sincroniza student_item_state (tabla histórica)
+    // ============================================================================
     
     logInfo('CleaningEngine', 'Remaining establecido correctamente', {
       traceId,
-      student_id,
+      student_uuid,
       item_ref,
       remaining
     });
@@ -810,7 +827,7 @@ export async function setRemainingShared(options, client = null) {
       error: error.message,
       code: error.code,
       stack: error.stack,
-      student_id,
+      student_uuid,
       item_ref
     });
     throw error;

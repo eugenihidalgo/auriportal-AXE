@@ -23,19 +23,39 @@ export class CleaningEventsRepoPg {
    * Inserta un evento de limpieza. Respeta idempotencia vía execution_key.
    * Si ya existe un evento con el mismo execution_key y student_id, devuelve "already_applied".
    * 
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id para escribir en tabla legacy.
+   * 
    * @param {Object} event - Datos del evento
+   * @param {string} event.student_uuid - UUID canónico del estudiante
+   * @param {number} [event.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object|string>} Objeto evento creado o "already_applied" si es duplicado
    */
   async insertEvent(event, client = null) {
-    if (!event || !event.execution_key || !event.student_id || !event.item_ref) {
-      throw new Error('execution_key, student_id e item_ref son requeridos');
+    if (!event || !event.execution_key || !event.item_ref) {
+      throw new Error('execution_key e item_ref son requeridos');
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente si no se proporciona
+    let legacyStudentId = event.student_id;
+    if (!legacyStudentId && event.student_uuid) {
+      const queryFn = client ? client.query.bind(client) : query;
+      const studentResult = await queryFn(
+        'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+        [event.student_uuid]
+      );
+      if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
+        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${event.student_uuid}`);
+      }
+      legacyStudentId = studentResult.rows[0].legacy_alumno_id;
+    } else if (!legacyStudentId) {
+      throw new Error('student_uuid o student_id es requerido');
     }
 
     const queryFn = client ? client.query.bind(client) : query;
 
     try {
-      // Intentar insertar
+      // Intentar insertar (tabla legacy usa student_id INTEGER)
       const result = await queryFn(`
         INSERT INTO cleaning_events (
           trace_id, execution_key, student_id, product_key, domain_type, item_ref,
@@ -48,7 +68,7 @@ export class CleaningEventsRepoPg {
       `, [
         event.trace_id || 'unknown',
         event.execution_key,
-        event.student_id,
+        legacyStudentId,
         event.product_key || 'pde',
         event.domain_type,
         event.item_ref,
@@ -66,7 +86,8 @@ export class CleaningEventsRepoPg {
       logInfo('CleaningEventsRepo', 'Evento insertado', {
         event_id: result.rows[0]?.id,
         execution_key: event.execution_key,
-        student_id: event.student_id,
+        student_uuid: event.student_uuid,
+        student_id: legacyStudentId,
         item_ref: event.item_ref
       });
 
@@ -76,7 +97,8 @@ export class CleaningEventsRepoPg {
       if (error.code === '23505' && error.constraint === 'idx_cleaning_events_execution_student') {
         logInfo('CleaningEventsRepo', 'Evento ya aplicado (idempotencia)', {
           execution_key: event.execution_key,
-          student_id: event.student_id
+          student_uuid: event.student_uuid,
+          student_id: legacyStudentId
         });
         return 'already_applied';
       }
@@ -85,7 +107,8 @@ export class CleaningEventsRepoPg {
         error: error.message,
         code: error.code,
         execution_key: event.execution_key,
-        student_id: event.student_id
+        student_uuid: event.student_uuid,
+        student_id: legacyStudentId
       });
       throw error;
     }
