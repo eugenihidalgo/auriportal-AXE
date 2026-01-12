@@ -10,7 +10,7 @@ import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import { validateCleanLayer, validateCleanLayerNotCombo, validateViewLayer } from '../core/master/services/cleaning-layer-constants.js';
 import {
-  listListas, getListaById, createLista, updateListaMeta, archiveLista,
+  listListas, getListaById, createLista, updateListaMeta, archiveLista, deleteLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
   getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
   listItemGroups
@@ -387,17 +387,45 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       return jsonSuccess({ lista: updated }, traceId);
     }
 
-    // DELETE /master/api/alquimia-general/listas/:id (soft delete)
+    // DELETE /master/api/alquimia-general/listas/:id (soft delete canónico)
     if (path.match(/^\/master\/api\/alquimia-general\/listas\/([^\/]+)$/) && method === 'DELETE') {
       const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id');
       const id = params.id;
 
-      const archived = await archiveLista(id);
-      if (!archived) {
-        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      // Validar que id es un número
+      const listaId = parseInt(id, 10);
+      if (isNaN(listaId)) {
+        return jsonError('ID de lista inválido', 'INVALID_LIST_ID', 400, traceId);
       }
 
-      return jsonSuccess({ lista: archived }, traceId);
+      // Verificar que la lista existe y no está ya eliminada
+      const existing = await getListaById(listaId);
+      if (!existing) {
+        return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+      }
+      
+      if (existing.deleted_at) {
+        return jsonError('Lista ya eliminada', 'LISTA_ALREADY_DELETED', 400, traceId);
+      }
+
+      // Soft delete canónico usando deleted_at (vía servicio)
+      const deleted = await deleteLista(listaId);
+      if (!deleted) {
+        return jsonError('Error eliminando lista', 'DELETE_FAILED', 500, traceId);
+      }
+
+      logInfo('MasterApiAlquimiaGeneral', '[CLEAN][LIST][DELETE] Lista eliminada desde endpoint', {
+        traceId,
+        lista_id: listaId,
+        deleted_at: deleted.deleted_at,
+        actor_type: 'master',
+        surface_key: 'master.alquimia_general'
+      });
+
+      return jsonSuccess({ 
+        lista: deleted,
+        deleted_at: deleted.deleted_at
+      }, traceId);
     }
 
     // GET /master/api/alquimia-general/listas/:id/classification

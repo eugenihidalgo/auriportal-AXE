@@ -99,13 +99,21 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
       const conditions = [];
 
       // REGLA CANÓNICA: onlyActive=true por defecto (UI operativa solo ve activos)
+      // Soft delete canónico: filtrar siempre deleted_at IS NULL
       if (onlyActive) {
+        // PRIORIDAD: deleted_at (soft delete canónico) > status (legacy)
+        conditions.push(`deleted_at IS NULL`);
+        
+        // Mantener filtro de status para compatibilidad (si existe columna)
         if (hasStatus) {
           conditions.push(`status = 'active'`);
         } else {
           // Fallback legacy: solo para compatibilidad DB, nunca como criterio visual
           conditions.push(`activo = true`);
         }
+      } else {
+        // Si onlyActive=false, aún filtrar deleted_at (no mostrar eliminadas)
+        conditions.push(`deleted_at IS NULL`);
       }
 
       if (tipo) {
@@ -315,10 +323,79 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
   }
 
   /**
-   * Archiva una lista (soft delete)
+   * Archiva una lista (soft delete legacy - usa status='archived')
+   * @deprecated Usar deleteLista() para soft delete canónico con deleted_at
    */
   async archiveLista(id, client = null) {
     return await this.updateListaMeta(id, { status: 'archived' }, client);
+  }
+
+  /**
+   * Elimina una lista (soft delete canónico usando deleted_at)
+   * 
+   * REGLA CANÓNICA:
+   * - Marca deleted_at = now()
+   * - NO borra datos históricos (eventos, limpiezas, contadores)
+   * - NO borra ítems (se ocultan automáticamente al filtrar deleted_at)
+   * 
+   * @param {number} id - ID de la lista
+   * @param {Object} client - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object|null>} Lista eliminada o null si no existe
+   */
+  async deleteLista(id, client = null) {
+    const traceId = getRequestId();
+    const queryFn = client ? client.query.bind(client) : query;
+    
+    try {
+      // Verificar que la lista existe y no está ya eliminada
+      const existing = await this.getListaById(id, client);
+      if (!existing) {
+        logWarn('AlquimiaCatalogRepo', 'Intento de eliminar lista inexistente', {
+          traceId,
+          lista_id: id
+        });
+        return null;
+      }
+      
+      if (existing.deleted_at) {
+        logWarn('AlquimiaCatalogRepo', 'Intento de eliminar lista ya eliminada', {
+          traceId,
+          lista_id: id,
+          deleted_at: existing.deleted_at
+        });
+        return null;
+      }
+      
+      // Soft delete canónico: marcar deleted_at
+      const result = await queryFn(
+        `UPDATE listas_transmutaciones 
+         SET deleted_at = now()
+         WHERE id = $1 AND deleted_at IS NULL
+         RETURNING *`,
+        [id]
+      );
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+      
+      logInfo('AlquimiaCatalogRepo', '[CLEAN][LIST][DELETE] Lista eliminada (soft delete)', {
+        traceId,
+        lista_id: id,
+        deleted_at: result.rows[0].deleted_at
+      });
+      
+      return result.rows[0];
+    } catch (error) {
+      logError('AlquimiaCatalogRepo', 'Error eliminando lista', {
+        traceId,
+        lista_id: id,
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      throw error;
+    }
   }
 
   /**
@@ -342,22 +419,26 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
       // FIX TDZ: Renombrar variable local para evitar shadowing
       const hasStatus = await hasStatusColumn('items_transmutaciones', queryFn);
 
-      let sql = 'SELECT * FROM items_transmutaciones WHERE lista_id = $1';
+      // REGLA CANÓNICA: Filtrar items de listas eliminadas (soft delete canónico)
+      // JOIN con listas_transmutaciones para filtrar deleted_at
+      let sql = `SELECT i.* FROM items_transmutaciones i
+                 INNER JOIN listas_transmutaciones l ON i.lista_id = l.id
+                 WHERE i.lista_id = $1 AND l.deleted_at IS NULL`;
       const params = [listaId];
 
       // REGLA CANÓNICA: onlyActive=true por defecto (UI operativa solo ve activos)
       if (onlyActive) {
         if (hasStatus) {
-          sql += ` AND status = 'active'`;
+          sql += ` AND i.status = 'active'`;
         } else {
           // Fallback legacy: solo para compatibilidad DB, nunca como criterio visual
-          sql += ` AND activo = true`;
+          sql += ` AND i.activo = true`;
         }
       }
 
       // LEY ABSOLUTA: ORDER BY priority ASC, nivel ASC, created_at ASC
       // priority 1 = máxima prioridad (número más bajo = más importante)
-      sql += ' ORDER BY priority ASC, nivel ASC NULLS LAST, created_at ASC';
+      sql += ' ORDER BY i.priority ASC, i.nivel ASC NULLS LAST, i.created_at ASC';
 
       const result = await queryFn(sql, params);
       
@@ -409,8 +490,11 @@ export class AlquimiaCatalogRepoPg extends AlquimiaCatalogRepo {
     if (!itemRef) return null;
 
     const queryFn = client ? client.query.bind(client) : query;
+    // REGLA CANÓNICA: Filtrar items de listas eliminadas
     const result = await queryFn(
-      'SELECT * FROM items_transmutaciones WHERE item_ref = $1',
+      `SELECT i.* FROM items_transmutaciones i
+       INNER JOIN listas_transmutaciones l ON i.lista_id = l.id
+       WHERE i.item_ref = $1 AND l.deleted_at IS NULL`,
       [itemRef]
     );
 

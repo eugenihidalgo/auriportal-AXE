@@ -3379,6 +3379,71 @@
     tagsContainer.appendChild(tagsInput);
     content.appendChild(tagsContainer);
 
+    // ============================================================================
+    // Botón Eliminar Lista (soft delete canónico)
+    // ============================================================================
+    const deleteSection = document.createElement('div');
+    deleteSection.style.cssText = 'margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #334155;';
+    
+    const deleteButton = document.createElement('button');
+    deleteButton.textContent = '🔴 Eliminar lista';
+    deleteButton.style.cssText = 'width: 100%; padding: 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+    deleteButton.addEventListener('click', async () => {
+      // Confirmación explícita
+      const confirmMessage = 'Esta acción eliminará la lista y todos sus ítems de las vistas.\nNo se borrará el historial.\n\n¿Continuar?';
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+      
+      try {
+        console.log('[UI][LIST][DELETE] Iniciando eliminación de lista', {
+          lista_id: state.listaActiva.id,
+          lista_nombre: state.listaActiva.nombre
+        });
+        
+        const response = await fetch(`/master/api/alquimia-general/listas/${state.listaActiva.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.ok) {
+          throw new Error(result.error || 'Error eliminando lista');
+        }
+        
+        console.log('[UI][LIST][DELETE] Lista eliminada correctamente', {
+          lista_id: state.listaActiva.id,
+          deleted_at: result.deleted_at
+        });
+        
+        showToastSuccess('✓ Lista eliminada correctamente');
+        
+        // Cerrar flotante
+        overlay.remove();
+        
+        // Refetch completo de Alquimia General
+        await loadListas(state.tipoActivo);
+        
+        // Si no hay listas, limpiar estado
+        if (state.listas.length === 0) {
+          state.listaActiva = null;
+          state.items = [];
+          renderListasTabs();
+          renderItems();
+        } else {
+          // Cargar la primera lista disponible
+          await loadLista(state.listas[0].id);
+        }
+      } catch (error) {
+        console.error('[UI][LIST][DELETE] Error eliminando lista:', error);
+        showToastError(`Error: ${error.message}`);
+      }
+    });
+    
+    deleteSection.appendChild(deleteButton);
+    content.appendChild(deleteSection);
+
     modal.appendChild(content);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);

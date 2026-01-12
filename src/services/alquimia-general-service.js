@@ -139,6 +139,52 @@ export async function archiveLista(id) {
 }
 
 /**
+ * Elimina una lista (soft delete canónico usando deleted_at)
+ * 
+ * REGLA CANÓNICA:
+ * - Marca deleted_at = now()
+ * - NO borra datos históricos (eventos, limpiezas, contadores)
+ * - NO borra ítems (se ocultan automáticamente al filtrar deleted_at)
+ * 
+ * @param {number} id - ID de la lista
+ * @returns {Promise<Object|null>} Lista eliminada o null si no existe
+ */
+export async function deleteLista(id) {
+  const traceId = getRequestId();
+  try {
+    logInfo('AlquimiaGeneralService', '[CLEAN][LIST][DELETE] deleteLista iniciado', {
+      traceId,
+      lista_id: id
+    });
+    
+    const repo = getDefaultAlquimiaCatalogRepo();
+    if (!repo) {
+      throw new Error('No se pudo obtener repositorio de catálogo');
+    }
+    
+    const result = await repo.deleteLista(id);
+    
+    logInfo('AlquimiaGeneralService', '[CLEAN][LIST][DELETE] deleteLista completado', {
+      traceId,
+      lista_id: id,
+      deleted: !!result,
+      deleted_at: result?.deleted_at
+    });
+    
+    return result;
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en deleteLista', {
+      traceId,
+      lista_id: id,
+      error: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    throw error;
+  }
+}
+
+/**
  * Lista todos los items de una lista
  * LEY ABSOLUTA: ORDER BY nivel ASC, created_at ASC
  * 
