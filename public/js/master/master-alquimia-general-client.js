@@ -1972,6 +1972,24 @@
       // ============================================================================
       // Obtener view_layer activo (default: 'combo' para UNA_VEZ, 'shared' para RECURRENTE)
       const activeViewLayer = state.modal.layerView || (itemKind === 'una_vez' ? 'combo' : 'shared');
+      
+      // Log forense para RECURRENTE: idempotencia por capa
+      if (itemKind === 'recurrente') {
+        // Obtener days_since_last_clean de la capa correspondiente desde state_by_view_layer
+        const stateData = student.state_by_view_layer?.[cleanLayer] || null;
+        const daysSinceLastClean = stateData?.computed_state?.days_since_last_clean ?? null;
+        
+        console.log('[UI][RECURRENTE][BUTTON] Intento de limpieza', {
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          action_clean_layer: cleanLayer,
+          view_layer: activeViewLayer,
+          days_since_last_clean: daysSinceLastClean,
+          enabled: true, // UI siempre permite intentar (idempotencia en backend)
+          idempotency_by_layer: true
+        });
+      }
+      
       console.log('[AG][ACTION][FORENSIC]', {
         actionType: 'mark-clean-student',
         item_kind: itemKind,

@@ -29,17 +29,39 @@ import { validateCleanLayer, validateCleanLayerNotCombo } from './cleaning-layer
 
 /**
  * Genera execution_key para idempotencia (APPLY) o certificación (CERTIFY)
- * APPLY: Formato: {action_type}:{item_ref}:{student_uuid}:{timestamp_day} (idempotente)
- * CERTIFY: Formato: certify:{item_ref}:{student_uuid}:{timestamp} (no idempotente, siempre ejecuta)
+ * 
+ * REGLA CANÓNICA: Idempotencia por clean_layer en RECURRENTE
+ * - RECURRENTE: {action_type}:{item_ref}:{student_uuid}:{clean_layer}:{timestamp_day}
+ * - UNA_VEZ: {action_type}:{item_ref}:{student_uuid}:{timestamp_day} (sin clean_layer, combo suma)
+ * 
+ * APPLY: Formato idempotente (por día y capa para RECURRENTE)
+ * CERTIFY: Formato no idempotente (timestamp completo)
+ * 
+ * @param {string} actionType - Tipo de acción ('mark_clean', etc.)
+ * @param {string} itemRef - Referencia del item
+ * @param {string} studentUuid - UUID del estudiante
+ * @param {Date} timestamp - Timestamp
+ * @param {string} executionMode - 'APPLY' (idempotente) o 'CERTIFY' (no idempotente)
+ * @param {string} itemKind - 'recurrente' | 'una_vez'
+ * @param {string} cleanLayer - 'shared' | 'pde' (solo para RECURRENTE)
+ * @returns {string} execution_key
  */
-function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date(), executionMode = 'APPLY') {
+function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date(), executionMode = 'APPLY', itemKind = null, cleanLayer = null) {
   if (executionMode === 'CERTIFY') {
     // CERTIFY: usar timestamp completo para garantizar unicidad (no idempotente)
     const timestampStr = timestamp.toISOString().replace(/[:.]/g, '-'); // ISO8601 sin caracteres problemáticos
     return `certify:${itemRef}:${studentUuid}:${timestampStr}`;
   }
-  // APPLY: usar día para idempotencia (comportamiento actual)
+  // APPLY: usar día para idempotencia
   const day = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  // REGLA CANÓNICA: RECURRENTE incluye clean_layer en execution_key
+  // Esto permite que SHARED y PDE sean independientes (pueden limpiarse el mismo día)
+  if (itemKind === 'recurrente' && cleanLayer) {
+    return `${actionType}:${itemRef}:${studentUuid}:${cleanLayer}:${day}`;
+  }
+  
+  // UNA_VEZ: no incluye clean_layer (combo suma shared + pde)
   return `${actionType}:${itemRef}:${studentUuid}:${day}`;
 }
 
@@ -346,16 +368,18 @@ export async function markCleanStudent(options, client = null) {
     }
     
     // 6. Generar execution_key (APPLY: idempotente, CERTIFY: no idempotente)
-    const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid, new Date(), effectiveExecutionMode);
+    // REGLA CANÓNICA: RECURRENTE incluye clean_layer para idempotencia por capa
+    const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid, new Date(), effectiveExecutionMode, itemKind, clean_layer);
     
-    logInfo('CleaningEngine', 'execution_key generado', {
+    logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] execution_key generado', {
       traceId,
       execution_key: executionKey,
       execution_mode: effectiveExecutionMode,
       student_uuid,
       item_ref,
       item_kind: itemKind,
-      clean_layer
+      clean_layer,
+      idempotency_by_layer: itemKind === 'recurrente' ? true : false
     });
     
     // 7. Insertar evento (repositorio resuelve legacy_id internamente)
@@ -403,23 +427,40 @@ export async function markCleanStudent(options, client = null) {
     
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-      logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
+      // Obtener estado actual para verificar days_since_last_clean de la capa
+      const stateRepo = getDefaultCleaningItemStateRepo();
+      const currentState = await stateRepo.getState({
+        student_uuid,
+        product_key,
+        domain_type,
+        item_ref
+      }, client);
+      
+      // Calcular days_since_last_clean de la capa correspondiente
+      let daysSinceLastClean = null;
+      if (itemKind === 'recurrente') {
+        if (clean_layer === 'shared') {
+          daysSinceLastClean = currentState?.shared_days_since_last_clean ?? null;
+        } else if (clean_layer === 'pde') {
+          daysSinceLastClean = currentState?.pde_days_since_last_clean ?? null;
+        }
+      }
+      
+      logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] Evento ya aplicado (idempotencia por capa)', {
         traceId,
         execution_key: executionKey,
         execution_mode: effectiveExecutionMode,
         student_uuid,
         item_ref,
         item_kind: itemKind,
-        clean_layer
+        clean_layer,
+        days_since_last_clean: daysSinceLastClean,
+        allowed: false, // No se permite limpiar la misma capa el mismo día
+        idempotency_by_layer: itemKind === 'recurrente' ? true : false
       });
+      
       // Devolver estado actual (repositorio resuelve legacy_id internamente)
-      const stateRepo = getDefaultCleaningItemStateRepo();
-      return await stateRepo.getState({
-        student_uuid,
-        product_key,
-        domain_type,
-        item_ref
-      }, client);
+      return currentState;
     }
     
     // 7. Aplicar a proyección cleaning_item_state (repositorio resuelve legacy_id internamente)
@@ -724,6 +765,7 @@ export async function markCleanAllStudents(options, client = null) {
         }
         
         // Para recurrentes: verificar si ya está limpio (mismo día) antes de llamar a markCleanStudent
+        // REGLA CANÓNICA: Idempotencia por clean_layer (SHARED y PDE son independientes)
         if (itemKind === 'recurrente') {
           const currentState = await stateRepo.getState({
             student_uuid: studentUuid,
@@ -733,9 +775,18 @@ export async function markCleanAllStudents(options, client = null) {
           }, client);
           
           if (currentState) {
+            // Obtener last_cleaned_at de la capa correspondiente
             const lastCleanedAt = clean_layer === 'shared' 
               ? currentState.shared_last_cleaned_at 
               : currentState.pde_last_cleaned_at;
+            
+            // Calcular days_since_last_clean de la capa correspondiente
+            let daysSinceLastClean = null;
+            if (clean_layer === 'shared') {
+              daysSinceLastClean = currentState.shared_days_since_last_clean ?? null;
+            } else if (clean_layer === 'pde') {
+              daysSinceLastClean = currentState.pde_days_since_last_clean ?? null;
+            }
             
             if (lastCleanedAt) {
               const lastCleanedDate = new Date(lastCleanedAt);
@@ -745,7 +796,16 @@ export async function markCleanAllStudents(options, client = null) {
                                lastCleanedDate.getDate() === today.getDate();
               
               if (isSameDay) {
-                // Ya está limpio hoy (mismo día) - NO es "omitido", es "skipped_already_clean"
+                // Ya está limpio hoy (mismo día) en esta capa - NO es "omitido", es "skipped_already_clean"
+                logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] Ya limpio hoy en esta capa (markCleanAllStudents)', {
+                  traceId,
+                  student_uuid: studentUuid,
+                  item_ref,
+                  clean_layer,
+                  days_since_last_clean: daysSinceLastClean,
+                  allowed: false,
+                  idempotency_by_layer: true
+                });
                 skippedAlreadyClean++;
                 skippedBreakdown.already_clean++;
                 continue; // No llamar a markCleanStudent
