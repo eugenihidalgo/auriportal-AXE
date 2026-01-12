@@ -922,13 +922,22 @@
       // Determinar clean_layer desde el estado del modal o default 'shared'
       const cleanLayer = state.modal?.cleanLayer || 'shared';
       
+      // Obtener item_kind desde la lista activa o del item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
+      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
+        showToastError('Error: tipo de item inválido');
+        return;
+      }
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: cleanLayer
+          clean_layer: cleanLayer,
+          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
 
@@ -1331,7 +1340,8 @@
 
     // Botón ✓ para limpiar individual (excepto REVISADO/COMPLETADO)
     const cleanLayer = normalized.clean_layer || 'shared';
-    const tipo = normalized.tipo || 'recurrente';
+    // Obtener item_kind desde normalized, lista activa o item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+    const tipo = normalized.tipo || state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
     
     if (stateKey !== 'reviewed' && stateKey !== 'completed') {
       const btnClean = document.createElement('button');
@@ -1364,6 +1374,18 @@
       return;
     }
 
+    // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+    // Si tipo no es válido, intentar obtenerlo de la lista activa o del item
+    let itemKind = tipo;
+    if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
+      itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
+    }
+    if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
+      showToastError('Error: tipo de item inválido');
+      return;
+    }
+
     try {
       let response;
       
@@ -1372,7 +1394,7 @@
       const payload = {
         student_uuid: student.student_uuid, // CAMBIADO: usar UUID canónico
         item_ref: item.item_ref,
-        item_kind: tipo, // 'recurrente' | 'una_vez' - REQUERIDO
+        item_kind: itemKind, // 'recurrente' | 'una_vez' - REQUERIDO según CONTRATO LIMPIEZA v1
         domain_type: 'transmutation',
         clean_layer: cleanLayer,
         actor_type: 'master',

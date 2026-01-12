@@ -254,10 +254,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             tags: listaTags || []
           });
           
+          // Usar tags desde SOT
           lista.classification = {
             category_key: listaWithClassification.category_key || null,
             subtype_key: listaWithClassification.subtype_key || null,
-            tags: listaTags // Usar tags desde SOT
+            tags: listaTags
           };
         } else {
           // Si no hay clasificación en DB, devolver objeto vacío
@@ -334,8 +335,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
                 traceId,
                 lista_id: id
               });
-            }
-            catch (tagsError) {
+            } catch (tagsError) {
               logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
                 traceId,
                 lista_id: id,
@@ -359,10 +359,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           const listaTags = await getListaTags(id); // Obtener tags desde SOT
           
           if (listaWithClassification) {
+            // Usar tags desde SOT
             updated.classification = {
               category_key: listaWithClassification.category_key || null,
               subtype_key: listaWithClassification.subtype_key || null,
-              tags: listaTags // Usar tags desde SOT
+              tags: listaTags
             };
           }
         }
@@ -406,10 +407,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // Obtener tags desde SOT
         const listaTags = await getListaTags(id);
 
+        // Usar tags desde SOT
         const classification = {
           category_key: listaWithClassification.category_key || null,
           subtype_key: listaWithClassification.subtype_key || null,
-          tags: listaTags // Usar tags desde SOT
+          tags: listaTags
         };
 
         return jsonSuccess({ classification }, traceId);
@@ -463,10 +465,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         }
 
         // Actualizar category_key y subtype_key (sistema legacy)
+        // Ya se actualizó arriba (tags)
         const updated = await updateListClassification(id, {
           category_key: body.category_key,
           subtype_key: body.subtype_key,
-          tags: undefined // Ya se actualizó arriba
+          tags: undefined
         });
         
         if (!updated) {
@@ -476,10 +479,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // Obtener tags desde SOT
         const listaTags = await getListaTags(id);
 
+        // Usar tags desde SOT
         const classification = {
           category_key: updated.category_key || null,
           subtype_key: updated.subtype_key || null,
-          tags: listaTags // Usar tags desde SOT
+          tags: listaTags
         };
 
         return jsonSuccess({ classification }, traceId);
@@ -822,13 +826,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         
         // Llamar servicio con try/catch para fail-open
         // REGLA MASTER: Flotante Master NUNCA filtra alumnos por nivel (skip_level_filter=true)
+        // Master puede limpiar cualquier item a cualquier alumno
         let result;
         try {
           result = await getStudentsForItem(itemRef, tipo, productKey, { 
             limit, 
             offset, 
             clean_layer: cleanLayer,
-            skip_level_filter: true // Master puede limpiar cualquier item a cualquier alumno
+            skip_level_filter: true
           });
         }
         catch (serviceError) {
@@ -906,7 +911,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       }
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
-      const result = await markCleanAll(itemRef, productKey, cleanLayer);
+      // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
+        return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+      }
+
+      const result = await markCleanAll(itemRef, productKey, cleanLayer, body.item_kind);
       return jsonSuccess(result, traceId);
     }
 

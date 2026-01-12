@@ -334,30 +334,26 @@ export async function updateItem(id, patch) {
         // Recalcular remaining usando Cleaning Engine
         // remaining = max(required_count - completed, 0)
         const { setRemainingShared } = await import('../core/master/services/cleaning-engine-service.js');
-        const { query } = await import('../../database/pg.js');
         
         // UUID-ONLY: Obtener todos los estados de cleaning_item_state para este item_ref (solo SHARED, solo activos)
-        // Resolver student_uuid desde legacy_alumno_id
-        const statesResult = await query(
-          `SELECT s.id as student_uuid, c.shared_completed 
-           FROM cleaning_item_state c
-           INNER JOIN students s ON s.legacy_alumno_id = c.student_id AND s.deleted_at IS NULL
-           LEFT JOIN pausas p ON p.alumno_id = c.student_id AND p.fin IS NULL
-           WHERE c.item_ref = $1 
-             AND c.product_key = 'pde' 
-             AND c.domain_type = 'transmutacion'
-             AND p.id IS NULL`,
-          [itemActual.item_ref]
+        // Usar repositorio master-student-transmutation-read-repo para obtener estudiantes con estados
+        const readRepo = getDefaultMasterStudentTransmutationReadRepo();
+        const studentsResult = await readRepo.getStudentsForItemFromCleaningEngine(
+          itemActual.item_ref,
+          'una_vez',
+          'shared',
+          'pde',
+          { limit: null } // Sin límite para obtener todos
         );
         
         // Actualizar remaining para cada estudiante usando UUID
         let updated = 0;
-        for (const row of statesResult.rows) {
-          const completed = row.shared_completed || 0;
+        for (const student of studentsResult.students) {
+          const completed = student.completed || 0;
           const newRemaining = Math.max(patch.veces_limpiar - completed, 0);
           
           await setRemainingShared({
-            student_uuid: row.student_uuid, // UUID canónico
+            student_uuid: student.student_uuid, // UUID canónico
             item_ref: itemActual.item_ref,
             remaining: newRemaining,
             actor_type: 'automation',
@@ -501,6 +497,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
     const { getStudentEffectiveLevel } = await import('../core/master/services/cleaning-engine-service.js');
     const { getDefaultPausaRepo } = await import('../infra/repos/pausa-repo-pg.js');
+    const { getDefaultStudentIdentityRepo } = await import('../infra/repos/student-identity-repo-pg.js');
 
     // UUID-ONLY: Leer EXCLUSIVAMENTE desde Cleaning Engine
     logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Leyendo desde Cleaning Engine (UUID-only)', {
@@ -537,14 +534,11 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       // Nota: getStudentsForItemFromCleaningEngine ya filtra pausados, pero verificamos por seguridad
       if (clean_layer && student.student_uuid) {
         // Resolver legacy_id solo para verificar pausa (tabla pausas usa alumno_id)
-        const { query } = await import('../database/pg.js');
-        const studentResult = await query(
-          'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-          [student.student_uuid]
-        );
-        if (studentResult.rows[0]?.legacy_alumno_id) {
+        const identityRepo = getDefaultStudentIdentityRepo();
+        const legacyId = await identityRepo.resolveLegacyId(student.student_uuid);
+        if (legacyId) {
           const pausaRepo = getDefaultPausaRepo();
-          const pausaActiva = await pausaRepo.getPausaActiva(studentResult.rows[0].legacy_alumno_id);
+          const pausaActiva = await pausaRepo.getPausaActiva(legacyId);
           if (pausaActiva) {
             continue; // Saltar estudiantes en pausa
           }
@@ -734,10 +728,16 @@ export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde',
  * @param {string} itemRef - item_ref del item
  * @param {string} [productKey='pde'] - Clave del producto
  * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
+ * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez') - OBLIGATORIO según CONTRATO LIMPIEZA v1
  * @returns {Promise<Object>} Objeto con { updated: number, skipped: number, total: number }
  */
-export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'shared') {
+export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'shared', itemKind) {
   if (!itemRef) return { updated: 0, skipped: 0, total: 0 };
+  
+  // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+  if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
   
   const traceId = getRequestId();
   
@@ -747,6 +747,7 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
     
     const result = await cleaningMarkCleanAll({
       item_ref: itemRef,
+      item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
       clean_layer: cleanLayer,
       product_key: productKey,
       domain_type: 'transmutation',
@@ -963,13 +964,11 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     const cleanedDate = new Date();
     const cleanedDateStr = cleanedDate.toISOString().split('T')[0];
     
-    // UUID-ONLY: Obtener lista de estudiantes (query directa para log)
-    const { query } = await import('../../database/pg.js');
-    const studentsResult = await query(
-      'SELECT id as student_uuid FROM students WHERE deleted_at IS NULL', 
-      []
-    );
-    const studentUuids = studentsResult.rows.map(row => row.student_uuid);
+    // UUID-ONLY: Obtener lista de estudiantes usando repositorio
+    const { getDefaultStudentsRepoPg } = await import('../infra/repos/students-repo-pg.js');
+    const studentsRepo = getDefaultStudentsRepoPg();
+    const studentsList = await studentsRepo.list();
+    const studentUuids = studentsList.map(student => student.id);
     
     const logRepo = getDefaultPdeDailyCleanLogRepo();
     // UUID-ONLY: Log usa student_uuid (el repo resuelve internamente si necesita legacy)
