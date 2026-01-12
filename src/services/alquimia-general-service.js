@@ -710,15 +710,6 @@ export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde',
     // El Cleaning Engine ya emite clean.executed (UUID-only)
     // NO se emiten señales duplicadas desde el servicio
     // ============================================================================
-        // No fallar si las señales fallan (fail-open)
-        logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
-          traceId,
-          error: signalError.message,
-          itemRef,
-          student_uuid: studentUuid // CAMBIADO: usar UUID canónico
-        });
-      }
-    }
     
     return result;
   } catch (error) {
@@ -785,11 +776,6 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
     // El Cleaning Engine ya emite clean.executed (UUID-only)
     // NO se emiten señales duplicadas desde el servicio
     // ============================================================================
-          error: signalError.message,
-          itemRef
-        });
-      }
-    }
     
     // Normalizar respuesta para compatibilidad (updated vs updated/skipped/total)
     return {
@@ -1005,26 +991,9 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     const logSkipped = logResult.skipped || 0;
     
     // 3) Emitir señales (fail-open) - el Cleaning Engine ya emite, pero mantenemos señal legacy
-    try {
-      const { emitSignal } = await import('./pde-signal-emitter.js');
-      
-      // UUID-ONLY: Señal legacy eliminada
-      // El Cleaning Engine ya emite clean.executed (UUID-only)
-      // NO se emiten señales duplicadas desde el servicio
-        executed_at: cleanedDate.toISOString(),
-        cleaned_date: cleanedDateStr
-      }, {}, {}, {
-        trace_id: traceId,
-        source: 'alquimia-general-service',
-        action: 'markPdeCleanAll'
-      });
-    } catch (signalError) {
-      logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
-        traceId,
-        error: signalError.message,
-        itemRef
-      });
-    }
+    // UUID-ONLY: Señal legacy eliminada
+    // El Cleaning Engine ya emite clean.executed (UUID-only)
+    // NO se emiten señales duplicadas desde el servicio
     
     logInfo('AlquimiaGeneralService', '[PDE_CLEAN_ALL] markPdeCleanAll completado', {
       traceId,
