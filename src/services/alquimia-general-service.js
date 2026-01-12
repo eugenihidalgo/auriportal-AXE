@@ -11,6 +11,7 @@ import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-r
 import { getDefaultMasterStudentTransmutationReadRepo } from '../infra/repos/master-student-transmutation-read-repo-pg.js';
 import { getDefaultPdeDailyCleanLogRepo } from '../infra/repos/pde-daily-clean-log-repo-pg.js';
 import { getDefaultPdeTransmutationItemGroupsRepo } from '../infra/repos/pde-transmutation-item-groups-repo-pg.js';
+import { validateViewLayer, ALLOWED_VIEW_LAYERS } from '../core/master/services/cleaning-layer-constants.js';
 
 /**
  * Lista listas de transmutaciones según filtros
@@ -443,6 +444,105 @@ export async function archiveItem(id) {
  */
 
 /**
+ * Calcula estado visual según view_layer, item_kind y datos
+ * 
+ * REGLA CANÓNICA:
+ * - RECURRENTE: usa days_since_last_clean de la capa indicada por view_layer
+ * - UNA_VEZ: usa combo (shared + pde) si view_layer='combo', sino usa la capa indicada
+ * 
+ * @param {Object} params - Parámetros
+ * @param {Object} params.shared - Datos shared { clean_count, days_since_last_clean, remaining, completed }
+ * @param {Object} params.pde - Datos pde { clean_count, days_since_last_clean, remaining, completed }
+ * @param {string} params.combo - Datos combo { clean_count, remaining, completed } (calculado)
+ * @param {string} params.item_kind - Tipo de item ('recurrente' | 'una_vez')
+ * @param {string} params.view_layer - Capa de vista ('shared' | 'pde' | 'combo')
+ * @param {Object} params.config - Configuración { threshold_days, critical_multiplier, required_count }
+ * @returns {Object} { state, visual_state, computed_state }
+ */
+export function computeVisualState({ shared, pde, combo, item_kind, view_layer, config }) {
+  const { threshold_days = 7, critical_multiplier = 2.0, required_count = 1 } = config || {};
+  const criticalThreshold = threshold_days * critical_multiplier;
+  
+  if (item_kind === 'recurrente') {
+    // RECURRENTE: usa days_since_last_clean de la capa indicada
+    let daysSince;
+    if (view_layer === 'pde') {
+      daysSince = pde?.days_since_last_clean ?? null;
+    } else {
+      // view_layer === 'shared' (default)
+      daysSince = shared?.days_since_last_clean ?? null;
+    }
+    
+    let state;
+    if (daysSince === null || daysSince === undefined) {
+      state = 'never';
+    } else if (daysSince < threshold_days) {
+      state = 'reviewed';
+    } else if (daysSince < criticalThreshold) {
+      state = 'pending';
+    } else {
+      state = 'important';
+    }
+    
+    return {
+      state,
+      visual_state: state, // RECURRENTE: visual_state = state
+      computed_state: {
+        view_layer,
+        days_since_last_clean: daysSince,
+        threshold_days,
+        critical_threshold: criticalThreshold
+      }
+    };
+  } else {
+    // UNA_VEZ: usa combo si view_layer='combo', sino usa la capa indicada
+    let cleanCount;
+    let remaining;
+    
+    if (view_layer === 'combo') {
+      // COMBO: suma shared + pde
+      cleanCount = combo?.clean_count ?? 0;
+      remaining = combo?.remaining ?? null;
+    } else if (view_layer === 'pde') {
+      cleanCount = pde?.clean_count ?? 0;
+      remaining = pde?.remaining ?? null;
+    } else {
+      // view_layer === 'shared' (default)
+      cleanCount = shared?.clean_count ?? 0;
+      remaining = shared?.remaining ?? null;
+    }
+    
+    let visualState;
+    let state;
+    
+    if (cleanCount === 0) {
+      visualState = 'never';
+      state = 'pending';
+    } else if (cleanCount < required_count) {
+      visualState = 'in_progress';
+      state = 'pending';
+    } else if (cleanCount >= required_count && cleanCount < (required_count * 10)) {
+      visualState = 'completed';
+      state = 'completed';
+    } else {
+      visualState = 'empowered';
+      state = 'completed';
+    }
+    
+    return {
+      state,
+      visual_state: visualState,
+      computed_state: {
+        view_layer,
+        clean_count: cleanCount,
+        remaining,
+        required_count
+      }
+    };
+  }
+}
+
+/**
  * Obtiene estado de alumnos para un item
  * 
  * UUID-ONLY: Lee EXCLUSIVAMENTE desde Cleaning Engine v1 (cleaning_item_state)
@@ -502,17 +602,21 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     throw error;
   }
   
-  // Validar view_layer si está presente
-  if (view_layer && view_layer !== 'shared' && view_layer !== 'pde') {
-    const error = new Error(`view_layer must be 'shared' or 'pde', got: ${view_layer}`);
-    error.code = 'VIEW_LAYER_INVALID';
-    logError('AlquimiaGeneralService', 'view_layer inválido', {
-      traceId,
-      itemRef,
-      tipo,
-      view_layer
-    });
-    throw error;
+  // Validar view_layer si está presente (puede ser shared, pde o combo)
+  if (view_layer) {
+    try {
+      validateViewLayer(view_layer);
+    } catch (validationError) {
+      const error = new Error(`view_layer validation failed: ${validationError.message}`);
+      error.code = 'VIEW_LAYER_INVALID';
+      logError('AlquimiaGeneralService', 'view_layer inválido', {
+        traceId,
+        itemRef,
+        tipo,
+        view_layer
+      });
+      throw error;
+    }
   }
   // ============================================================================
   
@@ -630,47 +734,54 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         // ============================================================================
         // REGLA CANÓNICA: Estado RECURRENTE se calcula según view_layer (NO clean_layer)
         // ============================================================================
-        // DIFERENCIACIÓN:
-        // - clean_layer: decide qué columnas se leen (siempre simétrico, ambos se leen)
-        // - view_layer: decide qué estado se calcula (shared o pde)
-        // PROHIBIDO: usar clean_layer para calcular estado
+        // Usar función canónica computeVisualState
         // ============================================================================
-        const layerForState = view_layer === 'pde' ? 'pde' : 'shared';
-        const layerDataForState = layerForState === 'pde' ? pdeData : sharedData;
-        const daysSince = layerDataForState.days_since_last_clean !== undefined 
-          ? layerDataForState.days_since_last_clean 
-          : (layerForState === 'pde' ? null : (student.days_since_last_clean || null));
-        
-        let state;
-        if (daysSince === null || daysSince === undefined) {
-          // Nunca limpiado → NUNCA (sección colapsable)
-          state = 'never';
-        } else if (daysSince < thresholdDays) {
-          // Última ejecución < threshold_days → REVISADO
-          state = 'reviewed';
-        } else if (daysSince < criticalThreshold) {
-          // threshold_days <= días < threshold_days * critical_multiplier → PENDIENTE
-          state = 'pending';
-        } else {
-          // días >= threshold_days * critical_multiplier → IMPORTANTE REVISAR
-          state = 'important';
-        }
+        const visualStateResult = computeVisualState({
+          shared: sharedData,
+          pde: pdeData,
+          combo: null, // RECURRENTE no usa combo
+          item_kind: 'recurrente',
+          view_layer: view_layer || 'shared',
+          config: {
+            threshold_days: thresholdDays,
+            critical_multiplier: criticalMultiplier
+          }
+        });
 
         // Log forense obligatorio
-        logInfo('AlquimiaGeneralService', '[FORENSIC][RECURRENTE_STATE] Estado calculado', {
+        logInfo('AlquimiaGeneralService', '[CLEAN][STATE] Estado RECURRENTE calculado', {
           traceId,
           student_uuid: student.student_uuid,
           item_ref: itemRef,
           clean_layer, // Para escritura
           view_layer, // Para cálculo de estado
-          layer_for_state: layerForState,
-          days_since_last_clean: daysSince,
-          state_calculated: state,
+          computed_state: visualStateResult.computed_state,
+          state_calculated: visualStateResult.state,
           threshold_days: thresholdDays,
           critical_threshold: criticalThreshold,
           shared_days: sharedData.days_since_last_clean,
           pde_days: pdeData.days_since_last_clean
         });
+
+        // Calcular estados para todas las view_layers posibles (proyección completa)
+        const stateByViewLayer = {
+          shared: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: null,
+            item_kind: 'recurrente',
+            view_layer: 'shared',
+            config: { threshold_days: thresholdDays, critical_multiplier: criticalMultiplier }
+          }),
+          pde: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: null,
+            item_kind: 'recurrente',
+            view_layer: 'pde',
+            config: { threshold_days: thresholdDays, critical_multiplier: criticalMultiplier }
+          })
+        };
 
         return {
           ...student,
@@ -678,11 +789,13 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           shared: sharedData,
           pde: pdeData,
           // Estado calculado según view_layer (autoridad backend)
-          state,
+          state: visualStateResult.state,
+          visual_state: visualStateResult.visual_state,
           threshold_days: thresholdDays,
           critical_multiplier: criticalMultiplier,
+          // Proyección completa: estados para todas las view_layers
+          state_by_view_layer: stateByViewLayer,
           // Forensics: indicar qué capa se usó para calcular estado
-          state_calculated_from: layerForState,
           view_layer_used: view_layer
         };
       });
@@ -738,32 +851,67 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         const comboRemaining = Math.max(0, vecesLimpiar - comboCleanCount);
         const comboCompleted = comboRemaining <= 0 ? 1 : 0;
         
-        // Calcular estado visual basado en COMBO (proyección backend)
-        // REGLA CANÓNICA UNA_VEZ v2:
-        // - never: combo_count == 0
-        // - in_progress (pending): combo_count > 0 && combo_count < required_count
-        // - completed: combo_count >= required_count && combo_count < required_count * 10
-        // - empowered: combo_count >= required_count * 10
-        let visualState;
-        let state;
+        // Datos combo para computeVisualState
+        const comboData = {
+          clean_count: comboCleanCount,
+          remaining: comboRemaining,
+          completed: comboCompleted
+        };
         
-        if (comboCleanCount === 0) {
-          // Nunca trabajado (gris)
-          visualState = 'never';
-          state = 'pending';
-        } else if (comboCleanCount < vecesLimpiar) {
-          // En proceso (amarillo) - tiene contador pero aún no alcanzó required_count
-          visualState = 'in_progress';
-          state = 'pending';
-        } else if (comboCleanCount >= vecesLimpiar && comboCleanCount < (vecesLimpiar * 10)) {
-          // Completado (verde) - alcanzó required_count pero no superó *10
-          visualState = 'completed';
-          state = 'completed';
-        } else {
-          // Potenciado/Empowered (violeta) - superó required_count * 10
-          visualState = 'empowered';
-          state = 'completed';
-        }
+        // Calcular estado visual usando función canónica
+        // view_layer puede ser 'shared', 'pde' o 'combo' (default: 'combo' para UNA_VEZ)
+        const effectiveViewLayer = view_layer || 'combo';
+        const visualStateResult = computeVisualState({
+          shared: sharedData,
+          pde: pdeData,
+          combo: comboData,
+          item_kind: 'una_vez',
+          view_layer: effectiveViewLayer,
+          config: {
+            required_count: vecesLimpiar
+          }
+        });
+        
+        // Log forense obligatorio
+        logInfo('AlquimiaGeneralService', '[CLEAN][STATE] Estado UNA_VEZ calculado', {
+          traceId,
+          student_uuid: student.student_uuid,
+          item_ref: itemRef,
+          clean_layer, // Para escritura
+          view_layer: effectiveViewLayer, // Para cálculo de estado
+          computed_state: visualStateResult.computed_state,
+          state_calculated: visualStateResult.state,
+          visual_state_calculated: visualStateResult.visual_state,
+          required_count: vecesLimpiar
+        });
+        
+        // Calcular estados para todas las view_layers posibles (proyección completa)
+        const stateByViewLayer = {
+          shared: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: comboData,
+            item_kind: 'una_vez',
+            view_layer: 'shared',
+            config: { required_count: vecesLimpiar }
+          }),
+          pde: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: comboData,
+            item_kind: 'una_vez',
+            view_layer: 'pde',
+            config: { required_count: vecesLimpiar }
+          }),
+          combo: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: comboData,
+            item_kind: 'una_vez',
+            view_layer: 'combo',
+            config: { required_count: vecesLimpiar }
+          })
+        };
         
         return {
           ...student,
@@ -771,19 +919,19 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           shared: sharedData,
           pde: pdeData,
           // PROYECCIÓN COMBO (calculada en backend, no persistida)
-          combo: {
-            clean_count: comboCleanCount,
-            remaining: comboRemaining,
-            completed: comboCompleted
-          },
+          combo: comboData,
           // Estado visual calculado por backend (autoridad única)
-          state,
-          visual_state: visualState,
+          state: visualStateResult.state,
+          visual_state: visualStateResult.visual_state,
+          // Proyección completa: estados para todas las view_layers
+          state_by_view_layer: stateByViewLayer,
           // Compatibilidad legacy (usar SHARED como default para campos legacy)
           clean_count: sharedCount,
           remaining: sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null,
           completed: sharedData.completed || 0,
-          veces_limpiar: vecesLimpiar
+          veces_limpiar: vecesLimpiar,
+          // Forensics: indicar qué capa se usó para calcular estado
+          view_layer_used: effectiveViewLayer
         };
       });
       

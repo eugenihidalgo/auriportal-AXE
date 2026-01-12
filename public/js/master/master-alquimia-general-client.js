@@ -1082,14 +1082,23 @@
       }
       showWarning(message);
       
+      // ============================================================================
+      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // ============================================================================
       // Recargar items para refrescar estado
       if (state.listaActiva && state.listaActiva.id) {
         await loadItems(state.listaActiva.id);
       }
       
-      // Refrescar modal si está abierto
+      // Refrescar modal si está abierto con view_layer activo
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        await handleVerItem(state.modal.item, state.modal.cleanLayer, state.modal.layerView);
+        const activeViewLayer = state.modal.layerView || 'shared';
+        console.log('[UI][COLUMN] Refetch post-acción masiva (mark-clean-all)', {
+          item_ref: item.item_ref,
+          action_clean_layer: cleanLayer,
+          active_view_layer: activeViewLayer
+        });
+        await handleVerItem(state.modal.item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
@@ -1287,36 +1296,114 @@
     const tipo = normalized.tipo || normalized.item_kind || 'recurrente';
     const itemKind = normalized.item_kind || tipo;
     const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
-    const layerView = state.modal.layerView || 'shared';
+    // ============================================================================
+    // REGLA CANÓNICA: Cada columna declara explícitamente su view_layer
+    // ============================================================================
+    // Columna SHARED → view_layer='shared'
+    // Columna PDE → view_layer='pde'
+    // Columna COMBO → view_layer='combo' (default para UNA_VEZ)
+    // ============================================================================
+    const activeViewLayer = state.modal.layerView || (itemKind === 'una_vez' ? 'combo' : 'shared'); // view_layer activo (decide qué columna se muestra)
     
-    // UI PASIVA: usar solo estados calculados por backend (autoridad única)
-    // NO calcular estados en frontend, solo agrupar por student.state o student.visual_state
+    console.log('[UI][COLUMN] Renderizando columnas con view_layer', {
+      item_ref: item.item_ref,
+      item_kind: itemKind,
+      view_layer: activeViewLayer,
+      tipo: tipo
+    });
+    
+    // ============================================================================
+    // REGLA CANÓNICA: UI consume EXCLUSIVAMENTE state_by_view_layer[view_layer]
+    // ============================================================================
+    // PROHIBIDO: usar student.state o student.visual_state (campos legacy ambiguos)
+    // OBLIGATORIO: usar student.state_by_view_layer[activeViewLayer]
+    // ============================================================================
     studentsAplicables.forEach(student => {
-      // RECURRENTE: usar student.state calculado por backend
-      // UNA_VEZ: usar student.visual_state calculado por backend (basado en COMBO)
-      const state = itemKind === 'recurrente' 
-        ? (student.state || 'never')  // Backend calcula: never | reviewed | pending | important
-        : (student.visual_state || 'never'); // Backend calcula: never | in_progress | completed | empowered
-      
-      // Mapeo de estados UNA_VEZ a estados de columna
-      let columnState = state;
-      if (itemKind === 'una_vez') {
-        // Mapear visual_state del backend a estados de columna
-        // Backend devuelve: never | in_progress | completed | empowered
-        if (state === 'in_progress') columnState = 'in_progress';
-        else if (state === 'empowered') columnState = 'empowered';
-        else if (state === 'completed') columnState = 'completed';
-        else columnState = 'never';
+      // Obtener estado desde state_by_view_layer[activeViewLayer]
+      // Si no existe state_by_view_layer, fallback a campos legacy (compatibilidad temporal)
+      let stateData = null;
+      if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
+        stateData = student.state_by_view_layer[activeViewLayer];
+      } else {
+        // Fallback temporal para compatibilidad (DEPRECATED)
+        console.warn('[MasterAlquimiaGeneral] [UI][COLUMN] state_by_view_layer no disponible, usando fallback legacy', {
+          student_uuid: student.student_uuid,
+          view_layer: activeViewLayer,
+          has_state_by_view_layer: !!student.state_by_view_layer
+        });
+        // Usar campos legacy como fallback
+        stateData = {
+          state: student.state || 'never',
+          visual_state: student.visual_state || 'never'
+        };
       }
       
+      // Determinar estado de columna según item_kind
+      let columnState;
+      if (itemKind === 'recurrente') {
+        // RECURRENTE: usar state (never | reviewed | pending | important)
+        columnState = stateData.state || 'never';
+      } else {
+        // UNA_VEZ: usar visual_state (never | in_progress | completed | empowered)
+        columnState = stateData.visual_state || 'never';
+      }
+      
+      // ============================================================================
+      // FORÉNSICA UI: Log de movimiento de columna
+      // ============================================================================
+      const stateBefore = student._last_column_state || null;
+      if (stateBefore && stateBefore !== columnState) {
+        console.log('[UI][COLUMN] Movimiento de columna detectado', {
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          view_layer: activeViewLayer,
+          state_before: stateBefore,
+          state_after: columnState,
+          item_kind: itemKind
+        });
+      } else if (stateBefore === null) {
+        // Primera vez que se renderiza este estudiante
+        console.log('[UI][COLUMN] Estudiante renderizado por primera vez', {
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          view_layer: activeViewLayer,
+          initial_state: columnState,
+          item_kind: itemKind
+        });
+      } else if (stateBefore === columnState) {
+        // No hay cambio de columna (puede ser esperado o no)
+        // Log solo si se esperaba un cambio (después de una acción)
+        if (student._action_expected_change) {
+          console.warn('[UI][COLUMN] ⚠️ No hubo cambio de columna tras acción (posible desincronización)', {
+            student_uuid: student.student_uuid,
+            item_ref: item.item_ref,
+            view_layer: activeViewLayer,
+            state: columnState,
+            item_kind: itemKind,
+            expected_change: student._action_expected_change
+          });
+          // Limpiar flag
+          delete student._action_expected_change;
+        }
+      }
+      
+      // Guardar estado actual para siguiente comparación
+      student._last_column_state = columnState;
+      
+      // Agrupar por estado
       if (studentsByState[columnState]) {
         studentsByState[columnState].push(student);
       } else {
         // Fallback seguro
+        console.warn('[MasterAlquimiaGeneral] [UI][COLUMN] Estado desconocido, usando fallback', {
+          columnState,
+          item_kind: itemKind,
+          student_uuid: student.student_uuid
+        });
         if (itemKind === 'recurrente') {
           studentsByState.never.push(student);
         } else {
-          studentsByState.pending.push(student);
+          studentsByState.never.push(student);
         }
       }
     });
@@ -1572,7 +1659,9 @@
       stateDiv.textContent = `S: ${sharedStateText} | P: ${pdeStateText}`;
     } else {
       // SHARED o PDE: usar estado calculado por backend
-      stateDiv.textContent = getStudentStateDisplay(student, itemKind);
+      // Obtener view_layer activo para display
+      const activeViewLayer = state.modal.layerView || 'shared';
+      stateDiv.textContent = getStudentStateDisplay(student, itemKind, activeViewLayer);
     }
     row.appendChild(stateDiv);
 
@@ -1760,12 +1849,36 @@
 
   /**
    * Obtiene texto de display para estado (UI PASIVA: solo formatea, no calcula)
-   * Usa student.state o student.visual_state calculado por backend
+   * REGLA CANÓNICA: Usa EXCLUSIVAMENTE state_by_view_layer[view_layer]
+   * 
+   * @param {Object} student - Estudiante con state_by_view_layer
+   * @param {string} itemKind - 'recurrente' | 'una_vez'
+   * @param {string} viewLayer - 'shared' | 'pde' | 'combo' (view_layer activo)
+   * @returns {string} Texto de display del estado
    */
-  function getStudentStateDisplay(student, itemKind) {
-    // RECURRENTE: usar student.state del backend
+  function getStudentStateDisplay(student, itemKind, viewLayer = null) {
+    // Obtener view_layer activo (del modal o parámetro)
+    const activeViewLayer = viewLayer || state.modal.layerView || 'shared';
+    
+    // Obtener estado desde state_by_view_layer[activeViewLayer]
+    let stateData = null;
+    if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
+      stateData = student.state_by_view_layer[activeViewLayer];
+    } else {
+      // Fallback temporal para compatibilidad (DEPRECATED)
+      console.warn('[MasterAlquimiaGeneral] [UI][STATE_DISPLAY] state_by_view_layer no disponible, usando fallback legacy', {
+        student_uuid: student.student_uuid,
+        view_layer: activeViewLayer
+      });
+      stateData = {
+        state: student.state || 'never',
+        visual_state: student.visual_state || 'never'
+      };
+    }
+    
+    // RECURRENTE: usar state
     if (itemKind === 'recurrente') {
-      const state = student.state || 'never';
+      const state = stateData.state || 'never';
       const stateMap = {
         'never': 'Nunca',
         'reviewed': 'Revisado',
@@ -1774,8 +1887,8 @@
       };
       return stateMap[state] || 'N/A';
     } else {
-      // UNA_VEZ: usar student.visual_state del backend (basado en COMBO)
-      const visualState = student.visual_state || 'never';
+      // UNA_VEZ: usar visual_state
+      const visualState = stateData.visual_state || 'never';
       const visualStateMap = {
         'never': 'Nunca',
         'in_progress': 'En proceso',
@@ -1857,7 +1970,8 @@
       // ============================================================================
       // LOG FORENSE OBLIGATORIO: action.clean_layer, view_layer, state calculado
       // ============================================================================
-      const activeViewLayer = state.modal.layerView || 'shared';
+      // Obtener view_layer activo (default: 'combo' para UNA_VEZ, 'shared' para RECURRENTE)
+      const activeViewLayer = state.modal.layerView || (itemKind === 'una_vez' ? 'combo' : 'shared');
       console.log('[AG][ACTION][FORENSIC]', {
         actionType: 'mark-clean-student',
         item_kind: itemKind,
@@ -1910,26 +2024,54 @@
       showToastSuccess(`✓ ${displayName} limpiado`);
       
       // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando layerView ACTIVA
+      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
       // DIFERENCIACIÓN:
       // - clean_layer: decide qué columnas se escriben (shared_* o pde_*)
-      // - layerView: decide qué estado se calcula y qué columna se muestra
+      // - view_layer: decide qué estado se calcula y qué columna se muestra
       // PROHIBIDO: hardcodear 'shared' o inferir desde el botón pulsado
       // OBLIGATORIO: usar state.modal.layerView (vista activa del usuario)
       // ============================================================================
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        // Refetch usando la layerView ACTIVA (no hardcoded)
-        const activeLayerView = state.modal.layerView || 'shared';
-        console.log('[MasterAlquimiaGeneral] [FORENSIC][REFRESH] Refetch post-acción', {
+        // Refetch usando el view_layer ACTIVO (no hardcoded)
+        const activeViewLayer = state.modal.layerView || 'shared';
+        
+        // Log forense: estado antes del refetch
+        const stateBefore = student._last_column_state || null;
+        
+        console.log('[UI][COLUMN] Refetch post-acción', {
           item_ref: item.item_ref,
           action_clean_layer: cleanLayer,
-          active_layer_view: activeLayerView,
-          student_uuid: student.student_uuid
+          active_view_layer: activeViewLayer,
+          student_uuid: student.student_uuid,
+          state_before: stateBefore
         });
-        await handleVerItem(item, 'shared', activeLayerView); // cleanLayer='shared' (repositorio), viewLayer=activeLayerView (estado)
-        // layerView se mantiene automáticamente en state.modal.layerView
-        // El flotante se re-renderizará con los datos frescos del backend y estado según layerView
+        
+        // Guardar estado antes del refetch para verificación
+        const stateBeforeRefetch = student._last_column_state || null;
+        
+        // Marcar que se espera un cambio de columna (para verificación)
+        student._action_expected_change = {
+          action: 'mark-clean-student',
+          clean_layer: cleanLayer,
+          view_layer: activeViewLayer,
+          state_before: stateBeforeRefetch
+        };
+        
+        // Refetch con view_layer activo
+        await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
+        
+        // Log forense: verificar cambio de columna después del refetch
+        // (se hará en el renderizado de columnas cuando se vuelva a agrupar)
+        console.log('[UI][COLUMN] Refetch completado, esperando re-render de columnas', {
+          item_ref: item.item_ref,
+          view_layer: activeViewLayer,
+          state_before_refetch: stateBeforeRefetch,
+          action_clean_layer: cleanLayer
+        });
+        
+        // Nota: La verificación de cambio de columna se hace en el forEach de agrupación
+        // Si no hay cambio cuando debería haberlo, se logueará allí con warning
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
@@ -2719,14 +2861,22 @@
       }
       showWarning(message);
       
+      // ============================================================================
+      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // ============================================================================
       // Refetch items y flotante si está abierto
       await loadItems(state.listaActiva.id);
       // Si hay flotante abierto, recargarlo y cambiar a vista PDE
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        console.log('[MasterAlquimiaGeneral] Refrescando modal con clean_layer=pde después de PDE clean-all');
-        state.modal.layerView = 'pde'; // Cambiar a vista PDE
+        const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
+        state.modal.layerView = activeViewLayer;
         state.modal.cleanLayer = 'pde';
-        await handleVerItem(item, 'pde', 'pde'); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
+        console.log('[UI][COLUMN] Refetch post-acción masiva (PDE clean-all)', {
+          item_ref: item.item_ref,
+          action_clean_layer: 'pde',
+          active_view_layer: activeViewLayer
+        });
+        await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
@@ -2784,14 +2934,23 @@
       console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', result);
       showToastSuccess(`Item incrementado para ${result.data?.updated || result.updated || 0} alumnos`);
       
+      // ============================================================================
+      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // ============================================================================
       // Refresh determinista: recargar items y flotante si está abierto
       if (state.listaActiva && state.listaActiva.id) {
         await loadItems(state.listaActiva.id);
       }
       
-      // Refrescar flotante si está abierto para este item
+      // Refrescar flotante si está abierto para este item con view_layer activo
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        await handleVerItem(item, state.modal.cleanLayer || 'shared', state.modal.layerView || 'shared');
+        const activeViewLayer = state.modal.layerView || 'combo'; // Default 'combo' para UNA_VEZ
+        console.log('[UI][COLUMN] Refetch post-acción masiva (increment-all)', {
+          item_ref: item.item_ref,
+          action_clean_layer: cleanLayer,
+          active_view_layer: activeViewLayer
+        });
+        await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
@@ -2851,12 +3010,21 @@
       }
       showToastSuccess(message);
       
+      // ============================================================================
+      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // ============================================================================
       // Recargar items y flotante si está abierto
       await loadItems(state.listaActiva.id);
       // Si hay flotante abierto, recargarlo y cambiar a vista PDE
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        state.modal.layerView = 'pde'; // Cambiar a vista PDE
-        await handleVerItem(item, 'pde', 'pde'); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
+        const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
+        state.modal.layerView = activeViewLayer;
+        console.log('[UI][COLUMN] Refetch post-acción masiva (PDE increment-all)', {
+          item_ref: item.item_ref,
+          action_clean_layer: cleanLayer,
+          active_view_layer: activeViewLayer
+        });
+        await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer=activeViewLayer (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);

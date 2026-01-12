@@ -25,6 +25,7 @@ import { getDefaultStudentLevelStateRepo } from '../../../infra/repos/levels/stu
 import { getRequestId } from '../../observability/request-context.js';
 import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { randomUUID } from 'crypto';
+import { validateCleanLayer, validateCleanLayerNotCombo } from './cleaning-layer-constants.js';
 
 /**
  * Genera execution_key para idempotencia (APPLY) o certificación (CERTIFY)
@@ -148,16 +149,16 @@ export async function markCleanStudent(options, client = null) {
     meta = {}
   } = options;
   
-  logInfo('CleaningEngine', 'markCleanStudent entrada', {
-    traceId,
-    student_uuid,
-    item_ref,
-    item_kind,
-    clean_layer,
-    product_key,
-    actor_type,
-    surface_key
-  });
+    logInfo('CleaningEngine', '[CLEAN][WRITE] markCleanStudent entrada', {
+      traceId,
+      student_uuid,
+      item_ref,
+      item_kind,
+      clean_layer,
+      product_key,
+      actor_type,
+      surface_key
+    });
   
   // ============================================================================
   // GUARD CONSTITUCIONAL: UUID-only Alquimia
@@ -187,10 +188,18 @@ export async function markCleanStudent(options, client = null) {
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
   }
   
-  // REGLA CONSTITUCIONAL: clean_layer es OBLIGATORIO y debe ser 'shared' o 'pde'
-  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
-    throw new Error(`clean_layer es requerido y debe ser 'shared' o 'pde'. Valor recibido: ${clean_layer}`);
+  // ============================================================================
+  // REGLA CONSTITUCIONAL: clean_layer es OBLIGATORIO y válido
+  // ============================================================================
+  if (!clean_layer) {
+    throw new Error('clean_layer is required. It determines which columns to write in cleaning_item_state.');
   }
+  
+  // Validar que clean_layer sea válido
+  validateCleanLayer(clean_layer);
+  
+  // Validar que clean_layer NO sea 'combo' (combo es SOLO view_layer)
+  validateCleanLayerNotCombo(clean_layer);
   
   // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
   if (item_kind !== 'recurrente' && item_kind !== 'una_vez') {
@@ -480,21 +489,23 @@ export async function markCleanStudent(options, client = null) {
       }
     }
     
-    logInfo('CleaningEngine', 'Proyección aplicada', {
+    logInfo('CleaningEngine', '[CLEAN][WRITE] Proyección aplicada', {
       traceId,
       student_uuid,
       item_ref,
       clean_layer,
       item_kind: itemKind,
       state_exists: !!state,
-      // SHARED
-      shared_clean_count: state?.shared_clean_count,
-      shared_remaining: state?.shared_remaining,
-      shared_completed: state?.shared_completed,
-      // PDE (simétrico)
-      pde_clean_count: state?.pde_clean_count,
-      pde_remaining: state?.pde_remaining,
-      pde_completed: state?.pde_completed
+      delta: {
+        // SHARED
+        shared_clean_count: state?.shared_clean_count,
+        shared_remaining: state?.shared_remaining,
+        shared_completed: state?.shared_completed,
+        // PDE (simétrico)
+        pde_clean_count: state?.pde_clean_count,
+        pde_remaining: state?.pde_remaining,
+        pde_completed: state?.pde_completed
+      }
     });
     
     // ============================================================================
@@ -531,20 +542,22 @@ export async function markCleanStudent(options, client = null) {
       });
     }
     
-    logInfo('CleaningEngine', 'Limpieza aplicada correctamente', {
+    logInfo('CleaningEngine', '[CLEAN][WRITE] Limpieza aplicada correctamente', {
       traceId,
       student_uuid,
       item_ref,
       clean_layer,
       item_kind,
-      // SHARED
-      shared_clean_count: state?.shared_clean_count,
-      shared_remaining: state?.shared_remaining,
-      shared_completed: state?.shared_completed,
-      // PDE (simétrico)
-      pde_clean_count: state?.pde_clean_count,
-      pde_remaining: state?.pde_remaining,
-      pde_completed: state?.pde_completed
+      delta: {
+        // SHARED
+        shared_clean_count: state?.shared_clean_count,
+        shared_remaining: state?.shared_remaining,
+        shared_completed: state?.shared_completed,
+        // PDE (simétrico)
+        pde_clean_count: state?.pde_clean_count,
+        pde_remaining: state?.pde_remaining,
+        pde_completed: state?.pde_completed
+      }
     });
     
     return state;

@@ -8,6 +8,7 @@
 import { requireAdminContext } from '../core/auth-context.js';
 import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo, logWarn } from '../core/observability/logger.js';
+import { validateCleanLayer, validateCleanLayerNotCombo, validateViewLayer } from '../core/master/services/cleaning-layer-constants.js';
 import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
@@ -770,6 +771,21 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const cleanLayer = url.searchParams.get('clean_layer') || 'shared'; // Default shared (para repositorio)
       const viewLayer = url.searchParams.get('view_layer'); // OBLIGATORIO para RECURRENTE (sin default)
       
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO en GET
+      // ============================================================================
+      if (!viewLayer) {
+        // Para UNA_VEZ, view_layer puede ser opcional (default: 'combo')
+        // Para RECURRENTE, view_layer es OBLIGATORIO
+        // Validaremos en el servicio según tipo
+      } else {
+        try {
+          validateViewLayer(viewLayer);
+        } catch (validationError) {
+          return jsonError(`view_layer validation failed: ${validationError.message}`, 'INVALID_VIEW_LAYER', 400, traceId);
+        }
+      }
+      
       logInfo('MasterApiAlquimiaGeneral', '[GET_STUDENTS] Request recibido', {
         traceId,
         itemRef,
@@ -836,15 +852,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // REGLA CANÓNICA: view_layer es OBLIGATORIO para RECURRENTE
         // ============================================================================
         if (tipo === 'recurrente' && !viewLayer) {
-          warnings.push('view_layer es obligatorio para items RECURRENTE. Usando clean_layer como fallback (DEPRECATED).');
-          logWarn('MasterApiAlquimiaGeneral', 'view_layer faltante para RECURRENTE, usando clean_layer como fallback', {
-            traceId,
-            itemRef,
-            tipo,
-            clean_layer: cleanLayer
-          });
-          // Fallback temporal: usar cleanLayer como viewLayer (DEPRECATED, será error en futuro)
-          // TODO: Eliminar este fallback en versión futura
+          return jsonError('view_layer is required for RECURRENTE items. It determines which layer state to calculate.', 'VIEW_LAYER_REQUIRED', 400, traceId);
         }
         
         // Llamar servicio con try/catch para fail-open
@@ -985,10 +993,19 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const body = await request.json();
       const productKey = url.searchParams.get('product_key') || 'pde';
       
-      // Validar clean_layer (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: clean_layer es OBLIGATORIO en POST
+      // ============================================================================
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer');
-      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
-        return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'INVALID_CLEAN_LAYER', 400, traceId);
+      if (!cleanLayer) {
+        return jsonError('clean_layer is required in POST. It determines which columns to write.', 'CLEAN_LAYER_REQUIRED', 400, traceId);
+      }
+      
+      try {
+        validateCleanLayer(cleanLayer);
+        validateCleanLayerNotCombo(cleanLayer); // combo es SOLO view_layer
+      } catch (validationError) {
+        return jsonError(`clean_layer validation failed: ${validationError.message}`, 'INVALID_CLEAN_LAYER', 400, traceId);
       }
 
       // Validar campos requeridos según contrato canónico (CAMBIADO: ahora acepta student_uuid)
@@ -1174,10 +1191,19 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         body = {};
       }
       
-      // Validar clean_layer (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: clean_layer es OBLIGATORIO en POST
+      // ============================================================================
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer');
-      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
-        return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'INVALID_CLEAN_LAYER', 400, traceId);
+      if (!cleanLayer) {
+        return jsonError('clean_layer is required in POST. It determines which columns to write.', 'CLEAN_LAYER_REQUIRED', 400, traceId);
+      }
+      
+      try {
+        validateCleanLayer(cleanLayer);
+        validateCleanLayerNotCombo(cleanLayer); // combo es SOLO view_layer
+      } catch (validationError) {
+        return jsonError(`clean_layer validation failed: ${validationError.message}`, 'INVALID_CLEAN_LAYER', 400, traceId);
       }
       
       // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
