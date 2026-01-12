@@ -217,13 +217,19 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
-  // RUTAS API STUDENTS (Diagnóstico v1)
+  // RUTAS API STUDENTS (Diagnóstico v1 + Creación Canónica v1)
   // ============================================
   {
     key: 'master-api-students',
     path: '/master/api/students',
     type: 'api',
     method: 'GET'
+  },
+  {
+    key: 'master-api-students-create',
+    path: '/master/api/students',
+    type: 'api',
+    method: 'POST'
   },
   {
     key: 'master-api-students-id',

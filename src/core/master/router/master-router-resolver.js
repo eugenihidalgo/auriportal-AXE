@@ -70,8 +70,9 @@ const MASTER_HANDLER_MAP = {
   'master-api-classifications-id': () => import('../../../endpoints/master-api-classifications.js'),
   'master-api-classifications-id-deprecate': () => import('../../../endpoints/master-api-classifications.js'),
   
-  // Students API Handlers (Diagnóstico v1)
+  // Students API Handlers (Diagnóstico v1 + Creación Canónica v1)
   'master-api-students': () => import('../../../endpoints/master-api-students.js'),
+  'master-api-students-create': () => import('../../../endpoints/master-api-students.js'),
   'master-api-students-id': () => import('../../../endpoints/master-api-students.js'),
   
   // UTE API Handlers (UTE CORE v1)
