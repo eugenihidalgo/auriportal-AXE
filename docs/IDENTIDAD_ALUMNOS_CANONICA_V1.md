@@ -396,13 +396,74 @@ Commit: (pendiente)
 
 ---
 
+## 8) REGLA CANÓNICA: SERVICIOS NO ACCEDEN A DB
+
+### 8.1 Principio Fundamental
+
+**Los servicios del dominio MASTER:**
+- ❌ **NO importan** `database/pg.js`
+- ❌ **NO importan** `database/*`
+- ✅ **SOLO orquestan** lógica de negocio
+- ✅ **Acceso a DB SOLO vía repositorios infra**
+
+### 8.2 Separación de Responsabilidades
+
+**Servicios (`src/core/master/services/`):**
+- Validan input
+- Orquestan lógica de negocio
+- Llaman a repositorios
+- Calculan DTOs finales
+- **NO escriben SQL**
+- **NO conocen PostgreSQL**
+
+**Repositorios (`src/infra/repos/`):**
+- **ÚNICO lugar** donde se importa `database/pg.js`
+- Encapsulan TODAS las queries SQL
+- Manejan transacciones
+- Retornan datos raw o DTOs simples
+
+### 8.3 Caso Documentado: student-creation-service.js
+
+**Problema original:**
+- Error: `ERR_MODULE_NOT_FOUND` - `Cannot find module '/var/www/aurelinportal/core/observability/logger.js'`
+- Servicio importaba directamente `database/pg.js`
+- Violación constitucional de separación de capas
+
+**Solución aplicada:**
+- **Contrato:** `src/core/repos/student-creation-repo.js`
+- **Implementación:** `src/infra/repos/student-creation-repo-pg.js`
+- **Servicio refactorizado:** Usa repositorio, NO acceso directo a DB
+
+**Resultado:**
+- ✅ Servicio sin imports a `database/pg.js`
+- ✅ Lógica SQL encapsulada en repositorio
+- ✅ Separación de responsabilidades respetada
+- ✅ Error eliminado
+
+### 8.4 Regla Obligatoria
+
+**CUALQUIER SERVICIO EN DOMINIO MASTER DEBE:**
+- ✅ Usar repositorios para acceso a DB
+- ✅ NO importar `database/pg.js` directamente
+- ✅ NO escribir SQL en servicios
+- ✅ NO conocer detalles de PostgreSQL
+
+**PROHIBIDO:**
+- ❌ `import { query } from '../../../database/pg.js'` en servicios
+- ❌ SQL hardcodeado en servicios
+- ❌ Acceso directo a tablas desde servicios
+
+---
+
 ## REFERENCIAS
 
 - **Commit v5.68.1:** `5bca549` - "feat(alquimia): migración Alquimia Alumno a student_uuid"
 - **Commit v5.68.2:** `4967588` - "feat(students): endpoint /master/api/students UUID-first"
-- **Commit v5.69.0:** (pendiente) - "feat(students): creación canónica de alumnos UUID-first"
+- **Commit v5.69.0:** `c3a3584` - "feat(students): creación canónica de alumnos UUID-first"
+- **Commit v5.69.2:** (pendiente) - "fix(master): remove direct DB access from student creation service"
 - **Documentación Alquimia:** `docs/ALQUIMIA_CANONICA_V1.md`
 - **Contrato Identidad:** `docs/STUDENT_IDENTITY_CONTRACT_V1.md`
 - **Helper Display Name:** `src/core/helpers/student-display-name-helper.js`
 - **Repositorio Identidad:** `src/infra/repos/student-identity-repo-pg.js`
 - **Servicio Creación:** `src/core/master/services/student-creation-service.js`
+- **Repositorio Creación:** `src/infra/repos/student-creation-repo-pg.js`

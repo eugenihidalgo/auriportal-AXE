@@ -2,17 +2,19 @@
 // Servicio Canónico de Creación de Alumnos (UUID-first)
 //
 // RESPONSABILIDADES:
-// - Crear alumnos en students (UUID) como SOT canónico
-// - Crear en alumnos (legacy) SOLO para display_name/compatibilidad
-// - Mantener legacy_alumno_id en students
+// - Validar input
+// - Orquestar creación vía repositorio
+// - Calcular display_name
+// - Retornar DTO final
 //
 // REGLAS CONSTITUCIONALES:
 // - students.id (UUID) es el ÚNICO Source of Truth
-// - alumnos es legacy (solo para display_name encapsulado)
+// alumnos es legacy (solo para display_name encapsulado)
 // - Email es obligatorio y único
 // - Idempotente por email (si ya existe, retorna existente)
+// - PROHIBIDO: acceso directo a DB (solo vía repositorio)
 
-import { query } from '../../../database/pg.js';
+import { getDefaultStudentCreationRepo } from '../../../infra/repos/student-creation-repo-pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logInfo, logWarn, logError } from '../../observability/logger.js';
 import { calculateStudentDisplayNames } from '../../helpers/student-display-name-helper.js';
@@ -51,138 +53,50 @@ export async function createStudentCanonical(options, client = null) {
     note: 'Se mantiene para compatibilidad de display_name, pero la SOT es students'
   });
   
-  const queryFn = client ? client.query.bind(client) : query;
-  
   try {
-    // Verificar si ya existe (idempotente por email)
-    // Buscar en students por legacy_alumno_id -> alumnos.email
-    const existingStudentResult = await queryFn(`
-      SELECT s.id as student_uuid, s.legacy_alumno_id, a.email, a.apodo, a.nombre_completo
-      FROM students s
-      LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
-      WHERE a.email = $1 AND s.deleted_at IS NULL
-      LIMIT 1
-    `, [normalizedEmail]);
+    // Obtener repositorio
+    const repo = getDefaultStudentCreationRepo();
     
-    if (existingStudentResult.rows.length > 0) {
-      const existing = existingStudentResult.rows[0];
-      logInfo('StudentCreationService', 'Alumno ya existe (idempotencia)', {
-        traceId,
-        student_uuid: existing.student_uuid,
-        email: normalizedEmail
-      });
-      
-      // Calcular display_name para el existente
-      const studentsForDisplay = [{
-        id: existing.student_uuid,
-        apodo: existing.apodo || null,
-        nombre_completo: existing.nombre_completo || null,
-        email: existing.email || null
-      }];
-      const studentsWithDisplay = await calculateStudentDisplayNames(studentsForDisplay);
-      const displayName = studentsWithDisplay[0]?.display_name || existing.email || 'Sin nombre';
-      
-      return {
-        student_uuid: existing.student_uuid,
-        display_name: displayName,
-        email: existing.email
-      };
-    }
+    // Crear alumno vía repositorio (encapsula toda la lógica SQL)
+    const result = await repo.createStudent({
+      email: normalizedEmail,
+      apodo,
+      nombre_completo
+    }, client);
     
-    // Crear en alumnos (legacy) primero (necesario para display_name)
-    const alumnoResult = await queryFn(`
-      INSERT INTO alumnos (email, apodo, nombre_completo, fecha_inscripcion, nivel_actual, streak, estado_suscripcion)
-      VALUES ($1, $2, $3, now(), 1, 0, 'activa')
-      RETURNING id, email, apodo, nombre_completo
-    `, [normalizedEmail, apodo || null, nombre_completo || null]);
-    
-    const alumnoId = alumnoResult.rows[0].id;
-    
-    logInfo('StudentCreationService', 'Alumno creado en tabla legacy (alumnos)', {
+    logInfo('StudentCreationService', 'Alumno creado o existente (idempotencia)', {
       traceId,
-      legacy_alumno_id: alumnoId,
-      email: normalizedEmail
-    });
-    
-    // Crear en students (UUID) con legacy_alumno_id
-    // PostgreSQL genera el UUID automáticamente (gen_random_uuid())
-    const studentResult = await queryFn(`
-      INSERT INTO students (status, legacy_alumno_id, created_at, updated_at)
-      VALUES ('NORMAL', $1, now(), now())
-      RETURNING id, status, legacy_alumno_id, created_at
-    `, [alumnoId]);
-    
-    const studentUuid = studentResult.rows[0].id;
-    
-    logInfo('StudentCreationService', 'Student creado en tabla canónica (students UUID)', {
-      traceId,
-      student_uuid: studentUuid,
-      legacy_alumno_id: alumnoId,
-      email: normalizedEmail
+      student_uuid: result.student_uuid,
+      legacy_alumno_id: result.legacy_alumno_id,
+      email: result.email
     });
     
     // Calcular display_name canónicamente
-    const alumno = alumnoResult.rows[0];
+    // El repositorio ya retorna apodo y nombre_completo
     const studentsForDisplay = [{
-      id: studentUuid,
-      apodo: alumno.apodo || null,
-      nombre_completo: alumno.nombre_completo || null,
-      email: alumno.email || null
+      id: result.student_uuid,
+      apodo: result.apodo || null,
+      nombre_completo: result.nombre_completo || null,
+      email: result.email || null
     }];
     const studentsWithDisplay = await calculateStudentDisplayNames(studentsForDisplay);
-    const displayName = studentsWithDisplay[0]?.display_name || alumno.email || 'Sin nombre';
+    const displayName = studentsWithDisplay[0]?.display_name || result.email || 'Sin nombre';
     
     logInfo('StudentCreationService', 'Alumno creado exitosamente (UUID-first)', {
       traceId,
-      student_uuid: studentUuid,
-      legacy_alumno_id: alumnoId,
-      email: normalizedEmail,
+      student_uuid: result.student_uuid,
+      legacy_alumno_id: result.legacy_alumno_id,
+      email: result.email,
       display_name: displayName
     });
     
     return {
-      student_uuid: studentUuid,
+      student_uuid: result.student_uuid,
       display_name: displayName,
-      email: normalizedEmail
+      email: result.email
     };
     
   } catch (error) {
-    // Si es error de unicidad (email duplicado en alumnos), tratar como idempotencia
-    if (error.code === '23505' && error.constraint?.includes('email')) {
-      logInfo('StudentCreationService', 'Email duplicado detectado (idempotencia)', {
-        traceId,
-        email: normalizedEmail,
-        error: error.message
-      });
-      
-      // Buscar el existente y retornarlo
-      const existingResult = await queryFn(`
-        SELECT s.id as student_uuid, s.legacy_alumno_id, a.email, a.apodo, a.nombre_completo
-        FROM students s
-        LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
-        WHERE a.email = $1 AND s.deleted_at IS NULL
-        LIMIT 1
-      `, [normalizedEmail]);
-      
-      if (existingResult.rows.length > 0) {
-        const existing = existingResult.rows[0];
-        const studentsForDisplay = [{
-          id: existing.student_uuid,
-          apodo: existing.apodo || null,
-          nombre_completo: existing.nombre_completo || null,
-          email: existing.email || null
-        }];
-        const studentsWithDisplay = await calculateStudentDisplayNames(studentsForDisplay);
-        const displayName = studentsWithDisplay[0]?.display_name || existing.email || 'Sin nombre';
-        
-        return {
-          student_uuid: existing.student_uuid,
-          display_name: displayName,
-          email: existing.email
-        };
-      }
-    }
-    
     logError('StudentCreationService', 'Error creando alumno canónico', {
       traceId,
       email: normalizedEmail,
