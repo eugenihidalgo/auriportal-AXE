@@ -1174,9 +1174,6 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         item_kind: body.item_kind,
         clean_layer: cleanLayer,
         product_key: productKey
-        cleanLayer,
-        item_kind: body.item_kind,
-        body: JSON.stringify(body)
       });
 
       const result = await incrementAll(itemRef, productKey, cleanLayer, body.item_kind);
