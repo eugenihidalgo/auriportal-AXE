@@ -164,14 +164,20 @@ export class MasterStudentTransmutationReadRepoPg {
     // LEFT JOIN para incluir estudiantes sin estado aún
     // Filtrar estudiantes en pausa (usando tabla pausas)
     // WARNING: Acceso directo a tabla alumnos (legacy) - debe migrarse a students
-    const { logWarn } = await import('../../../core/observability/logger.js');
-    const { getRequestId } = await import('../../../core/observability/request-context.js');
-    const traceId = getRequestId();
-    logWarn('MasterStudentTransmutationReadRepo', 'Acceso directo a tabla alumnos (legacy)', {
-      traceId,
-      method: 'getStudentsForItemFromCleaningEngine',
-      note: 'Debe migrarse a students table con student_uuid'
-    });
+    // Fail-open: logging opcional, no bloquea ejecución
+    try {
+      const { logWarn } = await import('../../../core/observability/logger.js');
+      const { getRequestId } = await import('../../../core/observability/request-context.js');
+      const traceId = getRequestId();
+      logWarn('MasterStudentTransmutationReadRepo', 'Acceso directo a tabla alumnos (legacy)', {
+        traceId,
+        method: 'getStudentsForItemFromCleaningEngine',
+        note: 'Debe migrarse a students table con student_uuid'
+      });
+    } catch (loggerError) {
+      // Fail-open: si el logger falla, continuar sin logging
+      console.warn('[LEGACY][STUDENT][WARN] Acceso directo a tabla alumnos (legacy) - getStudentsForItemFromCleaningEngine');
+    }
     
     // CAMBIADO: JOIN con students para obtener student_uuid (canónico)
     let sql = `
