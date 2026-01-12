@@ -767,12 +767,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/students');
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
-      const cleanLayer = url.searchParams.get('clean_layer') || 'shared'; // Default shared
+      const cleanLayer = url.searchParams.get('clean_layer') || 'shared'; // Default shared (para repositorio)
+      const viewLayer = url.searchParams.get('view_layer'); // OBLIGATORIO para RECURRENTE (sin default)
       
       logInfo('MasterApiAlquimiaGeneral', '[GET_STUDENTS] Request recibido', {
         traceId,
         itemRef,
         clean_layer: cleanLayer,
+        view_layer: viewLayer,
         product_key: productKey
       });
       const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : null;
@@ -830,6 +832,21 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
         const tipo = lista.tipo;
         
+        // ============================================================================
+        // REGLA CANÓNICA: view_layer es OBLIGATORIO para RECURRENTE
+        // ============================================================================
+        if (tipo === 'recurrente' && !viewLayer) {
+          warnings.push('view_layer es obligatorio para items RECURRENTE. Usando clean_layer como fallback (DEPRECATED).');
+          logWarn('MasterApiAlquimiaGeneral', 'view_layer faltante para RECURRENTE, usando clean_layer como fallback', {
+            traceId,
+            itemRef,
+            tipo,
+            clean_layer: cleanLayer
+          });
+          // Fallback temporal: usar cleanLayer como viewLayer (DEPRECATED, será error en futuro)
+          // TODO: Eliminar este fallback en versión futura
+        }
+        
         // Llamar servicio con try/catch para fail-open
         // REGLA MASTER: Flotante Master NUNCA filtra alumnos por nivel (skip_level_filter=true)
         // Master puede limpiar cualquier item a cualquier alumno
@@ -839,6 +856,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             limit, 
             offset, 
             clean_layer: cleanLayer,
+            view_layer: viewLayer || cleanLayer, // Fallback temporal para compatibilidad
             skip_level_filter: true
           });
           

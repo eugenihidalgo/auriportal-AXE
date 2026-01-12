@@ -870,9 +870,14 @@
 
   /**
    * Maneja el click en botón VER (abre flotante)
-   * Soporta clean_layer (SHARED/PDE) vía parámetro opcional
+   * Soporta clean_layer (SHARED/PDE) vía parámetro opcional (para repositorio)
+   * Soporta view_layer (SHARED/PDE) vía parámetro opcional (para cálculo de estado RECURRENTE)
+   * 
+   * REGLA CANÓNICA:
+   * - clean_layer: decide qué columnas se leen del repositorio (siempre simétrico, ambos se leen)
+   * - view_layer: decide qué estado se calcula para RECURRENTE (shared o pde)
    */
-  async function handleVerItem(item, cleanLayer = 'shared') {
+  async function handleVerItem(item, cleanLayer = 'shared', viewLayer = null) {
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
       // Mostrar error visible en UI
@@ -888,8 +893,27 @@
     }
 
     try {
-      // Cargar estudiantes para este item con clean_layer
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students?clean_layer=${cleanLayer}`);
+      // ============================================================================
+      // REGLA CANÓNICA: view_layer es OBLIGATORIO para RECURRENTE
+      // ============================================================================
+      // Si no se pasa viewLayer explícitamente, usar layerView del estado del modal
+      // Si no hay layerView, usar cleanLayer como fallback (DEPRECATED)
+      const activeViewLayer = viewLayer || state.modal.layerView || cleanLayer;
+      
+      // Construir URL con clean_layer (repositorio) y view_layer (estado RECURRENTE)
+      const urlParams = new URLSearchParams({
+        clean_layer: cleanLayer,
+        view_layer: activeViewLayer
+      });
+      
+      console.log('[MasterAlquimiaGeneral] [FORENSIC][GET_STUDENTS] Request', {
+        item_ref: item.item_ref,
+        clean_layer: cleanLayer,
+        view_layer: activeViewLayer,
+        state_modal_layerView: state.modal.layerView
+      });
+      
+      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students?${urlParams.toString()}`);
       
       // Verificar content-type
       const contentType = response.headers.get('content-type') || '';
@@ -919,6 +943,13 @@
       // Guardar estado del modal
       state.modal.item = item;
       state.modal.cleanLayer = cleanLayer;
+      // REGLA CANÓNICA: viewLayer determina qué estado se calcula (RECURRENTE)
+      // Si se pasa viewLayer explícitamente, usarlo; sino mantener layerView existente o default 'shared'
+      if (viewLayer) {
+        state.modal.layerView = viewLayer;
+      } else if (!state.modal.layerView) {
+        state.modal.layerView = 'shared'; // Default
+      }
       // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)
       const itemKind = getItemKindExplicit(item, state.listaActiva);
       if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
@@ -932,10 +963,6 @@
         return;
       }
       state.modal.itemKind = itemKind;
-      // Mantener layerView si ya existe, sino usar default 'shared'
-      if (!state.modal.layerView) {
-        state.modal.layerView = 'shared';
-      }
       
       // Si no es ok, mostrar warning pero no crash
       if (!normalized.ok) {
@@ -1062,7 +1089,7 @@
       
       // Refrescar modal si está abierto
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        await handleVerItem(state.modal.item, state.modal.cleanLayer);
+        await handleVerItem(state.modal.item, state.modal.cleanLayer, state.modal.layerView);
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
@@ -1827,15 +1854,20 @@
         surface_key: 'master.alquimia_general'
       };
       
-      // Log forense: verificar que clean_layer es correcto
-      console.log('[AG][ACTION]', {
+      // ============================================================================
+      // LOG FORENSE OBLIGATORIO: action.clean_layer, view_layer, state calculado
+      // ============================================================================
+      const activeViewLayer = state.modal.layerView || 'shared';
+      console.log('[AG][ACTION][FORENSIC]', {
         actionType: 'mark-clean-student',
         item_kind: itemKind,
-        clean_layer: cleanLayer,
+        action_clean_layer: cleanLayer, // Capa de escritura (shared_* o pde_*)
+        view_layer: activeViewLayer, // Vista activa (decide estado RECURRENTE)
         student_uuid: student.student_uuid,
         item_ref: item.item_ref,
         layerView: state.modal.layerView,
-        viewMode: 'flotante'
+        viewMode: 'flotante',
+        expected_column_change: itemKind === 'recurrente' ? `Estado calculado según ${activeViewLayer}.days_since_last_clean` : 'COMBO (shared+pde)'
       });
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
@@ -1877,15 +1909,27 @@
       const displayName = result.data?.student?.display_name || result.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // REGLA CONSTITUCIONAL: Refresh determinista post-acción
-      // NO usar state.modal.layerView para decidir datos
-      // SIEMPRE hacer refetch completo del flotante desde datos frescos del backend
+      // ============================================================================
+      // REGLA CANÓNICA: Refresh determinista post-acción usando layerView ACTIVA
+      // ============================================================================
+      // DIFERENCIACIÓN:
+      // - clean_layer: decide qué columnas se escriben (shared_* o pde_*)
+      // - layerView: decide qué estado se calcula y qué columna se muestra
+      // PROHIBIDO: hardcodear 'shared' o inferir desde el botón pulsado
+      // OBLIGATORIO: usar state.modal.layerView (vista activa del usuario)
+      // ============================================================================
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        // Refetch completo: usar cualquier clean_layer (los datos vienen simétricos)
-        // El backend devuelve shared.* y pde.* siempre, independientemente del clean_layer usado en el fetch
-        await handleVerItem(item, 'shared');
+        // Refetch usando la layerView ACTIVA (no hardcoded)
+        const activeLayerView = state.modal.layerView || 'shared';
+        console.log('[MasterAlquimiaGeneral] [FORENSIC][REFRESH] Refetch post-acción', {
+          item_ref: item.item_ref,
+          action_clean_layer: cleanLayer,
+          active_layer_view: activeLayerView,
+          student_uuid: student.student_uuid
+        });
+        await handleVerItem(item, 'shared', activeLayerView); // cleanLayer='shared' (repositorio), viewLayer=activeLayerView (estado)
         // layerView se mantiene automáticamente en state.modal.layerView
-        // El flotante se re-renderizará con los datos frescos del backend
+        // El flotante se re-renderizará con los datos frescos del backend y estado según layerView
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
@@ -2682,7 +2726,7 @@
         console.log('[MasterAlquimiaGeneral] Refrescando modal con clean_layer=pde después de PDE clean-all');
         state.modal.layerView = 'pde'; // Cambiar a vista PDE
         state.modal.cleanLayer = 'pde';
-        await handleVerItem(item, 'pde');
+        await handleVerItem(item, 'pde', 'pde'); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
@@ -2747,7 +2791,7 @@
       
       // Refrescar flotante si está abierto para este item
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        await handleVerItem(item, state.modal.cleanLayer || 'shared');
+        await handleVerItem(item, state.modal.cleanLayer || 'shared', state.modal.layerView || 'shared');
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
@@ -2812,7 +2856,7 @@
       // Si hay flotante abierto, recargarlo y cambiar a vista PDE
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
         state.modal.layerView = 'pde'; // Cambiar a vista PDE
-        await handleVerItem(item, 'pde');
+        await handleVerItem(item, 'pde', 'pde'); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);

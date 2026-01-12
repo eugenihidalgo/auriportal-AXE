@@ -448,15 +448,21 @@ export async function archiveItem(id) {
  * UUID-ONLY: Lee EXCLUSIVAMENTE desde Cleaning Engine v1 (cleaning_item_state)
  * 
  * REGLA CONSTITUCIONAL:
- * - clean_layer es OBLIGATORIO
+ * - clean_layer es OBLIGATORIO (para compatibilidad con repositorio)
+ * - view_layer es OBLIGATORIO para RECURRENTE (decide qué estado calcular)
  * - NO existe fallback a student_item_state (legacy eliminado)
  * - Alquimia es UUID-only, sin compatibilidad legacy
+ * 
+ * DIFERENCIACIÓN CANÓNICA:
+ * - clean_layer: decide qué columnas se leen del repositorio (siempre simétrico, ambos se leen)
+ * - view_layer: decide qué estado se calcula para RECURRENTE (shared o pde)
  * 
  * @param {string} itemRef - item_ref del item
  * @param {string} tipo - Tipo del item ('recurrente' o 'una_vez')
  * @param {string} [productKey='pde'] - Clave del producto
- * @param {Object} options - Opciones adicionales (limit, offset, clean_layer)
- * @param {string} options.clean_layer - Capa de limpieza ('shared' | 'pde') - OBLIGATORIO
+ * @param {Object} options - Opciones adicionales (limit, offset, clean_layer, view_layer)
+ * @param {string} options.clean_layer - Capa de limpieza ('shared' | 'pde') - OBLIGATORIO (legacy, para repositorio)
+ * @param {string} options.view_layer - Vista activa ('shared' | 'pde') - OBLIGATORIO para RECURRENTE (decide estado)
  * @returns {Promise<Object>} Objeto con students, counts, total
  */
 export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', options = {}) {
@@ -465,10 +471,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
   }
   
   const traceId = getRequestId();
-  const { clean_layer, ...otherOptions } = options;
+  const { clean_layer, view_layer, ...otherOptions } = options;
   
   // ============================================================================
-  // GUARD CONSTITUCIONAL: clean_layer es OBLIGATORIO
+  // GUARD CONSTITUCIONAL: clean_layer es OBLIGATORIO (para repositorio)
   // ============================================================================
   if (!clean_layer) {
     const error = new Error('clean_layer is required. MASTER Alquimia is UUID-only and uses Cleaning Engine exclusively.');
@@ -477,6 +483,34 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       traceId,
       itemRef,
       tipo
+    });
+    throw error;
+  }
+  
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: view_layer es OBLIGATORIO para RECURRENTE
+  // ============================================================================
+  if (tipo === 'recurrente' && !view_layer) {
+    const error = new Error('view_layer is required for RECURRENTE items. It determines which layer state to calculate.');
+    error.code = 'VIEW_LAYER_REQUIRED';
+    logError('AlquimiaGeneralService', 'Intento de usar getStudentsForItem RECURRENTE sin view_layer', {
+      traceId,
+      itemRef,
+      tipo,
+      clean_layer
+    });
+    throw error;
+  }
+  
+  // Validar view_layer si está presente
+  if (view_layer && view_layer !== 'shared' && view_layer !== 'pde') {
+    const error = new Error(`view_layer must be 'shared' or 'pde', got: ${view_layer}`);
+    error.code = 'VIEW_LAYER_INVALID';
+    logError('AlquimiaGeneralService', 'view_layer inválido', {
+      traceId,
+      itemRef,
+      tipo,
+      view_layer
     });
     throw error;
   }
@@ -593,11 +627,15 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           days_since_last_clean: null
         };
         
-        // REGLA CANÓNICA: Estado RECURRENTE se calcula según clean_layer del request
-        // Si clean_layer='shared', usar shared.days_since_last_clean
-        // Si clean_layer='pde', usar pde.days_since_last_clean
-        // Esto garantiza que el estado refleje la capa que se está visualizando
-        const layerForState = clean_layer === 'pde' ? 'pde' : 'shared';
+        // ============================================================================
+        // REGLA CANÓNICA: Estado RECURRENTE se calcula según view_layer (NO clean_layer)
+        // ============================================================================
+        // DIFERENCIACIÓN:
+        // - clean_layer: decide qué columnas se leen (siempre simétrico, ambos se leen)
+        // - view_layer: decide qué estado se calcula (shared o pde)
+        // PROHIBIDO: usar clean_layer para calcular estado
+        // ============================================================================
+        const layerForState = view_layer === 'pde' ? 'pde' : 'shared';
         const layerDataForState = layerForState === 'pde' ? pdeData : sharedData;
         const daysSince = layerDataForState.days_since_last_clean !== undefined 
           ? layerDataForState.days_since_last_clean 
@@ -618,17 +656,34 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           state = 'important';
         }
 
+        // Log forense obligatorio
+        logInfo('AlquimiaGeneralService', '[FORENSIC][RECURRENTE_STATE] Estado calculado', {
+          traceId,
+          student_uuid: student.student_uuid,
+          item_ref: itemRef,
+          clean_layer, // Para escritura
+          view_layer, // Para cálculo de estado
+          layer_for_state: layerForState,
+          days_since_last_clean: daysSince,
+          state_calculated: state,
+          threshold_days: thresholdDays,
+          critical_threshold: criticalThreshold,
+          shared_days: sharedData.days_since_last_clean,
+          pde_days: pdeData.days_since_last_clean
+        });
+
         return {
           ...student,
           // Asegurar que shared y pde están presentes (simétricos)
           shared: sharedData,
           pde: pdeData,
-          // Estado calculado según clean_layer del request (autoridad backend)
+          // Estado calculado según view_layer (autoridad backend)
           state,
           threshold_days: thresholdDays,
           critical_multiplier: criticalMultiplier,
           // Forensics: indicar qué capa se usó para calcular estado
-          state_calculated_from: layerForState
+          state_calculated_from: layerForState,
+          view_layer_used: view_layer
         };
       });
 
