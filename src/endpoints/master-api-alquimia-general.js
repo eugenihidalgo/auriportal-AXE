@@ -50,6 +50,7 @@ function jsonSuccess(data, traceId = null) {
           'Content-Type': 'application/json; charset=utf-8',
           'X-Trace-Id': traceId || getRequestId(),
           'X-AP-FLOAT-DTO': 'v1_layers', // Forensics: DTO con capas simétricas
+          'X-AP-ALQ-LAYERS': 'v1.1-itemkind-master-nolevel', // Forensics: versión de capas
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
@@ -950,6 +951,15 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('execution_mode debe ser "APPLY" o "CERTIFY"', 'INVALID_EXECUTION_MODE', 400, traceId);
       }
       
+      // Log temporal forense
+      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] mark-clean-all', {
+        traceId,
+        item_ref: itemRef,
+        item_kind: body.item_kind,
+        clean_layer: cleanLayer,
+        execution_mode: executionMode
+      });
+      
       const result = await markCleanAll(itemRef, productKey, cleanLayer, body.item_kind, executionMode);
       return jsonSuccess({
         ...result,
@@ -1004,6 +1014,15 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Item archivado', 'ITEM_ARCHIVED', 404, traceId);
       }
 
+      // Log temporal forense
+      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] mark-clean-student', {
+        traceId,
+        item_ref: itemRef,
+        item_kind: body.item_kind,
+        clean_layer: cleanLayer,
+        student_uuid: studentUuid
+      });
+      
       // Construir payload canónico para markCleanStudent (CAMBIADO: ahora pasa student_uuid)
       const options = {
         student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
@@ -1148,11 +1167,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
       }
 
-      // LOG TEMPORAL: endpoint increment-all
-      logInfo('MasterApiAlquimiaGeneral', '[TEMP] POST increment-all', {
+      // Log temporal forense
+      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] increment-all', {
         traceId,
-        itemRef,
-        productKey,
+        item_ref: itemRef,
+        item_kind: body.item_kind,
+        clean_layer: cleanLayer,
+        product_key: productKey
         cleanLayer,
         item_kind: body.item_kind,
         body: JSON.stringify(body)

@@ -675,6 +675,7 @@ export async function markCleanAllStudents(options, client = null) {
     // 6. Aplicar limpieza a cada estudiante activo con breakdown de razones
     let updated = 0;
     let skipped = 0;
+    let skippedAlreadyClean = 0; // Separado de omitted
     const skippedBreakdown = {
       paused: 0,
       not_applicable_level: 0,
@@ -684,6 +685,9 @@ export async function markCleanAllStudents(options, client = null) {
       error: 0,
       other: 0
     };
+    
+    // Helper para verificar si ya está limpio (solo para recurrentes)
+    const stateRepo = getDefaultCleaningItemStateRepo();
     
     for (const { uuid: studentUuid } of activeStudentUuids) {
       try {
@@ -697,6 +701,37 @@ export async function markCleanAllStudents(options, client = null) {
             skipped++;
             skippedBreakdown.not_applicable_level++;
             continue;
+          }
+        }
+        
+        // Para recurrentes: verificar si ya está limpio (mismo día) antes de llamar a markCleanStudent
+        if (itemKind === 'recurrente') {
+          const currentState = await stateRepo.getState({
+            student_uuid: studentUuid,
+            product_key,
+            domain_type,
+            item_ref
+          }, client);
+          
+          if (currentState) {
+            const lastCleanedAt = clean_layer === 'shared' 
+              ? currentState.shared_last_cleaned_at 
+              : currentState.pde_last_cleaned_at;
+            
+            if (lastCleanedAt) {
+              const lastCleanedDate = new Date(lastCleanedAt);
+              const today = new Date();
+              const isSameDay = lastCleanedDate.getFullYear() === today.getFullYear() &&
+                               lastCleanedDate.getMonth() === today.getMonth() &&
+                               lastCleanedDate.getDate() === today.getDate();
+              
+              if (isSameDay) {
+                // Ya está limpio hoy (mismo día) - NO es "omitido", es "skipped_already_clean"
+                skippedAlreadyClean++;
+                skippedBreakdown.already_clean++;
+                continue; // No llamar a markCleanStudent
+              }
+            }
           }
         }
         
@@ -717,6 +752,7 @@ export async function markCleanAllStudents(options, client = null) {
         if (result) {
           updated++;
         } else {
+          // Si markCleanStudent devuelve null, es "no aplica" (no "ya limpio")
           skipped++;
           skippedBreakdown.no_change++;
         }
@@ -731,6 +767,21 @@ export async function markCleanAllStudents(options, client = null) {
         skippedBreakdown.error++;
       }
     }
+    
+    // Log temporal
+    logInfo('CleaningEngine', '[TEMP_LAYER_ENGINE] markCleanAllStudents completado', {
+      traceId,
+      item_ref,
+      item_kind: itemKind,
+      clean_layer,
+      isMasterSurface: actor_type === 'master' && (surface_key?.startsWith('master.') || skip_level_filter),
+      skip_level_filter,
+      total: activeStudentUuids.length,
+      updated,
+      skipped,
+      skipped_already_clean: skippedAlreadyClean,
+      skipped_breakdown: skippedBreakdown
+    });
     
     logInfo('CleaningEngine', 'Limpieza global completada', {
       traceId,
@@ -749,6 +800,7 @@ export async function markCleanAllStudents(options, client = null) {
     return { 
       updated, 
       skipped, 
+      skipped_already_clean: skippedAlreadyClean, // Separado de omitted
       total: activeStudentUuids.length,
       skipped_breakdown: skippedBreakdown
     };

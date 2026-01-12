@@ -847,6 +847,8 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
     // Delegar al Cleaning Engine v1 (single decider)
     const { markCleanAllStudents: cleaningMarkCleanAll } = await import('../core/master/services/cleaning-engine-service.js');
     
+    // REGLA MASTER: En MASTER NO se filtra por nivel (skip_level_filter=true siempre)
+    const isMasterSurface = true; // Este servicio es siempre MASTER
     const result = await cleaningMarkCleanAll({
       item_ref: itemRef,
       item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
@@ -855,11 +857,13 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
+      skip_level_filter: true, // REGLA MASTER: NO filtrar por nivel
       execution_mode: executionMode, // Pasar execution_mode
       meta: {
         source: 'alquimia-general-service',
         legacy_call: true,
-        execution_mode: executionMode
+        execution_mode: executionMode,
+        is_master_surface: isMasterSurface
       }
     });
     
@@ -886,7 +890,9 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
     return {
       updated: result.updated || 0,
       skipped: result.skipped || 0,
-      total: result.total || 0
+      skipped_already_clean: result.skipped_already_clean || 0, // Separado de omitted
+      total: result.total || 0,
+      skipped_breakdown: result.skipped_breakdown || {}
     };
   } catch (error) {
     logError('AlquimiaGeneralService', 'Error en markCleanAll', {

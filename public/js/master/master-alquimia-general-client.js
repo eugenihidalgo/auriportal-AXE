@@ -883,6 +883,14 @@
       // Guardar estado del modal
       state.modal.item = item;
       state.modal.cleanLayer = cleanLayer;
+      // Guardar item_kind explícitamente (OBLIGATORIO para todas las acciones)
+      const itemKind = normalized.item_kind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido al abrir flotante:', itemKind);
+        showToastError('Error: tipo de item inválido');
+        return;
+      }
+      state.modal.itemKind = itemKind;
       // Mantener layerView si ya existe, sino usar default 'shared'
       if (!state.modal.layerView) {
         state.modal.layerView = 'shared';
@@ -935,13 +943,21 @@
       // Determinar clean_layer desde el estado del modal o default 'shared'
       const cleanLayer = state.modal?.cleanLayer || 'shared';
       
-      // Obtener item_kind desde la lista activa o del item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-      const itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
-      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
-        showToastError('Error: tipo de item inválido');
+      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      // Prioridad: state.modal.itemKind > item.item_kind > item.tipo > listaActiva.tipo
+      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+      if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', itemKind);
+        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
         return;
       }
+      
+      // Log temporal forense
+      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/mark-clean-all', {
+        item_ref: item.item_ref,
+        clean_layer: cleanLayer,
+        item_kind: itemKind
+      });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
         method: 'POST',
@@ -962,23 +978,34 @@
 
       console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', result);
       
-      // Mostrar mensaje en UI con breakdown si updated=0
+      // Mostrar mensaje en UI con breakdown
       const updated = result.updated || result.data?.updated || 0;
       const skipped = result.skipped || result.data?.skipped || 0;
+      const skippedAlreadyClean = result.skipped_already_clean || result.data?.skipped_already_clean || 0;
       const breakdown = result.skipped_breakdown || result.data?.skipped_breakdown || {};
       
       let message = `✅ Item limpiado para ${updated} alumnos`;
+      if (skippedAlreadyClean > 0) {
+        message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
+      }
       if (updated === 0 && skipped > 0) {
         const reasons = [];
         if (breakdown.paused > 0) reasons.push(`${breakdown.paused} pausados`);
         if (breakdown.not_applicable_level > 0) reasons.push(`${breakdown.not_applicable_level} no aplican (nivel)`);
-        if (breakdown.no_change > 0) reasons.push(`${breakdown.no_change} ya limpios`);
         if (breakdown.error > 0) reasons.push(`${breakdown.error} errores`);
         if (reasons.length > 0) {
           message = `⚠️ 0 actualizados; ${reasons.join(', ')}`;
+          if (skippedAlreadyClean > 0) {
+            message += `; ${skippedAlreadyClean} ya limpios hoy`;
+          }
         } else {
           message = `⚠️ 0 actualizados; ${skipped} omitidos`;
+          if (skippedAlreadyClean > 0) {
+            message += `; ${skippedAlreadyClean} ya limpios hoy`;
+          }
         }
+      } else if (skipped > 0 && skippedAlreadyClean === 0) {
+        message += ` (${skipped} omitidos)`;
       }
       showWarning(message);
       
@@ -1444,9 +1471,33 @@
         btnSP.textContent = 'S+P';
         btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
         btnSP.addEventListener('click', async () => {
-          // Ejecutar ambas secuencialmente
-          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
-          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+          // Ejecutar ambas secuencialmente con manejo de errores
+          console.info('[TEMP_COMBO]', { step: 'shared', student_uuid: student.student_uuid, item_ref: item.item_ref });
+          try {
+            await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+            console.info('[TEMP_COMBO]', { step: 'shared', status: 'ok' });
+            
+            // Si SHARED OK, ejecutar PDE
+            console.info('[TEMP_COMBO]', { step: 'pde', student_uuid: student.student_uuid, item_ref: item.item_ref });
+            try {
+              await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+              console.info('[TEMP_COMBO]', { step: 'pde', status: 'ok' });
+              showToastSuccess('✓ SHARED y PDE aplicados');
+            } catch (pdeError) {
+              console.error('[TEMP_COMBO]', { step: 'pde', status: 'error', error: pdeError.message });
+              showToastError(`✓ SHARED aplicado, pero PDE falló: ${pdeError.message}`);
+            }
+          } catch (sharedError) {
+            console.error('[TEMP_COMBO]', { step: 'shared', status: 'error', error: sharedError.message });
+            showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
+          }
+          
+          // Rehidratar siempre (incluso si hay fallos parciales)
+          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+            const currentLayerView = state.modal.layerView || 'combo';
+            await handleVerItem(item, 'shared'); // Fetch con cualquier clean_layer (datos vienen simétricos)
+            state.modal.layerView = currentLayerView; // Restaurar vista COMBO
+          }
         });
         actionsDiv.appendChild(btnSP);
       } else {
@@ -1471,8 +1522,33 @@
         btnSP.textContent = 'S+P';
         btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
         btnSP.addEventListener('click', async () => {
-          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
-          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+          // Ejecutar ambas secuencialmente con manejo de errores (RECURRENTE)
+          console.info('[TEMP_COMBO]', { step: 'shared', student_uuid: student.student_uuid, item_ref: item.item_ref, item_kind: 'recurrente' });
+          try {
+            await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+            console.info('[TEMP_COMBO]', { step: 'shared', status: 'ok' });
+            
+            // Si SHARED OK, ejecutar PDE
+            console.info('[TEMP_COMBO]', { step: 'pde', student_uuid: student.student_uuid, item_ref: item.item_ref, item_kind: 'recurrente' });
+            try {
+              await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+              console.info('[TEMP_COMBO]', { step: 'pde', status: 'ok' });
+              showToastSuccess('✓ SHARED y PDE aplicados');
+            } catch (pdeError) {
+              console.error('[TEMP_COMBO]', { step: 'pde', status: 'error', error: pdeError.message });
+              showToastError(`✓ SHARED aplicado, pero PDE falló: ${pdeError.message}`);
+            }
+          } catch (sharedError) {
+            console.error('[TEMP_COMBO]', { step: 'shared', status: 'error', error: sharedError.message });
+            showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
+          }
+          
+          // Rehidratar siempre (incluso si hay fallos parciales)
+          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+            const currentLayerView = state.modal.layerView || 'combo';
+            await handleVerItem(item, 'shared'); // Fetch con cualquier clean_layer (datos vienen simétricos)
+            state.modal.layerView = currentLayerView; // Restaurar vista COMBO
+          }
         });
         actionsDiv.appendChild(btnSP);
       }
@@ -1586,14 +1662,11 @@
     }
 
     // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-    // Si tipo no es válido, intentar obtenerlo de la lista activa o del item
-    let itemKind = tipo;
-    if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
-      itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
-    }
-    if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
-      console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
-      showToastError('Error: tipo de item inválido');
+    // Prioridad: state.modal.itemKind > tipo > item.item_kind > item.tipo > listaActiva.tipo
+    let itemKind = state.modal?.itemKind || tipo || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+    if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', itemKind);
+      showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
       return;
     }
 
@@ -1611,6 +1684,9 @@
         actor_type: 'master',
         surface_key: 'master.alquimia_general'
       };
+      
+      // Log temporal forense
+      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student', payload);
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
         method: 'POST',
@@ -2400,31 +2476,40 @@
       }
 
       const data = result.data || result;
-      const updated = data.updated_students || 0;
+      const updated = data.updated_students || data.updated || 0;
       const skipped = data.skipped || 0;
+      const skippedAlreadyClean = data.skipped_already_clean || 0;
       const breakdown = data.skipped_breakdown || {};
       
       let message = `PDE registrado: ${data.logged || updated} alumnos (fecha ${data.cleaned_date || 'hoy'})`;
+      if (skippedAlreadyClean > 0) {
+        message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
+      }
       if (updated === 0 && skipped > 0) {
         const reasons = [];
         if (breakdown.paused > 0) reasons.push(`${breakdown.paused} pausados`);
         if (breakdown.not_applicable_level > 0) reasons.push(`${breakdown.not_applicable_level} no aplican (nivel)`);
-        if (breakdown.no_change > 0) reasons.push(`${breakdown.no_change} ya limpios`);
         if (breakdown.error > 0) reasons.push(`${breakdown.error} errores`);
         if (reasons.length > 0) {
           message = `⚠️ PDE: 0 actualizados; ${reasons.join(', ')}`;
+          if (skippedAlreadyClean > 0) {
+            message += `; ${skippedAlreadyClean} ya limpios hoy`;
+          }
         } else {
           message = `⚠️ PDE: 0 actualizados; ${skipped} omitidos`;
+          if (skippedAlreadyClean > 0) {
+            message += `; ${skippedAlreadyClean} ya limpios hoy`;
+          }
         }
       }
       showWarning(message);
       
       // Refetch items y flotante si está abierto
       await loadItems(state.listaActiva.id);
-      // Si hay flotante abierto, recargarlo con clean_layer=pde
+      // Si hay flotante abierto, recargarlo y cambiar a vista PDE
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
         console.log('[MasterAlquimiaGeneral] Refrescando modal con clean_layer=pde después de PDE clean-all');
-        // Forzar refresh del modal con clean_layer='pde'
+        state.modal.layerView = 'pde'; // Cambiar a vista PDE
         state.modal.cleanLayer = 'pde';
         await handleVerItem(item, 'pde');
       }
@@ -2444,13 +2529,29 @@
     }
 
     try {
+      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'una_vez';
+      if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en increment-all:', itemKind);
+        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+        return;
+      }
+      
+      // Log temporal forense
+      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/increment-all', {
+        item_ref: item.item_ref,
+        clean_layer: 'shared',
+        item_kind: itemKind
+      });
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: 'shared'
+          clean_layer: 'shared',
+          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
 
@@ -2488,13 +2589,29 @@
     }
 
     try {
+      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'una_vez';
+      if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en PDE increment-all:', itemKind);
+        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+        return;
+      }
+      
+      // Log temporal forense
+      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/increment-all (PDE)', {
+        item_ref: item.item_ref,
+        clean_layer: 'pde',
+        item_kind: itemKind
+      });
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: 'pde'
+          clean_layer: 'pde',
+          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
 
@@ -2505,13 +2622,20 @@
       }
 
       console.log('[MasterAlquimiaGeneral] Incremento PDE registrado:', result);
-      showToastSuccess(`PDE registrado: ${result.data?.updated || result.updated || 0} alumnos`);
+      const updated = result.data?.updated || result.updated || 0;
+      const skippedAlreadyClean = result.data?.skipped_already_clean || 0;
+      let message = `PDE registrado: ${updated} alumnos`;
+      if (skippedAlreadyClean > 0) {
+        message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
+      }
+      showToastSuccess(message);
       
       // Recargar items y flotante si está abierto
       await loadItems(state.listaActiva.id);
-      const flotante = document.getElementById('flotante-ver-alquimia');
-      if (flotante) {
-        await handleVerItem(item);
+      // Si hay flotante abierto, recargarlo y cambiar a vista PDE
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        state.modal.layerView = 'pde'; // Cambiar a vista PDE
+        await handleVerItem(item, 'pde');
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);
