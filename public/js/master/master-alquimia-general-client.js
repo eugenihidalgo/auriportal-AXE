@@ -1031,6 +1031,16 @@
         return;
       }
       
+      // ============================================================================
+      // LOG FORENSE: Acción masiva con clean_layer explícito
+      // ============================================================================
+      console.log('[UI][BULK][CLEAN] Enviando mark-clean-all', {
+        item_ref: item.item_ref,
+        item_kind: itemKind,
+        clean_layer: cleanLayer,
+        actor_type: 'master',
+        surface_key: 'master.alquimia_general'
+      });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
         method: 'POST',
@@ -1038,7 +1048,7 @@
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: cleanLayer,
+          clean_layer: cleanLayer, // OBLIGATORIO: explícito según botón pulsado
           item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
@@ -2456,16 +2466,33 @@
       
       // Botón LIMPIAR (solo recurrentes)
       if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
-        const btnLimpiar = document.createElement('button');
-        btnLimpiar.textContent = '🟢 Limpiar';
-        btnLimpiar.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnLimpiar.addEventListener('click', () => handleLimpiarItem(item));
-        actionsDiv.appendChild(btnLimpiar);
+        // ============================================================================
+        // REGLA CANÓNICA: clean_layer DEBE ser explícito en acciones masivas
+        // ============================================================================
+        // Botón SHARED: limpiar todos en capa shared
+        const btnLimpiarShared = document.createElement('button');
+        btnLimpiarShared.textContent = '🟢 Limpiar SHARED';
+        btnLimpiarShared.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnLimpiarShared.addEventListener('click', () => {
+          console.log('[UI][BULK][CLEAN] Botón Limpiar SHARED pulsado', {
+            item_ref: item.item_ref,
+            clean_layer: 'shared'
+          });
+          handleLimpiarItem(item, 'shared');
+        });
+        actionsDiv.appendChild(btnLimpiarShared);
         
+        // Botón PDE: limpiar todos en capa pde
         const btnPde = document.createElement('button');
         btnPde.textContent = 'PDE';
         btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnPde.addEventListener('click', () => handlePdeCleanItem(item));
+        btnPde.addEventListener('click', () => {
+          console.log('[UI][BULK][CLEAN] Botón Limpiar PDE pulsado', {
+            item_ref: item.item_ref,
+            clean_layer: 'pde'
+          });
+          handlePdeCleanItem(item);
+        });
         actionsDiv.appendChild(btnPde);
       } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
         // Botón +1 (increment-all shared para una_vez)
@@ -2808,12 +2835,23 @@
         return;
       }
       
+      // ============================================================================
+      // LOG FORENSE: Acción masiva PDE con clean_layer explícito
+      // ============================================================================
+      console.log('[UI][BULK][CLEAN] Enviando mark-pde-clean-all', {
+        item_ref: item.item_ref,
+        item_kind: itemKind,
+        clean_layer: 'pde',
+        actor_type: 'master',
+        surface_key: 'master.alquimia_general'
+      });
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
-          clean_layer: 'pde' // PDE layer
+          clean_layer: 'pde' // OBLIGATORIO: explícito para PDE
         })
       });
 
