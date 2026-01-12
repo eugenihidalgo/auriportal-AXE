@@ -142,6 +142,20 @@ export const masterSidebarRegistry = [
   },
   
   // ============================================
+  // ALUMNOS - Crear Alumnos (Canónico UUID-first)
+  // ============================================
+  {
+    id: 'master-alumnos-crear',
+    label: 'Crear Alumnos',
+    icon: 'plus',
+    route: '/master/alumnos/crear',
+    section: 'PostgreSQL Alumnos',
+    visible: true,
+    order: 2,
+    universe: 'alumnos'
+  },
+  
+  // ============================================
   // ALUMNOS - Alumnos (Placeholder)
   // ============================================
   {

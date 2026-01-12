@@ -626,6 +626,11 @@ export const MASTER_ROUTES = [
     type: 'island'
   },
   {
+    key: 'master-alumnos-crear',
+    path: '/master/alumnos/crear',
+    type: 'island'
+  },
+  {
     key: 'master-alumnos-alumnos',
     path: '/master/alumnos/alumnos',
     type: 'island'

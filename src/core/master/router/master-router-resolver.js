@@ -151,6 +151,7 @@ const MASTER_HANDLER_MAP = {
   'master-limpiezas': () => import('../../../endpoints/master-limpiezas.js'),
   'master-alumnos': () => import('../../../endpoints/master-alumnos.js'),
   'master-alumnos-postgresql': () => import('../../../endpoints/master-alumnos-postgresql.js'),
+  'master-alumnos-crear': () => import('../../../endpoints/master-alumnos-crear.js'),
   'master-alumnos-alumnos': () => import('../../../endpoints/master-alumnos-alumnos.js'),
   'master-alumnos-info': () => import('../../../endpoints/master-alumnos-info.js'),
   'master-alumnos-progreso': () => import('../../../endpoints/master-alumnos-progreso.js'),

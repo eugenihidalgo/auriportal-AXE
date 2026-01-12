@@ -388,6 +388,84 @@ export async function getStudentByIdHandler(request, env, ctx) {
 }
 
 /**
+ * Handler POST /master/api/students (Crear alumno canónico)
+ */
+async function createStudentHandler(request, env, ctx) {
+  const traceId = getRequestId();
+  
+  try {
+    logInfo('MasterAPIStudents', 'POST /master/api/students - Crear alumno', {
+      traceId
+    });
+    
+    // Parsear body JSON
+    let body;
+    try {
+      body = await request.json();
+    } catch (jsonError) {
+      return jsonError('Body JSON inválido', 'INVALID_JSON', 400, traceId);
+    }
+    
+    const { email, apodo = null, nombre_completo = null } = body;
+    
+    // Validar email (obligatorio)
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return jsonError('Email es obligatorio', 'EMAIL_REQUIRED', 400, traceId);
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Validar formato de email básico
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return jsonError('Email inválido', 'INVALID_EMAIL', 400, traceId);
+    }
+    
+    logInfo('MasterAPIStudents', 'Creando alumno canónico', {
+      traceId,
+      email: normalizedEmail,
+      apodo,
+      nombre_completo
+    });
+    
+    // Llamar al servicio canónico de creación
+    const { createStudentCanonical } = await import('../core/master/services/student-creation-service.js');
+    const result = await createStudentCanonical({
+      email: normalizedEmail,
+      apodo: apodo || null,
+      nombre_completo: nombre_completo || null
+    });
+    
+    logInfo('MasterAPIStudents', 'Alumno creado exitosamente', {
+      traceId,
+      student_uuid: result.student_uuid,
+      email: result.email,
+      display_name: result.display_name
+    });
+    
+    return jsonSuccess({
+      student_uuid: result.student_uuid,
+      display_name: result.display_name,
+      email: result.email
+    }, traceId);
+    
+  } catch (error) {
+    logError('MasterAPIStudents', 'Error creando alumno', {
+      traceId,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    // Si es error de unicidad (email duplicado), retornar error amigable
+    if (error.message?.includes('ya existe') || error.code === '23505') {
+      return jsonError('Email ya existe', 'EMAIL_EXISTS', 409, traceId);
+    }
+    
+    return jsonError('Error interno del servidor', 'INTERNAL_ERROR', 500, traceId);
+  }
+}
+
+/**
  * Handler principal (despacha según método HTTP)
  */
 export default async function masterApiStudentsHandler(request, env, ctx) {
@@ -405,9 +483,11 @@ export default async function masterApiStudentsHandler(request, env, ctx) {
       return await getStudentByIdHandler(request, env, ctx);
     }
   } else {
-    // No hay nada después de "students" → es GET /master/api/students
+    // No hay nada después de "students" → es GET /master/api/students o POST /master/api/students
     if (method === 'GET') {
       return await listStudentsHandler(request, env, ctx);
+    } else if (method === 'POST') {
+      return await createStudentHandler(request, env, ctx);
     }
   }
   

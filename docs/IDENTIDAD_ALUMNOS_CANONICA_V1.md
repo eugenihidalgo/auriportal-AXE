@@ -279,6 +279,23 @@ Commit: 4967588
 - `students.id` (UUID) es el único identificador ontológico
 - `alumnos.id` (INTEGER) es legacy (solo para display_name encapsulado)
 
+### 6.1.1 Creación Canónica de Alumnos
+
+**Creación de alumnos UUID-first en dominio MASTER: CANÓNICA Y OPERATIVA**
+
+Fecha: 2026-01-13  
+Versión: v5.69.0  
+Commit: (pendiente)
+
+**Alcance:**
+- ✅ Endpoint `POST /master/api/students`: Creación canónica UUID-first
+- ✅ UI `/master/alumnos/crear`: Interfaz canónica de creación
+- ✅ Servicio canónico: `StudentCreationService` encapsula lógica
+- ✅ Idempotencia: Email único (retorna existente si ya existe)
+- ✅ Integración: Alumnos creados aparecen en Alquimia sin legacy
+
+**Purga de alumnos legacy:** Paso posterior independiente (fuera del alcance de la creación canónica).
+
 ### 6.2 Regla para Nuevos Módulos
 
 **CUALQUIER NUEVO MÓDULO EN DOMINIO MASTER DEBE:**
@@ -306,11 +323,86 @@ Commit: 4967588
 
 ---
 
+## 7) CREACIÓN CANÓNICA DE ALUMNOS (MASTER)
+
+### 7.1 Endpoint de Creación
+
+**La ÚNICA forma canónica de crear alumnos es mediante:**
+- **Endpoint:** `POST /master/api/students`
+- **UI:** `/master/alumnos/crear` (interfaz canónica de creación)
+
+### 7.2 Contrato del Endpoint
+
+**Input:**
+```json
+{
+  "email": "alumno@example.com",  // OBLIGATORIO
+  "apodo": "Apodo del Alumno",     // Opcional
+  "nombre_completo": "Nombre Completo"  // Opcional
+}
+```
+
+**Validaciones:**
+- Email obligatorio (required)
+- Email único (case-insensitive, unique constraint)
+- Email válido (regex básico)
+- Trim y lowercase automático
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "student_uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "display_name": "Nombre del Alumno",
+    "email": "alumno@example.com"
+  },
+  "trace_id": "..."
+}
+```
+
+### 7.3 Lógica de Creación
+
+**Flujo canónico:**
+1. **Verificar idempotencia:** Buscar por email (si existe, retornar existente)
+2. **Crear en `alumnos` (legacy):** Para display_name/compatibilidad
+3. **Crear en `students` (UUID):** Con `legacy_alumno_id` referenciando `alumnos.id`
+4. **Calcular `display_name`:** Usando helper canónico
+5. **Retornar resultado:** `student_uuid`, `display_name`, `email`
+
+**Servicio canónico:** `src/core/master/services/student-creation-service.js`
+
+**REGLA:** El endpoint NO crea alumnos directamente sin pasar por el servicio canónico.
+
+### 7.4 Rol del Legacy
+
+**`alumnos` (legacy):**
+- Se crea SOLO para display_name/compatibilidad
+- NO es decisor en runtime
+- `students.legacy_alumno_id` mantiene la referencia
+- Encapsulado en el servicio de creación
+
+**NO SOT:** `alumnos` no participa como Source of Truth en la creación.
+
+### 7.5 Integración con Alquimia
+
+**Los alumnos creados:**
+- ✅ Aparecen en `/master/api/students` (lista de selectores)
+- ✅ Aparecen en selectores de Alquimia Alumno
+- ✅ Funcionan en Alquimia General y Alumno sin legacy
+- ✅ UUID-first desde el momento de creación
+
+**Verificación:** Crear alumnos nuevos y probar Alquimia (limpieza individual, historial, reportes).
+
+---
+
 ## REFERENCIAS
 
 - **Commit v5.68.1:** `5bca549` - "feat(alquimia): migración Alquimia Alumno a student_uuid"
 - **Commit v5.68.2:** `4967588` - "feat(students): endpoint /master/api/students UUID-first"
+- **Commit v5.69.0:** (pendiente) - "feat(students): creación canónica de alumnos UUID-first"
 - **Documentación Alquimia:** `docs/ALQUIMIA_CANONICA_V1.md`
 - **Contrato Identidad:** `docs/STUDENT_IDENTITY_CONTRACT_V1.md`
 - **Helper Display Name:** `src/core/helpers/student-display-name-helper.js`
 - **Repositorio Identidad:** `src/infra/repos/student-identity-repo-pg.js`
+- **Servicio Creación:** `src/core/master/services/student-creation-service.js`
