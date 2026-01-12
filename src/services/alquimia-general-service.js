@@ -663,33 +663,37 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           completed: 0
         };
         
-        // Calcular estado visual usando SHARED como default (para compatibilidad)
-        const cleanCount = sharedData.clean_count !== null && sharedData.clean_count !== undefined ? parseInt(sharedData.clean_count, 10) : 0;
-        const remaining = sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null;
-        const completed = sharedData.completed || 0;
+        // PROYECCIÓN COMBO: calcular total (shared + pde) como proyección backend
+        const sharedCount = sharedData.clean_count !== null && sharedData.clean_count !== undefined ? parseInt(sharedData.clean_count, 10) : 0;
+        const pdeCount = pdeData.clean_count !== null && pdeData.clean_count !== undefined ? parseInt(pdeData.clean_count, 10) : 0;
+        const comboCleanCount = sharedCount + pdeCount;
         
-        // Calcular estado visual dinámicamente
+        // COMBO remaining: max(veces_limpiar - combo_clean_count, 0)
+        const comboRemaining = Math.max(0, vecesLimpiar - comboCleanCount);
+        const comboCompleted = comboRemaining <= 0 ? 1 : 0;
+        
+        // Calcular estado visual basado en COMBO (proyección backend)
         let visualState;
         let state;
         
-        if (cleanCount === 0) {
+        if (comboCleanCount === 0) {
           // Nunca trabajado (gris)
           visualState = 'never';
           state = 'pending';
-        } else if (remaining !== null && remaining > 0) {
+        } else if (comboRemaining > 0) {
           // En proceso (amarillo) - tiene contador pero aún no completado
           visualState = 'in_progress';
           state = 'pending';
-        } else if (remaining !== null && remaining <= 0 && cleanCount === vecesLimpiar) {
+        } else if (comboRemaining <= 0 && comboCleanCount === vecesLimpiar) {
           // Completado exactamente (verde)
           visualState = 'completed';
           state = 'completed';
-        } else if (remaining !== null && remaining <= 0 && cleanCount > vecesLimpiar) {
+        } else if (comboRemaining <= 0 && comboCleanCount > vecesLimpiar) {
           // Muy bien trabajado (dorado) - superó el recomendado
           visualState = 'excellent';
           state = 'completed';
         } else {
-          // Fallback: si remaining es null pero tiene clean_count, tratar como en proceso
+          // Fallback: en proceso
           visualState = 'in_progress';
           state = 'pending';
         }
@@ -699,13 +703,20 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           // Asegurar que shared y pde están presentes (simétricos)
           shared: sharedData,
           pde: pdeData,
-          // Compatibilidad legacy (usar SHARED como default)
-          clean_count: cleanCount,
+          // PROYECCIÓN COMBO (calculada en backend, no persistida)
+          combo: {
+            clean_count: comboCleanCount,
+            remaining: comboRemaining,
+            completed: comboCompleted
+          },
+          // Estado visual calculado por backend (autoridad única)
           state,
-          visual_state: visualState, // Estado visual para UI
-          remaining,
-          completed,
-          veces_limpiar: vecesLimpiar // Añadir veces_limpiar para UI
+          visual_state: visualState,
+          // Compatibilidad legacy (usar SHARED como default para campos legacy)
+          clean_count: sharedCount,
+          remaining: sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null,
+          completed: sharedData.completed || 0,
+          veces_limpiar: vecesLimpiar
         };
       });
       

@@ -1191,37 +1191,29 @@
     const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
     const layerView = state.modal.layerView || 'shared';
     
-    // Calcular estados según tipo y vista
+    // UI PASIVA: usar solo estados calculados por backend (autoridad única)
+    // NO calcular estados en frontend, solo agrupar por student.state o student.visual_state
     studentsAplicables.forEach(student => {
-      let state;
+      // RECURRENTE: usar student.state calculado por backend
+      // UNA_VEZ: usar student.visual_state calculado por backend (basado en COMBO)
+      const state = itemKind === 'recurrente' 
+        ? (student.state || 'never')  // Backend calcula: never | reviewed | pending | important
+        : (student.visual_state || 'never'); // Backend calcula: never | in_progress | completed | excellent
       
+      // Mapeo de estados UNA_VEZ a estados de columna
+      let columnState = state;
       if (itemKind === 'una_vez') {
-        // UNA_VEZ: TOTAL es el decisor (shared_clean_count + pde_clean_count)
-        const sharedCount = (student.shared?.clean_count || 0);
-        const pdeCount = (student.pde?.clean_count || 0);
-        const totalCount = sharedCount + pdeCount;
-        
-        if (totalCount === 0) {
-          state = 'never'; // Nunca trabajado
-        } else if (totalCount < (requiredCount / 2)) {
-          state = 'pending'; // Pendiente (menos de la mitad)
-        } else if (totalCount >= requiredCount && totalCount < (requiredCount * 2)) {
-          state = 'completed'; // Completado
-        } else if (totalCount >= (requiredCount * 2)) {
-          state = 'excellent'; // Muy bien trabajado
-        } else {
-          state = 'pending'; // En proceso
-        }
-      } else {
-        // RECURRENTE: usar capa seleccionada (SHARED o PDE)
-        const layer = layerView === 'pde' ? 'pde' : 'shared';
-        state = calculateStudentState(student, layer, itemKind, requiredCount, normalized);
+        // Mapear visual_state a estados de columna
+        if (state === 'in_progress') columnState = 'pending';
+        else if (state === 'excellent') columnState = 'excellent';
+        else if (state === 'completed') columnState = 'completed';
+        else columnState = 'never';
       }
       
-      if (studentsByState[state]) {
-        studentsByState[state].push(student);
+      if (studentsByState[columnState]) {
+        studentsByState[columnState].push(student);
       } else {
-        // Fallback
+        // Fallback seguro
         if (itemKind === 'recurrente') {
           studentsByState.never.push(student);
         } else {
@@ -1455,42 +1447,72 @@
       infoSpan.style.cssText = 'font-size: 0.75rem; color: #94a3b8;';
       stateDiv.appendChild(infoSpan);
     } else if (layerView === 'combo' && itemKind === 'recurrente') {
-      // COMBO RECURRENTE: mostrar ambos estados
-      const sharedState = getStudentState(student, 'shared', tipo, requiredCount);
-      const pdeState = getStudentState(student, 'pde', tipo, requiredCount);
-      stateDiv.textContent = `S: ${sharedState} | P: ${pdeState}`;
+      // COMBO RECURRENTE: mostrar ambos estados desde backend
+      const sharedDays = student.shared?.days_since_last_clean;
+      const pdeDays = student.pde?.days_since_last_clean;
+      const thresholdDays = normalized.threshold_days || 7;
+      const criticalMultiplier = normalized.critical_multiplier || 2.0;
+      const criticalThreshold = thresholdDays * criticalMultiplier;
+      
+      // Calcular estado SHARED (usar lógica backend, pero solo para display)
+      let sharedStateText = 'Nunca';
+      if (sharedDays !== null && sharedDays !== undefined) {
+        if (sharedDays < thresholdDays) sharedStateText = 'Revisado';
+        else if (sharedDays < criticalThreshold) sharedStateText = 'Pendiente';
+        else sharedStateText = 'Importante';
+      }
+      
+      // Calcular estado PDE (usar lógica backend, pero solo para display)
+      let pdeStateText = 'Nunca';
+      if (pdeDays !== null && pdeDays !== undefined) {
+        if (pdeDays < thresholdDays) pdeStateText = 'Revisado';
+        else if (pdeDays < criticalThreshold) pdeStateText = 'Pendiente';
+        else pdeStateText = 'Importante';
+      }
+      
+      stateDiv.textContent = `S: ${sharedStateText} | P: ${pdeStateText}`;
     } else {
-      // SHARED o PDE: mostrar solo la capa seleccionada
-      const layer = layerView === 'pde' ? 'pde' : 'shared';
-      stateDiv.textContent = getStudentState(student, layer, tipo, requiredCount);
+      // SHARED o PDE: usar estado calculado por backend
+      stateDiv.textContent = getStudentStateDisplay(student, itemKind);
     }
     row.appendChild(stateDiv);
 
-    // Columna 3: Restantes (según vista)
+    // Columna 3: Restantes (UI PASIVA: usar datos del backend)
     const remainingDiv = document.createElement('div');
     remainingDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     
     if (layerView === 'combo' && itemKind === 'una_vez') {
-      // COMBO UNA_VEZ: mostrar TOTAL remaining (si aplica) y S/P como informativos
-      const sharedCount = (student.shared?.clean_count || 0);
-      const pdeCount = (student.pde?.clean_count || 0);
-      const totalCount = sharedCount + pdeCount;
-      const totalRemaining = Math.max(0, requiredCount - totalCount);
+      // COMBO UNA_VEZ: usar proyección COMBO del backend
+      const comboRemaining = student.combo?.remaining ?? 0;
+      const sharedRemaining = student.shared?.remaining ?? 0;
+      const pdeRemaining = student.pde?.remaining ?? 0;
       
-      if (totalRemaining > 0) {
-        remainingDiv.textContent = `Restan: ${totalRemaining} (S:${student.shared?.remaining || 0} P:${student.pde?.remaining || 0})`;
+      if (comboRemaining > 0) {
+        remainingDiv.textContent = `Restan: ${comboRemaining} (S:${sharedRemaining} P:${pdeRemaining})`;
       } else {
-        remainingDiv.textContent = `Completado (S:${student.shared?.remaining || 0} P:${student.pde?.remaining || 0})`;
+        remainingDiv.textContent = `Completado (S:${sharedRemaining} P:${pdeRemaining})`;
       }
     } else if (layerView === 'combo' && itemKind === 'recurrente') {
-      // COMBO RECURRENTE: mostrar ambos remaining
-      const sharedRem = getStudentRemaining(student, 'shared', tipo);
-      const pdeRem = getStudentRemaining(student, 'pde', tipo);
-      remainingDiv.textContent = `S:${sharedRem} | P:${pdeRem}`;
+      // COMBO RECURRENTE: mostrar ambos remaining desde backend
+      const sharedDays = student.shared?.days_since_last_clean;
+      const pdeDays = student.pde?.days_since_last_clean;
+      const sharedText = sharedDays !== null ? `${sharedDays}d` : 'Nunca';
+      const pdeText = pdeDays !== null ? `${pdeDays}d` : 'Nunca';
+      remainingDiv.textContent = `S:${sharedText} | P:${pdeText}`;
     } else {
-      // SHARED o PDE: mostrar solo la capa seleccionada
-      const layer = layerView === 'pde' ? 'pde' : 'shared';
-      remainingDiv.textContent = getStudentRemaining(student, layer, tipo);
+      // SHARED o PDE: mostrar remaining desde backend
+      if (itemKind === 'recurrente') {
+        const days = layerView === 'pde' 
+          ? (student.pde?.days_since_last_clean)
+          : (student.shared?.days_since_last_clean);
+        remainingDiv.textContent = days !== null ? `${days}d` : 'Nunca';
+      } else {
+        // UNA_VEZ: usar remaining de la capa seleccionada
+        const remaining = layerView === 'pde'
+          ? (student.pde?.remaining ?? null)
+          : (student.shared?.remaining ?? null);
+        remainingDiv.textContent = remaining !== null ? remaining.toString() : 'N/A';
+      }
     }
     row.appendChild(remainingDiv);
 
@@ -1610,74 +1632,30 @@
   }
 
   /**
-   * Calcula el estado de un estudiante según capa (para agrupación)
+   * Obtiene texto de display para estado (UI PASIVA: solo formatea, no calcula)
+   * Usa student.state o student.visual_state calculado por backend
    */
-  function calculateStudentState(student, layer, itemKind, requiredCount, normalized = null) {
-    const layerData = student[layer];
-    if (!layerData) return itemKind === 'una_vez' ? 'pending' : 'never';
-    
+  function getStudentStateDisplay(student, itemKind) {
+    // RECURRENTE: usar student.state del backend
     if (itemKind === 'recurrente') {
-      const days = layerData.days_since_last_clean;
-      if (days === null || days === undefined) return 'never';
-      // Obtener threshold_days del normalized si está disponible
-      const thresholdDays = normalized?.threshold_days || 7;
-      const criticalMultiplier = normalized?.critical_multiplier || 2.0;
-      const criticalThreshold = thresholdDays * criticalMultiplier;
-      
-      if (days < thresholdDays) return 'reviewed';
-      if (days < criticalThreshold) return 'pending';
-      return 'important';
+      const state = student.state || 'never';
+      const stateMap = {
+        'never': 'Nunca',
+        'reviewed': 'Revisado',
+        'pending': 'Pendiente',
+        'important': 'Importante'
+      };
+      return stateMap[state] || 'N/A';
     } else {
-      // una_vez
-      const remaining = layerData.remaining;
-      const cleanCount = layerData.clean_count || 0;
-      
-      if (cleanCount === 0) return 'pending'; // Nunca trabajado
-      if (remaining !== null && remaining > 0) return 'pending'; // En proceso
-      if (remaining !== null && remaining <= 0) return 'completed'; // Completado
-      return 'pending';
-    }
-  }
-
-  /**
-   * Helper: Obtiene estado visual de un estudiante según capa (para display)
-   */
-  function getStudentState(student, layer, tipo, requiredCount) {
-    const layerData = student[layer];
-    if (!layerData) return 'N/A';
-    
-    if (tipo === 'recurrente') {
-      const days = layerData.days_since_last_clean;
-      if (days === null) return 'Nunca';
-      if (days < 7) return 'Revisado';
-      if (days < 14) return 'Pendiente';
-      return 'Importante';
-    } else {
-      // una_vez
-      const remaining = layerData.remaining;
-      const cleanCount = layerData.clean_count || 0;
-      if (cleanCount === 0) return 'Nunca';
-      if (remaining !== null && remaining > 0) return 'En proceso';
-      if (remaining !== null && remaining <= 0 && cleanCount === requiredCount) return 'Completado';
-      if (remaining !== null && remaining <= 0 && cleanCount > requiredCount) return 'Excelente';
-      return 'En proceso';
-    }
-  }
-
-  /**
-   * Helper: Obtiene remaining de un estudiante según capa
-   */
-  function getStudentRemaining(student, layer, tipo) {
-    const layerData = student[layer];
-    if (!layerData) return 'N/A';
-    
-    if (tipo === 'recurrente') {
-      const days = layerData.days_since_last_clean;
-      return days !== null ? `${days}d` : 'Nunca';
-    } else {
-      // una_vez
-      const remaining = layerData.remaining;
-      return remaining !== null ? remaining.toString() : 'N/A';
+      // UNA_VEZ: usar student.visual_state del backend (basado en COMBO)
+      const visualState = student.visual_state || 'never';
+      const visualStateMap = {
+        'never': 'Nunca',
+        'in_progress': 'En proceso',
+        'completed': 'Completado',
+        'excellent': 'Excelente'
+      };
+      return visualStateMap[visualState] || 'N/A';
     }
   }
 

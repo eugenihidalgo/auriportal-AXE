@@ -242,7 +242,7 @@ export async function markCleanStudent(options, client = null) {
         overrideAplicado = true;
         logInfo('CleaningEngine', 'Master Override aplicado (level_cap_override)', {
           traceId,
-          student_id,
+          student_uuid,
           item_ref,
           item_nivel: item.nivel,
           nivel_efectivo: nivelEfectivo,
