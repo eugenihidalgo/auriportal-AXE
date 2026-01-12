@@ -16,6 +16,7 @@ import { ensureCleaningItemStateSeedForStudent } from '../core/master/services/c
 import { buildHumanPanelForItemHistory } from '../core/master/services/alquimia-history-resolver-service.js';
 import { buildAlquimiaReport } from '../core/master/services/alquimia-report-service.js';
 import { getDefaultStudentIdentityRepo } from '../infra/repos/student-identity-repo-pg.js';
+import { validateViewLayer } from '../core/master/services/cleaning-layer-constants.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -107,13 +108,28 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
   }
 
   try {
-    // 1) GET /master/api/alquimia-alumno/megalist?student_uuid=...&levels_mode=...&level_cap=...
+    // 1) GET /master/api/alquimia-alumno/megalist?student_uuid=...&view_layer=...&levels_mode=...&level_cap=...
     if (path.match(/^\/master\/api\/alquimia-alumno\/megalist$/) && method === 'GET') {
       const studentUuid = url.searchParams.get('student_uuid');
+      const viewLayer = url.searchParams.get('view_layer');
       const levelsMode = url.searchParams.get('levels_mode') || null;
       const levelCapParam = url.searchParams.get('level_cap');
       const levelCap = levelCapParam === null || levelCapParam === '' ? null : 
                        (levelCapParam === 'infinity' || levelCapParam === '∞' ? 999 : parseInt(levelCapParam, 10));
+      
+      // ============================================================================
+      // GUARD CONSTITUCIONAL: view_layer es OBLIGATORIO
+      // ============================================================================
+      if (!viewLayer) {
+        return jsonError('view_layer es requerido. Debe ser uno de: shared, pde, combo', 'MISSING_VIEW_LAYER', 400, traceId);
+      }
+      
+      // Validar view_layer
+      try {
+        validateViewLayer(viewLayer);
+      } catch (validationError) {
+        return jsonError(`view_layer inválido: ${validationError.message}`, 'INVALID_VIEW_LAYER', 400, traceId);
+      }
       
       // CAMBIADO: Validar student_uuid (UUID canónico) en lugar de student_id
       if (!studentUuid) {
@@ -136,6 +152,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         traceId,
         student_uuid: studentUuid,
         legacy_student_id: legacyStudentId,
+        view_layer: viewLayer,
         levels_mode: levelsMode,
         level_cap: levelCap,
         level_cap_provided: levelCap !== null
@@ -163,8 +180,10 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       // Construir megalista SOLO desde estados (como fix b1cca23)
       // Filtrar por level_cap si viene
+      // REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO
       const result = await getMegalistForStudent({
         student_id: legacyStudentId, // Usar legacy ID para servicio legacy
+        view_layer: viewLayer, // OBLIGATORIO según regla constitucional
         levels_mode: levelsMode,
         level_cap: levelCap
       });
@@ -407,9 +426,15 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       // Panel humano (visible por defecto) - Resolver nombres y clasificaciones
       const humanPanel = await buildHumanPanelForItemHistory(events, itemRef);
       
+      // REGLA CONSTITUCIONAL: Este endpoint NO calcula estado, solo devuelve eventos históricos
+      // Por lo tanto, context.view_layer = null (explícito)
       return jsonSuccess({
         technical_panel: technicalPanel,
-        human_panel: humanPanel
+        human_panel: humanPanel,
+        context: {
+          view_layer: null, // Este endpoint no calcula estado
+          does_not_compute_state: true
+        }
       }, traceId);
     }
     
@@ -449,7 +474,15 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         days
       });
       
-      return jsonSuccess(report, traceId);
+      // REGLA CONSTITUCIONAL: Este endpoint NO calcula estado, solo devuelve eventos históricos
+      // Por lo tanto, context.view_layer = null (explícito)
+      return jsonSuccess({
+        ...report,
+        context: {
+          view_layer: null, // Este endpoint no calcula estado
+          does_not_compute_state: true
+        }
+      }, traceId);
     }
     
     // Método no soportado

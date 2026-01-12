@@ -59,7 +59,8 @@
     selectedStudentUuid: null, // CAMBIADO: usar student_uuid (UUID canónico) en lugar de selectedStudentId
     megalistData: null,
     loading: false,
-    levelCap: null // null = Auto (nivel_efectivo), number = cap explícito
+    levelCap: null, // null = Auto (nivel_efectivo), number = cap explícito
+    viewLayer: 'shared' // REGLA CONSTITUCIONAL: view_layer activa (default: 'shared')
   };
 
   // Elementos DOM
@@ -289,6 +290,7 @@
 
   /**
    * Carga la megalista para un alumno
+   * REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO
    * CAMBIADO: acepta student_uuid (UUID canónico) en lugar de student_id
    */
   async function loadMegalist(studentUuid) {
@@ -296,11 +298,20 @@
       state.loading = true;
       showLoading();
       
-      // Construir URL con level_cap si viene
-      let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}`; // CAMBIADO: usar student_uuid
+      // REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO en GET
+      const viewLayer = state.viewLayer || 'shared'; // Default 'shared'
+      
+      // Construir URL con view_layer (OBLIGATORIO) y level_cap si viene
+      let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}&view_layer=${viewLayer}`; // CAMBIADO: usar student_uuid y view_layer
       if (state.levelCap !== null) {
         url += `&level_cap=${state.levelCap === 999 ? 'infinity' : state.levelCap}`;
       }
+      
+      console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][COLUMN_PIPELINE] GET megalist', {
+        student_uuid: studentUuid,
+        view_layer: viewLayer,
+        level_cap: state.levelCap
+      });
       
       const response = await fetch(url);
       const result = await response.json();
@@ -312,7 +323,7 @@
       }
       
       state.megalistData = result.data;
-      renderMegalist(result.data);
+      renderMegalist(result.data, viewLayer);
     } catch (error) {
       console.error('[MasterAlquimiaAlumno] Error cargando megalist:', error);
       showError('Error cargando datos: ' + error.message);
@@ -324,13 +335,21 @@
 
   /**
    * Renderiza la megalista completa
+   * REGLA CONSTITUCIONAL: Consume state_by_view_layer[view_layer] para agrupar items
    */
-  function renderMegalist(data) {
+  function renderMegalist(data, viewLayer) {
+    const activeViewLayer = viewLayer || state.viewLayer || 'shared';
+    
+    console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][COLUMN_PIPELINE] Renderizando megalist', {
+      view_layer: activeViewLayer,
+      lists_count: data.lists?.length || 0
+    });
+    
     // Renderizar resumen
     renderSummary(data.summary);
     
-    // Renderizar megalista por listas
-    renderMegalistByLists(data.lists);
+    // Renderizar megalista por listas (agrupa desde state_by_view_layer)
+    renderMegalistByLists(data.lists, activeViewLayer);
     
     // Renderizar revisados
     renderReviewed(data.reviewed);
@@ -536,18 +555,20 @@
 
   /**
    * Renderiza la megalista agrupada por listas
+   * REGLA CONSTITUCIONAL: Agrupa items desde state_by_view_layer[view_layer]
    */
-  function renderMegalistByLists(lists) {
+  function renderMegalistByLists(lists, viewLayer) {
     if (!megalistSection) return;
+    
+    const activeViewLayer = viewLayer || state.viewLayer || 'shared';
     
     // Limpiar
     while (megalistSection.firstChild) {
       megalistSection.removeChild(megalistSection.firstChild);
     }
     
-    // CRÍTICO: Renderizar SOLO listas que tienen items con estado
-    // Las listas aparecen SOLO si contienen al menos un item con estado
-    if (lists.length === 0) {
+    // CRÍTICO: Renderizar SOLO listas que tienen items
+    if (!lists || lists.length === 0) {
       const emptyDiv = document.createElement('div');
       emptyDiv.style.cssText = 'padding: 3rem; text-align: center; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem;';
       
@@ -570,17 +591,20 @@
       return;
     }
     
-    // Renderizar cada lista (todas tienen items con estado)
+    // Renderizar cada lista (agrupa items desde state_by_view_layer)
     lists.forEach(list => {
-      const listDiv = renderList(list);
+      const listDiv = renderList(list, activeViewLayer);
       megalistSection.appendChild(listDiv);
     });
   }
 
   /**
-   * Renderiza una lista con sus grupos (SIEMPRE visible, aunque esté vacía)
+   * Renderiza una lista con sus grupos
+   * REGLA CONSTITUCIONAL: Agrupa items desde state_by_view_layer[view_layer]
    */
-  function renderList(list) {
+  function renderList(list, viewLayer) {
+    const activeViewLayer = viewLayer || state.viewLayer || 'shared';
+    
     const listDiv = document.createElement('div');
     listDiv.className = 'mb-8 border border-slate-700 rounded-lg overflow-hidden';
     
@@ -594,24 +618,73 @@
     listDiv.appendChild(header);
     
     // Contenido
-    // CRÍTICO: Esta lista SIEMPRE tiene items con estado (filtrado en backend)
     const content = document.createElement('div');
     content.className = 'p-4';
     
-    // Orden canónico: never → important → pending (siempre en este orden)
-    if (list.never && list.never.length > 0) {
-      const neverGroup = renderItemGroup('NUNCA', list.never, 'text-slate-400', 'bg-slate-900');
+    // REGLA CONSTITUCIONAL: Agrupar items desde state_by_view_layer[view_layer]
+    const items = list.items || [];
+    
+    // Agrupar items por estado desde state_by_view_layer[view_layer]
+    const groupedItems = {
+      never: [],
+      important: [],
+      pending: [],
+      reviewed: []
+    };
+    
+    for (const item of items) {
+      // Obtener estado desde state_by_view_layer[view_layer]
+      const stateData = item.state_by_view_layer?.[activeViewLayer];
+      
+      if (!stateData) {
+        console.warn('[DEPRECATED][VIEW_AUTHORITY] [MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][COLUMN_PIPELINE] Item sin state_by_view_layer - usando fallback legacy', {
+          item_ref: item.item_ref,
+          view_layer: activeViewLayer,
+          has_state_by_view_layer: !!item.state_by_view_layer,
+          deprecation_note: 'TODO: Eliminar fallback cuando backend garantice state_by_view_layer siempre presente (v5.71.0)'
+        });
+        groupedItems.never.push(item); // Fallback seguro (DEPRECATED)
+        continue;
+      }
+      
+      // Determinar estado según item_kind
+      const itemState = item.lista_tipo === 'recurrente' 
+        ? stateData.state 
+        : stateData.visual_state;
+      
+      // Agrupar por estado
+      if (itemState === 'never') {
+        groupedItems.never.push(item);
+      } else if (itemState === 'important') {
+        groupedItems.important.push(item);
+      } else if (itemState === 'pending') {
+        groupedItems.pending.push(item);
+      } else if (itemState === 'reviewed' || itemState === 'completed') {
+        groupedItems.reviewed.push(item);
+      } else {
+        groupedItems.pending.push(item); // Fallback seguro
+      }
+    }
+    
+    // Renderizar grupos en orden canónico: never → important → pending → reviewed
+    if (groupedItems.never.length > 0) {
+      const neverGroup = renderItemGroup('NUNCA', groupedItems.never, 'text-slate-400', 'bg-slate-900');
       content.appendChild(neverGroup);
     }
     
-    if (list.important && list.important.length > 0) {
-      const importantGroup = renderItemGroup('IMPORTANTE', list.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
+    if (groupedItems.important.length > 0) {
+      const importantGroup = renderItemGroup('IMPORTANTE', groupedItems.important, 'text-red-400', 'bg-red-900 bg-opacity-30');
       content.appendChild(importantGroup);
     }
     
-    if (list.pending && list.pending.length > 0) {
-      const pendingGroup = renderItemGroup('PENDIENTE', list.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
+    if (groupedItems.pending.length > 0) {
+      const pendingGroup = renderItemGroup('PENDIENTE', groupedItems.pending, 'text-yellow-400', 'bg-yellow-900 bg-opacity-30');
       content.appendChild(pendingGroup);
+    }
+    
+    if (groupedItems.reviewed.length > 0) {
+      const reviewedGroup = renderItemGroup('REVISADO', groupedItems.reviewed, 'text-green-400', 'bg-green-900 bg-opacity-30');
+      content.appendChild(reviewedGroup);
     }
     
     listDiv.appendChild(content);
@@ -679,20 +752,24 @@
     }
     
     // Recurrencia (frecuencia_dias o veces_limpiar)
-    // Para una_vez: mostrar progreso (realizadas / requeridas)
+    // Para una_vez: mostrar progreso (realizadas / requeridas) desde state_by_view_layer
     // Para recurrentes: mostrar frecuencia_dias
     if (item.lista_tipo === 'una_vez') {
-      // Items una_vez: mostrar progreso
-      if (item.progress_requeridas !== null && item.progress_requeridas !== undefined) {
+      // Items una_vez: mostrar progreso desde state_by_view_layer
+      const activeViewLayer = state.viewLayer || 'shared';
+      const stateData = item.state_by_view_layer?.[activeViewLayer];
+      const requiredCount = item.item_veces_limpiar || 1;
+      
+      if (stateData && requiredCount) {
+        // Calcular realizadas desde computed_state
+        const cleanCount = stateData.computed_state?.clean_count || 0;
         const vecesEl = document.createElement('span');
         vecesEl.style.cssText = 'color: #64748b; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(100, 116, 139, 0.2); border-radius: 0.25rem;';
-        const realizadas = item.progress_realizadas || 0;
-        const requeridas = item.progress_requeridas || 1;
-        vecesEl.textContent = `${realizadas} / ${requeridas}`;
+        vecesEl.textContent = `${cleanCount} / ${requiredCount}`;
         metaDiv.appendChild(vecesEl);
         
         // Marca visual si está trabajado (sin ocultar)
-        if (realizadas > 0) {
+        if (cleanCount > 0) {
           const workedEl = document.createElement('span');
           workedEl.style.cssText = 'color: #10b981; font-size: 0.75rem; padding: 0.125rem 0.375rem; background: rgba(16, 185, 129, 0.2); border-radius: 0.25rem;';
           workedEl.textContent = '✓ Trabajado';
@@ -717,9 +794,16 @@
     rightDiv.className = 'flex items-center gap-2';
     
     // Botón limpiar
+    // REGLA CONSTITUCIONAL: Usar estado desde state_by_view_layer[view_layer]
+    const activeViewLayer = state.viewLayer || 'shared';
+    const stateData = item.state_by_view_layer?.[activeViewLayer];
+    const itemState = item.lista_tipo === 'recurrente' 
+      ? (stateData?.state || 'never')
+      : (stateData?.visual_state || 'never');
+    
     // REGLA UNA_VEZ: Botón siempre activo (permite múltiples limpiezas sin límite diario)
     // REGLA RECURRENTE: Solo si NO está revisado
-    const shouldShowCleanButton = item.lista_tipo === 'una_vez' || item.state !== 'reviewed';
+    const shouldShowCleanButton = item.lista_tipo === 'una_vez' || itemState !== 'reviewed';
     
     if (shouldShowCleanButton) {
       const cleanBtn = document.createElement('button');
@@ -727,16 +811,20 @@
       
       // Texto diferente para una_vez vs recurrentes
       if (item.lista_tipo === 'una_vez') {
+        const requiredCount = item.item_veces_limpiar || 1;
+        const cleanCount = stateData?.computed_state?.clean_count || 0;
         cleanBtn.textContent = 'Limpiar';
-        cleanBtn.title = `Limpiar item (SHARED) - Progreso: ${item.progress_realizadas || 0} / ${item.progress_requeridas || 1}`;
+        cleanBtn.title = `Limpiar item (SHARED) - Progreso: ${cleanCount} / ${requiredCount}`;
       } else {
         cleanBtn.textContent = 'Marcar como revisado';
         cleanBtn.title = 'Limpiar item (SHARED) - acción inmediata';
       }
       
       cleanBtn.addEventListener('click', () => {
+        const requiredCount = item.item_veces_limpiar || 1;
+        const cleanCount = stateData?.computed_state?.clean_count || 0;
         const confirmMsg = item.lista_tipo === 'una_vez' 
-          ? `¿Limpiar "${item.item_nombre}"? (Progreso: ${item.progress_realizadas || 0} / ${item.progress_requeridas || 1})`
+          ? `¿Limpiar "${item.item_nombre}"? (Progreso: ${cleanCount} / ${requiredCount})`
           : `¿Marcar "${item.item_nombre}" como revisado?`;
         // Sin confirmación (UX sin fricción)
         handleCleanItem(item);

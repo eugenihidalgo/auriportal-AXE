@@ -285,6 +285,7 @@ Este inventario identifica **110+ documentos** relacionados con el movimiento es
 |------|--------|-----------|--------|
 | `PRINCIPIOS_INMUTABLES_AURIPORTAL.md` | Principios Inmutables de AuriPortal | Columna vertebral estructural. 9 principios inmutables, 8 reglas obligatorias, filosofía de evolución. | ✅ VIGENTE |
 | `CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md` | Certificación Source of Truth - Fase 1 | Principios constitucionales del SOT. Soberanía única, inmutabilidad de decisiones, clasificación de entidades. | ✅ VIGENTE |
+| `docs/CONSTITUTION_VIEW_AUTHORITY_V1.md` | Constitución: Regla de Autoridad de Vista v1 | Regla constitucional sobre autoridad de estado. Backend como única autoridad, view_layer obligatoria, separación clean_layer/view_layer. | ✅ VIGENTE |
 | `docs/CONTRACT_OF_CONTRACTS.md` | Contract of Contracts | Sistema de contratos. Relación entre contratos, jerarquía, cumplimiento. | ✅ VIGENTE |
 
 ### 10.2. Documentos Estructurales (Nivel: ESTRUCTURAL)
@@ -313,10 +314,13 @@ Este inventario identifica **110+ documentos** relacionados con el movimiento es
 2. CERTIFICACION_SOURCE_OF_TRUTH_FASE1.md
    └─ Principios constitucionales SOT
    
-3. docs/ADMIN_UI_CONTRACT_V1.md
+3. docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+   └─ Regla de autoridad de vista (backend como única autoridad)
+   
+4. docs/ADMIN_UI_CONTRACT_V1.md
    └─ Principios constitucionales UI Admin
    
-4. docs/CONTRACT_OF_CONTRACTS.md
+5. docs/CONTRACT_OF_CONTRACTS.md
    └─ Sistema de contratos (marco general)
 ```
 

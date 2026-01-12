@@ -16,87 +16,31 @@ import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-cat
 import { getDefaultStudentRepo } from '../../../infra/repos/student-repo-pg.js';
 import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
+import { computeVisualState } from '../../../services/alquimia-general-service.js';
+import { validateViewLayer } from './cleaning-layer-constants.js';
 
 /**
- * Calcula el estado de un item basado en cleaning_item_state
+ * Calcula days_since_last_clean desde last_cleaned_at
  * 
- * @param {Object} state - Estado de cleaning_item_state (SHARED)
- * @param {Object} item - Item del catálogo (para metadata: frecuencia_dias, critical_multiplier, tipo)
- * @param {string} tipo - Tipo de lista ('recurrente' | 'una_vez')
- * @returns {string} Estado: 'never' | 'important' | 'pending' | 'reviewed'
+ * @param {string|null} lastCleanedAt - Fecha ISO string o null
+ * @returns {number|null} Días desde última limpieza o null si nunca
  */
-function calculateItemState(state, item, tipo) {
-  // Fail-open: si tipo no es válido, usar 'recurrente' como fallback
-  const listaTipo = (tipo === 'recurrente' || tipo === 'una_vez') ? tipo : 'recurrente';
+function calculateDaysSince(lastCleanedAt) {
+  if (!lastCleanedAt) {
+    return null;
+  }
   
-  if (listaTipo === 'recurrente') {
-    const lastCleaned = state?.shared_last_cleaned_at;
+  try {
+    const now = new Date();
+    const lastCleanedDate = new Date(lastCleanedAt);
     
-    if (!lastCleaned) {
-      return 'never';
+    if (isNaN(lastCleanedDate.getTime())) {
+      return null;
     }
     
-    // Fail-open: si item no tiene frecuencia_dias, usar 7 por defecto
-    const thresholdDays = (item?.frecuencia_dias && item.frecuencia_dias > 0) ? item.frecuencia_dias : 7;
-    const criticalMultiplier = (item?.critical_multiplier && item.critical_multiplier > 0) ? item.critical_multiplier : 2.0;
-    const criticalThreshold = thresholdDays * criticalMultiplier;
-    
-    try {
-      const now = new Date();
-      const lastCleanedDate = new Date(lastCleaned);
-      
-      // Fail-open: si fecha inválida, retornar 'never'
-      if (isNaN(lastCleanedDate.getTime())) {
-        return 'never';
-      }
-      
-      const daysSince = Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
-      
-      if (daysSince < thresholdDays) {
-        return 'reviewed';
-      } else if (daysSince < criticalThreshold) {
-        return 'pending';
-      } else {
-        return 'important';
-      }
-    } catch (error) {
-      // Fail-open: si falla cálculo de fecha, retornar 'never'
-      return 'never';
-    }
-  } else {
-    // una_vez
-    // REGLA CANÓNICA: remaining = veces_limpiar - clean_count (calculado dinámicamente)
-    // Para determinar estado:
-    // - never: remaining > 0 y clean_count = 0 (nunca trabajado)
-    // - pending: remaining > 0 y clean_count > 0 (parcialmente trabajado)
-    // - reviewed: remaining <= 0 (completado)
-    const remaining = state?.shared_remaining ?? null;
-    const cleanCount = state?.shared_clean_count ?? 0;
-    const completed = state?.shared_completed ?? 0;
-    
-    // Fail-open: si no hay estado, retornar 'never'
-    if (remaining === null) {
-      return 'never';
-    }
-    
-    // REGLA: remaining <= 0 significa que está completado
-    // Pero también verificamos clean_count para evitar falsos positivos
-    if (remaining <= 0 || completed > 0) {
-      return 'reviewed';
-    }
-    
-    // REGLA: Si tiene clean_count > 0 pero remaining > 0, está parcialmente trabajado
-    if (cleanCount > 0 && remaining > 0) {
-      return 'pending';
-    }
-    
-    // REGLA: Si remaining > 0 y clean_count = 0, nunca trabajado
-    if (remaining > 0 && cleanCount === 0) {
-      return 'never';
-    }
-    
-    // Fallback: pending
-    return 'pending';
+    return Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
+  } catch (error) {
+    return null;
   }
 }
 
@@ -141,21 +85,44 @@ async function getLastCleanActor(studentId, itemRef) {
  * REGLA FUNDAMENTAL: La megalista se construye desde el ESTADO DEL ALUMNO, no desde el catálogo
  * - Fuente única: cleaning_item_state WHERE student_id = ?
  * - Catálogo SOLO como resolver (nombre, descripción)
- * - Listas aparecen SOLO si contienen items con estado
- * - Si item no se puede resolver → WARNING + NO SE RENDERIZA
+ * - Items devueltos PLANOS (NO agrupados) con state_by_view_layer
+ * - Frontend agrupa por estado desde state_by_view_layer[view_layer]
+ * 
+ * REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO
+ * - view_layer decide qué estado se calcula
+ * - state_by_view_layer contiene estados para todas las view_layers
  * 
  * @param {Object} options - Opciones
  * @param {number} options.student_id - ID del alumno
+ * @param {string} options.view_layer - Capa de vista ('shared' | 'pde' | 'combo') - OBLIGATORIO
  * @param {string} [options.levels_mode] - Modo de niveles (por ahora solo aceptado, no usado)
  * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
- * @returns {Promise<Object>} Estructura de megalista
+ * @returns {Promise<Object>} Estructura de megalista con items planos
  */
 export async function getMegalistForStudent(options = {}) {
   const traceId = getRequestId();
-  const { student_id, levels_mode, level_cap = null } = options;
+  const { student_id, view_layer, levels_mode, level_cap = null } = options;
   
   if (!student_id) {
     throw new Error('student_id es requerido');
+  }
+  
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: view_layer es OBLIGATORIO
+  // ============================================================================
+  if (!view_layer) {
+    const error = new Error('view_layer es requerido. Debe ser uno de: shared, pde, combo');
+    error.code = 'MISSING_VIEW_LAYER';
+    throw error;
+  }
+  
+  // Validar view_layer
+  try {
+    validateViewLayer(view_layer);
+  } catch (validationError) {
+    const error = new Error(`view_layer inválido: ${validationError.message}`);
+    error.code = 'INVALID_VIEW_LAYER';
+    throw error;
   }
   
   try {
@@ -174,6 +141,7 @@ export async function getMegalistForStudent(options = {}) {
     logInfo('AlquimiaAlumnoMegalist', 'Construyendo megalista desde estado', {
       traceId,
       student_id,
+      view_layer,
       levels_mode,
       level_cap: nivelCap,
       level_cap_provided: level_cap !== null
@@ -197,11 +165,26 @@ export async function getMegalistForStudent(options = {}) {
       });
     }
     
-    // 4. OBTENER ESTADOS DE LIMPIEZA SHARED PARA ESTE ALUMNO (FUENTE ÚNICA)
+    // 4. OBTENER ESTADOS DE LIMPIEZA SHARED Y PDE PARA ESTE ALUMNO (FUENTE ÚNICA)
+    // REGLA CONSTITUCIONAL: Leer tanto shared como pde para calcular state_by_view_layer
     // Filtrar por level_cap: solo items con nivel <= cap
     // Necesitamos hacer JOIN con items_transmutaciones para filtrar por nivel
     const statesResult = await query(`
-      SELECT s.*, i.nivel as item_nivel
+      SELECT 
+        s.*,
+        i.nivel as item_nivel,
+        -- Calcular days_since_last_clean para shared
+        CASE 
+          WHEN s.shared_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - s.shared_last_cleaned_at)) / 86400
+          ELSE NULL
+        END::integer as shared_days_since_last_clean,
+        -- Calcular days_since_last_clean para pde
+        CASE 
+          WHEN s.pde_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - s.pde_last_cleaned_at)) / 86400
+          ELSE NULL
+        END::integer as pde_days_since_last_clean
       FROM cleaning_item_state s
       LEFT JOIN items_transmutaciones i ON i.item_ref = s.item_ref
       WHERE s.student_id = $1
@@ -216,6 +199,7 @@ export async function getMegalistForStudent(options = {}) {
     logInfo('AlquimiaAlumnoMegalist', 'Estados obtenidos desde cleaning_item_state (filtrados por level_cap)', {
       traceId,
       student_id,
+      view_layer,
       level_cap: nivelCap,
       states_count: states.length
     });
@@ -423,86 +407,191 @@ export async function getMegalistForStudent(options = {}) {
         continue; // NO SE RENDERIZA
       }
       
-      // Calcular estado del item
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: Calcular state_by_view_layer usando computeVisualState
+      // ============================================================================
       const listaTipo = lista.tipo || 'recurrente';
-      let itemState;
+      const itemKind = listaTipo === 'recurrente' ? 'recurrente' : 'una_vez';
+      
+      // Preparar datos shared y pde para computeVisualState
+      const sharedData = {
+        clean_count: state.shared_clean_count || 0,
+        last_cleaned_at: state.shared_last_cleaned_at || null,
+        days_since_last_clean: state.shared_days_since_last_clean ?? null,
+        remaining: state.shared_remaining ?? null,
+        completed: state.shared_completed || 0
+      };
+      
+      const pdeData = {
+        clean_count: state.pde_clean_count || 0,
+        last_cleaned_at: state.pde_last_cleaned_at || null,
+        days_since_last_clean: state.pde_days_since_last_clean ?? null,
+        remaining: state.pde_remaining ?? null,
+        completed: state.pde_completed || 0
+      };
+      
+      // Para UNA_VEZ: calcular combo (suma shared + pde)
+      let comboData = null;
+      if (itemKind === 'una_vez') {
+        const vecesLimpiar = item.veces_limpiar || 1;
+        const sharedCount = sharedData.clean_count || 0;
+        const pdeCount = pdeData.clean_count || 0;
+        const comboCleanCount = sharedCount + pdeCount;
+        const comboRemaining = Math.max(0, vecesLimpiar - comboCleanCount);
+        const comboCompleted = comboRemaining <= 0 ? 1 : 0;
+        
+        comboData = {
+          clean_count: comboCleanCount,
+          remaining: comboRemaining,
+          completed: comboCompleted
+        };
+      }
+      
+      // Configuración para computeVisualState
+      const config = itemKind === 'recurrente' ? {
+        threshold_days: item.frecuencia_dias || 7,
+        critical_multiplier: item.critical_multiplier || 2.0
+      } : {
+        required_count: item.veces_limpiar || 1
+      };
+      
+      // Calcular state_by_view_layer para todas las view_layers posibles
+      const stateByViewLayer = {};
+      
+      // Calcular para 'shared'
       try {
-        itemState = calculateItemState(state, item, listaTipo);
+        stateByViewLayer.shared = computeVisualState({
+          shared: sharedData,
+          pde: pdeData,
+          combo: comboData,
+          item_kind: itemKind,
+          view_layer: 'shared',
+          config
+        });
       } catch (error) {
-        logWarn('AlquimiaAlumnoMegalist', 'Error calculando estado (fail-open)', {
+        logWarn('AlquimiaAlumnoMegalist', 'Error calculando state_by_view_layer[shared]', {
           traceId,
           student_id,
           item_ref: state.item_ref,
           error: error.message
         });
-        // Fallback a 'never' si falla cálculo
-        itemState = 'never';
-        warnings.push({
-          type: 'STATE_CALCULATION_ERROR',
-          item_ref: state.item_ref,
-          message: `Error calculando estado: ${error.message}`
-        });
+        // Fallback seguro
+        stateByViewLayer.shared = {
+          state: 'never',
+          visual_state: 'never',
+          computed_state: { view_layer: 'shared', error: error.message }
+        };
       }
       
-      // Obtener último actor (para separar revisados)
+      // Calcular para 'pde'
+      try {
+        stateByViewLayer.pde = computeVisualState({
+          shared: sharedData,
+          pde: pdeData,
+          combo: comboData,
+          item_kind: itemKind,
+          view_layer: 'pde',
+          config
+        });
+      } catch (error) {
+        logWarn('AlquimiaAlumnoMegalist', 'Error calculando state_by_view_layer[pde]', {
+          traceId,
+          student_id,
+          item_ref: state.item_ref,
+          error: error.message
+        });
+        // Fallback seguro
+        stateByViewLayer.pde = {
+          state: 'never',
+          visual_state: 'never',
+          computed_state: { view_layer: 'pde', error: error.message }
+        };
+      }
+      
+      // Calcular para 'combo' (solo UNA_VEZ)
+      if (itemKind === 'una_vez') {
+        try {
+          stateByViewLayer.combo = computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: comboData,
+            item_kind: itemKind,
+            view_layer: 'combo',
+            config
+          });
+        } catch (error) {
+          logWarn('AlquimiaAlumnoMegalist', 'Error calculando state_by_view_layer[combo]', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref,
+            error: error.message
+          });
+          // Fallback seguro
+          stateByViewLayer.combo = {
+            state: 'never',
+            visual_state: 'never',
+            computed_state: { view_layer: 'combo', error: error.message }
+          };
+        }
+      }
+      
+      // Log forense obligatorio
+      logInfo('AlquimiaAlumnoMegalist', '[ALQUIMIA_ALUMNO][STATE][view_layer] Estado calculado', {
+        traceId,
+        student_id,
+        item_ref: state.item_ref,
+        item_kind: itemKind,
+        view_layer,
+        state_by_view_layer: stateByViewLayer,
+        state_active: stateByViewLayer[view_layer]?.state || 'never',
+        visual_state_active: stateByViewLayer[view_layer]?.visual_state || 'never'
+      });
+      
+      // Obtener último actor (para metadata)
       const lastActor = await getLastCleanActor(student_id, state.item_ref);
       
-      // Construir datos del item (incluye metadata completa para UI)
+      // Construir datos del item PLANO (NO agrupado)
       const itemData = {
         item_id: item.id ?? null,
         item_ref: item.item_ref || state.item_ref,
-        item_nombre: item.nombre || 'NO_RESUELTO', // Fail-open para nombre
-        item_descripcion: item.descripcion || null, // Descripción para UI
+        item_nombre: item.nombre || 'NO_RESUELTO',
+        item_descripcion: item.descripcion || null,
         item_nivel: itemNivel,
-        item_frecuencia_dias: item.frecuencia_dias || null, // Para recurrentes (ignorar para una_vez)
-        item_veces_limpiar: item.veces_limpiar ?? null, // Para una_vez (requerido para progreso)
+        item_frecuencia_dias: item.frecuencia_dias || null,
+        item_veces_limpiar: item.veces_limpiar ?? null,
         lista_id: lista.id,
-        lista_nombre: lista.nombre || 'Sin lista', // Fail-open para nombre
+        lista_nombre: lista.nombre || 'Sin lista',
         lista_tipo: listaTipo,
-        state: itemState,
-        shared_last_cleaned_at: state.shared_last_cleaned_at || null,
-        shared_clean_count: state.shared_clean_count || 0,
-        shared_completed: state.shared_completed || 0,
-        shared_remaining: state.shared_remaining ?? null,
-        // Para una_vez: calcular progreso (realizadas / requeridas)
-        progress_realizadas: listaTipo === 'una_vez' ? (state.shared_clean_count || 0) : null,
-        progress_requeridas: listaTipo === 'una_vez' ? (item.veces_limpiar || 1) : null,
+        // REGLA CONSTITUCIONAL: state_by_view_layer contiene estados para todas las view_layers
+        state_by_view_layer: stateByViewLayer,
+        // Estado activo según view_layer solicitado (para compatibilidad)
+        state: stateByViewLayer[view_layer]?.state || 'never',
+        visual_state: stateByViewLayer[view_layer]?.visual_state || 'never',
+        // Metadata raw (para debugging)
+        shared: sharedData,
+        pde: pdeData,
+        combo: comboData,
         last_actor: lastActor
       };
       
-      // Asegurar que la lista existe en listsMap (SOLO si tiene items con estado)
+      // Agregar item a lista de items planos (NO agrupados)
       if (!listsMap[lista.id]) {
         listsMap[lista.id] = {
           lista_id: lista.id,
           lista_nombre: lista.nombre || 'Sin nombre',
           lista_tipo: listaTipo,
-          never: [],
-          important: [],
-          pending: [],
-          reviewed_by_student: [],
-          reviewed_by_master: []
+          items: [] // Items planos, NO agrupados
         };
       }
       
-      // Agregar item a la lista correspondiente
-      if (itemState === 'reviewed') {
-        const reviewedGroup = lastActor === 'student' ? 'reviewed_by_student' : 'reviewed_by_master';
-        listsMap[lista.id][reviewedGroup].push(itemData);
-      } else {
-        listsMap[lista.id][itemState].push(itemData);
-      }
+      listsMap[lista.id].items.push(itemData);
     }
     
-    // 7. Convertir map a array y ordenar listas (SOLO listas que tienen items con estado)
+    // 7. Convertir map a array y ordenar listas (SOLO listas que tienen items)
     const lists = Object.values(listsMap)
       .filter(list => {
-        // Filtrar: solo listas que tienen al menos un item con estado
-        const hasItems = (list.never?.length || 0) +
-                        (list.important?.length || 0) +
-                        (list.pending?.length || 0) +
-                        (list.reviewed_by_student?.length || 0) +
-                        (list.reviewed_by_master?.length || 0) > 0;
-        return hasItems;
+        // Filtrar: solo listas que tienen al menos un item
+        return (list.items?.length || 0) > 0;
       })
       .sort((a, b) => {
         // Ordenar por orden de lista (si existe) o por nombre
@@ -518,7 +607,8 @@ export async function getMegalistForStudent(options = {}) {
         return nombreA.localeCompare(nombreB);
       });
     
-    // 8. Calcular resumen DESDE ESTADOS REALES
+    // 8. Calcular métricas DESDE state_by_view_layer[view_layer] para cada item
+    // REGLA CONSTITUCIONAL: Métricas se calculan desde state_by_view_layer, NO desde agrupación
     let total = 0;
     let never = 0;
     let important = 0;
@@ -527,21 +617,56 @@ export async function getMegalistForStudent(options = {}) {
     let reviewedByStudent = 0;
     let reviewedByMaster = 0;
     
+    // Recorrer todos los items y calcular métricas desde state_by_view_layer[view_layer]
     for (const list of lists) {
-      never += (list.never?.length || 0);
-      important += (list.important?.length || 0);
-      pending += (list.pending?.length || 0);
-      reviewedByStudent += (list.reviewed_by_student?.length || 0);
-      reviewedByMaster += (list.reviewed_by_master?.length || 0);
+      for (const item of (list.items || [])) {
+        total++;
+        
+        // Obtener estado desde state_by_view_layer[view_layer]
+        const stateData = item.state_by_view_layer?.[view_layer];
+        if (!stateData) {
+          logWarn('AlquimiaAlumnoMegalist', 'Item sin state_by_view_layer para view_layer', {
+            traceId,
+            student_id,
+            item_ref: item.item_ref,
+            view_layer
+          });
+          never++; // Fallback seguro
+          continue;
+        }
+        
+        // Determinar estado según item_kind
+        const itemState = item.lista_tipo === 'recurrente' 
+          ? stateData.state 
+          : stateData.visual_state;
+        
+        // Contar por estado
+        if (itemState === 'never') {
+          never++;
+        } else if (itemState === 'important') {
+          important++;
+        } else if (itemState === 'pending') {
+          pending++;
+        } else if (itemState === 'reviewed' || itemState === 'completed') {
+          reviewed++;
+          // Separar por actor si es reviewed
+          if (item.last_actor === 'student') {
+            reviewedByStudent++;
+          } else {
+            reviewedByMaster++;
+          }
+        } else {
+          // Estado desconocido, contar como pending
+          pending++;
+        }
+      }
     }
     
-    reviewed = reviewedByStudent + reviewedByMaster;
-    total = never + important + pending + reviewed;
-    
-    // Validar coherencia: total debe coincidir con estados procesados (menos los excluidos)
-    logInfo('AlquimiaAlumnoMegalist', 'Resumen calculado desde estados', {
+    // Validar coherencia
+    logInfo('AlquimiaAlumnoMegalist', 'Métricas calculadas desde state_by_view_layer', {
       traceId,
       student_id,
+      view_layer,
       states_count: states.length,
       total,
       never,
@@ -556,7 +681,42 @@ export async function getMegalistForStudent(options = {}) {
     
     const percentReviewed = total > 0 ? Math.round((reviewed / total) * 100) : 0;
     
-    // 9. Construir respuesta
+    // Calcular métricas por view_layer (para todas las view_layers)
+    const metricsByLayer = {
+      shared: { never: 0, important: 0, pending: 0, reviewed: 0, total: 0 },
+      pde: { never: 0, important: 0, pending: 0, reviewed: 0, total: 0 },
+      combo: { never: 0, important: 0, pending: 0, reviewed: 0, total: 0 }
+    };
+    
+    for (const list of lists) {
+      for (const item of (list.items || [])) {
+        // Calcular métricas para cada view_layer
+        for (const layer of ['shared', 'pde', 'combo']) {
+          const layerStateData = item.state_by_view_layer?.[layer];
+          if (!layerStateData) continue;
+          
+          const layerState = item.lista_tipo === 'recurrente' 
+            ? layerStateData.state 
+            : layerStateData.visual_state;
+          
+          metricsByLayer[layer].total++;
+          if (layerState === 'never') {
+            metricsByLayer[layer].never++;
+          } else if (layerState === 'important') {
+            metricsByLayer[layer].important++;
+          } else if (layerState === 'pending') {
+            metricsByLayer[layer].pending++;
+          } else if (layerState === 'reviewed' || layerState === 'completed') {
+            metricsByLayer[layer].reviewed++;
+          } else {
+            metricsByLayer[layer].pending++;
+          }
+        }
+      }
+    }
+    
+    // 9. Construir respuesta con items planos (NO agrupados)
+    // REGLA CONSTITUCIONAL: Frontend agrupa desde state_by_view_layer[view_layer]
     const result = {
       student: {
         id: student.id,
@@ -578,35 +738,50 @@ export async function getMegalistForStudent(options = {}) {
         reviewed_by_master: reviewedByMaster,
         percent_reviewed: percentReviewed
       },
-      lists, // SOLO listas que tienen items con estado
+      lists, // Listas con items PLANOS (NO agrupados)
+      metrics_by_layer: metricsByLayer, // Métricas para todas las view_layers
       reviewed: {
+        // Construir desde items planos filtrando por state_by_view_layer[view_layer]
         by_student: lists
-          .filter(list => (list.reviewed_by_student?.length || 0) > 0)
           .map(list => ({
             lista_id: list.lista_id,
             lista_nombre: list.lista_nombre,
-            items: list.reviewed_by_student || []
-          })),
-        by_master: lists
-          .filter(list => (list.reviewed_by_master?.length || 0) > 0)
-          .map(list => ({
-            lista_id: list.lista_id,
-            lista_nombre: list.lista_nombre,
-            items: list.reviewed_by_master || []
+            items: (list.items || []).filter(item => {
+              const stateData = item.state_by_view_layer?.[view_layer];
+              const itemState = item.lista_tipo === 'recurrente' 
+                ? stateData?.state 
+                : stateData?.visual_state;
+              return (itemState === 'reviewed' || itemState === 'completed') && item.last_actor === 'student';
+            })
           }))
+          .filter(list => (list.items?.length || 0) > 0),
+        by_master: lists
+          .map(list => ({
+            lista_id: list.lista_id,
+            lista_nombre: list.lista_nombre,
+            items: (list.items || []).filter(item => {
+              const stateData = item.state_by_view_layer?.[view_layer];
+              const itemState = item.lista_tipo === 'recurrente' 
+                ? stateData?.state 
+                : stateData?.visual_state;
+              return (itemState === 'reviewed' || itemState === 'completed') && item.last_actor !== 'student';
+            })
+          }))
+          .filter(list => (list.items?.length || 0) > 0)
       },
       warnings: warnings.length > 0 ? warnings : undefined,
       context: {
+        view_layer, // REGLA CONSTITUCIONAL: view_layer en contexto
         levels_mode,
-        clean_layer: 'shared', // Siempre SHARED en este panel
         level_cap: nivelCap,
         level_cap_provided: level_cap !== null
       }
     };
     
-    logInfo('AlquimiaAlumnoMegalist', 'Megalista construida desde estado', {
+    logInfo('AlquimiaAlumnoMegalist', 'Megalista construida desde estado (items planos)', {
       traceId,
       student_id,
+      view_layer,
       total,
       never,
       important,

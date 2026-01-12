@@ -843,3 +843,123 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Fix: mover comentario fuera del objeto literal
       REFERENCIAS:
       - docs/ALQUIMIA_CANONICA_V1.md (Nota Técnica: Handlers MASTER API)
+
+# =========================================
+# CONSTITUCIÓN VIEW AUTHORITY v1 (AUTORIDAD DE VISTA)
+# =========================================
+
+  - id: view-authority-backend-only
+    title: Backend es única autoridad de estado (View Authority)
+    content: >
+      El backend es la ÚNICA autoridad de estado. El frontend NO calcula estados.
+      PROHIBIDO:
+      - Calcular estados en frontend (state, visual_state, days_since_last_clean)
+      - Inferir estados desde datos raw (shared_last_cleaned_at, pde_last_cleaned_at)
+      - Combinar estados localmente (shared + pde)
+      - Reutilizar estados previos sin refetch
+      - Agrupar items por campos legacy (student.state, visual_state) si existe state_by_view_layer
+      OBLIGATORIO:
+      - Solicitar datos al backend con view_layer explícita
+      - Consumir EXCLUSIVAMENTE state_by_view_layer[view_layer]
+      - Re-renderizar cuando el backend devuelve un estado distinto
+      - Refetch completo tras mutaciones preservando view_layer activa
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
+  - id: view-layer-obligatory-get
+    title: view_layer obligatorio en GET que calculan estado
+    content: >
+      Endpoints GET que calculan estado DEBEN requerir view_layer explícita.
+      PROHIBIDO:
+      - Omitir view_layer en GET que calculan estado/columnas
+      - Usar defaults implícitos para view_layer sin declararlo en response.context
+      - Asumir view_layer desde contexto sin validar
+      OBLIGATORIO:
+      - GET /master/api/alquimia-alumno/megalist requiere view_layer (400 si falta)
+      - GET que NO calculan estado deben incluir context.view_layer = null explícito
+      - Validar view_layer (debe ser 'shared' | 'pde' | 'combo')
+      - Error 400 explícito si view_layer falta o es inválido
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
+  - id: clean-layer-view-layer-separation
+    title: Separación absoluta clean_layer (POST) vs view_layer (GET)
+    content: >
+      clean_layer y view_layer son conceptos distintos y NO se mezclan.
+      PROHIBIDO:
+      - Usar clean_layer en GET (solo POST)
+      - Usar view_layer en POST (solo GET)
+      - clean_layer='combo' (combo es SOLO view_layer)
+      - Inferir clean_layer desde view_layer o viceversa
+      OBLIGATORIO:
+      - POST usa clean_layer explícita ('shared' | 'pde', nunca 'combo')
+      - GET usa view_layer explícita ('shared' | 'pde' | 'combo')
+      - response.context.view_layer presente en GET (string o null explícito)
+      - response.context.clean_layer NO debe existir en GET
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+      - src/core/master/services/cleaning-layer-constants.js
+
+  - id: state-by-view-layer-mandatory
+    title: state_by_view_layer obligatorio en respuestas que calculan estado
+    content: >
+      Respuestas que calculan estado DEBEN incluir state_by_view_layer para todas las view_layers.
+      PROHIBIDO:
+      - Devolver estado sin state_by_view_layer
+      - Calcular solo para view_layer solicitada (debe calcular para todas)
+      - Agrupar items por estado en backend (frontend agrupa desde state_by_view_layer)
+      OBLIGATORIO:
+      - Cada item incluye state_by_view_layer.shared, .pde, .combo (si aplica)
+      - Backend devuelve items PLANOS (NO agrupados)
+      - Frontend agrupa desde state_by_view_layer[view_layer]
+      - Logs forenses: [ALQUIMIA_ALUMNO][STATE][view_layer] en backend
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
+  - id: frontend-no-state-calculation
+    title: Frontend NO calcula estados ni decide columnas
+    content: >
+      El frontend NO puede calcular estados ni decidir en qué columna va un item.
+      PROHIBIDO:
+      - Calcular days_since_last_clean en frontend
+      - Comparar con frecuencia_days en frontend para decidir estado
+      - Usar shared_last_cleaned_at o pde_last_cleaned_at directamente para agrupar
+      - Fallback a campos legacy (student.state, visual_state) sin warning DEPRECATED
+      - Reutilizar estado previo para decidir columna tras acción
+      OBLIGATORIO:
+      - Consumir EXCLUSIVAMENTE state_by_view_layer[view_layer]
+      - Agrupar items desde state_by_view_layer[view_layer]
+      - Si state_by_view_layer falta → warning + fallback seguro (marcado DEPRECATED)
+      - Refetch completo tras mutaciones usando view_layer activa
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
+  - id: view-authority-logs-forensic
+    title: Logs forenses obligatorios para View Authority
+    content: >
+      Toda acción que afecte estado/columna DEBE emitir logs forenses estructurados.
+      OBLIGATORIO:
+      - [ALQUIMIA_ALUMNO][STATE][view_layer] en backend al calcular state_by_view_layer
+      - [ALQUIMIA_ALUMNO][WRITE][clean_layer] en POST (acción de limpieza)
+      - [ALQUIMIA_ALUMNO][COLUMN_PIPELINE] en frontend (GET, agrupación, refetch)
+      - Logs deben incluir: view_layer, clean_layer, state_before, state_after, trace_id
+      PROHIBIDO:
+      - Acciones sin logs forenses
+      - Logs sin prefijos canónicos
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
+  - id: view-authority-checklist-pr
+    title: Checklist obligatorio PR para Cleaning/Alquimia
+    content: >
+      Cualquier PR que toque Cleaning/Alquimia DEBE cumplir este checklist:
+      - [ ] ¿GET requiere/acepta view_layer?
+      - [ ] ¿response incluye state_by_view_layer?
+      - [ ] ¿UI consume state_by_view_layer?
+      - [ ] ¿refetch tras acción preserva view_layer?
+      - [ ] ¿assembly checks pasan (check:view-authority)?
+      - [ ] ¿logs forenses añadidos?
+      Si alguna respuesta es NO, el PR está incompleto.
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+      - scripts/check-view-authority.js
