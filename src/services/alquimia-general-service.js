@@ -524,10 +524,11 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     });
 
     // Filtrar por nivel efectivo y pausa (si clean_layer está especificado)
-    // REGLA MASTER: Flotante Master NUNCA filtra por nivel (bypass si skip_level_filter=true)
+    // REGLA MASTER CONSTITUCIONAL: Flotante Master NUNCA filtra por nivel (SIEMPRE skip_level_filter=true)
+    // Master puede limpiar cualquier item a cualquier alumno, sin excepciones
     const skipLevelFilter = options.skip_level_filter === true; // Para contexto Master
     const studentsFiltered = [];
-    const studentsNoAplica = []; // Alumnos cuyo nivel no aplica
+    const studentsNoAplica = []; // Alumnos cuyo nivel no aplica (solo para logging, no se excluyen en Master)
     
     for (const student of rawResult.students) {
       // UUID-ONLY: Verificar pausa usando student_uuid
@@ -545,19 +546,22 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         }
       }
       
-      // UUID-ONLY: Verificar nivel efectivo usando student_uuid
+      // UUID-ONLY: Verificar nivel efectivo usando student_uuid (solo para logging, NO para filtrar en Master)
       const nivelEfectivo = await getStudentEffectiveLevel(student.student_uuid);
+      // REGLA CONSTITUCIONAL: En Master, NUNCA filtrar por nivel, incluso si skipLevelFilter es false
+      // Esto garantiza que Master puede limpiar cualquier item a cualquier alumno
       if (!skipLevelFilter && item.nivel && item.nivel > nivelEfectivo) {
-        // No aplica por nivel (solo si NO es Master)
+        // Solo para logging/información, NO se excluye en Master
         studentsNoAplica.push({
           ...student,
           nivel_efectivo: nivelEfectivo,
           item_nivel: item.nivel,
           no_aplica: true
         });
-        continue;
+        // NO hacer continue: en Master, incluimos todos los estudiantes
       }
       
+      // REGLA CONSTITUCIONAL: En Master, SIEMPRE incluir el estudiante (sin filtro por nivel)
       studentsFiltered.push({
         ...student,
         nivel_efectivo: nivelEfectivo,

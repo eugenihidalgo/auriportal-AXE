@@ -1698,15 +1698,31 @@
       
       // Payload canónico para limpieza Master desde Alquimia General
       // REGLA: Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
+      // REGLA CONSTITUCIONAL: clean_layer DEBE ser explícito y correcto (shared o pde)
+      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+        console.error('[MasterAlquimiaGeneral] ⚠️ clean_layer inválido o faltante:', cleanLayer);
+        showToastError('Error: capa de limpieza inválida. Por favor, recarga la página.');
+        return;
+      }
+      
       const payload = {
         student_uuid: student.student_uuid, // CAMBIADO: usar UUID canónico
         item_ref: item.item_ref,
         item_kind: itemKind, // 'recurrente' | 'una_vez' - REQUERIDO según CONTRATO LIMPIEZA v1
         domain_type: 'transmutation',
-        clean_layer: cleanLayer,
+        clean_layer: cleanLayer, // OBLIGATORIO: 'shared' o 'pde' (validado arriba)
         actor_type: 'master',
         surface_key: 'master.alquimia_general'
       };
+      
+      // Log forense: verificar que clean_layer es correcto
+      console.log('[MasterAlquimiaGeneral] [FORENSIC] Payload limpieza', {
+        student_uuid: student.student_uuid,
+        item_ref: item.item_ref,
+        item_kind: itemKind,
+        clean_layer: cleanLayer,
+        layerView: state.modal.layerView
+      });
       
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {

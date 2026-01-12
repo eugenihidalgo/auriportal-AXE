@@ -187,6 +187,11 @@ export async function markCleanStudent(options, client = null) {
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
   }
   
+  // REGLA CONSTITUCIONAL: clean_layer es OBLIGATORIO y debe ser 'shared' o 'pde'
+  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
+    throw new Error(`clean_layer es requerido y debe ser 'shared' o 'pde'. Valor recibido: ${clean_layer}`);
+  }
+  
   // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
   if (item_kind !== 'recurrente' && item_kind !== 'una_vez') {
     throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
