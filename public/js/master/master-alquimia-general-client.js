@@ -19,11 +19,19 @@
 (function() {
   'use strict';
 
+  // BUILD_STAMP FORENSE (OBLIGATORIO)
+  const APP_VERSION = window.__AP_APP_VERSION__ || 'unknown';
+  const BUILD_ID = window.__AP_BUILD_ID__ || 'unknown';
+  const BUILD_TIMESTAMP = Date.now();
+  window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ = `MASTER_ALQUIMIA_GENERAL@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=float-layers-shared-pde-combo+simetric-dto`;
+  
   // CLIENT SENTINEL: Log al cargar el módulo
+  console.info('[MASTER][ALQ_FLOAT] build', APP_VERSION, BUILD_ID, 'layers: shared/pde/combo enabled');
   console.log('[MASTER][ALQUIMIA_GENERAL] client loaded', {
     time: Date.now(),
     context: window.__AP_CONTEXT__,
-    readyState: document.readyState
+    readyState: document.readyState,
+    build_stamp: window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__
   });
 
   // Guard: Verificar contexto MASTER y contenedor
@@ -83,7 +91,8 @@
     debounceTimers: {}, // Map de item_id -> timer para autosave
     modal: {
       item: null,
-      cleanLayer: 'shared' // 'shared' | 'pde'
+      cleanLayer: 'shared', // 'shared' | 'pde' (legacy, para compatibilidad)
+      layerView: 'shared' // 'shared' | 'pde' | 'combo' (vista actual del flotante)
     }
   };
 
@@ -874,6 +883,10 @@
       // Guardar estado del modal
       state.modal.item = item;
       state.modal.cleanLayer = cleanLayer;
+      // Mantener layerView si ya existe, sino usar default 'shared'
+      if (!state.modal.layerView) {
+        state.modal.layerView = 'shared';
+      }
       
       // Si no es ok, mostrar warning pero no crash
       if (!normalized.ok) {
@@ -1026,7 +1039,7 @@
     title.style.cssText = 'color: #f1f5f9; font-size: 1.25rem; font-weight: 600; margin: 0;';
     titleDiv.appendChild(title);
     
-    // Toggle SHARED/PDE
+    // Layer View Selector (SHARED/PDE/COMBO)
     const toggleContainer = document.createElement('div');
     toggleContainer.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
     
@@ -1035,27 +1048,38 @@
     toggleLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     toggleContainer.appendChild(toggleLabel);
     
-    const currentCleanLayer = normalized.clean_layer || 'shared';
+    // Obtener layerView desde localStorage o default 'shared'
+    const savedLayerView = localStorage.getItem('ap_master_alquimia_float_layer') || 'shared';
+    const currentLayerView = state.modal.layerView || savedLayerView;
+    state.modal.layerView = currentLayerView;
+    
+    // Función para cambiar vista (sin recargar, solo re-render)
+    const changeLayerView = (newView) => {
+      if (newView === currentLayerView) return;
+      state.modal.layerView = newView;
+      localStorage.setItem('ap_master_alquimia_float_layer', newView);
+      // Re-renderizar flotante con misma data pero nueva vista
+      overlay.remove();
+      showFlotanteVer(item, normalized);
+    };
     
     const btnShared = document.createElement('button');
-    btnShared.textContent = 'Alumno (SHARED)';
-    btnShared.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentCleanLayer === 'shared' ? '#4f46e5' : 'transparent'}; color: ${currentCleanLayer === 'shared' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
-    btnShared.addEventListener('click', () => {
-      if (currentCleanLayer !== 'shared') {
-        handleVerItem(item, 'shared');
-      }
-    });
+    btnShared.textContent = 'SHARED';
+    btnShared.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'shared' ? '#4f46e5' : 'transparent'}; color: ${currentLayerView === 'shared' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnShared.addEventListener('click', () => changeLayerView('shared'));
     toggleContainer.appendChild(btnShared);
     
     const btnPde = document.createElement('button');
     btnPde.textContent = 'PDE';
-    btnPde.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentCleanLayer === 'pde' ? '#8b5cf6' : 'transparent'}; color: ${currentCleanLayer === 'pde' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
-    btnPde.addEventListener('click', () => {
-      if (currentCleanLayer !== 'pde') {
-        handleVerItem(item, 'pde');
-      }
-    });
+    btnPde.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'pde' ? '#8b5cf6' : 'transparent'}; color: ${currentLayerView === 'pde' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnPde.addEventListener('click', () => changeLayerView('pde'));
     toggleContainer.appendChild(btnPde);
+    
+    const btnCombo = document.createElement('button');
+    btnCombo.textContent = 'COMBO';
+    btnCombo.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'combo' ? '#10b981' : 'transparent'}; color: ${currentLayerView === 'combo' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnCombo.addEventListener('click', () => changeLayerView('combo'));
+    toggleContainer.appendChild(btnCombo);
     
     titleDiv.appendChild(toggleContainer);
     header.appendChild(titleDiv);
@@ -1068,6 +1092,7 @@
       // Limpiar estado del modal
       state.modal.item = null;
       state.modal.cleanLayer = 'shared';
+      state.modal.layerView = 'shared';
     });
     header.appendChild(btnCerrar);
 
@@ -1130,18 +1155,33 @@
       // Para una_vez
     };
 
-    const tipo = normalized.tipo || 'recurrente';
+    const tipo = normalized.tipo || normalized.item_kind || 'recurrente';
+    const itemKind = normalized.item_kind || tipo;
+    const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
+    const layerView = state.modal.layerView || 'shared';
     
+    // Calcular estados según vista seleccionada (usando datos simétricos)
     studentsAplicables.forEach(student => {
-      const state = student.state || (tipo === 'una_vez' ? 'pending' : 'never');
+      let state;
+      
+      if (layerView === 'combo') {
+        // COMBO: usar estado de SHARED como principal (para agrupación)
+        const sharedState = calculateStudentState(student, 'shared', itemKind, requiredCount, normalized);
+        state = sharedState;
+      } else {
+        // SHARED o PDE: usar la capa seleccionada
+        const layer = layerView === 'pde' ? 'pde' : 'shared';
+        state = calculateStudentState(student, layer, itemKind, requiredCount, normalized);
+      }
+      
       if (studentsByState[state]) {
         studentsByState[state].push(student);
-      } else if (tipo === 'una_vez' && state === 'completed') {
+      } else if (itemKind === 'una_vez' && state === 'completed') {
         studentsByState.completed.push(student);
-      } else if (tipo === 'recurrente') {
+      } else if (itemKind === 'recurrente') {
         // Fallback para recurrentes
         if (state === 'completed') {
-          studentsByState.reviewed.push(student); // Tratar completed como reviewed en recurrentes
+          studentsByState.reviewed.push(student);
         } else {
           studentsByState.never.push(student);
         }
@@ -1320,7 +1360,7 @@
    */
   function createStudentRow(student, stateKey, item, normalized) {
     const row = document.createElement('div');
-    row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: flex; justify-content: space-between; align-items: center;';
+    row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0.5rem; align-items: center;';
     
     // Color de fondo según estado
     if (stateKey === 'reviewed' || stateKey === 'completed') {
@@ -1333,27 +1373,198 @@
       row.style.cssText += 'background: rgba(148, 163, 184, 0.1);';
     }
 
+    // Columna 1: Alumno
     const nameDiv = document.createElement('div');
     nameDiv.textContent = student.display_name || student.student_name || student.student_email || 'Sin nombre';
-    nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem; flex: 1;';
+    nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem;';
     row.appendChild(nameDiv);
 
-    // Botón ✓ para limpiar individual (excepto REVISADO/COMPLETADO)
-    const cleanLayer = normalized.clean_layer || 'shared';
-    // Obtener item_kind desde normalized, lista activa o item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-    const tipo = normalized.tipo || state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
+    // Obtener layerView actual
+    const layerView = state.modal.layerView || 'shared';
+    const tipo = normalized.tipo || normalized.item_kind || state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
+    const itemKind = normalized.item_kind || tipo;
+    const requiredCount = normalized.required_count || normalized.veces_limpiar || item.veces_limpiar || 1;
+
+    // Columna 2: Estado (según vista)
+    const stateDiv = document.createElement('div');
+    stateDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     
-    if (stateKey !== 'reviewed' && stateKey !== 'completed') {
-      const btnClean = document.createElement('button');
-      btnClean.textContent = '✓';
-      btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
-      btnClean.addEventListener('click', async () => {
-        await handleLimpiarEstudiante(student, item, cleanLayer, tipo);
-      });
-      row.appendChild(btnClean);
+    if (layerView === 'combo') {
+      // COMBO: mostrar ambos estados
+      const sharedState = getStudentState(student, 'shared', tipo, requiredCount);
+      const pdeState = getStudentState(student, 'pde', tipo, requiredCount);
+      stateDiv.textContent = `S: ${sharedState} | P: ${pdeState}`;
+    } else {
+      // SHARED o PDE: mostrar solo la capa seleccionada
+      const layer = layerView === 'pde' ? 'pde' : 'shared';
+      stateDiv.textContent = getStudentState(student, layer, tipo, requiredCount);
     }
+    row.appendChild(stateDiv);
+
+    // Columna 3: Restantes (según vista)
+    const remainingDiv = document.createElement('div');
+    remainingDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
+    
+    if (layerView === 'combo') {
+      // COMBO: mostrar ambos remaining
+      const sharedRem = getStudentRemaining(student, 'shared', tipo);
+      const pdeRem = getStudentRemaining(student, 'pde', tipo);
+      remainingDiv.textContent = `S:${sharedRem} | P:${pdeRem}`;
+    } else {
+      // SHARED o PDE: mostrar solo la capa seleccionada
+      const layer = layerView === 'pde' ? 'pde' : 'shared';
+      remainingDiv.textContent = getStudentRemaining(student, layer, tipo);
+    }
+    row.appendChild(remainingDiv);
+
+    // Columna 4: Acciones (según vista)
+    const actionsDiv = document.createElement('div');
+    actionsDiv.style.cssText = 'display: flex; gap: 0.25rem; justify-content: flex-end;';
+    
+    if (layerView === 'combo') {
+      // COMBO: 3 botones [S +1] [P +1] [S+P]
+      if (itemKind === 'una_vez') {
+        const btnS = document.createElement('button');
+        btnS.textContent = 'S +1';
+        btnS.style.cssText = 'padding: 0.25rem 0.5rem; background: #4f46e5; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnS.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+        });
+        actionsDiv.appendChild(btnS);
+        
+        const btnP = document.createElement('button');
+        btnP.textContent = 'P +1';
+        btnP.style.cssText = 'padding: 0.25rem 0.5rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnP.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+        });
+        actionsDiv.appendChild(btnP);
+        
+        const btnSP = document.createElement('button');
+        btnSP.textContent = 'S+P';
+        btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnSP.addEventListener('click', async () => {
+          // Ejecutar ambas secuencialmente
+          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+        });
+        actionsDiv.appendChild(btnSP);
+      } else {
+        // RECURRENTE: botones ✓
+        const btnS = document.createElement('button');
+        btnS.textContent = 'S ✓';
+        btnS.style.cssText = 'padding: 0.25rem 0.5rem; background: #4f46e5; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnS.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+        });
+        actionsDiv.appendChild(btnS);
+        
+        const btnP = document.createElement('button');
+        btnP.textContent = 'P ✓';
+        btnP.style.cssText = 'padding: 0.25rem 0.5rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnP.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+        });
+        actionsDiv.appendChild(btnP);
+        
+        const btnSP = document.createElement('button');
+        btnSP.textContent = 'S+P';
+        btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
+        btnSP.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+        });
+        actionsDiv.appendChild(btnSP);
+      }
+    } else {
+      // SHARED o PDE: un solo botón
+      const cleanLayer = layerView === 'pde' ? 'pde' : 'shared';
+      if (stateKey !== 'reviewed' && stateKey !== 'completed') {
+        const btnClean = document.createElement('button');
+        btnClean.textContent = itemKind === 'una_vez' ? '+1' : '✓';
+        btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
+        btnClean.addEventListener('click', async () => {
+          await handleLimpiarEstudiante(student, item, cleanLayer, itemKind);
+        });
+        actionsDiv.appendChild(btnClean);
+      }
+    }
+    
+    row.appendChild(actionsDiv);
 
     return row;
+  }
+
+  /**
+   * Calcula el estado de un estudiante según capa (para agrupación)
+   */
+  function calculateStudentState(student, layer, itemKind, requiredCount, normalized = null) {
+    const layerData = student[layer];
+    if (!layerData) return itemKind === 'una_vez' ? 'pending' : 'never';
+    
+    if (itemKind === 'recurrente') {
+      const days = layerData.days_since_last_clean;
+      if (days === null || days === undefined) return 'never';
+      // Obtener threshold_days del normalized si está disponible
+      const thresholdDays = normalized?.threshold_days || 7;
+      const criticalMultiplier = normalized?.critical_multiplier || 2.0;
+      const criticalThreshold = thresholdDays * criticalMultiplier;
+      
+      if (days < thresholdDays) return 'reviewed';
+      if (days < criticalThreshold) return 'pending';
+      return 'important';
+    } else {
+      // una_vez
+      const remaining = layerData.remaining;
+      const cleanCount = layerData.clean_count || 0;
+      
+      if (cleanCount === 0) return 'pending'; // Nunca trabajado
+      if (remaining !== null && remaining > 0) return 'pending'; // En proceso
+      if (remaining !== null && remaining <= 0) return 'completed'; // Completado
+      return 'pending';
+    }
+  }
+
+  /**
+   * Helper: Obtiene estado visual de un estudiante según capa (para display)
+   */
+  function getStudentState(student, layer, tipo, requiredCount) {
+    const layerData = student[layer];
+    if (!layerData) return 'N/A';
+    
+    if (tipo === 'recurrente') {
+      const days = layerData.days_since_last_clean;
+      if (days === null) return 'Nunca';
+      if (days < 7) return 'Revisado';
+      if (days < 14) return 'Pendiente';
+      return 'Importante';
+    } else {
+      // una_vez
+      const remaining = layerData.remaining;
+      const cleanCount = layerData.clean_count || 0;
+      if (cleanCount === 0) return 'Nunca';
+      if (remaining !== null && remaining > 0) return 'En proceso';
+      if (remaining !== null && remaining <= 0 && cleanCount === requiredCount) return 'Completado';
+      if (remaining !== null && remaining <= 0 && cleanCount > requiredCount) return 'Excelente';
+      return 'En proceso';
+    }
+  }
+
+  /**
+   * Helper: Obtiene remaining de un estudiante según capa
+   */
+  function getStudentRemaining(student, layer, tipo) {
+    const layerData = student[layer];
+    if (!layerData) return 'N/A';
+    
+    if (tipo === 'recurrente') {
+      const days = layerData.days_since_last_clean;
+      return days !== null ? `${days}d` : 'Nunca';
+    } else {
+      // una_vez
+      const remaining = layerData.remaining;
+      return remaining !== null ? remaining.toString() : 'N/A';
+    }
   }
 
   /**
@@ -1420,9 +1631,14 @@
       const displayName = result.data?.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // Refresh determinista: recargar flotante con mismo clean_layer
+      // Refresh determinista: recargar flotante manteniendo layerView actual
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        await handleVerItem(item, cleanLayer);
+        const currentLayerView = state.modal.layerView || 'shared';
+        // Recargar con cualquier clean_layer (los datos vienen simétricos ahora)
+        // Usar 'shared' como default para el fetch, pero layerView se mantiene
+        await handleVerItem(item, 'shared');
+        // Restaurar layerView después de recargar (se aplicará en showFlotanteVer)
+        // El flotante se re-renderizará con la vista correcta
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);

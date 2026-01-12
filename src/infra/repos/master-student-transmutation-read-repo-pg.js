@@ -163,15 +163,24 @@ export class MasterStudentTransmutationReadRepoPg {
     // UUID-ONLY: Obtener estudiantes desde students (UUID canónico)
     // JOIN con cleaning_item_state usando legacy_alumno_id resuelto internamente
     // NO hacer JOIN con alumnos directamente
+    // SIMÉTRICO: Seleccionar TODAS las columnas de ambas capas siempre
     let sql = `
       SELECT 
         s.id as student_uuid,
         s.legacy_alumno_id as legacy_student_id,
-        c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
-        c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'} as clean_count,
+        -- SHARED layer (siempre presente)
+        c.shared_last_cleaned_at,
+        COALESCE(c.shared_clean_count, 0) as shared_clean_count,
         c.shared_remaining,
         c.shared_completed,
-        c.pde_completed
+        -- PDE layer (siempre presente, simétrico)
+        c.pde_last_cleaned_at,
+        COALESCE(c.pde_clean_count, 0) as pde_clean_count,
+        c.pde_remaining,
+        c.pde_completed,
+        -- Compatibilidad: last_cleaned_at según cleanLayer (para lógica legacy)
+        c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
+        COALESCE(c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'}, 0) as clean_count
       FROM students s
       LEFT JOIN cleaning_item_state c ON c.student_id = s.legacy_alumno_id
         AND c.product_key = $1
@@ -225,10 +234,20 @@ export class MasterStudentTransmutationReadRepoPg {
         }
       }
       
+      // SIMÉTRICO: Construir DTO con shared y pde siempre presentes
+      const sharedCleanCount = row.shared_clean_count !== null ? parseInt(row.shared_clean_count, 10) : 0;
+      const pdeCleanCount = row.pde_clean_count !== null ? parseInt(row.pde_clean_count, 10) : 0;
+      
       if (tipo === 'recurrente') {
-        const daysSinceLastClean = row.last_cleaned_at 
-          ? Math.floor((new Date().getTime() - new Date(row.last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
+        const daysSinceLastCleanShared = row.shared_last_cleaned_at 
+          ? Math.floor((new Date().getTime() - new Date(row.shared_last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
           : null;
+        const daysSinceLastCleanPde = row.pde_last_cleaned_at 
+          ? Math.floor((new Date().getTime() - new Date(row.pde_last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+        
+        // Compatibilidad: usar cleanLayer para last_cleaned_at legacy
+        const daysSinceLastClean = cleanLayer === 'shared' ? daysSinceLastCleanShared : daysSinceLastCleanPde;
 
         students.push({
           student_uuid: row.student_uuid, // UUID canónico
@@ -236,18 +255,33 @@ export class MasterStudentTransmutationReadRepoPg {
           student_email: studentEmail,
           apodo: apodo,
           nombre_completo: nombreCompleto,
+          // SHARED layer (simétrico)
+          shared: {
+            clean_count: sharedCleanCount,
+            last_cleaned_at: row.shared_last_cleaned_at,
+            days_since_last_clean: daysSinceLastCleanShared
+          },
+          // PDE layer (simétrico)
+          pde: {
+            clean_count: pdeCleanCount,
+            last_cleaned_at: row.pde_last_cleaned_at,
+            days_since_last_clean: daysSinceLastCleanPde
+          },
+          // Compatibilidad legacy (según cleanLayer)
           days_since_last_clean: daysSinceLastClean,
           last_cleaned_at: row.last_cleaned_at,
           clean_count: row.clean_count || 0
         });
       } else {
-        // una_vez - solo SHARED tiene remaining/completed
-        const remaining = cleanLayer === 'shared' 
-          ? (row.shared_remaining !== null ? parseInt(row.shared_remaining, 10) : null)
-          : null;
-        const completed = cleanLayer === 'shared'
-          ? (row.shared_completed !== null ? parseInt(row.shared_completed, 10) : 0)
-          : (row.pde_completed !== null ? parseInt(row.pde_completed, 10) : 0);
+        // una_vez - SIMÉTRICO: ambas capas tienen remaining/completed
+        const sharedRemaining = row.shared_remaining !== null ? parseInt(row.shared_remaining, 10) : null;
+        const sharedCompleted = row.shared_completed !== null ? parseInt(row.shared_completed, 10) : 0;
+        const pdeRemaining = row.pde_remaining !== null ? parseInt(row.pde_remaining, 10) : null;
+        const pdeCompleted = row.pde_completed !== null ? parseInt(row.pde_completed, 10) : 0;
+        
+        // Compatibilidad: usar cleanLayer para remaining/completed legacy
+        const remaining = cleanLayer === 'shared' ? sharedRemaining : pdeRemaining;
+        const completed = cleanLayer === 'shared' ? sharedCompleted : pdeCompleted;
         const isComplete = remaining !== null && remaining <= 0;
 
         if (isComplete) {
@@ -262,6 +296,20 @@ export class MasterStudentTransmutationReadRepoPg {
           student_email: studentEmail,
           apodo: apodo,
           nombre_completo: nombreCompleto,
+          // SHARED layer (simétrico)
+          shared: {
+            clean_count: sharedCleanCount,
+            remaining: sharedRemaining,
+            completed: sharedCompleted
+          },
+          // PDE layer (simétrico)
+          pde: {
+            clean_count: pdeCleanCount,
+            remaining: pdeRemaining,
+            completed: pdeCompleted
+          },
+          // Compatibilidad legacy (según cleanLayer)
+          clean_count: cleanLayer === 'shared' ? sharedCleanCount : pdeCleanCount,
           remaining,
           completed,
           is_complete: isComplete

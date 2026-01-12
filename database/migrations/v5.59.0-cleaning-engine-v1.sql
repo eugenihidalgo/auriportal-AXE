@@ -120,7 +120,7 @@ COMMENT ON COLUMN cleaning_item_state.shared_last_cleaned_at IS 'Última limpiez
 COMMENT ON COLUMN cleaning_item_state.pde_last_cleaned_at IS 'Última limpieza PDE (repaso master-only, no afecta alumno)';
 COMMENT ON COLUMN cleaning_item_state.shared_completed IS 'Completadas SHARED para una_vez';
 COMMENT ON COLUMN cleaning_item_state.shared_remaining IS 'Restantes SHARED para una_vez';
-COMMENT ON COLUMN cleaning_item_state.pde_completed IS 'Completadas PDE para una_vez (solo audit, no afecta remaining del alumno)';
+COMMENT ON COLUMN cleaning_item_state.pde_completed IS 'Completadas PDE para una_vez (simétrico a shared_completed, independiente)';
 
 -- ============================================================================
 -- 3. VERIFICACIÓN

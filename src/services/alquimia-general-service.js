@@ -575,8 +575,24 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       // Calcular estados y nombres
       const studentsWithState = await calculateStudentDisplayNames(studentsFiltered);
       
+      // NOTA: Los datos ya vienen con shared y pde simétricos desde el repositorio
       const students = studentsWithState.map(student => {
-        const daysSince = student.days_since_last_clean;
+        // Compatibilidad: usar datos legacy si no vienen simétricos aún
+        const sharedData = student.shared || {
+          clean_count: student.clean_count || 0,
+          last_cleaned_at: student.last_cleaned_at,
+          days_since_last_clean: student.days_since_last_clean
+        };
+        const pdeData = student.pde || {
+          clean_count: 0,
+          last_cleaned_at: null,
+          days_since_last_clean: null
+        };
+        
+        // Calcular estado usando SHARED como default (para compatibilidad)
+        const daysSince = sharedData.days_since_last_clean !== undefined 
+          ? sharedData.days_since_last_clean 
+          : student.days_since_last_clean;
         
         let state;
         if (daysSince === null) {
@@ -595,6 +611,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
 
         return {
           ...student,
+          // Asegurar que shared y pde están presentes (simétricos)
+          shared: sharedData,
+          pde: pdeData,
+          // Compatibilidad legacy
           state,
           threshold_days: thresholdDays,
           critical_multiplier: criticalMultiplier
@@ -616,29 +636,88 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         total: studentsFiltered.length,
         threshold_days: thresholdDays,
         critical_multiplier: criticalMultiplier,
-        clean_layer: clean_layer || 'shared' // Default shared si no se especifica
+        clean_layer: clean_layer || 'shared', // Default shared si no se especifica
+        item_kind: 'recurrente', // OBLIGATORIO según contrato
+        item_ref: itemRef
       };
     } else {
       // una_vez - usar nombres de display
       const students = await calculateStudentDisplayNames(studentsFiltered);
       
-      // Calcular estados para una_vez
+      // Obtener veces_limpiar del item para cálculo de estados visuales
+      const vecesLimpiar = item.veces_limpiar || 1;
+      
+      // Calcular estados visuales dinámicamente según orden canónico:
+      // Nunca (gris) → Iniciando → En proceso → Completado (verde) → Muy bien trabajado (dorado)
+      // NOTA: Los datos ya vienen con shared y pde simétricos desde el repositorio
       const studentsWithState = students.map(student => {
-        const remaining = student.remaining !== null ? student.remaining : null;
-        const completed = student.completed || 0;
-        const isComplete = remaining !== null && remaining <= 0;
+        // Compatibilidad: usar datos legacy si no vienen simétricos aún
+        const sharedData = student.shared || {
+          clean_count: student.clean_count || 0,
+          remaining: student.remaining,
+          completed: student.completed || 0
+        };
+        const pdeData = student.pde || {
+          clean_count: 0,
+          remaining: null,
+          completed: 0
+        };
+        
+        // Calcular estado visual usando SHARED como default (para compatibilidad)
+        const cleanCount = sharedData.clean_count !== null && sharedData.clean_count !== undefined ? parseInt(sharedData.clean_count, 10) : 0;
+        const remaining = sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null;
+        const completed = sharedData.completed || 0;
+        
+        // Calcular estado visual dinámicamente
+        let visualState;
+        let state;
+        
+        if (cleanCount === 0) {
+          // Nunca trabajado (gris)
+          visualState = 'never';
+          state = 'pending';
+        } else if (remaining !== null && remaining > 0) {
+          // En proceso (amarillo) - tiene contador pero aún no completado
+          visualState = 'in_progress';
+          state = 'pending';
+        } else if (remaining !== null && remaining <= 0 && cleanCount === vecesLimpiar) {
+          // Completado exactamente (verde)
+          visualState = 'completed';
+          state = 'completed';
+        } else if (remaining !== null && remaining <= 0 && cleanCount > vecesLimpiar) {
+          // Muy bien trabajado (dorado) - superó el recomendado
+          visualState = 'excellent';
+          state = 'completed';
+        } else {
+          // Fallback: si remaining es null pero tiene clean_count, tratar como en proceso
+          visualState = 'in_progress';
+          state = 'pending';
+        }
         
         return {
           ...student,
-          state: isComplete ? 'completed' : 'pending',
+          // Asegurar que shared y pde están presentes (simétricos)
+          shared: sharedData,
+          pde: pdeData,
+          // Compatibilidad legacy (usar SHARED como default)
+          clean_count: cleanCount,
+          state,
+          visual_state: visualState, // Estado visual para UI
           remaining,
-          completed
+          completed,
+          veces_limpiar: vecesLimpiar // Añadir veces_limpiar para UI
         };
       });
       
+      // Contar por estado visual para ordenación canónica
       const counts = {
-        completed: studentsWithState.filter(s => s.state === 'completed').length,
-        pending: studentsWithState.filter(s => s.state === 'pending').length
+        never: studentsWithState.filter(s => s.visual_state === 'never').length,
+        in_progress: studentsWithState.filter(s => s.visual_state === 'in_progress').length,
+        completed: studentsWithState.filter(s => s.visual_state === 'completed').length,
+        excellent: studentsWithState.filter(s => s.visual_state === 'excellent').length,
+        // Mantener compatibilidad con estados legacy
+        pending: studentsWithState.filter(s => s.state === 'pending').length,
+        completed_legacy: studentsWithState.filter(s => s.state === 'completed').length
       };
       
       return {
@@ -646,7 +725,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         students_no_aplica: studentsNoAplica.length > 0 ? studentsNoAplica : undefined,
         counts,
         total: studentsFiltered.length,
-        clean_layer: clean_layer || 'shared' // Default shared si no se especifica
+        clean_layer: clean_layer || 'shared', // Default shared si no se especifica
+        item_kind: 'una_vez', // OBLIGATORIO según contrato
+        item_ref: itemRef,
+        required_count: vecesLimpiar // OBLIGATORIO para UNA_VEZ según contrato
       };
     }
 
@@ -669,16 +751,32 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
  * 
  * DELEGADO AL CLEANING ENGINE v1 (single decider)
  * 
- * @param {number} studentId - ID del alumno
+ * @param {string} studentUuid - UUID del alumno
  * @param {string} itemRef - item_ref del item
+ * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez') - OBLIGATORIO según CONTRATO LIMPIEZA v1
  * @param {string} [productKey='pde'] - Clave del producto
  * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
  * @returns {Promise<Object|null>} Estado actualizado o null si no existe/está pausado
  */
-export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde', cleanLayer = 'shared') {
+export async function markCleanStudent(studentUuid, itemRef, itemKind, productKey = 'pde', cleanLayer = 'shared') {
   if (!studentUuid || !itemRef) return null;
   
+  // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+  if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
+  
   const traceId = getRequestId();
+  
+  // LOG TEMPORAL: entrada a markCleanStudent
+  logInfo('AlquimiaGeneralService', '[TEMP] markCleanStudent entrada', {
+    traceId,
+    student_uuid: studentUuid,
+    item_ref: itemRef,
+    item_kind: itemKind,
+    clean_layer: cleanLayer,
+    product_key: productKey
+  });
   
   try {
     // Delegar al Cleaning Engine v1 (single decider) (CAMBIADO: pasa UUID)
@@ -687,13 +785,12 @@ export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde',
     const result = await cleaningMarkClean({
       student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
       item_ref: itemRef,
+      item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
       clean_layer: cleanLayer,
       product_key: productKey,
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
-      // NOTA: item_kind debe venir en options si se llama desde endpoint
-      // Este servicio legacy no recibe item_kind, pero el endpoint lo pasa directamente al Cleaning Engine
       meta: {
         source: 'alquimia-general-service'
       }
@@ -731,12 +828,17 @@ export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde',
  * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez') - OBLIGATORIO según CONTRATO LIMPIEZA v1
  * @returns {Promise<Object>} Objeto con { updated: number, skipped: number, total: number }
  */
-export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'shared', itemKind) {
+export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'shared', itemKind, executionMode = 'APPLY') {
   if (!itemRef) return { updated: 0, skipped: 0, total: 0 };
   
   // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
   if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
     throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
+  
+  // Validar execution_mode
+  if (executionMode !== 'APPLY' && executionMode !== 'CERTIFY') {
+    throw new Error('execution_mode debe ser "APPLY" o "CERTIFY"');
   }
   
   const traceId = getRequestId();
@@ -753,9 +855,11 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
+      execution_mode: executionMode, // Pasar execution_mode
       meta: {
         source: 'alquimia-general-service',
-        legacy_call: true
+        legacy_call: true,
+        execution_mode: executionMode
       }
     });
     
@@ -806,28 +910,49 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
  * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
  * @returns {Promise<Object>} Objeto con { updated: number, skipped: number, total: number }
  */
-export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'shared') {
+export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'shared', itemKind = 'una_vez') {
   if (!itemRef) return { updated: 0, skipped: 0, total: 0 };
   
   const traceId = getRequestId();
+  
+  // LOG TEMPORAL: entrada a incrementAll
+  logInfo('AlquimiaGeneralService', '[TEMP] incrementAll entrada', {
+    traceId,
+    itemRef,
+    productKey,
+    cleanLayer
+  });
   
   try {
     // Delegar al Cleaning Engine v1 (single decider)
     // CONTRATO LIMPIEZA v1: item_kind es REQUERIDO
     const { incrementAllStudents: cleaningIncrementAll } = await import('../core/master/services/cleaning-engine-service.js');
     
+    // REGLA MASTER: Para UNA_VEZ en MASTER, usar CERTIFY para permitir múltiples incrementos
     const result = await cleaningIncrementAll({
       item_ref: itemRef,
-      item_kind: 'una_vez', // REQUERIDO según contrato canónico
+      item_kind: itemKind, // REQUERIDO según contrato canónico (pasado como parámetro)
       clean_layer: cleanLayer,
       product_key: productKey,
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
+      execution_mode: 'CERTIFY', // MASTER: usar CERTIFY para permitir múltiples incrementos sin límite diario
       skip_level_filter: true, // REGLA: Master increment-all NO filtra por nivel (puede incrementar cualquier item a cualquier alumno)
       meta: {
-        source: 'alquimia-general-service'
+        source: 'alquimia-general-service',
+        clean_layer: cleanLayer
       }
+    });
+    
+    // LOG TEMPORAL: resultado de incrementAll
+    logInfo('AlquimiaGeneralService', '[TEMP] incrementAll resultado', {
+      traceId,
+      itemRef,
+      cleanLayer,
+      updated: result.updated,
+      skipped: result.skipped,
+      total: result.total
     });
     
     // Normalizar respuesta para compatibilidad
@@ -900,7 +1025,7 @@ export async function adjustRemaining(studentUuid, itemRef, remaining, productKe
  * @param {Object} [ctx] - Contexto con actor_id (opcional)
  * @returns {Promise<Object>} Objeto con { updated_students, logged, skipped, cleaned_date }
  */
-export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, itemKind) {
+export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, itemKind, executionMode = 'APPLY') {
   if (!itemRef) return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
   
   // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
@@ -921,16 +1046,37 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
       return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
     }
     
-    // Verificar que es recurrente (PDE solo para recurrentes)
+    // Validar coherencia con lista (no inferir, solo validar)
     const lista = await getListaById(item.lista_id);
-    if (!lista || lista.tipo !== 'recurrente') {
-      logWarn('AlquimiaGeneralService', 'markPdeCleanAll solo soportado para recurrentes', {
+    if (!lista) {
+      logError('AlquimiaGeneralService', 'Lista no encontrada para markPdeCleanAll', {
         traceId,
         itemRef,
-        tipo: lista?.tipo
+        lista_id: item.lista_id
       });
       return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
     }
+    
+    // Validar coherencia item_kind con lista.tipo (warning si no coincide, pero usar el proporcionado)
+    if (itemKind !== lista.tipo) {
+      logWarn('AlquimiaGeneralService', 'item_kind no coincide con lista.tipo en markPdeCleanAll', {
+        traceId,
+        itemRef,
+        item_kind_provided: itemKind,
+        lista_tipo: lista.tipo
+      });
+    }
+    
+    // LOG TEMPORAL: entrada a markPdeCleanAll
+    logInfo('AlquimiaGeneralService', '[TEMP_PDE] markPdeCleanAll entrada', {
+      traceId,
+      itemRef,
+      item_id: item.id,
+      lista_id: item.lista_id,
+      lista_tipo: lista.tipo,
+      item_kind: itemKind,
+      clean_layer: 'pde'
+    });
     
     const itemId = item.id;
     
@@ -946,6 +1092,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
       actor_type: 'master',
       actor_ref: ctx.actor_id ? `master:${ctx.actor_id}` : null,
       surface_key: 'master.alquimia_general',
+      execution_mode: executionMode, // Pasar execution_mode
       meta: {
         source: 'alquimia-general-service',
         action: 'markPdeCleanAll',
@@ -1000,12 +1147,13 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
     // El Cleaning Engine ya emite clean.executed (UUID-only)
     // NO se emiten señales duplicadas desde el servicio
     
-    logInfo('AlquimiaGeneralService', '[PDE_CLEAN_ALL] markPdeCleanAll completado', {
+    logInfo('AlquimiaGeneralService', '[TEMP_PDE] markPdeCleanAll completado', {
       traceId,
       itemRef,
       item_id: itemId,
       lista_id: item.lista_id,
       lista_tipo: lista.tipo,
+      item_kind: itemKind,
       clean_layer: 'pde',
       updated_students: updatedStudents,
       logged,

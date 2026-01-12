@@ -27,10 +27,17 @@ import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { randomUUID } from 'crypto';
 
 /**
- * Genera execution_key para idempotencia
- * Formato: {action_type}:{item_ref}:{student_uuid}:{timestamp_day}
+ * Genera execution_key para idempotencia (APPLY) o certificación (CERTIFY)
+ * APPLY: Formato: {action_type}:{item_ref}:{student_uuid}:{timestamp_day} (idempotente)
+ * CERTIFY: Formato: certify:{item_ref}:{student_uuid}:{timestamp} (no idempotente, siempre ejecuta)
  */
-function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date()) {
+function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date(), executionMode = 'APPLY') {
+  if (executionMode === 'CERTIFY') {
+    // CERTIFY: usar timestamp completo para garantizar unicidad (no idempotente)
+    const timestampStr = timestamp.toISOString().replace(/[:.]/g, '-'); // ISO8601 sin caracteres problemáticos
+    return `certify:${itemRef}:${studentUuid}:${timestampStr}`;
+  }
+  // APPLY: usar día para idempotencia (comportamiento actual)
   const day = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
   return `${actionType}:${itemRef}:${studentUuid}:${day}`;
 }
@@ -137,8 +144,21 @@ export async function markCleanStudent(options, client = null) {
     actor_ref = null,
     surface_key = null,
     level_cap_override = null,
+    execution_mode = 'APPLY', // Nuevo: 'APPLY' (idempotente) o 'CERTIFY' (no idempotente)
     meta = {}
   } = options;
+  
+  // LOG TEMPORAL: entrada a markCleanStudent (SIMÉTRICO)
+  logInfo('CleaningEngine', '[TEMP_PDE_SYMM] markCleanStudent entrada', {
+    traceId,
+    student_uuid,
+    item_ref,
+    item_kind,
+    clean_layer,
+    product_key,
+    actor_type,
+    surface_key
+  });
   
   // ============================================================================
   // GUARD CONSTITUCIONAL: UUID-only Alquimia
@@ -185,7 +205,7 @@ export async function markCleanStudent(options, client = null) {
     if (isPaused) {
       logInfo('CleaningEngine', 'Alumno en pausa, excluido', {
         traceId,
-        student_id,
+        student_uuid,
         item_ref
       });
       return null;
@@ -289,10 +309,41 @@ export async function markCleanStudent(options, client = null) {
     
     const legacyStudentId = studentResult.rows[0].legacy_alumno_id; // Solo para escribir en tablas legacy
     
-    // 5. Generar execution_key para idempotencia (usar UUID para el key)
-    const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid);
+    // 5. REGLA MASTER: Para UNA_VEZ en dominio MASTER, usar CERTIFY para permitir múltiples incrementos
+    // En MASTER no hay límite diario para UNA_VEZ (puede sumar varias veces el mismo día)
+    const isMasterDomain = actor_type === 'master' && surface_key === 'master.alquimia_general';
+    const effectiveExecutionMode = (isMasterDomain && itemKind === 'una_vez' && execution_mode === 'APPLY') 
+      ? 'CERTIFY' 
+      : execution_mode;
     
-    // 6. Insertar evento (repositorio resuelve legacy_id internamente)
+    // LOG TEMPORAL: decisión de execution_mode
+    if (isMasterDomain && itemKind === 'una_vez') {
+      logInfo('CleaningEngine', '[TEMP] MASTER UNA_VEZ: usando CERTIFY para permitir múltiples incrementos', {
+        traceId,
+        student_uuid,
+        item_ref,
+        original_execution_mode: execution_mode,
+        effective_execution_mode: effectiveExecutionMode,
+        actor_type,
+        surface_key
+      });
+    }
+    
+    // 6. Generar execution_key (APPLY: idempotente, CERTIFY: no idempotente)
+    const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid, new Date(), effectiveExecutionMode);
+    
+    // LOG TEMPORAL: execution_key generado
+    logInfo('CleaningEngine', '[TEMP_PDE] execution_key generado', {
+      traceId,
+      execution_key: executionKey,
+      execution_mode: effectiveExecutionMode,
+      student_uuid,
+      item_ref,
+      item_kind: itemKind,
+      clean_layer
+    });
+    
+    // 7. Insertar evento (repositorio resuelve legacy_id internamente)
     const eventsRepo = getDefaultCleaningEventsRepo();
     const eventData = {
       trace_id: traceId,
@@ -325,13 +376,27 @@ export async function markCleanStudent(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
+    // LOG TEMPORAL: resultado de inserción
+    logInfo('CleaningEngine', '[TEMP_PDE] evento insertado', {
+      traceId,
+      execution_key: executionKey,
+      event_result: eventResult,
+      already_executed: eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true),
+      student_uuid,
+      item_ref,
+      clean_layer
+    });
+    
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-      logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
+      logInfo('CleaningEngine', '[TEMP_PDE] Evento ya aplicado (idempotencia) - esto NO debería pasar en MASTER UNA_VEZ con CERTIFY', {
         traceId,
         execution_key: executionKey,
+        execution_mode: effectiveExecutionMode,
         student_uuid,
-        item_ref
+        item_ref,
+        item_kind: itemKind,
+        clean_layer
       });
       // Devolver estado actual (repositorio resuelve legacy_id internamente)
       const stateRepo = getDefaultCleaningItemStateRepo();
@@ -347,8 +412,25 @@ export async function markCleanStudent(options, client = null) {
     const stateRepo = getDefaultCleaningItemStateRepo();
     let state;
     
+    // LOG TEMPORAL: decisión de capa y método (SIMÉTRICO)
+    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Aplicando proyección', {
+      traceId,
+      student_uuid,
+      item_ref,
+      item_kind: itemKind,
+      clean_layer,
+      product_key,
+      domain_type,
+      capa_seleccionada: clean_layer === 'shared' ? 'SHARED' : 'PDE'
+    });
+    
     if (itemKind === 'recurrente') {
-      // Recurrente: actualizar last_cleaned_at y clean_count
+      // Recurrente: actualizar last_cleaned_at y clean_count (SIMÉTRICO)
+      logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Recurrente: usando upsertApplyRecurrent', {
+        traceId,
+        clean_layer,
+        capa: clean_layer === 'shared' ? 'SHARED' : 'PDE'
+      });
       state = await stateRepo.upsertApplyRecurrent({
         student_uuid,
         product_key,
@@ -358,16 +440,59 @@ export async function markCleanStudent(options, client = null) {
         cleaned_at: new Date()
       }, client);
     } else {
-      // Una vez: incrementar completed y decrementar remaining
-      const requiredCount = item.veces_limpiar || 1;
-      state = await stateRepo.upsertApplyOneTimeIncrementShared({
-        student_uuid,
-        product_key,
-        domain_type,
-        item_ref,
-        required_count: requiredCount
-      }, client);
+      // Una vez: usar método según clean_layer (SIMÉTRICO)
+      if (clean_layer === 'pde') {
+        // PDE: incrementar pde_clean_count y recalcular pde_remaining/pde_completed (simétrico a SHARED)
+        const requiredCount = item.veces_limpiar || 1;
+        logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Una vez PDE: usando upsertApplyOneTimeIncrementPde (simétrico)', {
+          traceId,
+          student_uuid,
+          item_ref,
+          required_count: requiredCount
+        });
+        state = await stateRepo.upsertApplyOneTimeIncrementPde({
+          student_uuid,
+          product_key,
+          domain_type,
+          item_ref,
+          required_count: requiredCount
+        }, client);
+      } else {
+        // SHARED: incrementar completed y decrementar remaining
+        logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Una vez SHARED: usando upsertApplyOneTimeIncrementShared', {
+          traceId,
+          student_uuid,
+          item_ref,
+          capa: 'SHARED'
+        });
+        const requiredCount = item.veces_limpiar || 1;
+        state = await stateRepo.upsertApplyOneTimeIncrementShared({
+          student_uuid,
+          product_key,
+          domain_type,
+          item_ref,
+          required_count: requiredCount
+        }, client);
+      }
     }
+    
+    // LOG TEMPORAL: resultado de proyección (SIMÉTRICO)
+    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Proyección aplicada', {
+      traceId,
+      student_uuid,
+      item_ref,
+      clean_layer,
+      item_kind: itemKind,
+      state_exists: !!state,
+      // SHARED
+      shared_clean_count: state?.shared_clean_count,
+      shared_remaining: state?.shared_remaining,
+      shared_completed: state?.shared_completed,
+      // PDE (simétrico)
+      pde_clean_count: state?.pde_clean_count,
+      pde_remaining: state?.pde_remaining,
+      pde_completed: state?.pde_completed
+    });
     
     // ============================================================================
     // UUID-ONLY: syncToStudentItemState() ELIMINADA
@@ -403,12 +528,20 @@ export async function markCleanStudent(options, client = null) {
       });
     }
     
-    logInfo('CleaningEngine', 'Limpieza aplicada correctamente', {
+    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Limpieza aplicada correctamente', {
       traceId,
       student_uuid,
       item_ref,
       clean_layer,
-      item_kind
+      item_kind,
+      // SHARED
+      shared_clean_count: state?.shared_clean_count,
+      shared_remaining: state?.shared_remaining,
+      shared_completed: state?.shared_completed,
+      // PDE (simétrico)
+      pde_clean_count: state?.pde_clean_count,
+      pde_remaining: state?.pde_remaining,
+      pde_completed: state?.pde_completed
     });
     
     return state;
@@ -452,8 +585,21 @@ export async function markCleanAllStudents(options, client = null) {
     actor_ref = null,
     surface_key = null,
     skip_level_filter = false,
+    execution_mode = 'APPLY', // Nuevo: 'APPLY' (idempotente) o 'CERTIFY' (no idempotente)
     meta = {}
   } = options;
+
+  // LOG TEMPORAL: entrada a markCleanAllStudents
+  logInfo('CleaningEngine', '[TEMP] markCleanAllStudents entrada', {
+    traceId,
+    item_ref,
+    item_kind: options.item_kind,
+    clean_layer,
+    product_key,
+    actor_type,
+    surface_key,
+    skip_level_filter
+  });
 
   // REGLA: markCleanAllStudents obtiene todos los alumnos desde students (UUID canónico)
   // Luego resuelve legacy_id internamente solo cuando necesita escribir en tablas legacy
@@ -564,6 +710,7 @@ export async function markCleanAllStudents(options, client = null) {
           actor_type,
           actor_ref,
           surface_key,
+          execution_mode, // Pasar execution_mode a markCleanStudent
           meta
         }, client);
         
@@ -636,6 +783,17 @@ export async function incrementAllStudents(options, client = null) {
   // CONTRATO LIMPIEZA v1: item_kind debe venir en options
   const traceId = getRequestId();
   
+  // LOG TEMPORAL: entrada a incrementAllStudents
+  logInfo('CleaningEngine', '[TEMP] incrementAllStudents entrada', {
+    traceId,
+    item_ref: options.item_ref,
+    item_kind: options.item_kind,
+    clean_layer: options.clean_layer,
+    execution_mode: options.execution_mode,
+    actor_type: options.actor_type,
+    surface_key: options.surface_key
+  });
+  
   if (!options.item_kind) {
     // TODO DEPRECATION: Eliminar este fallback después de v5.66.0
     // WARNING FUERTE: item_kind debe venir explícitamente desde el frontend
@@ -647,12 +805,29 @@ export async function incrementAllStudents(options, client = null) {
     options.item_kind = 'una_vez'; // Fallback legacy solo por compatibilidad temporal
   }
   
+  // REGLA MASTER: Para UNA_VEZ en MASTER, usar CERTIFY para permitir múltiples incrementos
+  const isMasterDomain = options.actor_type === 'master' && options.surface_key === 'master.alquimia_general';
+  const effectiveExecutionMode = (isMasterDomain && options.item_kind === 'una_vez' && (!options.execution_mode || options.execution_mode === 'APPLY'))
+    ? 'CERTIFY'
+    : (options.execution_mode || 'APPLY');
+  
+  // LOG TEMPORAL: decisión de execution_mode
+  if (isMasterDomain && options.item_kind === 'una_vez') {
+    logInfo('CleaningEngine', '[TEMP] MASTER UNA_VEZ incrementAll: usando CERTIFY para permitir múltiples incrementos', {
+      traceId,
+      item_ref: options.item_ref,
+      original_execution_mode: options.execution_mode,
+      effective_execution_mode: effectiveExecutionMode
+    });
+  }
+  
   // REGLA: incrementAll desde Alquimia General debe pasar skip_level_filter para ignorar nivel
   // Asegurar que skip_level_filter se pasa correctamente a markCleanAllStudents
   return await markCleanAllStudents({
     ...options,
     item_kind: options.item_kind, // Asegurar que se pasa explícitamente
     clean_layer: options.clean_layer || 'shared', // Usar clean_layer de options si viene
+    execution_mode: effectiveExecutionMode, // Usar execution_mode efectivo (CERTIFY para MASTER UNA_VEZ)
     skip_level_filter: options.skip_level_filter !== undefined ? options.skip_level_filter : true // Por defecto true para incrementAll (Alquimia General ignora nivel)
   }, client);
 }

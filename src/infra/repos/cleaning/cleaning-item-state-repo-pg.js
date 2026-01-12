@@ -180,11 +180,12 @@ export class CleaningItemStateRepoPg {
     const domainType = options.domain_type;
     const requiredCount = options.required_count || 1;
 
-    // REGLA UNA_VEZ: 
-    // - Incrementar clean_count
-    // - Recalcular remaining = max(required_count - clean_count, 0)
+    // REGLA UNA_VEZ v1: 
+    // - Incrementar clean_count SIEMPRE (+1)
+    // - Recalcular remaining = max(required_count - clean_count, 0) (clamp a 0)
     // - Recalcular completed = (remaining === 0 ? 1 : 0)
-    // Si no existe estado, inicializar con clean_count = 1, remaining = max(0, required_count - 1), completed = (remaining === 0)
+    // - clean_count puede superar required_count (sin bloqueo)
+    // - Si no existe estado, inicializar con clean_count = 1, remaining = max(0, required_count - 1), completed = (remaining === 0)
     const result = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id, product_key, domain_type, item_ref,
@@ -196,13 +197,13 @@ export class CleaningItemStateRepoPg {
       ON CONFLICT (student_id, product_key, domain_type, item_ref)
       DO UPDATE SET
         shared_clean_count = cleaning_item_state.shared_clean_count + 1,
-        -- Recalcular remaining basado en required_count y nuevo clean_count
-        -- Asumimos que remaining original = required_count - clean_count original
-        -- Nuevo remaining = required_count - (clean_count + 1) = remaining - 1
-        shared_remaining = GREATEST(0, cleaning_item_state.shared_remaining - 1),
+        -- Recalcular remaining basado en required_count y nuevo clean_count (no solo decrementar)
+        -- Nuevo remaining = max(required_count - (clean_count + 1), 0)
+        -- Esto permite que clean_count supere required_count (remaining queda en 0)
+        shared_remaining = GREATEST(0, $5 - (cleaning_item_state.shared_clean_count + 1)),
         -- Recalcular completed: es 1 si remaining = 0, 0 si remaining > 0
         shared_completed = CASE 
-          WHEN GREATEST(0, cleaning_item_state.shared_remaining - 1) <= 0 THEN 1 
+          WHEN GREATEST(0, $5 - (cleaning_item_state.shared_clean_count + 1)) <= 0 THEN 1 
           ELSE 0 
         END,
         updated_at = CURRENT_TIMESTAMP
@@ -286,6 +287,89 @@ export class CleaningItemStateRepoPg {
       student_id: legacyStudentId,
       item_ref: options.item_ref,
       remaining: result.rows[0]?.shared_remaining
+    });
+
+    return result.rows[0];
+  }
+
+  /**
+   * Incrementa clean_count y recalcula remaining/completed para una_vez en capa PDE.
+   * SIMÉTRICO A SHARED: misma lógica, distintas columnas.
+   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id
+   * 
+   * @param {Object} options - Opciones
+   * @param {string} [options.student_uuid] - UUID canónico del estudiante
+   * @param {number} [options.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
+   * @param {number} [options.required_count=1] - Total requerido (para calcular remaining)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object>} Estado actualizado
+   */
+  async upsertApplyOneTimeIncrementPde(options, client = null) {
+    if (!options || !options.item_ref) {
+      throw new Error('student_uuid (o student_id) e item_ref son requeridos');
+    }
+
+    // UUID-ONLY: Resolver legacy_id internamente
+    let legacyStudentId = options.student_id;
+    if (!legacyStudentId && options.student_uuid) {
+      legacyStudentId = await this._resolveLegacyId(options.student_uuid, client);
+      if (!legacyStudentId) {
+        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${options.student_uuid}`);
+      }
+    } else if (!legacyStudentId) {
+      throw new Error('student_uuid o student_id es requerido');
+    }
+
+    const queryFn = client ? client.query.bind(client) : query;
+
+    const productKey = options.product_key || 'pde';
+    const domainType = options.domain_type;
+    const requiredCount = options.required_count || 1;
+
+    // REGLA PDE UNA_VEZ v1 (SIMÉTRICO A SHARED):
+    // - Incrementar pde_clean_count SIEMPRE (+1)
+    // - Recalcular pde_remaining = max(required_count - pde_clean_count, 0) (clamp a 0)
+    // - Recalcular pde_completed = (pde_remaining === 0 ? 1 : 0)
+    // - pde_clean_count puede superar required_count (sin bloqueo)
+    // - Si no existe estado, inicializar con pde_clean_count = 1, pde_remaining = max(0, required_count - 1), pde_completed = (pde_remaining === 0)
+    const result = await queryFn(`
+      INSERT INTO cleaning_item_state (
+        student_id, product_key, domain_type, item_ref,
+        pde_clean_count, pde_remaining, pde_completed
+      ) VALUES (
+        $1, $2, $3, $4, 1, GREATEST(0, $5 - 1), 
+        CASE WHEN $5 - 1 <= 0 THEN 1 ELSE 0 END
+      )
+      ON CONFLICT (student_id, product_key, domain_type, item_ref)
+      DO UPDATE SET
+        pde_clean_count = cleaning_item_state.pde_clean_count + 1,
+        -- Recalcular remaining basado en required_count y nuevo clean_count (no solo decrementar)
+        -- Nuevo remaining = max(required_count - (clean_count + 1), 0)
+        -- Esto permite que clean_count supere required_count (remaining queda en 0)
+        pde_remaining = GREATEST(0, $5 - (cleaning_item_state.pde_clean_count + 1)),
+        -- Recalcular completed: es 1 si remaining = 0, 0 si remaining > 0
+        pde_completed = CASE 
+          WHEN GREATEST(0, $5 - (cleaning_item_state.pde_clean_count + 1)) <= 0 THEN 1 
+          ELSE 0 
+        END,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `, [
+      legacyStudentId,
+      productKey,
+      domainType,
+      options.item_ref,
+      requiredCount
+    ]);
+
+    logInfo('CleaningItemStateRepo', '[TEMP_PDE_SYMM] Incremento una_vez PDE aplicado (simétrico)', {
+      student_uuid: options.student_uuid,
+      student_id: legacyStudentId,
+      item_ref: options.item_ref,
+      required_count: requiredCount,
+      pde_clean_count: result.rows[0]?.pde_clean_count,
+      pde_remaining: result.rows[0]?.pde_remaining,
+      pde_completed: result.rows[0]?.pde_completed
     });
 
     return result.rows[0];

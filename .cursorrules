@@ -691,6 +691,29 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       REFERENCIAS:
       - docs/ALQUIMIA_CANONICA_V1.md (documentación canónica completa)
 
+  - id: execution-mode-constitutional
+    title: Execution Mode como concepto constitucional (APPLY/CERTIFY)
+    content: >
+      execution_mode es un concepto constitucional que diferencia limpiezas idempotentes (APPLY) de certificaciones MASTER (CERTIFY).
+      OBLIGATORIO:
+      - Por defecto todo es APPLY (idempotente, comportamiento actual)
+      - CERTIFY solo se usa en acciones MASTER explícitas (botones "Marcar como hecho AHORA para todos")
+      - Validar execution_mode como 'APPLY' o 'CERTIFY' en servicios y APIs
+      - CERTIFY genera execution_key único (certify:{item_ref}:{student_uuid}:{timestamp})
+      - APPLY genera execution_key idempotente (mark_clean:{item_ref}:{student_uuid}:{date})
+      PROHIBIDO:
+      - Eliminar CERTIFY o convertirlo en APPLY
+      - Añadir flags alternativos (solo APPLY y CERTIFY son válidos)
+      - Inferir execution_mode (debe ser explícito en el payload)
+      - Cambiar el comportamiento de APPLY (es idempotente por diseño)
+      - Cambiar constraints existentes (ON CONFLICT se mantiene)
+      REGLA:
+      - CERTIFY siempre ejecuta (no idempotente, skipped siempre 0)
+      - APPLY respeta idempotencia (puede devolver skipped > 0)
+      REFERENCIAS:
+      - docs/ALQUIMIA_EXECUTION_MODE_V1.md (documentación canónica completa)
+      - src/core/master/services/cleaning-engine-service.js (generateExecutionKey)
+
 # =========================================
 # CONSTITUCIÓN BACKUPS POSTGRESQL v1
 # =========================================

@@ -40,17 +40,22 @@ function jsonError(message, code, status = 400, traceId = null) {
  * Helper: Respuesta JSON de éxito
  */
 function jsonSuccess(data, traceId = null) {
-  return new Response(JSON.stringify({
-    ok: true,
-    ...data,
-    trace_id: traceId || getRequestId()
-  }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'X-Trace-Id': traceId || getRequestId()
-    }
-  });
+      const response = new Response(JSON.stringify({
+        ok: true,
+        ...data,
+        trace_id: traceId || getRequestId()
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-Trace-Id': traceId || getRequestId(),
+          'X-AP-FLOAT-DTO': 'v1_layers', // Forensics: DTO con capas simétricas
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      return response;
 }
 
 /**
@@ -835,6 +840,24 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             clean_layer: cleanLayer,
             skip_level_filter: true
           });
+          
+          // LOG TEMPORAL FORENSE: verificar que llegan pde_* y shared_*
+          if (result.students && result.students.length > 0) {
+            const firstRow = result.students[0];
+            logInfo('MasterApiAlquimiaGeneral', '[TEMP_FLOAT_DTO] students payload keys', {
+              traceId,
+              keys: Object.keys(firstRow || {}),
+              has_shared: !!firstRow.shared,
+              has_pde: !!firstRow.pde,
+              shared_keys: firstRow.shared ? Object.keys(firstRow.shared) : [],
+              pde_keys: firstRow.pde ? Object.keys(firstRow.pde) : [],
+              sample: {
+                student_uuid: firstRow.student_uuid,
+                shared: firstRow.shared,
+                pde: firstRow.pde
+              }
+            });
+          }
         }
         catch (serviceError) {
           logError('MasterApiAlquimiaGeneral', 'Error en getStudentsForItem (fail-open)', {
@@ -901,7 +924,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
       
-      // Leer clean_layer del body o query (default: 'shared')
+      // Leer clean_layer del body o query (OBLIGATORIO)
       let body = null;
       try {
         body = await request.json();
@@ -909,15 +932,30 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       catch (e) {
         body = {};
       }
-      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
+      
+      // Validar clean_layer (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer');
+      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+        return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'INVALID_CLEAN_LAYER', 400, traceId);
+      }
 
       // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
       if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
         return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
       }
 
-      const result = await markCleanAll(itemRef, productKey, cleanLayer, body.item_kind);
-      return jsonSuccess(result, traceId);
+      // Obtener execution_mode del body (default: 'APPLY')
+      const executionMode = body.execution_mode || 'APPLY';
+      if (executionMode !== 'APPLY' && executionMode !== 'CERTIFY') {
+        return jsonError('execution_mode debe ser "APPLY" o "CERTIFY"', 'INVALID_EXECUTION_MODE', 400, traceId);
+      }
+      
+      const result = await markCleanAll(itemRef, productKey, cleanLayer, body.item_kind, executionMode);
+      return jsonSuccess({
+        ...result,
+        applied_layer: cleanLayer, // Forensics: indicar capa aplicada
+        item_kind: body.item_kind
+      }, traceId);
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student (recurrente o una_vez)
@@ -927,7 +965,12 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const itemRef = params.item_ref;
       const body = await request.json();
       const productKey = url.searchParams.get('product_key') || 'pde';
-      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
+      
+      // Validar clean_layer (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer');
+      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+        return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'INVALID_CLEAN_LAYER', 400, traceId);
+      }
 
       // Validar campos requeridos según contrato canónico (CAMBIADO: ahora acepta student_uuid)
       if (!body.student_uuid) {
@@ -1021,6 +1064,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
       return jsonSuccess({ 
         state,
+        applied_layer: cleanLayer, // Forensics: indicar capa aplicada
+        item_kind: body.item_kind,
         student: {
           student_uuid: studentUuid, // CAMBIADO: retornar UUID canónico
           display_name: displayName
@@ -1054,7 +1099,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       };
 
       try {
-        const result = await markPdeCleanAll(itemRef, productKey, ctx, body.item_kind);
+        // Obtener execution_mode del body (default: 'APPLY')
+        const executionMode = body.execution_mode || 'APPLY';
+        if (executionMode !== 'APPLY' && executionMode !== 'CERTIFY') {
+          return jsonError('execution_mode debe ser "APPLY" o "CERTIFY"', 'INVALID_EXECUTION_MODE', 400, traceId);
+        }
+        
+        const result = await markPdeCleanAll(itemRef, productKey, ctx, body.item_kind, executionMode);
         return jsonSuccess({
           data: result
         }, traceId);
@@ -1077,7 +1128,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
       
-      // Leer clean_layer del body o query (default: 'shared')
+      // Leer clean_layer del body o query (OBLIGATORIO)
       let body = null;
       try {
         body = await request.json();
@@ -1085,10 +1136,34 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       catch (e) {
         body = {};
       }
-      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
+      
+      // Validar clean_layer (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer');
+      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+        return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'INVALID_CLEAN_LAYER', 400, traceId);
+      }
+      
+      // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
+        return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+      }
 
-      const result = await incrementAll(itemRef, productKey, cleanLayer);
-      return jsonSuccess(result, traceId);
+      // LOG TEMPORAL: endpoint increment-all
+      logInfo('MasterApiAlquimiaGeneral', '[TEMP] POST increment-all', {
+        traceId,
+        itemRef,
+        productKey,
+        cleanLayer,
+        item_kind: body.item_kind,
+        body: JSON.stringify(body)
+      });
+
+      const result = await incrementAll(itemRef, productKey, cleanLayer, body.item_kind);
+      return jsonSuccess({
+        ...result,
+        applied_layer: cleanLayer, // Forensics: indicar capa aplicada
+        item_kind: body.item_kind
+      }, traceId);
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/adjust-remaining (una_vez)

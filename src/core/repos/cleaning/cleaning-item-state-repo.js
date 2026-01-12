@@ -81,6 +81,26 @@ export function upsertApplyOneTimeIncrementShared(options, client = null) {
 }
 
 /**
+ * CONTRATO: upsertApplyOneTimeIncrementPde(options)
+ * 
+ * Incrementa clean_count y recalcula remaining/completed para una_vez en capa PDE.
+ * SIMÉTRICO A SHARED: misma lógica, distintas columnas.
+ * 
+ * @param {Object} options - Opciones
+ * @param {number} options.student_id - ID del alumno
+ * @param {string} [options.product_key='pde'] - Clave del producto
+ * @param {string} options.domain_type - Tipo de dominio
+ * @param {string} options.item_ref - Referencia del item
+ * @param {number} [options.required_count=1] - Total requerido (para calcular remaining)
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<CleaningItemState>} Estado actualizado
+ * @throws {Error} Si hay error de conexión o query
+ */
+export function upsertApplyOneTimeIncrementPde(options, client = null) {
+  throw new Error('upsertApplyOneTimeIncrementPde debe ser implementado por el repositorio concreto');
+}
+
+/**
  * CONTRATO: upsertApplyOneTimeSetRemainingShared(options)
  * 
  * Establece remaining directamente para una_vez en capa SHARED.
