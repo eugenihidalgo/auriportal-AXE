@@ -802,3 +802,21 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Fix aplicado mediante StudentCreationRepo
       REFERENCIAS:
       - docs/IDENTIDAD_ALUMNOS_CANONICA_V1.md (sección 8)
+
+  - id: handlers-master-api-try-catch-required
+    title: Handlers MASTER API: try debe tener catch o finally
+    content: >
+      Los handlers MASTER API deben ser sintácticamente importables.
+      PROHIBIDO:
+      - Bloque try sin catch o finally
+      - Comentarios inline dentro de objetos literales que puedan confundir al parser
+      - try huérfano que rompa la importación del módulo
+      OBLIGATORIO:
+      - Todo bloque try { DEBE tener su correspondiente } catch o } finally
+      - Comentarios deben ir antes o después de la llamada, no dentro del objeto literal
+      - Verificación: node -e "import('./handler.js')" debe ejecutar sin errores
+      CASO DOCUMENTADO:
+      - master-api-alquimia-general.js (error "Missing catch or finally after try" en línea 346)
+      - Fix: mover comentario fuera del objeto literal
+      REFERENCIAS:
+      - docs/ALQUIMIA_CANONICA_V1.md (Nota Técnica: Handlers MASTER API)

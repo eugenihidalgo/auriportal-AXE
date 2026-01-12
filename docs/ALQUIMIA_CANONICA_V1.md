@@ -704,4 +704,18 @@ showToastSuccess(`✓ ${displayName} limpiado`);
 
 ---
 
+## NOTA TÉCNICA: Handlers MASTER API
+
+Los handlers MASTER API deben ser sintácticamente importables. Un bloque `try` sin `catch` o `finally` rompe todo el módulo y provoca error "Missing catch or finally after try" al importar.
+
+**Regla obligatoria:**
+- Todo bloque `try {` DEBE tener su correspondiente `} catch` o `} finally`
+- No se permiten comentarios inline dentro de objetos literales que puedan confundir al parser
+- Los comentarios deben ir antes o después de la llamada, no dentro del objeto literal
+
+**Verificación:**
+- `node -e "import('./src/endpoints/master-api-alquimia-general.js')"` debe ejecutar sin errores de sintaxis
+
+---
+
 **FIN DEL DOCUMENTO**
