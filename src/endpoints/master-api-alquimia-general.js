@@ -133,7 +133,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
               subtype_key: listaWithClassification?.subtype_key || null,
               tags: listaTags || []
             };
-          } catch (error) {
+          }
+          catch (error) {
             logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo classification para lista en listado', {
               traceId,
               lista_id: lista.id,
@@ -155,7 +156,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
         
         return jsonSuccess({ listas }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en GET /listas', {
           traceId,
           error: error.message,
@@ -206,7 +208,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             'X-Trace-Id': traceId
           }
         });
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en POST /listas', {
           traceId,
           error: error.message,
@@ -264,7 +267,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             tags: []
           };
         }
-      } catch (error) {
+      }
+      catch (error) {
         logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones', {
           traceId,
           lista_id: id,
@@ -330,7 +334,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
                 traceId,
                 lista_id: id
               });
-            } catch (tagsError) {
+            }
+            catch (tagsError) {
               logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
                 traceId,
                 lista_id: id,
@@ -360,7 +365,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
               tags: listaTags // Usar tags desde SOT
             };
           }
-        } catch (error) {
+        }
+        catch (error) {
           logWarn('MasterApiAlquimiaGeneral', 'Error actualizando clasificaciones', {
             traceId,
             lista_id: id,
@@ -407,7 +413,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         };
 
         return jsonSuccess({ classification }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones', {
           traceId,
           lista_id: id,
@@ -445,7 +452,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
               traceId,
               lista_id: id
             });
-          } catch (tagsError) {
+          }
+          catch (tagsError) {
             logWarn('MasterApiAlquimiaGeneral', 'Error actualizando tags (continuando)', {
               traceId,
               lista_id: id,
@@ -475,7 +483,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         };
 
         return jsonSuccess({ classification }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error actualizando clasificaciones', {
           traceId,
           lista_id: id,
@@ -522,7 +531,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // Formato canónico: { ok: true, categories: [], subtypes: [], tags: [] }
         // (consistente con otros endpoints que devuelven { lista }, { listas }, etc.)
         return jsonSuccess(normalized, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         // Fail-open: devolver estructura vacía en lugar de error 500
         logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo clasificaciones (fail-open)', {
           traceId,
@@ -630,7 +640,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             items: groups
           }
         }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en GET item-groups (fail-open)', {
           traceId,
           error: error.message,
@@ -819,7 +830,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             clean_layer: cleanLayer,
             skip_level_filter: true // Master puede limpiar cualquier item a cualquier alumno
           });
-        } catch (serviceError) {
+        }
+        catch (serviceError) {
           logError('MasterApiAlquimiaGeneral', 'Error en getStudentsForItem (fail-open)', {
             traceId,
             error: serviceError.message,
@@ -853,7 +865,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           warnings: warnings.length > 0 ? warnings : undefined
         }, traceId);
 
-      } catch (error) {
+      }
+      catch (error) {
         // Fail-open absoluto: cualquier error no capturado
         logError('MasterApiAlquimiaGeneral', 'Error crítico en GET students (fail-open)', {
           traceId,
@@ -887,7 +900,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       let body = null;
       try {
         body = await request.json();
-      } catch (e) {
+      }
+      catch (e) {
         body = {};
       }
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
@@ -986,7 +1000,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             email: row.email
           }]))[0]?.display_name || null;
         }
-      } catch (nameError) {
+      }
+      catch (nameError) {
         logWarn('MasterApiAlquimiaGeneral', 'Error calculando display_name (fail-open)', {
           traceId,
           student_uuid: studentUuid,
@@ -1019,7 +1034,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonSuccess({
           data: result
         }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en markPdeCleanAll', {
           traceId,
           error: error.message,
@@ -1041,7 +1057,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       let body = null;
       try {
         body = await request.json();
-      } catch (e) {
+      }
+      catch (e) {
         body = {};
       }
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
@@ -1066,7 +1083,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonSuccess({
           data: result
         }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en markPdeCleanAll', {
           traceId,
           error: error.message,
@@ -1191,7 +1209,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         };
         
         return jsonSuccess({ diagnostics }, traceId);
-      } catch (error) {
+      }
+      catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en GET /diagnostics', {
           traceId,
           error: error.message,
@@ -1204,7 +1223,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // Ruta no encontrada
     return jsonError(`Ruta no encontrada: ${method} ${path}`, 'ROUTE_NOT_FOUND', 404, traceId);
 
-  } catch (error) {
+  }
+  catch (error) {
     logError('MasterApiAlquimiaGeneral', 'Error no manejado en handler', {
       traceId,
       error: error.message,
