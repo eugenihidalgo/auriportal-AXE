@@ -402,7 +402,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - student.level.upgrade.locked (genérica, incluye line_key)
       BACKWARD COMPAT:
       - Si line_key === 'pde', emitir TAMBIÉN student.pde.*
-      - Payload SIEMPRE incluye: student_id, line_key, before/after, computed_days, trace_id
+      - Payload SIEMPRE incluye: student_uuid (UUID canónico), line_key, before/after, computed_days, trace_id
 
   - id: ui-progreso-sovereign-section
     title: UI Progreso como sección soberana de MASTER/ALUMNOS
@@ -447,7 +447,8 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       Cleaning Engine v1 es el ÚNICO decisor canónico de estados de limpieza.
       PROHIBIDO:
       - Calcular estados de limpieza (reviewed/pending/important/completed) fuera del Cleaning Engine
-      - Escribir directamente en student_item_state sin pasar por Cleaning Engine
+      - Escribir directamente en cleaning_item_state sin pasar por Cleaning Engine
+      - Usar student_item_state (tabla histórica, no usada en runtime)
       - Duplicar lógica de limpieza en handlers o servicios
       OBLIGATORIO:
       - Toda mutación de estado de limpieza pasa por CleaningEngineService
@@ -458,16 +459,16 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
     title: Dos capas de limpieza: SHARED y PDE
     content: >
       El sistema soporta dos capas de limpieza distintas:
-      - SHARED: Visible para estudiantes, sincroniza con student_item_state
-      - PDE: Solo master, no afecta student_item_state (solo auditoría)
+      - SHARED: Visible para estudiantes, se registra en cleaning_item_state
+      - PDE: Solo master, se registra en cleaning_item_state (solo auditoría)
       PROHIBIDO:
       - Mezclar lógica entre capas
       - Usar SHARED cuando se requiere PDE o viceversa
       - Asumir que una limpieza afecta ambas capas
       OBLIGATORIO:
       - Toda acción debe declarar explícitamente su clean_layer
-      - SHARED se sincroniza automáticamente con student_item_state
-      - PDE solo se registra en cleaning_events y cleaning_item_state
+      - SHARED y PDE se registran en cleaning_events y cleaning_item_state (UUID-only)
+      - student_item_state es tabla histórica, NO se usa en runtime
 
   - id: cleaning-engine-paused-exclusion
     title: Exclusión obligatoria de estudiantes pausados
@@ -490,7 +491,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Procesar la misma acción dos veces sin verificar execution_key
       - Permitir duplicados en cleaning_events
       OBLIGATORIO:
-      - Unique constraint en (execution_key, student_id) en cleaning_events
+      - Unique constraint en (execution_key, student_uuid) en cleaning_events (UUID-only)
       - Repositorios verifican idempotencia antes de insertar
       - Mismo execution_key = misma acción = mismo resultado
 
@@ -520,18 +521,31 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - cleaning_item_state es proyección optimizada para lecturas
       - Estados se reconstruyen desde eventos si es necesario
 
-  - id: cleaning-engine-sync-shared
-    title: Sincronización automática SHARED con student_item_state
+  - id: cleaning-engine-uuid-only-constitutional
+    title: Alquimia UUID-only constitucional (legacy alumno_id prohibido)
     content: >
-      Limpiezas SHARED DEBEN sincronizarse automáticamente con student_item_state.
+      En dominio MASTER, Alquimia funciona EXCLUSIVAMENTE con student_uuid (UUID).
       PROHIBIDO:
-      - Escribir en student_item_state sin pasar por Cleaning Engine
-      - Desincronizar SHARED y student_item_state
-      - Permitir inconsistencias entre capas
+      - Usar legacy_alumno_id en runtime de Alquimia
+      - Escribir o leer student_item_state (tabla histórica, no usada)
+      - Hacer JOINs con tabla alumnos en el motor
+      - Crear repositorios duales UUID/INTEGER
+      - Reintroducir compatibilidad legacy
+      - Resolver legacy IDs fuera de repositorios (solo para escribir en tablas legacy)
       OBLIGATORIO:
-      - Cleaning Engine sincroniza automáticamente SHARED con student_item_state
-      - PDE no afecta student_item_state (solo auditoría)
-      - Sincronización es atómica (misma transacción)
+      - Cleaning Engine acepta EXCLUSIVAMENTE student_uuid
+      - Repositorios resuelven legacy_alumno_id internamente SOLO para escribir en tablas legacy
+      - Señales emiten SOLO student_uuid (UUID canónico)
+      - clean_layer es OBLIGATORIO (no existe fallback a student_item_state)
+      - Si se intenta usar legacy → error explícito: "LEGACY alumno_id is forbidden. MASTER Alquimia is UUID-only."
+      REGLA CONSTITUCIONAL:
+      - Esta decisión es IRREVERSIBLE
+      - NO es transicional
+      - NO es opcional
+      - Tablas legacy (alumnos, student_item_state) quedan como HISTÓRICAS (no usadas en runtime)
+      REFERENCIAS:
+      - docs/ALQUIMIA_UUID_ONLY_V1.md
+      - docs/ALQUIMIA_CANONICA_V1.md (sección 13)
 
   - id: cleaning-engine-pde-refresh-modal
     title: Refresh obligatorio del modal después de PDE clean-all
@@ -738,3 +752,53 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 
 
+
+
+# =========================================
+# CONSTITUCIÓN IDENTIDAD ALUMNOS UUID-ONLY v1
+# =========================================
+
+  - id: alumnos-uuid-only-constitutional
+    title: Identidad de alumnos UUID-only constitucional (legacy prohibido)
+    content: >
+      En dominio MASTER, alumnos existen EXCLUSIVAMENTE como student_uuid (UUID).
+      PROHIBIDO:
+      - Usar legacy_alumno_id (INTEGER) en runtime de MASTER
+      - Acceder a tabla alumnos como Source of Truth
+      - Crear servicios que resuelvan IDs legacy
+      - Exponer legacy_alumno_id en respuestas API
+      - Crear repositorios duales UUID/INTEGER
+      - Reintroducir compatibilidad legacy
+      OBLIGATORIO:
+      - students.id (UUID) es el ÚNICO Source of Truth
+      - Endpoints MASTER aceptan/retornan SOLO student_uuid
+      - Repositorios resuelven legacy_alumno_id internamente SOLO si necesitan escribir en tablas legacy
+      - Señales emiten SOLO student_uuid (UUID canónico)
+      - Si se intenta usar legacy → error explícito: "LEGACY alumno_id is forbidden. MASTER is UUID-only."
+      REGLA CONSTITUCIONAL:
+      - Esta decisión es IRREVERSIBLE
+      - NO es transicional
+      - NO es opcional
+      - Tabla alumnos queda como HISTÓRICA (no usada en runtime, solo para display_name encapsulado)
+      REFERENCIAS:
+      - docs/IDENTIDAD_ALUMNOS_CANONICA_V1.md
+      - docs/ALQUIMIA_UUID_ONLY_V1.md
+
+  - id: servicios-no-acceso-db-directo
+    title: Servicios NO acceden a DB directamente
+    content: >
+      Los servicios del dominio MASTER NO deben importar database/pg.js directamente.
+      PROHIBIDO:
+      - Importar src/database/pg.js en servicios
+      - Escribir SQL en servicios
+      - Conocer PostgreSQL en servicios
+      OBLIGATORIO:
+      - Servicios orquestan lógica y delegan a repositorios
+      - Acceso a DB SOLO vía repositorios infra
+      - Repositorios encapsulan toda la lógica SQL
+      - Repositorios resuelven legacy IDs internamente si es necesario
+      CASO DOCUMENTADO:
+      - student-creation-service.js (error ERR_MODULE_NOT_FOUND)
+      - Fix aplicado mediante StudentCreationRepo
+      REFERENCIAS:
+      - docs/IDENTIDAD_ALUMNOS_CANONICA_V1.md (sección 8)

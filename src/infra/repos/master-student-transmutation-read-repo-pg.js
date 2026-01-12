@@ -257,11 +257,11 @@ export class MasterStudentTransmutationReadRepoPg {
         }
 
         students.push({
-          student_id: row.student_id,
-          student_name: row.student_name || row.student_email || 'Sin nombre',
-          student_email: row.student_email,
-          apodo: row.apodo,
-          nombre_completo: row.nombre_completo,
+          student_uuid: row.student_uuid, // UUID canónico
+          student_name: studentName || 'Sin nombre',
+          student_email: studentEmail,
+          apodo: apodo,
+          nombre_completo: nombreCompleto,
           remaining,
           completed,
           is_complete: isComplete

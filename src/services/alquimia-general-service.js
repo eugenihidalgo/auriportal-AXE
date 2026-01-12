@@ -336,25 +336,28 @@ export async function updateItem(id, patch) {
         const { setRemainingShared } = await import('../core/master/services/cleaning-engine-service.js');
         const { query } = await import('../../database/pg.js');
         
-        // Obtener todos los estados de cleaning_item_state para este item_ref (solo SHARED, solo activos)
+        // UUID-ONLY: Obtener todos los estados de cleaning_item_state para este item_ref (solo SHARED, solo activos)
+        // Resolver student_uuid desde legacy_alumno_id
         const statesResult = await query(
-          `SELECT student_id, shared_completed 
-           FROM cleaning_item_state 
-           WHERE item_ref = $1 AND product_key = 'pde' AND domain_type = 'transmutacion'
-           AND student_id NOT IN (
-             SELECT alumno_id FROM pausas WHERE fin IS NULL
-           )`,
+          `SELECT s.id as student_uuid, c.shared_completed 
+           FROM cleaning_item_state c
+           INNER JOIN students s ON s.legacy_alumno_id = c.student_id AND s.deleted_at IS NULL
+           LEFT JOIN pausas p ON p.alumno_id = c.student_id AND p.fin IS NULL
+           WHERE c.item_ref = $1 
+             AND c.product_key = 'pde' 
+             AND c.domain_type = 'transmutacion'
+             AND p.id IS NULL`,
           [itemActual.item_ref]
         );
         
-        // Actualizar remaining para cada estudiante
+        // Actualizar remaining para cada estudiante usando UUID
         let updated = 0;
         for (const row of statesResult.rows) {
           const completed = row.shared_completed || 0;
           const newRemaining = Math.max(patch.veces_limpiar - completed, 0);
           
           await setRemainingShared({
-            student_id: row.student_id,
+            student_uuid: row.student_uuid, // UUID canónico
             item_ref: itemActual.item_ref,
             remaining: newRemaining,
             actor_type: 'automation',
@@ -446,14 +449,18 @@ export async function archiveItem(id) {
 /**
  * Obtiene estado de alumnos para un item
  * 
- * LEE DESDE CLEANING ENGINE v1 cuando se especifica clean_layer
- * Mantiene compatibilidad con student_item_state cuando no se especifica
+ * UUID-ONLY: Lee EXCLUSIVAMENTE desde Cleaning Engine v1 (cleaning_item_state)
+ * 
+ * REGLA CONSTITUCIONAL:
+ * - clean_layer es OBLIGATORIO
+ * - NO existe fallback a student_item_state (legacy eliminado)
+ * - Alquimia es UUID-only, sin compatibilidad legacy
  * 
  * @param {string} itemRef - item_ref del item
  * @param {string} tipo - Tipo del item ('recurrente' o 'una_vez')
  * @param {string} [productKey='pde'] - Clave del producto
- * @param {Object} [options] - Opciones adicionales (limit, offset, clean_layer)
- * @param {string} [options.clean_layer] - Capa de limpieza ('shared' | 'pde'). Si se especifica, lee desde cleaning_item_state
+ * @param {Object} options - Opciones adicionales (limit, offset, clean_layer)
+ * @param {string} options.clean_layer - Capa de limpieza ('shared' | 'pde') - OBLIGATORIO
  * @returns {Promise<Object>} Objeto con students, counts, total
  */
 export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', options = {}) {
@@ -463,6 +470,21 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
   
   const traceId = getRequestId();
   const { clean_layer, ...otherOptions } = options;
+  
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: clean_layer es OBLIGATORIO
+  // ============================================================================
+  if (!clean_layer) {
+    const error = new Error('clean_layer is required. MASTER Alquimia is UUID-only and uses Cleaning Engine exclusively.');
+    error.code = 'CLEAN_LAYER_REQUIRED';
+    logError('AlquimiaGeneralService', 'Intento de usar getStudentsForItem sin clean_layer (legacy forbidden)', {
+      traceId,
+      itemRef,
+      tipo
+    });
+    throw error;
+  }
+  // ============================================================================
   
   try {
     // Obtener item completo para threshold_days, critical_multiplier y nivel
@@ -480,36 +502,29 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     const { getStudentEffectiveLevel } = await import('../core/master/services/cleaning-engine-service.js');
     const { getDefaultPausaRepo } = await import('../infra/repos/pausa-repo-pg.js');
 
-    // Si se especifica clean_layer, leer desde Cleaning Engine
-    let rawResult;
-    if (clean_layer) {
-      logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Leyendo desde Cleaning Engine', {
-        traceId,
-        itemRef,
-        tipo,
-        clean_layer,
-        productKey
-      });
-      const repo = getDefaultMasterStudentTransmutationReadRepo();
-      rawResult = await repo.getStudentsForItemFromCleaningEngine(
-        itemRef, 
-        tipo, 
-        clean_layer, 
-        productKey, 
-        otherOptions
-      );
-      logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Resultado Cleaning Engine', {
-        traceId,
-        itemRef,
-        clean_layer,
-        students_count: rawResult.students?.length || 0,
-        counts: rawResult.counts
-      });
-    } else {
-      // Compatibilidad: leer desde student_item_state (legacy)
-      const repo = getDefaultMasterStudentTransmutationReadRepo();
-      rawResult = await repo.getStudentsForItemRaw(itemRef, tipo, productKey, otherOptions);
-    }
+    // UUID-ONLY: Leer EXCLUSIVAMENTE desde Cleaning Engine
+    logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Leyendo desde Cleaning Engine (UUID-only)', {
+      traceId,
+      itemRef,
+      tipo,
+      clean_layer,
+      productKey
+    });
+    const repo = getDefaultMasterStudentTransmutationReadRepo();
+    const rawResult = await repo.getStudentsForItemFromCleaningEngine(
+      itemRef, 
+      tipo, 
+      clean_layer, 
+      productKey, 
+      otherOptions
+    );
+    logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Resultado Cleaning Engine', {
+      traceId,
+      itemRef,
+      clean_layer,
+      students_count: rawResult.students?.length || 0,
+      counts: rawResult.counts
+    });
 
     // Filtrar por nivel efectivo y pausa (si clean_layer está especificado)
     // REGLA MASTER: Flotante Master NUNCA filtra por nivel (bypass si skip_level_filter=true)
@@ -518,17 +533,26 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     const studentsNoAplica = []; // Alumnos cuyo nivel no aplica
     
     for (const student of rawResult.students) {
-      // Verificar pausa (si clean_layer está especificado, ya está filtrado en query, pero verificamos por seguridad)
-      if (clean_layer) {
-        const pausaRepo = getDefaultPausaRepo();
-        const pausaActiva = await pausaRepo.getPausaActiva(student.student_id);
-        if (pausaActiva) {
-          continue; // Saltar alumnos en pausa
+      // UUID-ONLY: Verificar pausa usando student_uuid
+      // Nota: getStudentsForItemFromCleaningEngine ya filtra pausados, pero verificamos por seguridad
+      if (clean_layer && student.student_uuid) {
+        // Resolver legacy_id solo para verificar pausa (tabla pausas usa alumno_id)
+        const { query } = await import('../database/pg.js');
+        const studentResult = await query(
+          'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+          [student.student_uuid]
+        );
+        if (studentResult.rows[0]?.legacy_alumno_id) {
+          const pausaRepo = getDefaultPausaRepo();
+          const pausaActiva = await pausaRepo.getPausaActiva(studentResult.rows[0].legacy_alumno_id);
+          if (pausaActiva) {
+            continue; // Saltar estudiantes en pausa
+          }
         }
       }
       
-      // Verificar nivel efectivo (SKIP si es Master desde alquimia_general)
-      const nivelEfectivo = await getStudentEffectiveLevel(student.student_id);
+      // UUID-ONLY: Verificar nivel efectivo usando student_uuid
+      const nivelEfectivo = await getStudentEffectiveLevel(student.student_uuid);
       if (!skipLevelFilter && item.nivel && item.nivel > nivelEfectivo) {
         // No aplica por nivel (solo si NO es Master)
         studentsNoAplica.push({
@@ -677,46 +701,15 @@ export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde',
       // NOTA: item_kind debe venir en options si se llama desde endpoint
       // Este servicio legacy no recibe item_kind, pero el endpoint lo pasa directamente al Cleaning Engine
       meta: {
-        source: 'alquimia-general-service',
-        legacy_call: true
+        source: 'alquimia-general-service'
       }
     });
     
-    // Mantener señales legacy para compatibilidad (el Cleaning Engine ya emite señales)
-    if (result) {
-      try {
-        const { emitSignal } = await import('./pde-signal-emitter.js');
-        
-        // origin.executed - Se ejecutó la limpieza (backward compat) (CAMBIADO: usar UUID)
-        await emitSignal('origin.executed', {
-          origin_key: `alquimia:item:${itemRef}`,
-          item_ref: itemRef,
-          student_uuid: studentUuid, // CAMBIADO: usar UUID canónico
-          product_key: productKey,
-          execution_mode: 'recurrent',
-          actor: 'master',
-          clean_layer: cleanLayer
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanStudent'
-        });
-        
-        // origin.completed - Se completó la limpieza (backward compat) (CAMBIADO: usar UUID)
-        await emitSignal('origin.completed', {
-          origin_key: `alquimia:item:${itemRef}`,
-          item_ref: itemRef,
-          student_uuid: studentUuid, // CAMBIADO: usar UUID canónico
-          product_key: productKey,
-          execution_mode: 'recurrent',
-          actor: 'master',
-          clean_layer: cleanLayer
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanStudent'
-        });
-      } catch (signalError) {
+    // ============================================================================
+    // UUID-ONLY: Señales legacy eliminadas
+    // El Cleaning Engine ya emite clean.executed (UUID-only)
+    // NO se emiten señales duplicadas desde el servicio
+    // ============================================================================
         // No fallar si las señales fallan (fail-open)
         logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
           traceId,
@@ -787,46 +780,11 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       };
     }
     
-    // Mantener señales legacy para compatibilidad (el Cleaning Engine ya emite señales)
-    if (result && result.updated > 0) {
-      try {
-        const { emitSignal } = await import('./pde-signal-emitter.js');
-        
-        // origin.executed - Se ejecutó la limpieza (backward compat)
-        await emitSignal('origin.executed', {
-          origin_key: `alquimia:item:${itemRef}`,
-          item_ref: itemRef,
-          product_key: productKey,
-          execution_mode: 'recurrent',
-          actor: 'master',
-          scope: 'all',
-          students_updated: result.updated,
-          clean_layer: cleanLayer
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanAll'
-        });
-        
-        // origin.completed - Se completó la limpieza (backward compat)
-        await emitSignal('origin.completed', {
-          origin_key: `alquimia:item:${itemRef}`,
-          item_ref: itemRef,
-          product_key: productKey,
-          execution_mode: 'recurrent',
-          actor: 'master',
-          scope: 'all',
-          students_updated: result.updated,
-          clean_layer: cleanLayer
-        }, {}, {}, {
-          trace_id: traceId,
-          source: 'alquimia-general-service',
-          action: 'markCleanAll'
-        });
-      } catch (signalError) {
-        // No fallar si las señales fallan (fail-open)
-        logWarn('AlquimiaGeneralService', 'Error emitiendo señales legacy (fail-open)', {
-          traceId,
+    // ============================================================================
+    // UUID-ONLY: Señales legacy eliminadas
+    // El Cleaning Engine ya emite clean.executed (UUID-only)
+    // NO se emiten señales duplicadas desde el servicio
+    // ============================================================================
           error: signalError.message,
           itemRef
         });
@@ -922,7 +880,7 @@ export async function adjustRemaining(studentUuid, itemRef, remaining, productKe
     const { setRemainingShared: cleaningSetRemaining } = await import('../core/master/services/cleaning-engine-service.js');
     
     return await cleaningSetRemaining({
-      student_id: studentId,
+      student_uuid: studentUuid, // UUID canónico
       item_ref: itemRef,
       remaining,
       product_key: productKey,
@@ -930,8 +888,7 @@ export async function adjustRemaining(studentUuid, itemRef, remaining, productKe
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
       meta: {
-        source: 'alquimia-general-service',
-        legacy_call: true
+        source: 'alquimia-general-service'
       }
     });
   } catch (error) {
@@ -1020,16 +977,20 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     const cleanedDate = new Date();
     const cleanedDateStr = cleanedDate.toISOString().split('T')[0];
     
-    // Obtener lista de alumnos (query directa para log)
+    // UUID-ONLY: Obtener lista de estudiantes (query directa para log)
     const { query } = await import('../../database/pg.js');
-    const alumnosResult = await query('SELECT id FROM alumnos', []);
-    const studentIds = alumnosResult.rows.map(row => row.id);
+    const studentsResult = await query(
+      'SELECT id as student_uuid FROM students WHERE deleted_at IS NULL', 
+      []
+    );
+    const studentUuids = studentsResult.rows.map(row => row.student_uuid);
     
     const logRepo = getDefaultPdeDailyCleanLogRepo();
+    // UUID-ONLY: Log usa student_uuid (el repo resuelve internamente si necesita legacy)
     const logResult = await logRepo.insertManyDailyLogs({
       cleaned_date: cleanedDateStr,
       item_ref: itemRef,
-      student_ids: studentIds,
+      student_uuid: studentUuids, // UUID canónico
       actor_type: 'master',
       actor_id: ctx.actor_id || null,
       trace_id: traceId,
@@ -1047,16 +1008,9 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     try {
       const { emitSignal } = await import('./pde-signal-emitter.js');
       
-      await emitSignal('clean.executed', {
-        signal: 'clean.executed',
-        scope: 'pde_daily',
-        student_id: null,
-        item_id: itemId,
-        item_ref: itemRef,
-        domain: 'transmutation',
-        product_key: productKey,
-        source: 'master',
-        clean_layer: 'pde',
+      // UUID-ONLY: Señal legacy eliminada
+      // El Cleaning Engine ya emite clean.executed (UUID-only)
+      // NO se emiten señales duplicadas desde el servicio
         executed_at: cleanedDate.toISOString(),
         cleaned_date: cleanedDateStr
       }, {}, {}, {
