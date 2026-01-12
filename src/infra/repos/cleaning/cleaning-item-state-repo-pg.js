@@ -137,11 +137,13 @@ export class CleaningItemStateRepoPg {
       options.cleaned_at
     ]);
 
-    logInfo('CleaningItemStateRepo', 'Limpieza recurrente aplicada', {
+    logInfo('CleaningItemStateRepo', '[FORENSIC] Limpieza recurrente aplicada', {
       student_uuid: options.student_uuid,
       student_id: legacyStudentId,
       item_ref: options.item_ref,
-      clean_layer: options.clean_layer
+      clean_layer: options.clean_layer,
+      columns_updated: `${lastCleanedColumn}, ${countColumn}`,
+      independence_check: `SOLO ${options.clean_layer === 'shared' ? 'SHARED' : 'PDE'} columns`
     });
 
     return result.rows[0];
@@ -216,12 +218,15 @@ export class CleaningItemStateRepoPg {
       requiredCount
     ]);
 
-    logInfo('CleaningItemStateRepo', 'Incremento una_vez SHARED aplicado', {
+    logInfo('CleaningItemStateRepo', '[FORENSIC] Incremento una_vez SHARED aplicado', {
       student_uuid: options.student_uuid,
       student_id: legacyStudentId,
       item_ref: options.item_ref,
+      columns_updated: 'shared_clean_count, shared_remaining, shared_completed',
+      independence_check: 'SOLO SHARED columns (pde_* NO modificadas)',
       remaining: result.rows[0]?.shared_remaining,
-      completed: result.rows[0]?.shared_completed
+      completed: result.rows[0]?.shared_completed,
+      clean_count: result.rows[0]?.shared_clean_count
     });
 
     return result.rows[0];
@@ -362,10 +367,12 @@ export class CleaningItemStateRepoPg {
       requiredCount
     ]);
 
-    logInfo('CleaningItemStateRepo', '[TEMP_PDE_SYMM] Incremento una_vez PDE aplicado (simétrico)', {
+    logInfo('CleaningItemStateRepo', '[FORENSIC] Incremento una_vez PDE aplicado', {
       student_uuid: options.student_uuid,
       student_id: legacyStudentId,
       item_ref: options.item_ref,
+      columns_updated: 'pde_clean_count, pde_remaining, pde_completed',
+      independence_check: 'SOLO PDE columns (shared_* NO modificadas)',
       required_count: requiredCount,
       pde_clean_count: result.rows[0]?.pde_clean_count,
       pde_remaining: result.rows[0]?.pde_remaining,

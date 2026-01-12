@@ -1182,8 +1182,8 @@
       important: [],
       never: [],
       completed: [],
-      excellent: [], // Para UNA_VEZ: Muy bien trabajado
-      // Para una_vez
+      in_progress: [], // Para UNA_VEZ: En proceso
+      empowered: [] // Para UNA_VEZ: Potenciado (>= required_count * 10)
     };
 
     const tipo = normalized.tipo || normalized.item_kind || 'recurrente';
@@ -1198,14 +1198,15 @@
       // UNA_VEZ: usar student.visual_state calculado por backend (basado en COMBO)
       const state = itemKind === 'recurrente' 
         ? (student.state || 'never')  // Backend calcula: never | reviewed | pending | important
-        : (student.visual_state || 'never'); // Backend calcula: never | in_progress | completed | excellent
+        : (student.visual_state || 'never'); // Backend calcula: never | in_progress | completed | empowered
       
       // Mapeo de estados UNA_VEZ a estados de columna
       let columnState = state;
       if (itemKind === 'una_vez') {
-        // Mapear visual_state a estados de columna
-        if (state === 'in_progress') columnState = 'pending';
-        else if (state === 'excellent') columnState = 'excellent';
+        // Mapear visual_state del backend a estados de columna
+        // Backend devuelve: never | in_progress | completed | empowered
+        if (state === 'in_progress') columnState = 'in_progress';
+        else if (state === 'empowered') columnState = 'empowered';
         else if (state === 'completed') columnState = 'completed';
         else columnState = 'never';
       }
@@ -1251,17 +1252,17 @@
       const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized);
       columnsContainer.appendChild(colNever);
 
-      // 🟡 PENDIENTE (amarillo) - total > 0 && total < (required_count / 2)
-      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
-      columnsContainer.appendChild(colPending);
+      // 🟡 EN PROCESO (amarillo) - combo_count > 0 && combo_count < required_count
+      const colInProgress = createStateColumn('🟡 EN PROCESO', studentsByState.in_progress || [], 'in_progress', item, normalized);
+      columnsContainer.appendChild(colInProgress);
 
-      // ✅ COMPLETADO (verde) - total >= required_count && total < (required_count * 2)
+      // ✅ COMPLETADO (verde) - combo_count >= required_count && combo_count < (required_count * 10)
       const colCompleted = createStateColumn('✅ COMPLETADO', studentsByState.completed, 'completed', item, normalized);
       columnsContainer.appendChild(colCompleted);
 
-      // 🟣 MUY BIEN TRABAJADO (violeta) - total >= (required_count * 2)
-      const colExcellent = createStateColumn('🟣 MUY BIEN TRABAJADO', studentsByState.excellent, 'excellent', item, normalized);
-      columnsContainer.appendChild(colExcellent);
+      // 🟣 POTENCIADO (violeta) - combo_count >= (required_count * 10)
+      const colEmpowered = createStateColumn('🟣 POTENCIADO', studentsByState.empowered || [], 'empowered', item, normalized);
+      columnsContainer.appendChild(colEmpowered);
     }
 
     content.appendChild(columnsContainer);
@@ -1615,7 +1616,13 @@
     } else {
       // SHARED o PDE: un solo botón
       const cleanLayer = layerView === 'pde' ? 'pde' : 'shared';
-      if (stateKey !== 'reviewed' && stateKey !== 'completed') {
+      // REGLA CANÓNICA: RECURRENTE bloquea si está "reviewed", UNA_VEZ NUNCA bloquea (infinito)
+      if (itemKind === 'recurrente' && stateKey === 'reviewed') {
+        // RECURRENTE: no mostrar botón si ya está revisado (idempotencia diaria)
+        // (botón no se muestra, pero no es un error)
+      } else {
+        // UNA_VEZ: SIEMPRE permitir +1 (infinito), incluso si está completed/empowered
+        // RECURRENTE: mostrar botón si NO está reviewed
         const btnClean = document.createElement('button');
         btnClean.textContent = itemKind === 'una_vez' ? '+1' : '✓';
         btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
@@ -1653,7 +1660,7 @@
         'never': 'Nunca',
         'in_progress': 'En proceso',
         'completed': 'Completado',
-        'excellent': 'Excelente'
+        'empowered': 'Potenciado'
       };
       return visualStateMap[visualState] || 'N/A';
     }

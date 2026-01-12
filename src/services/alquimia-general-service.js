@@ -589,13 +589,18 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           days_since_last_clean: null
         };
         
-        // Calcular estado usando SHARED como default (para compatibilidad)
-        const daysSince = sharedData.days_since_last_clean !== undefined 
-          ? sharedData.days_since_last_clean 
-          : student.days_since_last_clean;
+        // REGLA CANÓNICA: Estado RECURRENTE se calcula según clean_layer del request
+        // Si clean_layer='shared', usar shared.days_since_last_clean
+        // Si clean_layer='pde', usar pde.days_since_last_clean
+        // Esto garantiza que el estado refleje la capa que se está visualizando
+        const layerForState = clean_layer === 'pde' ? 'pde' : 'shared';
+        const layerDataForState = layerForState === 'pde' ? pdeData : sharedData;
+        const daysSince = layerDataForState.days_since_last_clean !== undefined 
+          ? layerDataForState.days_since_last_clean 
+          : (layerForState === 'pde' ? null : (student.days_since_last_clean || null));
         
         let state;
-        if (daysSince === null) {
+        if (daysSince === null || daysSince === undefined) {
           // Nunca limpiado → NUNCA (sección colapsable)
           state = 'never';
         } else if (daysSince < thresholdDays) {
@@ -614,10 +619,12 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           // Asegurar que shared y pde están presentes (simétricos)
           shared: sharedData,
           pde: pdeData,
-          // Compatibilidad legacy
+          // Estado calculado según clean_layer del request (autoridad backend)
           state,
           threshold_days: thresholdDays,
-          critical_multiplier: criticalMultiplier
+          critical_multiplier: criticalMultiplier,
+          // Forensics: indicar qué capa se usó para calcular estado
+          state_calculated_from: layerForState
         };
       });
 
@@ -673,6 +680,11 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         const comboCompleted = comboRemaining <= 0 ? 1 : 0;
         
         // Calcular estado visual basado en COMBO (proyección backend)
+        // REGLA CANÓNICA UNA_VEZ v2:
+        // - never: combo_count == 0
+        // - in_progress (pending): combo_count > 0 && combo_count < required_count
+        // - completed: combo_count >= required_count && combo_count < required_count * 10
+        // - empowered: combo_count >= required_count * 10
         let visualState;
         let state;
         
@@ -680,22 +692,18 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           // Nunca trabajado (gris)
           visualState = 'never';
           state = 'pending';
-        } else if (comboRemaining > 0) {
-          // En proceso (amarillo) - tiene contador pero aún no completado
+        } else if (comboCleanCount < vecesLimpiar) {
+          // En proceso (amarillo) - tiene contador pero aún no alcanzó required_count
           visualState = 'in_progress';
           state = 'pending';
-        } else if (comboRemaining <= 0 && comboCleanCount === vecesLimpiar) {
-          // Completado exactamente (verde)
+        } else if (comboCleanCount >= vecesLimpiar && comboCleanCount < (vecesLimpiar * 10)) {
+          // Completado (verde) - alcanzó required_count pero no superó *10
           visualState = 'completed';
           state = 'completed';
-        } else if (comboRemaining <= 0 && comboCleanCount > vecesLimpiar) {
-          // Muy bien trabajado (dorado) - superó el recomendado
-          visualState = 'excellent';
-          state = 'completed';
         } else {
-          // Fallback: en proceso
-          visualState = 'in_progress';
-          state = 'pending';
+          // Potenciado/Empowered (violeta) - superó required_count * 10
+          visualState = 'empowered';
+          state = 'completed';
         }
         
         return {
@@ -725,7 +733,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         never: studentsWithState.filter(s => s.visual_state === 'never').length,
         in_progress: studentsWithState.filter(s => s.visual_state === 'in_progress').length,
         completed: studentsWithState.filter(s => s.visual_state === 'completed').length,
-        excellent: studentsWithState.filter(s => s.visual_state === 'excellent').length,
+        empowered: studentsWithState.filter(s => s.visual_state === 'empowered').length,
         // Mantener compatibilidad con estados legacy
         pending: studentsWithState.filter(s => s.state === 'pending').length,
         completed_legacy: studentsWithState.filter(s => s.state === 'completed').length
