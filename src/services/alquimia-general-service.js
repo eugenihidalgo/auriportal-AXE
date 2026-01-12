@@ -900,8 +900,13 @@ export async function adjustRemaining(studentUuid, itemRef, remaining, productKe
  * @param {Object} [ctx] - Contexto con actor_id (opcional)
  * @returns {Promise<Object>} Objeto con { updated_students, logged, skipped, cleaned_date }
  */
-export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
+export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, itemKind) {
   if (!itemRef) return { updated_students: 0, logged: 0, skipped: 0, cleaned_date: null };
+  
+  // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+  if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
   
   const traceId = getRequestId();
   
@@ -934,6 +939,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}) {
     
     const cleaningResult = await cleaningMarkCleanAll({
       item_ref: itemRef,
+      item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
       clean_layer: 'pde', // PDE layer
       product_key: productKey,
       domain_type: 'transmutation',

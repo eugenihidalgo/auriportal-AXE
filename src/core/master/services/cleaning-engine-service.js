@@ -324,7 +324,8 @@ export async function markCleanStudent(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
-    if (eventResult === 'already_applied') {
+    // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
+    if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
       logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,
@@ -781,7 +782,8 @@ export async function setRemainingShared(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
-    if (eventResult === 'already_applied') {
+    // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
+    if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
       logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,

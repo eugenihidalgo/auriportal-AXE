@@ -2133,9 +2133,21 @@
     // Sin confirmación (UX sin fricción)
 
     try {
+      // Obtener item_kind desde la lista activa o del item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      const itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
+      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
+        showToastError('Error: tipo de item inválido');
+        return;
+      }
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
+          clean_layer: 'pde' // PDE layer
+        })
       });
 
       // Error surfacing: leer body como texto primero para diagnóstico

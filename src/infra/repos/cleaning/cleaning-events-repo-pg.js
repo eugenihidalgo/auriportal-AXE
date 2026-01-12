@@ -55,7 +55,8 @@ export class CleaningEventsRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
 
     try {
-      // Intentar insertar (tabla legacy usa student_id INTEGER)
+      // Intentar insertar con idempotencia vía ON CONFLICT DO NOTHING
+      // Si ya existe (execution_key, student_id), no se inserta y se devuelve already_executed
       const result = await queryFn(`
         INSERT INTO cleaning_events (
           trace_id, execution_key, student_id, product_key, domain_type, item_ref,
@@ -64,6 +65,7 @@ export class CleaningEventsRepoPg {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
         )
+        ON CONFLICT (execution_key, student_id) DO NOTHING
         RETURNING *
       `, [
         event.trace_id || 'unknown',
@@ -83,6 +85,16 @@ export class CleaningEventsRepoPg {
         JSON.stringify(event.meta || {})
       ]);
 
+      // Si no se insertó ninguna fila (ya existía), devolver already_executed
+      if (!result.rows || result.rows.length === 0) {
+        logInfo('CleaningEventsRepo', 'Evento ya aplicado (idempotencia)', {
+          execution_key: event.execution_key,
+          student_uuid: event.student_uuid,
+          student_id: legacyStudentId
+        });
+        return { already_executed: true };
+      }
+
       logInfo('CleaningEventsRepo', 'Evento insertado', {
         event_id: result.rows[0]?.id,
         execution_key: event.execution_key,
@@ -93,16 +105,6 @@ export class CleaningEventsRepoPg {
 
       return result.rows[0];
     } catch (error) {
-      // Si es violación de constraint único (idempotencia), devolver "already_applied"
-      if (error.code === '23505' && error.constraint === 'idx_cleaning_events_execution_student') {
-        logInfo('CleaningEventsRepo', 'Evento ya aplicado (idempotencia)', {
-          execution_key: event.execution_key,
-          student_uuid: event.student_uuid,
-          student_id: legacyStudentId
-        });
-        return 'already_applied';
-      }
-
       logError('CleaningEventsRepo', 'Error insertando evento', {
         error: error.message,
         code: error.code,

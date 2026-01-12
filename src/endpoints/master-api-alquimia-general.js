@@ -1034,13 +1034,27 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const itemRef = params.item_ref;
       const productKey = url.searchParams.get('product_key') || 'pde';
       
+      // Leer body para obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      let body = null;
+      try {
+        body = await request.json();
+      }
+      catch (e) {
+        body = {};
+      }
+      
+      // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+      if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
+        return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+      }
+      
       // Obtener actor_id del contexto si existe
       const ctx = {
         actor_id: authCtx?.adminId || null
       };
 
       try {
-        const result = await markPdeCleanAll(itemRef, productKey, ctx);
+        const result = await markPdeCleanAll(itemRef, productKey, ctx, body.item_kind);
         return jsonSuccess({
           data: result
         }, traceId);
@@ -1075,35 +1089,6 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
       const result = await incrementAll(itemRef, productKey, cleanLayer);
       return jsonSuccess(result, traceId);
-    }
-
-    // POST /master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all (recurrente)
-    if (path.match(/^\/master\/api\/alquimia-general\/items\/([^\/]+)\/master\/mark-pde-clean-all$/) && method === 'POST') {
-      const params = extractRouteParams(path, '/master/api/alquimia-general/items/:item_ref/master/mark-pde-clean-all');
-      const itemRef = params.item_ref;
-      const productKey = url.searchParams.get('product_key') || 'pde';
-      
-      // Obtener actor_id del contexto si existe
-      const ctx = {
-        actor_id: authCtx?.adminId || null
-      };
-
-      try {
-        const result = await markPdeCleanAll(itemRef, productKey, ctx);
-        return jsonSuccess({
-          data: result
-        }, traceId);
-      }
-      catch (error) {
-        logError('MasterApiAlquimiaGeneral', 'Error en markPdeCleanAll', {
-          traceId,
-          error: error.message,
-          code: error.code,
-          stack: error.stack,
-          itemRef
-        });
-        return jsonError(`Error en limpieza PDE: ${error.message}`, 'PDE_CLEAN_ERROR', 500, traceId);
-      }
     }
 
     // POST /master/api/alquimia-general/items/:item_ref/master/adjust-remaining (una_vez)
