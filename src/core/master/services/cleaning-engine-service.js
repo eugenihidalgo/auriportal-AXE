@@ -284,16 +284,19 @@ export async function markCleanStudent(options, client = null) {
       throw new Error(`Lista no encontrada para item: ${item_ref}`);
     }
     
-    // Validar que item_kind coincide con lista.tipo (coherencia, no inferencia)
+    // REGLA CONSTITUCIONAL: item_kind DEBE coincidir con lista.tipo
+    // NO se permite inferencia ni fallback
     if (item_kind !== lista.tipo) {
-      logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo', {
+      const error = new Error(`item_kind no coincide con lista.tipo: item_kind=${item_kind}, lista.tipo=${lista.tipo}`);
+      error.code = 'ITEM_KIND_MISMATCH';
+      logError('CleaningEngine', 'item_kind no coincide con lista.tipo (ERROR)', {
         traceId,
         student_uuid,
         item_ref,
         item_kind_provided: item_kind,
         lista_tipo: lista.tipo
       });
-      // Fail-open: usar el proporcionado, pero log warning
+      throw error; // Fail-hard: rechazar si no coincide
     }
     
     const itemKind = item_kind; // Usar siempre el proporcionado (sin fallback)
@@ -635,14 +638,18 @@ export async function markCleanAllStudents(options, client = null) {
     // Usar item_kind del options (contrato canónico: payload explícito)
     const itemKind = options.item_kind;
     
-    // Validar coherencia (warning si no coincide, pero usar el proporcionado)
+    // REGLA CONSTITUCIONAL: item_kind DEBE coincidir con lista.tipo
+    // NO se permite inferencia ni fallback
     if (itemKind !== lista.tipo) {
-      logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo en markCleanAllStudents', {
+      const error = new Error(`item_kind no coincide con lista.tipo: item_kind=${itemKind}, lista.tipo=${lista.tipo}`);
+      error.code = 'ITEM_KIND_MISMATCH';
+      logError('CleaningEngine', 'item_kind no coincide con lista.tipo en markCleanAllStudents (ERROR)', {
         traceId,
         item_ref,
         item_kind_provided: itemKind,
         lista_tipo: lista.tipo
       });
+      throw error; // Fail-hard: rechazar si no coincide
     }
     
     // 3. Obtener todos los estudiantes desde students (UUID canónico)

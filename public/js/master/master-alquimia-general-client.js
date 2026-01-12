@@ -96,6 +96,42 @@
     }
   };
 
+  /**
+   * Obtiene item_kind de forma EXPLÍCITA (sin inferencias ni fallbacks)
+   * REGLA CONSTITUCIONAL: item_kind es ontológico, JAMÁS se infiere
+   * 
+   * @param {Object} item - Item con item_kind o tipo
+   * @param {Object} lista - Lista con tipo (opcional, para validación)
+   * @returns {string|null} 'recurrente' | 'una_vez' | null si no está disponible
+   */
+  function getItemKindExplicit(item, lista = null) {
+    if (!item) return null;
+    
+    // Prioridad: item.item_kind > item.tipo > lista.tipo
+    // PERO: si lista existe y item.tipo no coincide con lista.tipo, es inconsistencia
+    const itemKind = item.item_kind || item.tipo;
+    
+    if (itemKind && (itemKind === 'recurrente' || itemKind === 'una_vez')) {
+      // Validar coherencia con lista si está disponible
+      if (lista && lista.tipo && itemKind !== lista.tipo) {
+        console.warn('[MasterAlquimiaGeneral] Inconsistencia detectada: item_kind no coincide con lista.tipo', {
+          item_kind: itemKind,
+          lista_tipo: lista.tipo,
+          item_ref: item.item_ref
+        });
+        // NO fallar aquí, solo warning (el backend rechazará si es necesario)
+      }
+      return itemKind;
+    }
+    
+    // Si lista está disponible, usar lista.tipo como última opción
+    if (lista && lista.tipo && (lista.tipo === 'recurrente' || lista.tipo === 'una_vez')) {
+      return lista.tipo;
+    }
+    
+    return null;
+  }
+
   // Elementos DOM
   const tabsTipoContainer = document.getElementById('tabs-tipo-container');
   const listasTabsContainer = document.getElementById('listas-tabs-container');
@@ -883,11 +919,16 @@
       // Guardar estado del modal
       state.modal.item = item;
       state.modal.cleanLayer = cleanLayer;
-      // Guardar item_kind explícitamente (OBLIGATORIO para todas las acciones)
-      const itemKind = normalized.item_kind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
-      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido al abrir flotante:', itemKind);
-        showToastError('Error: tipo de item inválido');
+      // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)
+      const itemKind = getItemKindExplicit(item, state.listaActiva);
+      if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante al abrir flotante:', {
+          item_kind: itemKind,
+          item: item,
+          lista: state.listaActiva,
+          normalized_item_kind: normalized.item_kind
+        });
+        showToastError('ERROR: item_kind no definido. No se puede abrir el flotante.');
         return;
       }
       state.modal.itemKind = itemKind;
@@ -931,24 +972,35 @@
   /**
    * Maneja el click en botón LIMPIAR (limpieza global)
    */
-  async function handleLimpiarItem(item) {
+  async function handleLimpiarItem(item, cleanLayer = null) {
+    // REGLA CONSTITUCIONAL: clean_layer y item_kind DEBEN ser explícitos
+    // NO se permiten defaults ni inferencias
+    
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      showToastError('ERROR: Item sin item_ref. Acción bloqueada.');
       return;
     }
 
-    // Sin confirmación (UX sin fricción)
-
     try {
-      // Determinar clean_layer desde el estado del modal o default 'shared'
-      const cleanLayer = state.modal?.cleanLayer || 'shared';
+      // REGLA CONSTITUCIONAL: clean_layer DEBE ser explícito
+      // Si no viene como parámetro, ERROR (no usar state.modal.cleanLayer)
+      if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+        console.error('[MasterAlquimiaGeneral] ⚠️ clean_layer inválido o faltante en handleLimpiarItem:', cleanLayer);
+        showToastError('ERROR: clean_layer no definido. Acción bloqueada. Use botones SHARED o PDE específicos.');
+        return;
+      }
       
-      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-      // Prioridad: state.modal.itemKind > item.item_kind > item.tipo > listaActiva.tipo
-      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+      // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (obtenido desde item/lista)
+      const itemKind = getItemKindExplicit(item, state.listaActiva);
       if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', itemKind);
-        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en handleLimpiarItem:', {
+          item_kind: itemKind,
+          item: item,
+          lista: state.listaActiva,
+          contexto: 'handleLimpiarItem'
+        });
+        showToastError('ERROR: item_kind no definido. Acción bloqueada.');
         return;
       }
       
@@ -1102,7 +1154,26 @@
     toggleContainer.appendChild(btnPde);
     
     // COMBO solo disponible para UNA_VEZ
-    const itemKindForCombo = normalized.item_kind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+    // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)
+    // Usar state.modal.itemKind si está disponible (ya validado en handleVerItem)
+    // Si no, obtenerlo explícitamente
+    let itemKindForCombo = state.modal?.itemKind;
+    if (!itemKindForCombo) {
+      itemKindForCombo = getItemKindExplicit(item, state.listaActiva);
+    }
+    
+    // Si aún no está disponible, es error crítico (no debería pasar si handleVerItem validó correctamente)
+    if (!itemKindForCombo || (itemKindForCombo !== 'recurrente' && itemKindForCombo !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en showFlotanteVer (combo):', {
+        item_kind: itemKindForCombo,
+        item: item,
+        lista: state.listaActiva,
+        modal_itemKind: state.modal?.itemKind
+      });
+      // Bloquear render si no hay item_kind válido
+      showToastError('ERROR: item_kind no definido. No se puede mostrar el flotante.');
+      return;
+    }
     if (itemKindForCombo === 'una_vez') {
       const btnCombo = document.createElement('button');
       btnCombo.textContent = 'COMBO';
@@ -1692,26 +1763,45 @@
    * Maneja la limpieza individual de un estudiante
    * Soporta recurrente (mark-clean) y una_vez (increment o mark-clean según clean_layer)
    */
-  async function handleLimpiarEstudiante(student, item, cleanLayer = 'shared', tipo = 'recurrente') {
-    // CAMBIADO: validar student_uuid (canónico) en lugar de student_id
+  async function handleLimpiarEstudiante(student, item, cleanLayer, itemKind = null) {
+    // REGLA CONSTITUCIONAL: clean_layer y item_kind DEBEN ser explícitos
+    // NO se permiten defaults ni inferencias
+    
+    // Validar datos básicos
     if (!item || !item.item_ref || !student || !student.student_uuid) {
       console.error('[MasterAlquimiaGeneral] Datos incompletos para limpiar:', { item, student });
       // WARNING: Si se intenta usar student_id, mostrar warning
       if (student && student.student_id && !student.student_uuid) {
         console.warn('[MasterAlquimiaGeneral] ⚠️ UI intentando usar student_id (legacy). Debe usar student_uuid.', {
-          student_uuid: student.student_uuid, // CAMBIADO: usar UUID canónico
+          student_uuid: student.student_uuid,
           student
         });
       }
+      showToastError('ERROR: Datos incompletos. Acción bloqueada.');
       return;
     }
 
-    // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-    // Prioridad: state.modal.itemKind > tipo > item.item_kind > item.tipo > listaActiva.tipo
-    let itemKind = state.modal?.itemKind || tipo || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+    // REGLA CONSTITUCIONAL: clean_layer DEBE ser explícito
+    if (!cleanLayer || (cleanLayer !== 'shared' && cleanLayer !== 'pde')) {
+      console.error('[MasterAlquimiaGeneral] ⚠️ clean_layer inválido o faltante:', cleanLayer);
+      showToastError('ERROR: clean_layer no definido. Acción bloqueada.');
+      return;
+    }
+
+    // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (obtenido desde item/lista)
+    // Si no viene como parámetro, obtenerlo explícitamente
+    if (!itemKind) {
+      itemKind = getItemKindExplicit(item, state.listaActiva);
+    }
+    
     if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
-      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', itemKind);
-      showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', {
+        item_kind: itemKind,
+        item: item,
+        lista: state.listaActiva,
+        contexto: 'handleLimpiarEstudiante'
+      });
+      showToastError('ERROR: item_kind no definido. Acción bloqueada.');
       return;
     }
 
@@ -1784,17 +1874,18 @@
 
       console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
       // CONTRATO: Backend SIEMPRE entrega display_name en result.student.display_name
-      const displayName = result.data?.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
+      const displayName = result.data?.student?.display_name || result.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // Refresh determinista: recargar flotante manteniendo layerView actual
+      // REGLA CONSTITUCIONAL: Refresh determinista post-acción
+      // NO usar state.modal.layerView para decidir datos
+      // SIEMPRE hacer refetch completo del flotante desde datos frescos del backend
       if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const currentLayerView = state.modal.layerView || 'shared';
-        // Recargar con cualquier clean_layer (los datos vienen simétricos ahora)
-        // Usar 'shared' como default para el fetch, pero layerView se mantiene
+        // Refetch completo: usar cualquier clean_layer (los datos vienen simétricos)
+        // El backend devuelve shared.* y pde.* siempre, independientemente del clean_layer usado en el fetch
         await handleVerItem(item, 'shared');
-        // Restaurar layerView después de recargar (se aplicará en showFlotanteVer)
-        // El flotante se re-renderizará con la vista correcta
+        // layerView se mantiene automáticamente en state.modal.layerView
+        // El flotante se re-renderizará con los datos frescos del backend
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
@@ -2603,20 +2694,31 @@
    * Maneja el click en botón +1 (increment-all para una_vez)
    */
   async function handleIncrementAllItem(item) {
+    // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)
+    // clean_layer es 'shared' (hardcoded para este botón específico)
+    
     if (!item || !item.item_ref) {
       console.error('[MasterAlquimiaGeneral] Item sin item_ref:', item);
+      showToastError('ERROR: Item sin item_ref. Acción bloqueada.');
       return;
     }
 
     try {
-      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'una_vez';
+      // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (obtenido desde item/lista)
+      const itemKind = getItemKindExplicit(item, state.listaActiva);
       if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en increment-all:', itemKind);
-        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en increment-all:', {
+          item_kind: itemKind,
+          item: item,
+          lista: state.listaActiva,
+          contexto: 'handleIncrementAllItem'
+        });
+        showToastError('ERROR: item_kind no definido. Acción bloqueada.');
         return;
       }
       
+      // clean_layer es 'shared' (explícito para este botón)
+      const cleanLayer = 'shared';
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
@@ -2624,7 +2726,7 @@
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: 'shared',
+          clean_layer: cleanLayer,
           item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
@@ -2663,14 +2765,21 @@
     }
 
     try {
-      // Obtener item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-      const itemKind = state.modal?.itemKind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'una_vez';
+      // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (obtenido desde item/lista)
+      const itemKind = getItemKindExplicit(item, state.listaActiva);
       if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en PDE increment-all:', itemKind);
-        showToastError('Error: tipo de item inválido o faltante. Por favor, recarga la página.');
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en PDE increment-all:', {
+          item_kind: itemKind,
+          item: item,
+          lista: state.listaActiva,
+          contexto: 'handlePdeIncrementAllItem'
+        });
+        showToastError('ERROR: item_kind no definido. Acción bloqueada.');
         return;
       }
       
+      // clean_layer es 'pde' (explícito para este botón)
+      const cleanLayer = 'pde';
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
@@ -2678,7 +2787,7 @@
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          clean_layer: 'pde',
+          clean_layer: cleanLayer,
           item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
         })
       });
