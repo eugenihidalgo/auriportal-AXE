@@ -125,7 +125,8 @@ export const STUDENT_SIGNAL_REGISTRY = {
     version: 'v1',
     deprecated: null,
     payload: {
-      student_id: 'ID legacy del alumno (legacy_alumno_id)',
+      student_uuid: 'UUID canónico del estudiante (students.id)',
+      student_id: 'ID legacy del alumno (legacy_alumno_id, en meta si necesario)',
       item_ref: 'Referencia del ítem',
       domain: 'Tipo de dominio (transmutation, etc.)',
       product_key: 'Clave del producto (pde, etc.)',

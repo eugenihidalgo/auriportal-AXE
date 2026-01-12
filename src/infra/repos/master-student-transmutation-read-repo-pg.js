@@ -160,9 +160,19 @@ export class MasterStudentTransmutationReadRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     const domainType = 'transmutation';
 
-    // Obtener TODOS los alumnos, con su estado desde cleaning_item_state
-    // LEFT JOIN para incluir alumnos sin estado aún
-    // Filtrar alumnos en pausa (usando tabla pausas)
+    // Obtener TODOS los estudiantes, con su estado desde cleaning_item_state
+    // LEFT JOIN para incluir estudiantes sin estado aún
+    // Filtrar estudiantes en pausa (usando tabla pausas)
+    // WARNING: Acceso directo a tabla alumnos (legacy) - debe migrarse a students
+    const { logWarn } = await import('../../../core/observability/logger.js');
+    const { getRequestId } = await import('../../../core/observability/request-context.js');
+    const traceId = getRequestId();
+    logWarn('MasterStudentTransmutationReadRepo', 'Acceso directo a tabla alumnos (legacy)', {
+      traceId,
+      method: 'getStudentsForItemFromCleaningEngine',
+      note: 'Debe migrarse a students table con student_uuid'
+    });
+    
     let sql = `
       SELECT 
         a.id as student_id,

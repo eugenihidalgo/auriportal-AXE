@@ -906,14 +906,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const productKey = url.searchParams.get('product_key') || 'pde';
       const cleanLayer = body.clean_layer || url.searchParams.get('clean_layer') || 'shared';
 
-      // Validar campos requeridos según contrato canónico
-      if (!body.student_id) {
-        return jsonError('student_id es requerido', 'MISSING_STUDENT_ID', 400, traceId);
+      // Validar campos requeridos según contrato canónico (CAMBIADO: ahora acepta student_uuid)
+      if (!body.student_uuid) {
+        return jsonError('student_uuid es requerido', 'MISSING_STUDENT_UUID', 400, traceId);
       }
 
-      const studentId = parseInt(body.student_id);
-      if (isNaN(studentId) || studentId <= 0) {
-        return jsonError('student_id debe ser un número válido', 'INVALID_STUDENT_ID', 400, traceId);
+      const studentUuid = body.student_uuid;
+      if (typeof studentUuid !== 'string' || !studentUuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        return jsonError('student_uuid debe ser un UUID válido', 'INVALID_STUDENT_UUID', 400, traceId);
       }
       
       if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
@@ -938,9 +938,9 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Item archivado', 'ITEM_ARCHIVED', 404, traceId);
       }
 
-      // Construir payload canónico para markCleanStudent (todos los campos vienen del frontend)
+      // Construir payload canónico para markCleanStudent (CAMBIADO: ahora pasa student_uuid)
       const options = {
-        student_id: studentId,
+        student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
         item_ref: itemRef,
         item_kind: body.item_kind, // REQUERIDO (validado arriba)
         product_key: productKey,
@@ -952,7 +952,9 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         meta: body.meta || {}
       };
 
-      const state = await markCleanStudent(options);
+      // CAMBIADO: Llamar directamente al Cleaning Engine con UUID
+      const { markCleanStudent: cleaningMarkClean } = await import('../core/master/services/cleaning-engine-service.js');
+      const state = await cleaningMarkClean(options);
       if (!state) {
         // Puede ser null si está pausado (no es error, pero Master no debería estar bloqueado por nivel)
         return jsonSuccess({ 
@@ -961,23 +963,34 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         }, traceId);
       }
 
-      // CONTRATO: Backend SIEMPRE entrega display_name
+      // CONTRATO: Backend SIEMPRE entrega display_name y student_uuid
       // Calcular display_name del estudiante para el toast
       let displayName = null;
       try {
-        const { calculateStudentDisplayName } = await import('../core/helpers/student-display-name-helper.js');
+        const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
         const { query } = await import('../../database/pg.js');
+        // Obtener datos del estudiante desde students (UUID canónico)
         const studentResult = await query(
-          'SELECT id, apodo, nombre_completo, email FROM alumnos WHERE id = $1 LIMIT 1',
-          [studentId]
+          `SELECT s.id as student_uuid, s.legacy_alumno_id, a.apodo, a.nombre_completo, a.email
+           FROM students s
+           LEFT JOIN alumnos a ON a.id = s.legacy_alumno_id
+           WHERE s.id = $1 AND s.deleted_at IS NULL
+           LIMIT 1`,
+          [studentUuid]
         );
         if (studentResult.rows[0]) {
-          displayName = await calculateStudentDisplayName(studentResult.rows[0]);
+          const row = studentResult.rows[0];
+          displayName = (await calculateStudentDisplayNames([{
+            student_uuid: row.student_uuid,
+            apodo: row.apodo,
+            nombre_completo: row.nombre_completo,
+            email: row.email
+          }]))[0]?.display_name || null;
         }
       } catch (nameError) {
         logWarn('MasterApiAlquimiaGeneral', 'Error calculando display_name (fail-open)', {
           traceId,
-          student_id: studentId,
+          student_uuid: studentUuid,
           error: nameError.message
         });
       }
@@ -985,7 +998,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       return jsonSuccess({ 
         state,
         student: {
-          student_id: studentId,
+          student_uuid: studentUuid, // CAMBIADO: retornar UUID canónico
           display_name: displayName
         }
       }, traceId);

@@ -657,23 +657,25 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
  * @param {string} [cleanLayer='shared'] - Capa de limpieza ('shared' | 'pde')
  * @returns {Promise<Object|null>} Estado actualizado o null si no existe/está pausado
  */
-export async function markCleanStudent(studentId, itemRef, productKey = 'pde', cleanLayer = 'shared') {
-  if (!studentId || !itemRef) return null;
+export async function markCleanStudent(studentUuid, itemRef, productKey = 'pde', cleanLayer = 'shared') {
+  if (!studentUuid || !itemRef) return null;
   
   const traceId = getRequestId();
   
   try {
-    // Delegar al Cleaning Engine v1 (single decider)
+    // Delegar al Cleaning Engine v1 (single decider) (CAMBIADO: pasa UUID)
     const { markCleanStudent: cleaningMarkClean } = await import('../core/master/services/cleaning-engine-service.js');
     
     const result = await cleaningMarkClean({
-      student_id: studentId,
+      student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
       item_ref: itemRef,
       clean_layer: cleanLayer,
       product_key: productKey,
       domain_type: 'transmutation',
       actor_type: 'master',
       surface_key: 'master.alquimia_general',
+      // NOTA: item_kind debe venir en options si se llama desde endpoint
+      // Este servicio legacy no recibe item_kind, pero el endpoint lo pasa directamente al Cleaning Engine
       meta: {
         source: 'alquimia-general-service',
         legacy_call: true
@@ -685,11 +687,11 @@ export async function markCleanStudent(studentId, itemRef, productKey = 'pde', c
       try {
         const { emitSignal } = await import('./pde-signal-emitter.js');
         
-        // origin.executed - Se ejecutó la limpieza (backward compat)
+        // origin.executed - Se ejecutó la limpieza (backward compat) (CAMBIADO: usar UUID)
         await emitSignal('origin.executed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
-          student_id: studentId,
+          student_uuid: studentUuid, // CAMBIADO: usar UUID canónico
           product_key: productKey,
           execution_mode: 'recurrent',
           actor: 'master',
@@ -700,11 +702,11 @@ export async function markCleanStudent(studentId, itemRef, productKey = 'pde', c
           action: 'markCleanStudent'
         });
         
-        // origin.completed - Se completó la limpieza (backward compat)
+        // origin.completed - Se completó la limpieza (backward compat) (CAMBIADO: usar UUID)
         await emitSignal('origin.completed', {
           origin_key: `alquimia:item:${itemRef}`,
           item_ref: itemRef,
-          student_id: studentId,
+          student_uuid: studentUuid, // CAMBIADO: usar UUID canónico
           product_key: productKey,
           execution_mode: 'recurrent',
           actor: 'master',
@@ -720,7 +722,7 @@ export async function markCleanStudent(studentId, itemRef, productKey = 'pde', c
           traceId,
           error: signalError.message,
           itemRef,
-          studentId
+          student_uuid: studentUuid // CAMBIADO: usar UUID canónico
         });
       }
     }
@@ -732,7 +734,7 @@ export async function markCleanStudent(studentId, itemRef, productKey = 'pde', c
       error: error.message,
       code: error.code,
       stack: error.stack,
-      studentId,
+      student_uuid: studentUuid, // CAMBIADO: usar UUID canónico
       itemRef
     });
     throw error;
@@ -904,14 +906,14 @@ export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'sh
  * 
  * DELEGADO AL CLEANING ENGINE v1 (single decider)
  * 
- * @param {number} studentId - ID del alumno
+ * @param {string} studentUuid - UUID canónico del estudiante (CAMBIADO: ahora acepta UUID)
  * @param {string} itemRef - item_ref del item
  * @param {number} remaining - Nuevo valor de remaining
  * @param {string} [productKey='pde'] - Clave del producto
  * @returns {Promise<Object|null>} Estado actualizado o null si no existe/está pausado
  */
-export async function adjustRemaining(studentId, itemRef, remaining, productKey = 'pde') {
-  if (!studentId || !itemRef || remaining === undefined) return null;
+export async function adjustRemaining(studentUuid, itemRef, remaining, productKey = 'pde') {
+  if (!studentUuid || !itemRef || remaining === undefined) return null;
   
   const traceId = getRequestId();
   

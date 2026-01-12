@@ -162,7 +162,7 @@ async function syncToStudentItemState(options, client = null) {
  * Marca limpio un alumno específico (recurrente o una_vez)
  * 
  * @param {Object} options - Opciones
- * @param {number} options.student_id - ID del alumno
+ * @param {string} options.student_uuid - UUID canónico del estudiante (CAMBIADO: ahora acepta UUID)
  * @param {string} options.item_ref - Referencia del item
  * @param {string} [options.clean_layer='shared'] - Capa de limpieza ('shared' | 'pde')
  * @param {string} [options.product_key='pde'] - Clave del producto
@@ -178,7 +178,7 @@ async function syncToStudentItemState(options, client = null) {
 export async function markCleanStudent(options, client = null) {
   const traceId = getRequestId();
   const {
-    student_id,
+    student_uuid, // CAMBIADO: ahora acepta UUID canónico
     item_ref,
     clean_layer = 'shared',
     product_key = 'pde',
@@ -191,14 +191,22 @@ export async function markCleanStudent(options, client = null) {
   } = options;
   
   // Validar campos requeridos según contrato canónico
-  if (!student_id || !item_ref || !actor_type || !options.item_kind || !options.surface_key) {
+  if (!student_uuid || !item_ref || !actor_type || !options.item_kind || !options.surface_key) {
     const missing = [];
-    if (!student_id) missing.push('student_id');
+    if (!student_uuid) missing.push('student_uuid');
     if (!item_ref) missing.push('item_ref');
     if (!actor_type) missing.push('actor_type');
     if (!options.item_kind) missing.push('item_kind');
     if (!options.surface_key) missing.push('surface_key');
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+  }
+
+  // Resolver legacy_id internamente (solo para tablas legacy)
+  const identityRepo = getDefaultStudentIdentityRepo();
+  const student_id = await identityRepo.resolveLegacyId(student_uuid, client);
+  
+  if (!student_id) {
+    throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
   }
   
   try {
@@ -395,7 +403,8 @@ export async function markCleanStudent(options, client = null) {
       await emitSignal('clean.executed', {
         signal: 'clean.executed',
         scope: 'student',
-        student_id,
+        student_uuid, // CAMBIADO: emitir UUID canónico
+        student_id, // Legacy ID en payload para compatibilidad (si necesario)
         item_id: item.id,
         item_ref,
         domain: domain_type,
@@ -468,6 +477,9 @@ export async function markCleanAllStudents(options, client = null) {
     skip_level_filter = false,
     meta = {}
   } = options;
+
+  // REGLA: markCleanAllStudents obtiene todos los alumnos desde students (UUID canónico)
+  // Luego resuelve legacy_id internamente solo cuando necesita escribir en tablas legacy
   
   // Validar campos requeridos según contrato canónico
   if (!item_ref || !actor_type || !options.item_kind || !options.surface_key) {
@@ -543,13 +555,13 @@ export async function markCleanAllStudents(options, client = null) {
       other: 0
     };
     
-    for (const studentId of activeStudentIds) {
+    for (const { uuid: studentUuid, legacy_id: studentId } of activeStudentUuids) {
       try {
         // Verificar si aplica por nivel antes de limpiar
         // REGLA: Filtro por nivel SOLO cuando item_kind === 'recurrente' y skip_level_filter !== true
         // Para UNA_VEZ o cuando skip_level_filter === true, NO filtrar por nivel
         if (!skip_level_filter && itemKind === 'recurrente') {
-          const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key);
+          const nivelEfectivo = await getStudentEffectiveLevel(studentId, product_key); // getStudentEffectiveLevel usa legacy_id
           
           if (nivelEfectivo < itemNivel) {
             skipped++;
@@ -559,7 +571,7 @@ export async function markCleanAllStudents(options, client = null) {
         }
         
         const result = await markCleanStudent({
-          student_id: studentId,
+          student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
           item_ref,
           item_kind: itemKind, // REQUERIDO según contrato canónico
           clean_layer,
