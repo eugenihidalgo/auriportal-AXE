@@ -141,6 +141,7 @@
 
   /**
    * Carga la lista de alumnos
+   * CAMBIADO: Usa nuevo formato UUID-first (result.data.students con student_uuid)
    */
   async function loadStudents() {
     try {
@@ -152,7 +153,20 @@
         return;
       }
       
-      state.students = result.data.items || [];
+      // CAMBIADO: Usar result.data.students (UUID-first) en lugar de result.data.items
+      const students = result.data.students || result.data.items || []; // Fallback a items para compatibilidad
+      
+      // Normalizar a formato esperado por UI (student_uuid como id)
+      state.students = students.map(student => ({
+        id: student.student_uuid || student.id, // Usar student_uuid como id (UUID canónico)
+        student_uuid: student.student_uuid || student.id, // Asegurar que student_uuid existe
+        display_name: student.display_name || student.name || student.apodo || student.email,
+        email: student.email,
+        apodo: student.apodo || null,
+        nombre_completo: student.nombre_completo || null,
+        paused: student.paused || false
+      }));
+      
       updateStudentSelect();
     } catch (error) {
       console.error('[MasterAlquimiaAlumno] Error cargando alumnos:', error);
@@ -174,9 +188,10 @@
     // Añadir alumnos
     state.students.forEach(student => {
       const option = document.createElement('option');
-      option.value = student.id;
-      const displayName = student.apodo || student.nombre_completo || student.email;
-      option.textContent = `${displayName} (${student.email})`;
+      option.value = student.id; // Ya es UUID (student_uuid normalizado)
+      // CAMBIADO: Usar display_name canónico si existe, fallback a campos legacy
+      const displayName = student.display_name || student.apodo || student.nombre_completo || student.email || 'Sin nombre';
+      option.textContent = `${displayName}${student.email ? ` (${student.email})` : ''}`;
       select.appendChild(option);
     });
   }
@@ -204,9 +219,10 @@
     
     filtered.forEach(student => {
       const option = document.createElement('option');
-      option.value = student.id;
-      const displayName = student.apodo || student.nombre_completo || student.email;
-      option.textContent = `${displayName} (${student.email})`;
+      option.value = student.id; // Ya es UUID (student_uuid normalizado)
+      // CAMBIADO: Usar display_name canónico si existe, fallback a campos legacy
+      const displayName = student.display_name || student.apodo || student.nombre_completo || student.email || 'Sin nombre';
+      option.textContent = `${displayName}${student.email ? ` (${student.email})` : ''}`;
       select.appendChild(option);
     });
   }

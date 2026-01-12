@@ -15,10 +15,11 @@
  */
 
 import { getRequestId } from '../core/observability/request-context.js';
-import { logError, logInfo } from '../core/observability/logger.js';
+import { logError, logInfo, logWarn } from '../core/observability/logger.js';
 import { requireAdminContext } from '../core/auth-context.js';
 import { query } from '../../database/pg.js';
 import { getDefaultStudentRepo } from '../infra/repos/student-repo-pg.js';
+import { calculateStudentDisplayNames } from '../core/helpers/student-display-name-helper.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -100,7 +101,8 @@ async function getTableColumnsMetadata(tableName = 'alumnos') {
 
 /**
  * A) GET /master/api/students
- * Lista alumnos con paginación y opcionalmente metadata de columnas
+ * Lista estudiantes con paginación
+ * CAMBIADO: Usa students (UUID) como SOT, LEFT JOIN con alumnos solo para display_name
  */
 export async function listStudentsHandler(request, env, ctx) {
   const traceId = getRequestId();
@@ -129,64 +131,104 @@ export async function listStudentsHandler(request, env, ctx) {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200); // Max 200
     const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0);
     const search = url.searchParams.get('search') || '';
-    const includeColumns = url.searchParams.get('include_columns') === 'true';
     
-    logInfo('MasterAPIStudents', 'Listando alumnos', {
+    logInfo('MasterAPIStudents', 'Listando estudiantes (UUID-first)', {
       limit,
       offset,
       search,
-      includeColumns,
       traceId
     });
     
-    // Construir query base
+    // WARNING: Acceso a tabla alumnos (legacy) para display_name
+    logWarn('MasterAPIStudents', 'Acceso a tabla alumnos (legacy) para display_name', {
+      traceId,
+      method: 'listStudentsHandler',
+      note: 'Se mantiene para compatibilidad de display_name, pero la SOT es students'
+    });
+    
+    // Construir query base desde students (UUID) como SOT
+    // LEFT JOIN con alumnos solo para display_name
+    // LEFT JOIN con pausas para verificar pausa
     const conditions = [];
     const params = [];
     let paramIndex = 1;
     
+    // Filtrar estudiantes eliminados
+    conditions.push('s.deleted_at IS NULL');
+    
     if (search) {
-      conditions.push(`(email ILIKE $${paramIndex} OR apodo ILIKE $${paramIndex})`);
+      // Búsqueda en email, apodo, nombre_completo (desde alumnos)
+      conditions.push(`(a.email ILIKE $${paramIndex} OR a.apodo ILIKE $${paramIndex} OR a.nombre_completo ILIKE $${paramIndex})`);
       params.push(`%${search}%`);
       paramIndex++;
     }
     
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     
-    // Contar total
+    // Contar total (solo estudiantes no eliminados)
     const countResult = await query(
-      `SELECT COUNT(*) as total FROM alumnos ${whereClause}`,
+      `SELECT COUNT(*) as total 
+       FROM students s
+       LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
+       ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0]?.total || 0, 10);
     
-    // Obtener items (SELECT * para obtener TODAS las columnas)
+    // Obtener estudiantes desde students (UUID) como SOT
+    // LEFT JOIN con alumnos para display_name (apodo, nombre_completo, email)
+    // LEFT JOIN con pausas para verificar pausa
     const itemsResult = await query(
-      `SELECT * FROM alumnos ${whereClause}
-       ORDER BY email
+      `SELECT 
+         s.id as student_uuid,
+         a.email,
+         a.apodo,
+         a.nombre_completo,
+         CASE WHEN p.id IS NOT NULL THEN true ELSE false END as paused
+       FROM students s
+       LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
+       LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
+       ${whereClause}
+       ORDER BY COALESCE(a.email, s.id::text) ASC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, limit, offset]
     );
     
-    const items = itemsResult.rows || [];
+    const rawItems = itemsResult.rows || [];
     
-    // Obtener metadata de columnas (fail-open: si falla, continuar sin metadata)
-    let columns = null;
-    if (includeColumns) {
-      columns = await getTableColumnsMetadata('alumnos');
-    }
+    // Calcular display_name usando helper canónico
+    // El helper espera objetos con: id, apodo, nombre_completo, email
+    const studentsForDisplay = rawItems.map(row => ({
+      id: row.student_uuid, // Usar UUID como id para el helper
+      apodo: row.apodo || null,
+      nombre_completo: row.nombre_completo || null,
+      email: row.email || null
+    }));
+    
+    const studentsWithDisplay = await calculateStudentDisplayNames(studentsForDisplay);
+    
+    // Construir response canónico: solo student_uuid, display_name, email, paused
+    const students = rawItems.map((row, index) => {
+      const displayData = studentsWithDisplay[index];
+      return {
+        student_uuid: row.student_uuid,
+        display_name: displayData?.display_name || row.email || 'Sin nombre',
+        email: row.email || null,
+        paused: row.paused || false
+      };
+    });
+    
+    logInfo('MasterAPIStudents', 'Estudiantes listados (UUID-first)', {
+      traceId,
+      count: students.length,
+      total
+    });
     
     // Contrato JSON canónico para /master/api/students
-    // Formato: { ok: true, data: { items: [...] }, trace_id: string }
+    // Formato: { ok: true, data: { students: [...] }, trace_id: string }
     return jsonSuccess({
       data: {
-        items: items.map(s => ({
-          id: s.id,
-          student_id: s.id, // Alias para compatibilidad
-          email: s.email,
-          name: s.apodo || s.email,
-          apodo: s.apodo || null,
-          nombre_completo: s.nombre_completo || null
-        })),
+        students,
         total,
         limit,
         offset
