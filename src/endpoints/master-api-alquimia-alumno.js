@@ -108,10 +108,11 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
   }
 
   try {
-    // 1) GET /master/api/alquimia-alumno/megalist?student_uuid=...&view_layer=...&levels_mode=...&level_cap=...
+    // 1) GET /master/api/alquimia-alumno/megalist?student_uuid=...&view_layer=...&lista_tipo=...&levels_mode=...&level_cap=...
     if (path.match(/^\/master\/api\/alquimia-alumno\/megalist$/) && method === 'GET') {
       const studentUuid = url.searchParams.get('student_uuid');
       const viewLayer = url.searchParams.get('view_layer');
+      const listaTipo = url.searchParams.get('lista_tipo');
       const levelsMode = url.searchParams.get('levels_mode') || null;
       const levelCapParam = url.searchParams.get('level_cap');
       const levelCap = levelCapParam === null || levelCapParam === '' ? null : 
@@ -131,6 +132,17 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError(`view_layer inválido: ${validationError.message}`, 'INVALID_VIEW_LAYER', 400, traceId);
       }
       
+      // ============================================================================
+      // GUARD CONSTITUCIONAL: lista_tipo es OBLIGATORIO
+      // ============================================================================
+      if (!listaTipo) {
+        return jsonError('lista_tipo es requerido. Debe ser uno de: recurrente, una_vez', 'MISSING_LISTA_TIPO', 400, traceId);
+      }
+      
+      if (listaTipo !== 'recurrente' && listaTipo !== 'una_vez') {
+        return jsonError('lista_tipo inválido. Debe ser "recurrente" o "una_vez"', 'INVALID_LISTA_TIPO', 400, traceId);
+      }
+      
       // CAMBIADO: Validar student_uuid (UUID canónico) en lugar de student_id
       if (!studentUuid) {
         return jsonError('student_uuid es requerido', 'MISSING_STUDENT_UUID', 400, traceId);
@@ -148,11 +160,12 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('Student UUID no encontrado o sin legacy_alumno_id', 'STUDENT_NOT_FOUND', 404, traceId);
       }
       
-      logInfo('MasterApiAlquimiaAlumno', 'GET megalist', {
+      logInfo('MasterApiAlquimiaAlumno', '[ALQUIMIA_ALUMNO][MEGALIST] GET megalist', {
         traceId,
         student_uuid: studentUuid,
         legacy_student_id: legacyStudentId,
         view_layer: viewLayer,
+        lista_tipo: listaTipo,
         levels_mode: levelsMode,
         level_cap: levelCap,
         level_cap_provided: levelCap !== null
@@ -180,10 +193,11 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       // Construir megalista SOLO desde estados (como fix b1cca23)
       // Filtrar por level_cap si viene
-      // REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO
+      // REGLA CONSTITUCIONAL: view_layer y lista_tipo son OBLIGATORIOS
       const result = await getMegalistForStudent({
         student_id: legacyStudentId, // Usar legacy ID para servicio legacy
         view_layer: viewLayer, // OBLIGATORIO según regla constitucional
+        lista_tipo: listaTipo, // OBLIGATORIO: filtrar por tipo de lista
         levels_mode: levelsMode,
         level_cap: levelCap
       });

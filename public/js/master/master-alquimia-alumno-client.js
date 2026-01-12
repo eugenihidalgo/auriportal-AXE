@@ -60,7 +60,8 @@
     megalistData: null,
     loading: false,
     levelCap: null, // null = Auto (nivel_efectivo), number = cap explícito
-    viewLayer: 'shared' // REGLA CONSTITUCIONAL: view_layer activa (default: 'shared')
+    viewLayer: 'shared', // REGLA CONSTITUCIONAL: view_layer activa (default: 'shared')
+    activeTab: 'recurrente' // Tab activo: 'recurrente' | 'una_vez' (default: 'recurrente')
   };
 
   // Elementos DOM
@@ -298,18 +299,24 @@
       state.loading = true;
       showLoading();
       
-      // REGLA CONSTITUCIONAL: view_layer es OBLIGATORIO en GET
-      const viewLayer = state.viewLayer || 'shared'; // Default 'shared'
+      // REGLA CONSTITUCIONAL: Traducción tab → parámetros (SIN lógica extra)
+      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = 'shared'
+      // Si activeTab === 'una_vez': lista_tipo = 'una_vez', view_layer = 'combo'
+      const activeTab = state.activeTab || 'recurrente';
+      const listaTipo = activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
+      const viewLayer = activeTab === 'recurrente' ? 'shared' : 'combo';
       
-      // Construir URL con view_layer (OBLIGATORIO) y level_cap si viene
-      let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}&view_layer=${viewLayer}`; // CAMBIADO: usar student_uuid y view_layer
+      // Construir URL con view_layer (OBLIGATORIO), lista_tipo (OBLIGATORIO) y level_cap si viene
+      let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}&view_layer=${viewLayer}&lista_tipo=${listaTipo}`;
       if (state.levelCap !== null) {
         url += `&level_cap=${state.levelCap === 999 ? 'infinity' : state.levelCap}`;
       }
       
-      console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][COLUMN_PIPELINE] GET megalist', {
+      console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][TAB_FETCH] GET megalist', {
         student_uuid: studentUuid,
+        tab: activeTab,
         view_layer: viewLayer,
+        lista_tipo: listaTipo,
         level_cap: state.levelCap
       });
       
@@ -334,6 +341,86 @@
   }
 
   /**
+   * Renderiza los tabs (Recurrente / Una vez)
+   */
+  function renderTabs() {
+    // Buscar contenedor de tabs (debajo del dashboard)
+    let tabsContainer = document.getElementById('alquimia-tabs-container');
+    if (!tabsContainer) {
+      tabsContainer = document.createElement('div');
+      tabsContainer.id = 'alquimia-tabs-container';
+      tabsContainer.className = 'border-b border-gray-200 mb-6';
+      
+      // Insertar después de summary-section o al inicio de panel-content
+      if (summarySection && summarySection.nextSibling) {
+        summarySection.parentNode.insertBefore(tabsContainer, summarySection.nextSibling);
+      } else if (panelContent) {
+        panelContent.insertBefore(tabsContainer, panelContent.firstChild);
+      } else {
+        return; // No hay contenedor padre
+      }
+    }
+    
+    // Limpiar tabs anteriores
+    while (tabsContainer.firstChild) {
+      tabsContainer.removeChild(tabsContainer.firstChild);
+    }
+    
+    // Contenedor flex para tabs
+    const tabsFlex = document.createElement('div');
+    tabsFlex.className = 'flex space-x-1';
+    
+    // Tab "Recurrente"
+    const tabRecurrente = document.createElement('button');
+    tabRecurrente.className = `px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+      state.activeTab === 'recurrente'
+        ? 'bg-blue-500 text-white'
+        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`;
+    tabRecurrente.textContent = 'Recurrente';
+    tabRecurrente.addEventListener('click', () => {
+      if (state.activeTab !== 'recurrente') {
+        state.activeTab = 'recurrente';
+        renderTabs(); // Re-renderizar tabs para actualizar estilos
+        if (state.selectedStudentUuid) {
+          loadMegalist(state.selectedStudentUuid);
+        }
+      }
+    });
+    tabsFlex.appendChild(tabRecurrente);
+    
+    // Tab "Una vez"
+    const tabUnaVez = document.createElement('button');
+    tabUnaVez.className = `px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+      state.activeTab === 'una_vez'
+        ? 'bg-blue-500 text-white'
+        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`;
+    tabUnaVez.textContent = 'Una vez';
+    tabUnaVez.addEventListener('click', () => {
+      if (state.activeTab !== 'una_vez') {
+        state.activeTab = 'una_vez';
+        renderTabs(); // Re-renderizar tabs para actualizar estilos
+        if (state.selectedStudentUuid) {
+          loadMegalist(state.selectedStudentUuid);
+        }
+      }
+    });
+    tabsFlex.appendChild(tabUnaVez);
+    
+    tabsContainer.appendChild(tabsFlex);
+    
+    // Log forense
+    const listaTipo = state.activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
+    const viewLayer = state.activeTab === 'recurrente' ? 'shared' : 'combo';
+    console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][TAB_RENDER] Tabs renderizados', {
+      tab: state.activeTab,
+      view_layer: viewLayer,
+      lista_tipo: listaTipo
+    });
+  }
+
+  /**
    * Renderiza la megalista completa
    * REGLA CONSTITUCIONAL: Consume state_by_view_layer[view_layer] para agrupar items
    */
@@ -344,6 +431,9 @@
       view_layer: activeViewLayer,
       lists_count: data.lists?.length || 0
     });
+    
+    // Renderizar tabs primero
+    renderTabs();
     
     // Renderizar resumen
     renderSummary(data.summary);

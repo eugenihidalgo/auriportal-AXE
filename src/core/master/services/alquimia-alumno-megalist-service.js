@@ -101,7 +101,7 @@ async function getLastCleanActor(studentId, itemRef) {
  */
 export async function getMegalistForStudent(options = {}) {
   const traceId = getRequestId();
-  const { student_id, view_layer, levels_mode, level_cap = null } = options;
+  const { student_id, view_layer, lista_tipo, levels_mode, level_cap = null } = options;
   
   if (!student_id) {
     throw new Error('student_id es requerido');
@@ -125,6 +125,21 @@ export async function getMegalistForStudent(options = {}) {
     throw error;
   }
   
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: lista_tipo es OBLIGATORIO
+  // ============================================================================
+  if (!lista_tipo) {
+    const error = new Error('lista_tipo es requerido. Debe ser uno de: recurrente, una_vez');
+    error.code = 'MISSING_LISTA_TIPO';
+    throw error;
+  }
+  
+  if (lista_tipo !== 'recurrente' && lista_tipo !== 'una_vez') {
+    const error = new Error('lista_tipo inválido. Debe ser "recurrente" o "una_vez"');
+    error.code = 'INVALID_LISTA_TIPO';
+    throw error;
+  }
+  
   try {
     // 1. Determinar cap de nivel
     let nivelCap;
@@ -138,10 +153,11 @@ export async function getMegalistForStudent(options = {}) {
       nivelCap = await getStudentEffectiveLevel(student_id);
     }
     
-    logInfo('AlquimiaAlumnoMegalist', 'Construyendo megalista desde estado', {
+    logInfo('AlquimiaAlumnoMegalist', '[ALQUIMIA_ALUMNO][MEGALIST] Construyendo megalista desde estado', {
       traceId,
       student_id,
       view_layer,
+      lista_tipo,
       levels_mode,
       level_cap: nivelCap,
       level_cap_provided: level_cap !== null
@@ -212,9 +228,14 @@ export async function getMegalistForStudent(options = {}) {
       const catalogRepo = getDefaultAlquimiaCatalogRepo();
       
       // Cargar listas del catálogo (para resolver lista_id → nombre)
+      // REGLA CONSTITUCIONAL: Filtrar por lista_tipo ANTES de procesar items
       const allListas = await catalogRepo.listListas({ onlyActive: true });
       for (const lista of allListas) {
-        listasById[lista.id] = lista;
+        // Filtrar por lista_tipo: solo incluir listas que coinciden con el tipo solicitado
+        const listaTipoFromCatalog = lista.tipo || 'recurrente';
+        if (listaTipoFromCatalog === lista_tipo) {
+          listasById[lista.id] = lista;
+        }
       }
       
       // Cargar items del catálogo (para resolver item_ref → nombre, nivel, lista_id, metadata)
@@ -772,6 +793,7 @@ export async function getMegalistForStudent(options = {}) {
       warnings: warnings.length > 0 ? warnings : undefined,
       context: {
         view_layer, // REGLA CONSTITUCIONAL: view_layer en contexto
+        lista_tipo, // REGLA CONSTITUCIONAL: lista_tipo en contexto
         levels_mode,
         level_cap: nivelCap,
         level_cap_provided: level_cap !== null
