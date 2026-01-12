@@ -129,6 +129,7 @@ export async function markCleanStudent(options, client = null) {
   const {
     student_uuid, // CAMBIADO: ahora acepta UUID canónico
     item_ref,
+    item_kind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
     clean_layer = 'shared',
     product_key = 'pde',
     domain_type = 'transmutation',
@@ -157,14 +158,19 @@ export async function markCleanStudent(options, client = null) {
   // ============================================================================
 
   // Validar campos requeridos según contrato canónico
-  if (!student_uuid || !item_ref || !actor_type || !options.item_kind || !options.surface_key) {
+  if (!student_uuid || !item_ref || !actor_type || !item_kind || !surface_key) {
     const missing = [];
     if (!student_uuid) missing.push('student_uuid');
     if (!item_ref) missing.push('item_ref');
     if (!actor_type) missing.push('actor_type');
-    if (!options.item_kind) missing.push('item_kind');
-    if (!options.surface_key) missing.push('surface_key');
+    if (!item_kind) missing.push('item_kind');
+    if (!surface_key) missing.push('surface_key');
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+  }
+  
+  // Validar item_kind (OBLIGATORIO según CONTRATO LIMPIEZA v1)
+  if (item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
   }
   
   // Validar formato UUID
@@ -248,30 +254,25 @@ export async function markCleanStudent(options, client = null) {
       });
     }
     
-    // 4. Validar item_kind (REQUERIDO según contrato canónico)
-    if (!options.item_kind || (options.item_kind !== 'recurrente' && options.item_kind !== 'una_vez')) {
-      throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
-    }
-    
-    // Verificar coherencia con lista (validación adicional, no inferencia)
+    // 4. Verificar coherencia con lista (validación adicional, no inferencia)
     const lista = await catalogRepo.getListaById(item.lista_id);
     if (!lista) {
       throw new Error(`Lista no encontrada para item: ${item_ref}`);
     }
     
     // Validar que item_kind coincide con lista.tipo (coherencia, no inferencia)
-    if (options.item_kind !== lista.tipo) {
+    if (item_kind !== lista.tipo) {
       logWarn('CleaningEngine', 'item_kind no coincide con lista.tipo', {
         traceId,
         student_uuid,
         item_ref,
-        item_kind_provided: options.item_kind,
+        item_kind_provided: item_kind,
         lista_tipo: lista.tipo
       });
       // Fail-open: usar el proporcionado, pero log warning
     }
     
-    const itemKind = options.item_kind; // Usar siempre el proporcionado (sin fallback)
+    const itemKind = item_kind; // Usar siempre el proporcionado (sin fallback)
     
     // Resolver legacy_id SOLO para escribir en tablas legacy (repositorios lo hacen internamente)
     // Los repositorios de cleaning necesitan legacy_id para escribir en cleaning_events y cleaning_item_state
