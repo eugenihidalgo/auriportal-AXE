@@ -842,10 +842,10 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
             skip_level_filter: true
           });
           
-          // LOG TEMPORAL FORENSE: verificar que llegan pde_* y shared_*
+          // Log forense: verificar que llegan pde_* y shared_*
           if (result.students && result.students.length > 0) {
             const firstRow = result.students[0];
-            logInfo('MasterApiAlquimiaGeneral', '[TEMP_FLOAT_DTO] students payload keys', {
+            logInfo('MasterApiAlquimiaGeneral', 'students payload keys', {
               traceId,
               keys: Object.keys(firstRow || {}),
               has_shared: !!firstRow.shared,
@@ -951,15 +951,6 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('execution_mode debe ser "APPLY" o "CERTIFY"', 'INVALID_EXECUTION_MODE', 400, traceId);
       }
       
-      // Log temporal forense
-      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] mark-clean-all', {
-        traceId,
-        item_ref: itemRef,
-        item_kind: body.item_kind,
-        clean_layer: cleanLayer,
-        execution_mode: executionMode
-      });
-      
       const result = await markCleanAll(itemRef, productKey, cleanLayer, body.item_kind, executionMode);
       return jsonSuccess({
         ...result,
@@ -1014,15 +1005,6 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         return jsonError('Item archivado', 'ITEM_ARCHIVED', 404, traceId);
       }
 
-      // Log temporal forense
-      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] mark-clean-student', {
-        traceId,
-        item_ref: itemRef,
-        item_kind: body.item_kind,
-        clean_layer: cleanLayer,
-        student_uuid: studentUuid
-      });
-      
       // Construir payload canónico para markCleanStudent (CAMBIADO: ahora pasa student_uuid)
       const options = {
         student_uuid: studentUuid, // CAMBIADO: pasar UUID canónico
@@ -1166,15 +1148,6 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       if (!body.item_kind || (body.item_kind !== 'recurrente' && body.item_kind !== 'una_vez')) {
         return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
       }
-
-      // Log temporal forense
-      logInfo('MasterApiAlquimiaGeneral', '[TEMP_LAYER] increment-all', {
-        traceId,
-        item_ref: itemRef,
-        item_kind: body.item_kind,
-        clean_layer: cleanLayer,
-        product_key: productKey
-      });
 
       const result = await incrementAll(itemRef, productKey, cleanLayer, body.item_kind);
       return jsonSuccess({

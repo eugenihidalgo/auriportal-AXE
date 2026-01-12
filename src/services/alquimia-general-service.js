@@ -768,8 +768,7 @@ export async function markCleanStudent(studentUuid, itemRef, itemKind, productKe
   
   const traceId = getRequestId();
   
-  // LOG TEMPORAL: entrada a markCleanStudent
-  logInfo('AlquimiaGeneralService', '[TEMP] markCleanStudent entrada', {
+  logInfo('AlquimiaGeneralService', 'markCleanStudent entrada', {
     traceId,
     student_uuid: studentUuid,
     item_ref: itemRef,
@@ -921,8 +920,7 @@ export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'sh
   
   const traceId = getRequestId();
   
-  // LOG TEMPORAL: entrada a incrementAll
-  logInfo('AlquimiaGeneralService', '[TEMP] incrementAll entrada', {
+  logInfo('AlquimiaGeneralService', 'incrementAll entrada', {
     traceId,
     itemRef,
     productKey,
@@ -951,8 +949,7 @@ export async function incrementAll(itemRef, productKey = 'pde', cleanLayer = 'sh
       }
     });
     
-    // LOG TEMPORAL: resultado de incrementAll
-    logInfo('AlquimiaGeneralService', '[TEMP] incrementAll resultado', {
+    logInfo('AlquimiaGeneralService', 'incrementAll resultado', {
       traceId,
       itemRef,
       cleanLayer,
@@ -1074,7 +1071,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
     }
     
     // LOG TEMPORAL: entrada a markPdeCleanAll
-    logInfo('AlquimiaGeneralService', '[TEMP_PDE] markPdeCleanAll entrada', {
+    logInfo('AlquimiaGeneralService', 'markPdeCleanAll entrada', {
       traceId,
       itemRef,
       item_id: item.id,
@@ -1153,7 +1150,7 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
     // El Cleaning Engine ya emite clean.executed (UUID-only)
     // NO se emiten señales duplicadas desde el servicio
     
-    logInfo('AlquimiaGeneralService', '[TEMP_PDE] markPdeCleanAll completado', {
+    logInfo('AlquimiaGeneralService', 'markPdeCleanAll completado', {
       traceId,
       itemRef,
       item_id: itemId,

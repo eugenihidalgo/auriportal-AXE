@@ -952,12 +952,6 @@
         return;
       }
       
-      // Log temporal forense
-      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/mark-clean-all', {
-        item_ref: item.item_ref,
-        clean_layer: cleanLayer,
-        item_kind: itemKind
-      });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
         method: 'POST',
@@ -1049,10 +1043,15 @@
       }
     });
 
-    // Crear modal
+    // Crear modal (redimensionable)
     const modal = document.createElement('div');
-    modal.style.cssText = 'background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; max-width: 90vw; max-height: 80vh; width: 1000px; display: flex; flex-direction: column; overflow: hidden;';
+    modal.style.cssText = 'background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; max-width: 95vw; max-height: 90vh; width: 1000px; height: 600px; min-width: 800px; min-height: 400px; display: flex; flex-direction: column; overflow: hidden; resize: both; position: relative;';
     modal.addEventListener('click', (e) => e.stopPropagation());
+    
+    // Indicador visual de redimensionamiento (esquina inferior derecha)
+    const resizeHandle = document.createElement('div');
+    resizeHandle.style.cssText = 'position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 0%, transparent 40%, #64748b 40%, #64748b 45%, transparent 45%, transparent 55%, #64748b 55%, #64748b 60%, transparent 60%); z-index: 10;';
+    modal.appendChild(resizeHandle);
 
     // Header
     const header = document.createElement('div');
@@ -1102,11 +1101,15 @@
     btnPde.addEventListener('click', () => changeLayerView('pde'));
     toggleContainer.appendChild(btnPde);
     
-    const btnCombo = document.createElement('button');
-    btnCombo.textContent = 'COMBO';
-    btnCombo.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'combo' ? '#10b981' : 'transparent'}; color: ${currentLayerView === 'combo' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
-    btnCombo.addEventListener('click', () => changeLayerView('combo'));
-    toggleContainer.appendChild(btnCombo);
+    // COMBO solo disponible para UNA_VEZ
+    const itemKindForCombo = normalized.item_kind || item.item_kind || item.tipo || state.listaActiva?.tipo || 'recurrente';
+    if (itemKindForCombo === 'una_vez') {
+      const btnCombo = document.createElement('button');
+      btnCombo.textContent = 'COMBO';
+      btnCombo.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'combo' ? '#10b981' : 'transparent'}; color: ${currentLayerView === 'combo' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+      btnCombo.addEventListener('click', () => changeLayerView('combo'));
+      toggleContainer.appendChild(btnCombo);
+    }
     
     titleDiv.appendChild(toggleContainer);
     header.appendChild(titleDiv);
@@ -1179,6 +1182,7 @@
       important: [],
       never: [],
       completed: [],
+      excellent: [], // Para UNA_VEZ: Muy bien trabajado
       // Para una_vez
     };
 
@@ -1187,30 +1191,41 @@
     const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
     const layerView = state.modal.layerView || 'shared';
     
-    // Calcular estados según vista seleccionada (usando datos simétricos)
+    // Calcular estados según tipo y vista
     studentsAplicables.forEach(student => {
       let state;
       
-      if (layerView === 'combo') {
-        // COMBO: usar estado de SHARED como principal (para agrupación)
-        const sharedState = calculateStudentState(student, 'shared', itemKind, requiredCount, normalized);
-        state = sharedState;
+      if (itemKind === 'una_vez') {
+        // UNA_VEZ: TOTAL es el decisor (shared_clean_count + pde_clean_count)
+        const sharedCount = (student.shared?.clean_count || 0);
+        const pdeCount = (student.pde?.clean_count || 0);
+        const totalCount = sharedCount + pdeCount;
+        
+        if (totalCount === 0) {
+          state = 'never'; // Nunca trabajado
+        } else if (totalCount < (requiredCount / 2)) {
+          state = 'pending'; // Pendiente (menos de la mitad)
+        } else if (totalCount >= requiredCount && totalCount < (requiredCount * 2)) {
+          state = 'completed'; // Completado
+        } else if (totalCount >= (requiredCount * 2)) {
+          state = 'excellent'; // Muy bien trabajado
+        } else {
+          state = 'pending'; // En proceso
+        }
       } else {
-        // SHARED o PDE: usar la capa seleccionada
+        // RECURRENTE: usar capa seleccionada (SHARED o PDE)
         const layer = layerView === 'pde' ? 'pde' : 'shared';
         state = calculateStudentState(student, layer, itemKind, requiredCount, normalized);
       }
       
       if (studentsByState[state]) {
         studentsByState[state].push(student);
-      } else if (itemKind === 'una_vez' && state === 'completed') {
-        studentsByState.completed.push(student);
-      } else if (itemKind === 'recurrente') {
-        // Fallback para recurrentes
-        if (state === 'completed') {
-          studentsByState.reviewed.push(student);
-        } else {
+      } else {
+        // Fallback
+        if (itemKind === 'recurrente') {
           studentsByState.never.push(student);
+        } else {
+          studentsByState.pending.push(student);
         }
       }
     });
@@ -1237,16 +1252,24 @@
       const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
       columnsContainer.appendChild(colNever);
     } else {
-      // una_vez
-      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;';
+      // una_vez: 4 columnas obligatorias basadas en TOTAL
+      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
       
-      // ✅ COMPLETADO
+      // ⚪ NUNCA (gris) - total_clean_count = 0
+      const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized);
+      columnsContainer.appendChild(colNever);
+
+      // 🟡 PENDIENTE (amarillo) - total > 0 && total < (required_count / 2)
+      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
+      columnsContainer.appendChild(colPending);
+
+      // ✅ COMPLETADO (verde) - total >= required_count && total < (required_count * 2)
       const colCompleted = createStateColumn('✅ COMPLETADO', studentsByState.completed, 'completed', item, normalized);
       columnsContainer.appendChild(colCompleted);
 
-      // 🟡 PENDIENTE
-      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
-      columnsContainer.appendChild(colPending);
+      // 🟣 MUY BIEN TRABAJADO (violeta) - total >= (required_count * 2)
+      const colExcellent = createStateColumn('🟣 MUY BIEN TRABAJADO', studentsByState.excellent, 'excellent', item, normalized);
+      columnsContainer.appendChild(colExcellent);
     }
 
     content.appendChild(columnsContainer);
@@ -1416,8 +1439,23 @@
     const stateDiv = document.createElement('div');
     stateDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     
-    if (layerView === 'combo') {
-      // COMBO: mostrar ambos estados
+    if (layerView === 'combo' && itemKind === 'una_vez') {
+      // COMBO UNA_VEZ: TOTAL como protagonista, S/P como informativos
+      const sharedCount = (student.shared?.clean_count || 0);
+      const pdeCount = (student.pde?.clean_count || 0);
+      const totalCount = sharedCount + pdeCount;
+      
+      const totalSpan = document.createElement('span');
+      totalSpan.textContent = `TOTAL: ${totalCount}`;
+      totalSpan.style.cssText = 'font-weight: 600; font-size: 1rem; color: #f1f5f9; margin-right: 0.5rem;';
+      stateDiv.appendChild(totalSpan);
+      
+      const infoSpan = document.createElement('span');
+      infoSpan.textContent = `S: ${sharedCount} | P: ${pdeCount}`;
+      infoSpan.style.cssText = 'font-size: 0.75rem; color: #94a3b8;';
+      stateDiv.appendChild(infoSpan);
+    } else if (layerView === 'combo' && itemKind === 'recurrente') {
+      // COMBO RECURRENTE: mostrar ambos estados
       const sharedState = getStudentState(student, 'shared', tipo, requiredCount);
       const pdeState = getStudentState(student, 'pde', tipo, requiredCount);
       stateDiv.textContent = `S: ${sharedState} | P: ${pdeState}`;
@@ -1432,8 +1470,20 @@
     const remainingDiv = document.createElement('div');
     remainingDiv.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     
-    if (layerView === 'combo') {
-      // COMBO: mostrar ambos remaining
+    if (layerView === 'combo' && itemKind === 'una_vez') {
+      // COMBO UNA_VEZ: mostrar TOTAL remaining (si aplica) y S/P como informativos
+      const sharedCount = (student.shared?.clean_count || 0);
+      const pdeCount = (student.pde?.clean_count || 0);
+      const totalCount = sharedCount + pdeCount;
+      const totalRemaining = Math.max(0, requiredCount - totalCount);
+      
+      if (totalRemaining > 0) {
+        remainingDiv.textContent = `Restan: ${totalRemaining} (S:${student.shared?.remaining || 0} P:${student.pde?.remaining || 0})`;
+      } else {
+        remainingDiv.textContent = `Completado (S:${student.shared?.remaining || 0} P:${student.pde?.remaining || 0})`;
+      }
+    } else if (layerView === 'combo' && itemKind === 'recurrente') {
+      // COMBO RECURRENTE: mostrar ambos remaining
       const sharedRem = getStudentRemaining(student, 'shared', tipo);
       const pdeRem = getStudentRemaining(student, 'pde', tipo);
       remainingDiv.textContent = `S:${sharedRem} | P:${pdeRem}`;
@@ -1472,23 +1522,17 @@
         btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
         btnSP.addEventListener('click', async () => {
           // Ejecutar ambas secuencialmente con manejo de errores
-          console.info('[TEMP_COMBO]', { step: 'shared', student_uuid: student.student_uuid, item_ref: item.item_ref });
           try {
             await handleLimpiarEstudiante(student, item, 'shared', itemKind);
-            console.info('[TEMP_COMBO]', { step: 'shared', status: 'ok' });
             
             // Si SHARED OK, ejecutar PDE
-            console.info('[TEMP_COMBO]', { step: 'pde', student_uuid: student.student_uuid, item_ref: item.item_ref });
             try {
               await handleLimpiarEstudiante(student, item, 'pde', itemKind);
-              console.info('[TEMP_COMBO]', { step: 'pde', status: 'ok' });
               showToastSuccess('✓ SHARED y PDE aplicados');
             } catch (pdeError) {
-              console.error('[TEMP_COMBO]', { step: 'pde', status: 'error', error: pdeError.message });
               showToastError(`✓ SHARED aplicado, pero PDE falló: ${pdeError.message}`);
             }
           } catch (sharedError) {
-            console.error('[TEMP_COMBO]', { step: 'shared', status: 'error', error: sharedError.message });
             showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
           }
           
@@ -1523,23 +1567,17 @@
         btnSP.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem;';
         btnSP.addEventListener('click', async () => {
           // Ejecutar ambas secuencialmente con manejo de errores (RECURRENTE)
-          console.info('[TEMP_COMBO]', { step: 'shared', student_uuid: student.student_uuid, item_ref: item.item_ref, item_kind: 'recurrente' });
           try {
             await handleLimpiarEstudiante(student, item, 'shared', itemKind);
-            console.info('[TEMP_COMBO]', { step: 'shared', status: 'ok' });
             
             // Si SHARED OK, ejecutar PDE
-            console.info('[TEMP_COMBO]', { step: 'pde', student_uuid: student.student_uuid, item_ref: item.item_ref, item_kind: 'recurrente' });
             try {
               await handleLimpiarEstudiante(student, item, 'pde', itemKind);
-              console.info('[TEMP_COMBO]', { step: 'pde', status: 'ok' });
               showToastSuccess('✓ SHARED y PDE aplicados');
             } catch (pdeError) {
-              console.error('[TEMP_COMBO]', { step: 'pde', status: 'error', error: pdeError.message });
               showToastError(`✓ SHARED aplicado, pero PDE falló: ${pdeError.message}`);
             }
           } catch (sharedError) {
-            console.error('[TEMP_COMBO]', { step: 'shared', status: 'error', error: sharedError.message });
             showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
           }
           
@@ -1685,8 +1723,6 @@
         surface_key: 'master.alquimia_general'
       };
       
-      // Log temporal forense
-      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/mark-clean-student', payload);
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
         method: 'POST',
@@ -2537,12 +2573,6 @@
         return;
       }
       
-      // Log temporal forense
-      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/increment-all', {
-        item_ref: item.item_ref,
-        clean_layer: 'shared',
-        item_kind: itemKind
-      });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',
@@ -2597,12 +2627,6 @@
         return;
       }
       
-      // Log temporal forense
-      console.info('[TEMP_REQ]', '/master/api/alquimia-general/items/:item_ref/master/increment-all (PDE)', {
-        item_ref: item.item_ref,
-        clean_layer: 'pde',
-        item_kind: itemKind
-      });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
         method: 'POST',

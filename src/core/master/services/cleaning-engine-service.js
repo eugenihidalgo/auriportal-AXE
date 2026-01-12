@@ -148,8 +148,7 @@ export async function markCleanStudent(options, client = null) {
     meta = {}
   } = options;
   
-  // LOG TEMPORAL: entrada a markCleanStudent (SIMÉTRICO)
-  logInfo('CleaningEngine', '[TEMP_PDE_SYMM] markCleanStudent entrada', {
+  logInfo('CleaningEngine', 'markCleanStudent entrada', {
     traceId,
     student_uuid,
     item_ref,
@@ -318,7 +317,7 @@ export async function markCleanStudent(options, client = null) {
     
     // LOG TEMPORAL: decisión de execution_mode
     if (isMasterDomain && itemKind === 'una_vez') {
-      logInfo('CleaningEngine', '[TEMP] MASTER UNA_VEZ: usando CERTIFY para permitir múltiples incrementos', {
+      logInfo('CleaningEngine', 'MASTER UNA_VEZ: usando CERTIFY para permitir múltiples incrementos', {
         traceId,
         student_uuid,
         item_ref,
@@ -332,8 +331,7 @@ export async function markCleanStudent(options, client = null) {
     // 6. Generar execution_key (APPLY: idempotente, CERTIFY: no idempotente)
     const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid, new Date(), effectiveExecutionMode);
     
-    // LOG TEMPORAL: execution_key generado
-    logInfo('CleaningEngine', '[TEMP_PDE] execution_key generado', {
+    logInfo('CleaningEngine', 'execution_key generado', {
       traceId,
       execution_key: executionKey,
       execution_mode: effectiveExecutionMode,
@@ -376,8 +374,7 @@ export async function markCleanStudent(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
-    // LOG TEMPORAL: resultado de inserción
-    logInfo('CleaningEngine', '[TEMP_PDE] evento insertado', {
+    logInfo('CleaningEngine', 'evento insertado', {
       traceId,
       execution_key: executionKey,
       event_result: eventResult,
@@ -389,7 +386,7 @@ export async function markCleanStudent(options, client = null) {
     
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-      logInfo('CleaningEngine', '[TEMP_PDE] Evento ya aplicado (idempotencia) - esto NO debería pasar en MASTER UNA_VEZ con CERTIFY', {
+      logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,
         execution_mode: effectiveExecutionMode,
@@ -412,8 +409,7 @@ export async function markCleanStudent(options, client = null) {
     const stateRepo = getDefaultCleaningItemStateRepo();
     let state;
     
-    // LOG TEMPORAL: decisión de capa y método (SIMÉTRICO)
-    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Aplicando proyección', {
+    logInfo('CleaningEngine', 'Aplicando proyección', {
       traceId,
       student_uuid,
       item_ref,
@@ -426,7 +422,7 @@ export async function markCleanStudent(options, client = null) {
     
     if (itemKind === 'recurrente') {
       // Recurrente: actualizar last_cleaned_at y clean_count (SIMÉTRICO)
-      logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Recurrente: usando upsertApplyRecurrent', {
+      logInfo('CleaningEngine', 'Recurrente: usando upsertApplyRecurrent', {
         traceId,
         clean_layer,
         capa: clean_layer === 'shared' ? 'SHARED' : 'PDE'
@@ -444,7 +440,7 @@ export async function markCleanStudent(options, client = null) {
       if (clean_layer === 'pde') {
         // PDE: incrementar pde_clean_count y recalcular pde_remaining/pde_completed (simétrico a SHARED)
         const requiredCount = item.veces_limpiar || 1;
-        logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Una vez PDE: usando upsertApplyOneTimeIncrementPde (simétrico)', {
+        logInfo('CleaningEngine', 'Una vez PDE: usando upsertApplyOneTimeIncrementPde', {
           traceId,
           student_uuid,
           item_ref,
@@ -459,7 +455,7 @@ export async function markCleanStudent(options, client = null) {
         }, client);
       } else {
         // SHARED: incrementar completed y decrementar remaining
-        logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Una vez SHARED: usando upsertApplyOneTimeIncrementShared', {
+        logInfo('CleaningEngine', 'Una vez SHARED: usando upsertApplyOneTimeIncrementShared', {
           traceId,
           student_uuid,
           item_ref,
@@ -476,8 +472,7 @@ export async function markCleanStudent(options, client = null) {
       }
     }
     
-    // LOG TEMPORAL: resultado de proyección (SIMÉTRICO)
-    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Proyección aplicada', {
+    logInfo('CleaningEngine', 'Proyección aplicada', {
       traceId,
       student_uuid,
       item_ref,
@@ -528,7 +523,7 @@ export async function markCleanStudent(options, client = null) {
       });
     }
     
-    logInfo('CleaningEngine', '[TEMP_PDE_SYMM] Limpieza aplicada correctamente', {
+    logInfo('CleaningEngine', 'Limpieza aplicada correctamente', {
       traceId,
       student_uuid,
       item_ref,
@@ -589,8 +584,7 @@ export async function markCleanAllStudents(options, client = null) {
     meta = {}
   } = options;
 
-  // LOG TEMPORAL: entrada a markCleanAllStudents
-  logInfo('CleaningEngine', '[TEMP] markCleanAllStudents entrada', {
+  logInfo('CleaningEngine', 'markCleanAllStudents entrada', {
     traceId,
     item_ref,
     item_kind: options.item_kind,
@@ -768,8 +762,7 @@ export async function markCleanAllStudents(options, client = null) {
       }
     }
     
-    // Log temporal
-    logInfo('CleaningEngine', '[TEMP_LAYER_ENGINE] markCleanAllStudents completado', {
+    logInfo('CleaningEngine', 'markCleanAllStudents completado', {
       traceId,
       item_ref,
       item_kind: itemKind,
@@ -835,8 +828,7 @@ export async function incrementAllStudents(options, client = null) {
   // CONTRATO LIMPIEZA v1: item_kind debe venir en options
   const traceId = getRequestId();
   
-  // LOG TEMPORAL: entrada a incrementAllStudents
-  logInfo('CleaningEngine', '[TEMP] incrementAllStudents entrada', {
+  logInfo('CleaningEngine', 'incrementAllStudents entrada', {
     traceId,
     item_ref: options.item_ref,
     item_kind: options.item_kind,
@@ -865,7 +857,7 @@ export async function incrementAllStudents(options, client = null) {
   
   // LOG TEMPORAL: decisión de execution_mode
   if (isMasterDomain && options.item_kind === 'una_vez') {
-    logInfo('CleaningEngine', '[TEMP] MASTER UNA_VEZ incrementAll: usando CERTIFY para permitir múltiples incrementos', {
+    logInfo('CleaningEngine', 'MASTER UNA_VEZ incrementAll: usando CERTIFY para permitir múltiples incrementos', {
       traceId,
       item_ref: options.item_ref,
       original_execution_mode: options.execution_mode,
