@@ -1105,7 +1105,7 @@
     // También incluir students_no_aplica del payload si existe
     if (normalized.students_no_aplica && Array.isArray(normalized.students_no_aplica)) {
       normalized.students_no_aplica.forEach(student => {
-        if (!studentsNoAplica.find(s => s.student_id === student.student_id)) {
+        if (!studentsNoAplica.find(s => s.student_uuid === student.student_uuid)) {
           studentsNoAplica.push(student);
         }
       });
@@ -1304,7 +1304,7 @@
 
   /**
    * Crea una fila de estudiante
-   * @param {Object} student - Estudiante con display_name, student_id, etc.
+   * @param {Object} student - Estudiante con display_name, student_uuid, etc. (CAMBIADO: usar student_uuid)
    * @param {string} stateKey - Clave del estado
    * @param {Object} item - Item con item_ref, etc.
    * @param {Object} normalized - Payload normalizado
@@ -1351,8 +1351,16 @@
    * Soporta recurrente (mark-clean) y una_vez (increment o mark-clean según clean_layer)
    */
   async function handleLimpiarEstudiante(student, item, cleanLayer = 'shared', tipo = 'recurrente') {
-    if (!item || !item.item_ref || !student || !student.student_id) {
+    // CAMBIADO: validar student_uuid (canónico) en lugar de student_id
+    if (!item || !item.item_ref || !student || !student.student_uuid) {
       console.error('[MasterAlquimiaGeneral] Datos incompletos para limpiar:', { item, student });
+      // WARNING: Si se intenta usar student_id, mostrar warning
+      if (student && student.student_id && !student.student_uuid) {
+        console.warn('[MasterAlquimiaGeneral] ⚠️ UI intentando usar student_id (legacy). Debe usar student_uuid.', {
+          student_uuid: student.student_uuid, // CAMBIADO: usar UUID canónico
+          student
+        });
+      }
       return;
     }
 
@@ -1362,7 +1370,7 @@
       // Payload canónico para limpieza Master desde Alquimia General
       // REGLA: Master puede limpiar cualquier item a cualquier alumno (sin validación de nivel)
       const payload = {
-        student_id: student.student_id,
+        student_uuid: student.student_uuid, // CAMBIADO: usar UUID canónico
         item_ref: item.item_ref,
         item_kind: tipo, // 'recurrente' | 'una_vez' - REQUERIDO
         domain_type: 'transmutation',

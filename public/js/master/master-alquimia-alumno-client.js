@@ -56,7 +56,7 @@
   // Estado global
   const state = {
     students: [],
-    selectedStudentId: null,
+    selectedStudentUuid: null, // CAMBIADO: usar student_uuid (UUID canónico) en lugar de selectedStudentId
     megalistData: null,
     loading: false,
     levelCap: null // null = Auto (nivel_efectivo), number = cap explícito
@@ -86,13 +86,13 @@
     // Cargar lista de alumnos
     await loadStudents();
     
-    // Verificar deep-link (?student_id=...)
+    // Verificar deep-link (?student_uuid=...) - CAMBIADO: usar student_uuid (UUID canónico)
     const urlParams = new URLSearchParams(window.location.search);
-    const studentIdParam = urlParams.get('student_id');
-    if (studentIdParam) {
-      const studentId = parseInt(studentIdParam, 10);
-      if (studentId && !isNaN(studentId)) {
-        selectStudent(studentId);
+    const studentUuidParam = urlParams.get('student_uuid');
+    if (studentUuidParam) {
+      // Validar que es un UUID válido
+      if (studentUuidParam.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        selectStudent(studentUuidParam);
       }
     }
   }
@@ -127,9 +127,9 @@
     });
     
     select.addEventListener('change', (e) => {
-      const studentId = parseInt(e.target.value, 10);
-      if (studentId && !isNaN(studentId)) {
-        selectStudent(studentId);
+      const studentUuid = e.target.value; // CAMBIADO: valor es UUID (string), no INTEGER
+      if (studentUuid && studentUuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        selectStudent(studentUuid);
       } else {
         clearSelection();
       }
@@ -213,13 +213,14 @@
 
   /**
    * Selecciona un alumno y carga sus datos
+   * CAMBIADO: acepta student_uuid (UUID canónico) en lugar de student_id
    */
-  async function selectStudent(studentId) {
-    state.selectedStudentId = studentId;
+  async function selectStudent(studentUuid) {
+    state.selectedStudentUuid = studentUuid; // CAMBIADO: usar selectedStudentUuid
     state.loading = true;
     
     // Cargar level_cap desde localStorage
-    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${studentId}`;
+    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${studentUuid}`; // CAMBIADO: usar UUID en key
     const savedCap = localStorage.getItem(storageKey);
     if (savedCap) {
       const cap = parseInt(savedCap, 10);
@@ -230,13 +231,13 @@
     
     // Actualizar URL
     const url = new URL(window.location);
-    url.searchParams.set('student_id', studentId);
+    url.searchParams.set('student_uuid', studentUuid); // CAMBIADO: usar student_uuid en URL
     window.history.pushState({}, '', url);
     
     // Actualizar select
     const select = document.getElementById('student-select');
     if (select) {
-      select.value = studentId;
+      select.value = studentUuid; // CAMBIADO: valor es UUID (string)
     }
     
     // Ocultar empty state, mostrar panel
@@ -245,7 +246,7 @@
     
     // Cargar megalista y informe
     await Promise.all([
-      loadMegalist(studentId),
+      loadMegalist(studentUuid), // CAMBIADO: pasar UUID
       loadReport()
     ]);
   }
@@ -254,12 +255,12 @@
    * Limpia la selección
    */
   function clearSelection() {
-    state.selectedStudentId = null;
+    state.selectedStudentUuid = null; // CAMBIADO: usar selectedStudentUuid
     state.megalistData = null;
     
     // Actualizar URL
     const url = new URL(window.location);
-    url.searchParams.delete('student_id');
+    url.searchParams.delete('student_uuid'); // CAMBIADO: usar student_uuid
     window.history.pushState({}, '', url);
     
     // Mostrar empty state, ocultar panel
@@ -272,14 +273,15 @@
 
   /**
    * Carga la megalista para un alumno
+   * CAMBIADO: acepta student_uuid (UUID canónico) en lugar de student_id
    */
-  async function loadMegalist(studentId) {
+  async function loadMegalist(studentUuid) {
     try {
       state.loading = true;
       showLoading();
       
       // Construir URL con level_cap si viene
-      let url = `/master/api/alquimia-alumno/megalist?student_id=${studentId}`;
+      let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}`; // CAMBIADO: usar student_uuid
       if (state.levelCap !== null) {
         url += `&level_cap=${state.levelCap === 999 ? 'infinity' : state.levelCap}`;
       }
@@ -372,7 +374,7 @@
     }
     
     // Cargar valor desde localStorage o state
-    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentId}`;
+    const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentUuid}`; // CAMBIADO: usar selectedStudentUuid
     const savedCap = state.levelCap !== null ? state.levelCap.toString() : 
                      (localStorage.getItem(storageKey) || '');
     
@@ -401,8 +403,8 @@
       state.levelCap = cap;
       
       // Persistir en localStorage
-      if (state.selectedStudentId) {
-        const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentId}`;
+      if (state.selectedStudentUuid) { // CAMBIADO: usar selectedStudentUuid
+        const storageKey = `ap_master_alquimia_alumno_level_cap_v1:${state.selectedStudentUuid}`; // CAMBIADO: usar UUID
         if (cap === null) {
           localStorage.removeItem(storageKey);
         } else {
@@ -411,8 +413,8 @@
       }
       
       // Recargar megalist con nuevo cap
-      if (state.selectedStudentId) {
-        loadMegalist(state.selectedStudentId);
+      if (state.selectedStudentUuid) { // CAMBIADO: usar selectedStudentUuid
+        loadMegalist(state.selectedStudentUuid); // CAMBIADO: pasar UUID
       }
     });
     
@@ -803,13 +805,13 @@
    * Maneja la limpieza de un item (SHARED, acción operativa)
    */
   async function handleCleanItem(item) {
-    if (!state.selectedStudentId) {
+    if (!state.selectedStudentUuid) { // CAMBIADO: usar selectedStudentUuid
       console.warn('[MasterAlquimiaAlumno] No hay alumno seleccionado');
       return;
     }
     
     console.log('[MasterAlquimiaAlumno] Limpiando item:', {
-      student_id: state.selectedStudentId,
+      student_uuid: state.selectedStudentUuid, // CAMBIADO: usar student_uuid
       item_ref: item.item_ref,
       item_nombre: item.item_nombre
     });
@@ -823,8 +825,9 @@
     
     try {
       // Payload canónico según CONTRATO_LIMPIEZA_V1 (todos los campos requeridos explícitos)
+      // CAMBIADO: usar student_uuid (UUID canónico) en lugar de student_id
       const body = {
-        student_id: state.selectedStudentId,
+        student_uuid: state.selectedStudentUuid, // CAMBIADO: usar student_uuid
         item_ref: item.item_ref,
         item_kind: item.lista_tipo || 'recurrente', // REQUERIDO (ya disponible en megalist)
         actor_type: 'master', // REQUERIDO
@@ -869,7 +872,7 @@
       showToastSuccess(`✓ ${item.item_nombre} marcado como revisado`);
       
       // Refetch megalist inmediato (el item debe moverse a "Revisados")
-      await loadMegalist(state.selectedStudentId);
+      await loadMegalist(state.selectedStudentUuid); // CAMBIADO: pasar UUID
       
       console.log('[MasterAlquimiaAlumno] Item limpiado exitosamente, megalist refrescada');
     } catch (error) {
@@ -887,10 +890,10 @@
    * Muestra el historial de un item (dos paneles: técnico + humano)
    */
   async function handleShowHistory(item) {
-    if (!state.selectedStudentId) return;
+    if (!state.selectedStudentUuid) return; // CAMBIADO: usar selectedStudentUuid
     
     try {
-      const response = await fetch(`/master/api/alquimia-alumno/item-history?student_id=${state.selectedStudentId}&domain_type=transmutation&item_ref=${item.item_ref}&limit=50`);
+      const response = await fetch(`/master/api/alquimia-alumno/item-history?student_uuid=${state.selectedStudentUuid}&domain_type=transmutation&item_ref=${item.item_ref}&limit=50`); // CAMBIADO: usar student_uuid
       const result = await response.json();
       
       if (!result.ok) {
@@ -1168,10 +1171,10 @@
    * Carga el informe
    */
   async function loadReport() {
-    if (!state.selectedStudentId || !reportContent) return;
+    if (!state.selectedStudentUuid || !reportContent) return; // CAMBIADO: usar selectedStudentUuid
     
     try {
-      const response = await fetch(`/master/api/alquimia-alumno/report?student_id=${state.selectedStudentId}&days=30`);
+      const response = await fetch(`/master/api/alquimia-alumno/report?student_uuid=${state.selectedStudentUuid}&days=30`); // CAMBIADO: usar student_uuid
       const result = await response.json();
       
       if (!result.ok) {

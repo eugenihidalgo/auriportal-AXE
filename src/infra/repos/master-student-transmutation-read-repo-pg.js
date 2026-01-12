@@ -173,9 +173,11 @@ export class MasterStudentTransmutationReadRepoPg {
       note: 'Debe migrarse a students table con student_uuid'
     });
     
+    // CAMBIADO: JOIN con students para obtener student_uuid (canónico)
     let sql = `
       SELECT 
-        a.id as student_id,
+        s.id as student_uuid,
+        a.id as legacy_student_id,
         COALESCE(a.nombre_completo, a.apodo, a.email) as student_name,
         a.email as student_email,
         a.apodo,
@@ -186,6 +188,7 @@ export class MasterStudentTransmutationReadRepoPg {
         c.shared_completed,
         c.pde_completed
       FROM alumnos a
+      INNER JOIN students s ON s.legacy_alumno_id = a.id AND s.deleted_at IS NULL
       LEFT JOIN cleaning_item_state c ON c.student_id = a.id
         AND c.product_key = $1
         AND c.domain_type = $2
@@ -216,7 +219,7 @@ export class MasterStudentTransmutationReadRepoPg {
           : null;
 
         students.push({
-          student_id: row.student_id,
+          student_uuid: row.student_uuid, // CAMBIADO: usar UUID canónico
           student_name: row.student_name || row.student_email || 'Sin nombre',
           student_email: row.student_email,
           apodo: row.apodo,
