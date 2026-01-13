@@ -263,11 +263,191 @@
     listaContent.appendChild(tabsContainer);
     
     // Renderizar según viewMode
+    console.log('[UI][RENDER_VIEW]', {
+      mode: viewState.viewMode,
+      list_id: viewState.list_id,
+      item_kind: viewState.item_kind
+    });
+    
     if (viewState.viewMode === 'proyeccion') {
       renderProjectionView();
     } else {
       renderOperativeView();
     }
+  }
+
+  /**
+   * Renderiza la vista operativa (tabla de items)
+   * Esta función es llamada por renderView() cuando viewMode === 'operativa'
+   * NO modifica la lógica existente, solo la extrae para integración formal
+   */
+  function renderOperativeView() {
+    if (!listaContent || !state.listaActiva) return;
+    
+    // Header con título y botón configurar
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;';
+    
+    const title = document.createElement('h2');
+    title.textContent = state.listaActiva.nombre || state.listaActiva.list_name || 'Lista sin nombre';
+    title.style.cssText = 'color: #f1f5f9; font-size: 1.5rem; font-weight: 700; margin: 0;';
+    header.appendChild(title);
+    
+    // Botón Configurar lista
+    const btnConfig = document.createElement('button');
+    btnConfig.textContent = '⚙ Configurar lista';
+    btnConfig.style.cssText = 'padding: 0.5rem 1rem; background: #64748b; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+    btnConfig.addEventListener('click', () => handleConfigurarLista());
+    header.appendChild(btnConfig);
+    
+    listaContent.appendChild(header);
+
+    // Clasificaciones (category, subtype, tags)
+    const classificationSection = document.createElement('div');
+    classificationSection.className = 'mb-4 p-3 bg-slate-800 rounded border border-slate-700';
+    classificationSection.style.cssText = 'padding: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 1rem;';
+    
+    const classificationTitle = document.createElement('div');
+    classificationTitle.textContent = 'Clasificación:';
+    classificationTitle.style.cssText = 'color: #cbd5e1; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.875rem;';
+    classificationSection.appendChild(classificationTitle);
+
+    const classificationRow = document.createElement('div');
+    classificationRow.style.cssText = 'display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;';
+    
+    // Category
+    const categoryLabel = document.createElement('span');
+    categoryLabel.textContent = 'Categoría:';
+    categoryLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    classificationRow.appendChild(categoryLabel);
+    
+    const categoryValue = document.createElement('span');
+    const category = state.listaActiva.classification?.category_key || 'Sin categoría';
+    categoryValue.textContent = category;
+    categoryValue.style.cssText = 'color: #f1f5f9; font-size: 0.875rem;';
+    classificationRow.appendChild(categoryValue);
+
+    // Subtype
+    const subtypeLabel = document.createElement('span');
+    subtypeLabel.textContent = 'Subclasificación:';
+    subtypeLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    classificationRow.appendChild(subtypeLabel);
+    
+    const subtypeValue = document.createElement('span');
+    const subtype = state.listaActiva.classification?.subtype_key || 'Sin subclasificación';
+    subtypeValue.textContent = subtype;
+    subtypeValue.style.cssText = 'color: #f1f5f9; font-size: 0.875rem;';
+    classificationRow.appendChild(subtypeValue);
+
+    // Tags
+    const tagsLabel = document.createElement('span');
+    tagsLabel.textContent = 'Tags:';
+    tagsLabel.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    classificationRow.appendChild(tagsLabel);
+    
+    const tagsValue = document.createElement('span');
+    const tags = state.listaActiva.classification?.tags || [];
+    tagsValue.textContent = tags.length > 0 ? tags.join(', ') : 'Sin tags';
+    tagsValue.style.cssText = 'color: #f1f5f9; font-size: 0.875rem;';
+    classificationRow.appendChild(tagsValue);
+
+    classificationSection.appendChild(classificationRow);
+    listaContent.appendChild(classificationSection);
+    
+    // Tabla editable de items (modo Operativa)
+    const itemsTableContainer = document.createElement('div');
+    itemsTableContainer.style.cssText = 'overflow-x: auto; margin-top: 1rem;';
+    
+    const itemsTable = document.createElement('table');
+    itemsTable.style.cssText = 'width: 100%; border-collapse: collapse; background: #0f172a;';
+    
+    // Cargar sort pipeline desde localStorage
+    loadItemsSortPipeline();
+    
+    // Aplicar sort antes de renderizar
+    const sortedItems = applyItemsSort(state.items);
+    
+    // Headers (clicables para order pipeline)
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.style.cssText = 'background: #1e293b; border-bottom: 2px solid #334155;';
+    
+    const headers = [
+      { key: 'nivel', label: 'NIVEL' },
+      { key: 'nombre', label: 'NOMBRE' },
+      { key: 'descripcion', label: 'DESCRIPCIÓN' },
+      { key: 'grupo', label: 'GRUPO' }
+    ];
+    
+    if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+      headers.push({ key: 'frecuencia_dias', label: 'DÍAS RECURRENCIA' });
+    } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
+      headers.push({ key: 'veces_limpiar', label: 'VECES LIMPIAR' });
+    }
+    
+    headers.push({ key: 'actions', label: 'ACCIONES' });
+    
+    headers.forEach(header => {
+      const th = document.createElement('th');
+      th.style.cssText = 'padding: 0.75rem; text-align: left; color: #cbd5e1; font-size: 0.875rem; font-weight: 600; cursor: pointer; user-select: none;';
+      
+      const headerContent = document.createElement('div');
+      headerContent.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+      
+      const headerText = document.createElement('span');
+      headerText.textContent = header.label;
+      headerContent.appendChild(headerText);
+      
+      // Badge de prioridad si está en pipeline
+      if (header.key !== 'actions') {
+        const priority = getSortPriority(header.key);
+        if (priority > 0) {
+          const badge = document.createElement('span');
+          badge.textContent = `${priority}`;
+          badge.style.cssText = 'background: #4f46e5; color: #fff; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;';
+          headerContent.appendChild(badge);
+          
+          const arrow = document.createElement('span');
+          const dir = getSortDirection(header.key);
+          arrow.textContent = dir === 'asc' ? '↑' : '↓';
+          arrow.style.cssText = 'color: #86efac; font-size: 0.75rem;';
+          headerContent.appendChild(arrow);
+        }
+        
+        // Click handlers para order pipeline
+        th.addEventListener('click', (e) => {
+          if (e.shiftKey) {
+            toggleSortPriority(header.key, 'add');
+          } else {
+            toggleSortPriority(header.key, 'toggle');
+          }
+          renderView(); // Re-render con nuevo sort
+        });
+      }
+      
+      th.appendChild(headerContent);
+      headerRow.appendChild(th);
+    });
+    
+    thead.appendChild(headerRow);
+    itemsTable.appendChild(thead);
+    
+    // Body
+    const tbody = document.createElement('tbody');
+    
+    // Fila sticky de creación (primera fila)
+    const createRow = createItemTableRow(null, true);
+    tbody.appendChild(createRow);
+    
+    // Filas de items editables
+    sortedItems.forEach(item => {
+      const itemRow = createItemTableRow(item, false);
+      tbody.appendChild(itemRow);
+    });
+    
+    itemsTable.appendChild(tbody);
+    itemsTableContainer.appendChild(itemsTable);
+    listaContent.appendChild(itemsTableContainer);
   }
 
   /**
