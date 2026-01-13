@@ -207,6 +207,10 @@ El CPM es responsable de:
 {
   state: 'reviewed', // Mejor entre shared y pde
   visual_state: 'reviewed',
+  effective_sources: {
+    shared: false, // shared_state !== 'reviewed'
+    pde: true     // pde_state === 'reviewed'
+  },
   computed_state: {
     view_layer: 'effective',
     days_since_last_clean: 2, // Mínimo entre shared y pde
@@ -217,6 +221,12 @@ El CPM es responsable de:
   }
 }
 ```
+
+**Metadata `effective_sources`:**
+- `shared: true` si `shared_state === 'reviewed'` (estado limpio)
+- `pde: true` si `pde_state === 'reviewed'` (estado limpio)
+- Permite visualizar de qué capas proviene el estado effective
+- Solo presente cuando `view_layer === 'effective'`
 
 **Validación:**
 - Si `view_layer === 'effective'` y `item_kind !== 'recurrente'` → ERROR 400

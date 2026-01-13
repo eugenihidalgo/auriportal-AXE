@@ -86,9 +86,18 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
         ? Math.min(sharedDaysSince, pdeDaysSince)
         : (sharedDaysSince !== null ? sharedDaysSince : pdeDaysSince);
       
+      // REGLA: effective_sources indica qué capas están en estado limpio (reviewed)
+      // shared = true si shared_state === 'reviewed'
+      // pde = true si pde_state === 'reviewed'
+      const effectiveSources = {
+        shared: sharedState === 'reviewed',
+        pde: pdeState === 'reviewed'
+      };
+      
       return {
         state: effectiveState,
         visual_state: effectiveState, // RECURRENTE: visual_state = state
+        effective_sources: effectiveSources, // Metadata de composición
         computed_state: {
           view_layer: 'effective',
           days_since_last_clean: effectiveDaysSince,

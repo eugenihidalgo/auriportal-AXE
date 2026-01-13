@@ -1658,12 +1658,47 @@
 
     // Columna 1: Alumno
     const nameDiv = document.createElement('div');
-    nameDiv.textContent = student.display_name || student.student_name || student.student_email || 'Sin nombre';
-    nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem;';
-    row.appendChild(nameDiv);
-
+    nameDiv.style.cssText = 'color: #f1f5f9; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;';
+    
+    const nameText = document.createElement('span');
+    nameText.textContent = student.display_name || student.student_name || student.student_email || 'Sin nombre';
+    nameDiv.appendChild(nameText);
+    
     // Obtener layerView actual
     const layerView = state.modal.layerView || 'shared';
+    
+    // REGLA: Mostrar indicadores [S] [P] SOLO cuando view_layer === 'effective'
+    if (layerView === 'effective') {
+      // Obtener effective_sources desde state_by_view_layer.effective
+      const effectiveStateData = student.state_by_view_layer?.effective;
+      const effectiveSources = effectiveStateData?.effective_sources || { shared: false, pde: false };
+      
+      console.log('[ALQUIMIA_GENERAL][FLOTANTE][EFFECTIVE_SOURCES_RENDER] Renderizando indicadores', {
+        student_uuid: student.student_uuid,
+        item_ref: item.item_ref,
+        effective_sources: effectiveSources
+      });
+      
+      // Indicador [S] Shared
+      const sharedIndicator = document.createElement('span');
+      sharedIndicator.textContent = '[S]';
+      sharedIndicator.style.cssText = effectiveSources.shared 
+        ? 'color: #10b981; font-weight: 600; font-size: 0.75rem;'
+        : 'color: #64748b; font-size: 0.75rem;';
+      sharedIndicator.title = effectiveSources.shared ? 'Shared: revisado' : 'Shared: no revisado';
+      nameDiv.appendChild(sharedIndicator);
+      
+      // Indicador [P] PDE
+      const pdeIndicator = document.createElement('span');
+      pdeIndicator.textContent = '[P]';
+      pdeIndicator.style.cssText = effectiveSources.pde 
+        ? 'color: #10b981; font-weight: 600; font-size: 0.75rem;'
+        : 'color: #64748b; font-size: 0.75rem;';
+      pdeIndicator.title = effectiveSources.pde ? 'PDE: revisado' : 'PDE: no revisado';
+      nameDiv.appendChild(pdeIndicator);
+    }
+    
+    row.appendChild(nameDiv);
     const tipo = normalized.tipo || normalized.item_kind || state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
     const itemKind = normalized.item_kind || tipo;
     const requiredCount = normalized.required_count || normalized.veces_limpiar || item.veces_limpiar || 1;

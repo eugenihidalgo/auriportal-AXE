@@ -30,7 +30,9 @@
 
 Cualquier otra combinación es **ERROR CONSTITUCIONAL** (HTTP 400).
 
-**Nota:** `effective` está disponible en el flotante de Alquimia General para items RECURRENTES. En Alquimia del Alumno, solo están disponibles `shared`, `pde` y `combo` (para `una_vez`).
+**Nota:** `effective` está disponible en:
+- Flotante de Alquimia General para items RECURRENTES
+- Tabs de Alquimia del Alumno (junto a Shared y PDE) para items RECURRENTES
 
 ---
 
@@ -85,6 +87,7 @@ effective: state = 'reviewed' (mejor estado), days_since = 3 (mínimo)
 - `state_by_view_layer.effective` contiene:
   - `state`: estado efectivo calculado
   - `visual_state`: igual a `state` (RECURRENTE)
+  - `effective_sources`: metadata de composición `{ shared: boolean, pde: boolean }`
   - `computed_state`: metadatos (shared_state, pde_state, days_since, etc.)
 
 ---
@@ -95,10 +98,10 @@ effective: state = 'reviewed' (mejor estado), days_since = 3 (mínimo)
 
 En el tab "Recurrente" de Alquimia del Alumno:
 
-- Selector visual con 3 opciones:
+- Tabs de vista con 3 opciones:
   - **Shared**: vista del trabajo del alumno
   - **PDE**: vista del trabajo de la PDE
-  - **Effective**: vista agregada (alumno + PDE)
+  - **Effective**: vista agregada (alumno + PDE) - muestra estado combinado
 
 ### Comportamiento
 
@@ -113,6 +116,52 @@ En el tab "Recurrente" de Alquimia del Alumno:
 - No distingue si es `shared` / `pde` / `effective`
 - No contiene lógica condicional por vista
 - Refetch completo tras mutaciones preservando `view_layer` activa
+
+---
+
+## Interpretación Visual (S / P)
+
+### Metadata `effective_sources`
+
+Cuando `view_layer === 'effective'`, el CPM expone metadata `effective_sources` que indica de qué capas proviene el estado effective:
+
+```javascript
+{
+  state: 'reviewed',
+  visual_state: 'reviewed',
+  effective_sources: {
+    shared: true,  // shared_state === 'reviewed' (estado limpio)
+    pde: false     // pde_state !== 'reviewed' (no está limpio)
+  }
+}
+```
+
+### Visualización en Flotante Alquimia General
+
+En el flotante de Alquimia General, cuando `view_layer === 'effective'`, se muestran indicadores informativos por cada alumno:
+
+- **[S] Shared**: Verde si `effective_sources.shared === true`, gris si `false`
+- **[P] PDE**: Verde si `effective_sources.pde === true`, gris si `false`
+
+**Reglas:**
+- Ambos activos (verde): Ambas capas están en estado limpio (`reviewed`)
+- Solo S activo: Solo Shared está limpio
+- Solo P activo: Solo PDE está limpio
+- Ninguno activo: Ninguna capa está limpia
+
+**Características:**
+- Son puramente informativos (NO son botones de acción)
+- NO disparan eventos
+- Permiten entender la composición del estado effective
+
+### Ejemplo Visual
+
+```
+Alumno: Juan Pérez [S] [P]
+         └─ verde  └─ gris
+```
+
+Indica que el estado effective de Juan proviene de Shared (está limpio), pero PDE no está limpio.
 
 ---
 

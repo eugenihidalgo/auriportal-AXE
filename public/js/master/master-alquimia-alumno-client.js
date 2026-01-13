@@ -300,7 +300,7 @@
       showLoading();
       
       // REGLA CONSTITUCIONAL: Traducción tab → parámetros (SIN lógica extra)
-      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = state.viewLayer (shared/pde, NO effective)
+      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = state.viewLayer (shared/pde/effective)
       // Si activeTab === 'una_vez': lista_tipo = 'una_vez', view_layer = state.viewLayer (shared/pde/combo)
       const activeTab = state.activeTab || 'recurrente';
       const listaTipo = activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
@@ -436,11 +436,11 @@
     
     tabsContainer.appendChild(tabsFlex);
     
-    // Tabs de vista a nivel de pantalla (Shared / PDE / Combo)
+    // Tabs de vista a nivel de pantalla (Shared / PDE / Effective / Combo)
     // REGLA CONSTITUCIONAL: 
     // - Shared y PDE siempre disponibles
+    // - Effective solo para recurrente
     // - Combo solo para una_vez
-    // - Effective NO permitido aquí (solo en Alquimia General flotante)
     const viewTabsContainer = document.createElement('div');
     viewTabsContainer.className = 'mt-4 flex items-center gap-2';
     viewTabsContainer.id = 'view-tabs-container';
@@ -453,10 +453,11 @@
     // Definir opciones según activeTab
     const viewOptions = [];
     if (state.activeTab === 'recurrente') {
-      // RECURRENTE: Shared y PDE (effective NO permitido aquí)
+      // RECURRENTE: Shared, PDE y Effective
       viewOptions.push(
         { value: 'shared', label: 'Shared' },
-        { value: 'pde', label: 'PDE' }
+        { value: 'pde', label: 'PDE' },
+        { value: 'effective', label: 'Effective' }
       );
     } else {
       // UNA_VEZ: Shared, PDE y Combo
@@ -477,7 +478,11 @@
       viewButton.textContent = option.label;
       viewButton.addEventListener('click', () => {
         if (state.viewLayer !== option.value) {
-          console.log('[ALQUIMIA_ALUMNO][TAB_VIEW_LAYER_CHANGE] Cambiando vista', {
+          const logPrefix = option.value === 'effective' 
+            ? '[ALQUIMIA_ALUMNO][TAB_VIEW_LAYER_CHANGE][EFFECTIVE]'
+            : '[ALQUIMIA_ALUMNO][TAB_VIEW_LAYER_CHANGE]';
+          
+          console.log(logPrefix, 'Cambiando vista', {
             student_uuid: state.selectedStudentUuid,
             view_layer_before: state.viewLayer,
             view_layer_after: option.value,
