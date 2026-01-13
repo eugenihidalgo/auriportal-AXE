@@ -106,6 +106,171 @@
   };
 
   /**
+   * Obtiene el viewState canónico consolidado
+   * PRINCIPIO CANÓNICO: La vista activa es un vector de parámetros
+   */
+  function getViewState() {
+    return {
+      item_kind: state.tipoActivo,
+      list_id: state.listaActiva?.id || null,
+      viewMode: state.projection.mode,
+      view_layer: state.projection.view_layer,
+      scope: state.projection.scope,
+      student_uuid: state.projection.student_uuid
+    };
+  }
+
+  /**
+   * Actualiza el viewState según las reglas canónicas
+   * REGLAS:
+   * A) Cambio de view_layer: mantiene list_id, scope, alumno
+   * B) Cambio de scope/alumno: mantiene list_id, view_layer
+   * C) Cambio de lista: mantiene item_kind, viewMode, view_layer, scope
+   * D) Cambio de item_kind: limpia list_id, mantiene viewMode, view_layer, scope
+   */
+  function updateViewState(updates) {
+    const oldViewState = getViewState();
+    
+    // Aplicar actualizaciones
+    if (updates.item_kind !== undefined) {
+      state.tipoActivo = updates.item_kind;
+      // REGLA D: Cambio de item_kind limpia list_id
+      if (updates.item_kind !== oldViewState.item_kind) {
+        state.listaActiva = null;
+        console.log('[UI][VIEW_STATE_CHANGE] item_kind changed, list_id cleared', {
+          old: oldViewState.item_kind,
+          new: updates.item_kind
+        });
+      }
+    }
+    
+    if (updates.list_id !== undefined) {
+      // Encontrar la lista en state.listas
+      const lista = state.listas.find(l => l.id === updates.list_id);
+      state.listaActiva = lista || null;
+      console.log('[UI][VIEW_STATE_CHANGE] list_id changed', {
+        old: oldViewState.list_id,
+        new: updates.list_id
+      });
+    }
+    
+    if (updates.viewMode !== undefined) {
+      state.projection.mode = updates.viewMode;
+      console.log('[UI][VIEW_STATE_CHANGE] viewMode changed', {
+        old: oldViewState.viewMode,
+        new: updates.viewMode
+      });
+    }
+    
+    if (updates.view_layer !== undefined) {
+      state.projection.view_layer = updates.view_layer;
+      console.log('[UI][VIEW_STATE_CHANGE] view_layer changed', {
+        old: oldViewState.view_layer,
+        new: updates.view_layer
+      });
+    }
+    
+    if (updates.scope !== undefined) {
+      state.projection.scope = updates.scope;
+      console.log('[UI][VIEW_STATE_CHANGE] scope changed', {
+        old: oldViewState.scope,
+        new: updates.scope
+      });
+    }
+    
+    if (updates.student_uuid !== undefined) {
+      state.projection.student_uuid = updates.student_uuid;
+      console.log('[UI][VIEW_STATE_CHANGE] student_uuid changed', {
+        old: oldViewState.student_uuid,
+        new: updates.student_uuid
+      });
+    }
+    
+    const newViewState = getViewState();
+    console.log('[UI][VIEW_STATE_CHANGE] viewState', {
+      old: oldViewState,
+      new: newViewState
+    });
+    
+    return newViewState;
+  }
+
+  /**
+   * GATILLO ÚNICO DE RENDER
+   * Decide si puede renderizar y qué renderizar según viewState
+   */
+  function renderView() {
+    const viewState = getViewState();
+    const canRender = viewState.list_id !== null;
+    
+    console.log('[UI][RENDER_DECISION]', {
+      canRender,
+      viewState
+    });
+    
+    // Limpiar contenedor visual previo
+    if (listaContent) {
+      while (listaContent.firstChild) {
+        listaContent.removeChild(listaContent.firstChild);
+      }
+    }
+    
+    if (!canRender) {
+      // Estado de espera: no renderizar nada
+      if (listaContent) {
+        const waitingMsg = document.createElement('div');
+        waitingMsg.style.cssText = 'padding: 2rem; text-align: center; color: #94a3b8; font-style: italic;';
+        waitingMsg.textContent = 'Selecciona una lista para comenzar';
+        listaContent.appendChild(waitingMsg);
+      }
+      return;
+    }
+    
+    // Tabs Operativa / Proyección (siempre presentes cuando hay lista)
+    const tabsContainer = document.createElement('div');
+    tabsContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #334155;';
+    
+    const tabOperativa = document.createElement('button');
+    tabOperativa.textContent = 'Operativa';
+    tabOperativa.style.cssText = 'padding: 0.5rem 1rem; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; font-size: 0.875rem; font-weight: 500;';
+    if (viewState.viewMode === 'operativa') {
+      tabOperativa.style.color = '#6366f1';
+      tabOperativa.style.borderBottomColor = '#6366f1';
+    }
+    tabOperativa.addEventListener('click', () => {
+      updateViewState({ viewMode: 'operativa' });
+      renderView();
+    });
+    tabsContainer.appendChild(tabOperativa);
+    
+    const tabProyeccion = document.createElement('button');
+    tabProyeccion.textContent = 'Proyección';
+    tabProyeccion.style.cssText = 'padding: 0.5rem 1rem; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; font-size: 0.875rem; font-weight: 500;';
+    if (viewState.viewMode === 'proyeccion') {
+      tabProyeccion.style.color = '#6366f1';
+      tabProyeccion.style.borderBottomColor = '#6366f1';
+    }
+    tabProyeccion.addEventListener('click', () => {
+      updateViewState({ viewMode: 'proyeccion' });
+      renderView();
+      // Cargar proyección si no está cargada
+      if (!state.projection.data) {
+        loadListProjection();
+      }
+    });
+    tabsContainer.appendChild(tabProyeccion);
+    
+    listaContent.appendChild(tabsContainer);
+    
+    // Renderizar según viewMode
+    if (viewState.viewMode === 'proyeccion') {
+      renderProjectionView();
+    } else {
+      renderOperativeView();
+    }
+  }
+
+  /**
    * Obtiene item_kind de forma EXPLÍCITA (sin inferencias ni fallbacks)
    * REGLA CONSTITUCIONAL: item_kind es ontológico, JAMÁS se infiere
    * 
@@ -415,9 +580,12 @@
       }
       
       tab.addEventListener('click', () => {
-        state.tipoActivo = tipo.id;
+        // REGLA D: Cambio de item_kind limpia list_id
+        updateViewState({ item_kind: tipo.id });
         renderTabsTipo();
         loadListas(tipo.id);
+        // No renderizar hasta que se seleccione una lista
+        renderView();
       });
       
       tabsTipoContainer.appendChild(tab);
@@ -449,7 +617,9 @@
       
       // Si hay listas, cargar la primera
       if (state.listas.length > 0 && !state.listaActiva) {
+        updateViewState({ list_id: state.listas[0].id });
         await loadLista(state.listas[0].id);
+        renderView();
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando listas:', error);
@@ -509,7 +679,10 @@
       }
       
       tab.addEventListener('click', () => {
+        // REGLA C: Cambio de lista mantiene item_kind, viewMode, view_layer, scope
+        updateViewState({ list_id: lista.id });
         loadLista(lista.id);
+        renderView();
       });
       
       listasTabsContainer.appendChild(tab);
@@ -565,7 +738,7 @@
 
       // FIX: El endpoint devuelve { ok: true, items: [...] }, no { data: [...] }
       state.items = result.items || result.data || [];
-      renderListaContent();
+      renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando items:', error);
       
@@ -680,7 +853,8 @@
     }
     tabOperativa.addEventListener('click', () => {
       state.projection.mode = 'operativa';
-      renderListaContent();
+      updateViewState({ viewMode: 'operativa' });
+      renderView();
     });
     tabsContainer.appendChild(tabOperativa);
     
@@ -692,8 +866,8 @@
       tabProyeccion.style.borderBottomColor = '#6366f1';
     }
     tabProyeccion.addEventListener('click', () => {
-      state.projection.mode = 'proyeccion';
-      renderListaContent();
+      updateViewState({ viewMode: 'proyeccion' });
+      renderView();
       // Cargar proyección si no está cargada
       if (!state.projection.data) {
         loadListProjection();
@@ -776,7 +950,7 @@
           } else {
             toggleSortPriority(header.key, 'toggle');
           }
-          renderListaContent(); // Re-render con nuevo sort
+          renderView(); // Re-render con nuevo sort
         });
       }
       
@@ -853,7 +1027,7 @@
         reviewed_pct: result.data.metrics.reviewed_pct
       });
       
-      renderListaContent(); // Re-renderizar con datos de proyección
+      renderView(); // Re-renderizar con datos de proyección
     } catch (error) {
       console.error('[MasterAlquimiaGeneral][LPM] Error cargando proyección:', error);
       
@@ -893,8 +1067,10 @@
       btn.textContent = vl.charAt(0).toUpperCase() + vl.slice(1);
       btn.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.view_layer === vl ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
       btn.addEventListener('click', () => {
-        state.projection.view_layer = vl;
+        // REGLA A: Cambio de view_layer mantiene list_id, scope, alumno
+        updateViewState({ view_layer: vl });
         loadListProjection();
+        renderView();
       });
       viewLayerContainer.appendChild(btn);
     });
@@ -914,9 +1090,10 @@
     btnAll.textContent = 'All';
     btnAll.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'all' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
     btnAll.addEventListener('click', () => {
-      state.projection.scope = 'all';
-      state.projection.student_uuid = null;
+      // REGLA B: Cambio de scope mantiene list_id, view_layer
+      updateViewState({ scope: 'all', student_uuid: null });
       loadListProjection();
+      renderView();
     });
     scopeContainer.appendChild(btnAll);
     
@@ -927,9 +1104,10 @@
       // TODO: Abrir selector de alumno (por ahora, usar prompt)
       const studentUuid = prompt('UUID del estudiante:');
       if (studentUuid) {
-        state.projection.scope = 'student';
-        state.projection.student_uuid = studentUuid;
+        // REGLA B: Cambio de scope mantiene list_id, view_layer
+        updateViewState({ scope: 'student', student_uuid: studentUuid });
         loadListProjection();
+        renderView();
       }
     });
     scopeContainer.appendChild(btnStudent);
