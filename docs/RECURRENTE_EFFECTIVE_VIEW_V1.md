@@ -247,6 +247,67 @@ Indica que el estado effective de Juan proviene de Shared (está limpio), pero P
 
 ---
 
+## Acciones WRITE en Vista Effective
+
+### Limpieza por Capa
+
+En el flotante de Alquimia General, cuando `view_layer === 'effective'` y `item_kind === 'recurrente'`, se muestran botones de acción por capa:
+
+- **Botón S (Shared)**: Limpia solo la capa Shared
+  - Disabled si `effective_sources.shared === true` (ya está revisado)
+  - Acción: `clean_layer='shared'`
+
+- **Botón P (PDE)**: Limpia solo la capa PDE
+  - Disabled si `effective_sources.pde === true` (ya está revisado)
+  - Acción: `clean_layer='pde'`
+
+- **Botón S+P (Ambos)**: Limpia ambas capas secuencialmente
+  - Disabled si ambas `effective_sources.shared === true` y `effective_sources.pde === true`
+  - Acción: Ejecuta `clean_layer='shared'` y luego `clean_layer='pde'`
+
+### Reglas de Visibilidad
+
+Los botones solo se muestran si:
+- `view_layer === 'effective'`
+- `item_kind === 'recurrente'`
+- `state_by_view_layer.effective.state !== 'reviewed'`
+
+Si el estado effective es `'reviewed'`, se muestra texto "✓ Revisado" en lugar de botones.
+
+### Refetch Obligatorio
+
+Tras cualquier acción de limpieza:
+- Se ejecuta refetch completo del flotante
+- Se preserva `view_layer='effective'`
+- NO se actualiza estado localmente
+- El backend recalcula `state_by_view_layer.effective` y `effective_sources`
+
+### Relación con effective_sources
+
+Los botones se habilitan/deshabilitan según `effective_sources`:
+- Si `effective_sources.shared === true` → Botón S disabled
+- Si `effective_sources.pde === true` → Botón P disabled
+- Si ambos `true` → Botón S+P disabled
+
+Esto permite al usuario ver qué capas ya están limpias y cuáles necesitan limpieza.
+
+### Logs Forenses
+
+**Frontend:**
+```
+[ALQUIMIA_GENERAL][FLOTANTE][EFFECTIVE_ACTION] Limpiando Shared
+{
+  student_uuid: '...',
+  item_ref: '...',
+  action: 'clean_shared' | 'clean_pde' | 'clean_both'
+}
+```
+
+**Backend:**
+Los logs del Cleaning Engine ya cubren las acciones de limpieza (no duplicar).
+
+---
+
 ## Verificación
 
 Checklist obligatorio:

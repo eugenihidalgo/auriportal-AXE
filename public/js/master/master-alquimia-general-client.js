@@ -1912,6 +1912,93 @@
         });
         actionsDiv.appendChild(btnSP);
       }
+    } else if (layerView === 'effective' && itemKind === 'recurrente') {
+      // EFFECTIVE: 3 botones [S] [P] [S+P] con disabled según effective_sources
+      // REGLA: Solo mostrar si state !== 'reviewed' (si está reviewed, no necesita limpieza)
+      const effectiveStateData = student.state_by_view_layer?.effective;
+      const effectiveSources = effectiveStateData?.effective_sources || { shared: false, pde: false };
+      const effectiveState = effectiveStateData?.state || 'never';
+      
+      // Solo mostrar botones si el estado effective NO es 'reviewed'
+      if (effectiveState !== 'reviewed') {
+        // Botón S (Shared)
+        const btnS = document.createElement('button');
+        btnS.textContent = 'S';
+        const sDisabled = effectiveSources.shared === true;
+        btnS.disabled = sDisabled;
+        btnS.style.cssText = `padding: 0.25rem 0.5rem; background: ${sDisabled ? '#475569' : '#4f46e5'}; color: ${sDisabled ? '#64748b' : '#fff'}; border: none; border-radius: 0.25rem; cursor: ${sDisabled ? 'not-allowed' : 'pointer'}; font-size: 0.75rem; opacity: ${sDisabled ? 0.5 : 1};`;
+        btnS.title = sDisabled ? 'Shared ya está revisado' : 'Limpiar Shared';
+        btnS.addEventListener('click', async () => {
+          console.log('[ALQUIMIA_GENERAL][FLOTANTE][EFFECTIVE_ACTION] Limpiando Shared', {
+            student_uuid: student.student_uuid,
+            item_ref: item.item_ref,
+            action: 'clean_shared'
+          });
+          await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+        });
+        actionsDiv.appendChild(btnS);
+        
+        // Botón P (PDE)
+        const btnP = document.createElement('button');
+        btnP.textContent = 'P';
+        const pDisabled = effectiveSources.pde === true;
+        btnP.disabled = pDisabled;
+        btnP.style.cssText = `padding: 0.25rem 0.5rem; background: ${pDisabled ? '#475569' : '#8b5cf6'}; color: ${pDisabled ? '#64748b' : '#fff'}; border: none; border-radius: 0.25rem; cursor: ${pDisabled ? 'not-allowed' : 'pointer'}; font-size: 0.75rem; opacity: ${pDisabled ? 0.5 : 1};`;
+        btnP.title = pDisabled ? 'PDE ya está revisado' : 'Limpiar PDE';
+        btnP.addEventListener('click', async () => {
+          console.log('[ALQUIMIA_GENERAL][FLOTANTE][EFFECTIVE_ACTION] Limpiando PDE', {
+            student_uuid: student.student_uuid,
+            item_ref: item.item_ref,
+            action: 'clean_pde'
+          });
+          await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+        });
+        actionsDiv.appendChild(btnP);
+        
+        // Botón S+P (Ambos)
+        const btnSP = document.createElement('button');
+        btnSP.textContent = 'S+P';
+        const spDisabled = effectiveSources.shared === true && effectiveSources.pde === true;
+        btnSP.disabled = spDisabled;
+        btnSP.style.cssText = `padding: 0.25rem 0.5rem; background: ${spDisabled ? '#475569' : '#10b981'}; color: ${spDisabled ? '#64748b' : '#fff'}; border: none; border-radius: 0.25rem; cursor: ${spDisabled ? 'not-allowed' : 'pointer'}; font-size: 0.75rem; opacity: ${spDisabled ? 0.5 : 1};`;
+        btnSP.title = spDisabled ? 'Ambas capas ya están revisadas' : 'Limpiar Shared y PDE';
+        btnSP.addEventListener('click', async () => {
+          console.log('[ALQUIMIA_GENERAL][FLOTANTE][EFFECTIVE_ACTION] Limpiando ambos (Shared + PDE)', {
+            student_uuid: student.student_uuid,
+            item_ref: item.item_ref,
+            action: 'clean_both'
+          });
+          
+          // Ejecutar ambas secuencialmente con manejo de errores
+          try {
+            await handleLimpiarEstudiante(student, item, 'shared', itemKind);
+            
+            // Si SHARED OK, ejecutar PDE
+            try {
+              await handleLimpiarEstudiante(student, item, 'pde', itemKind);
+              showToastSuccess('✓ SHARED y PDE aplicados');
+            } catch (pdeError) {
+              showToastError(`✓ SHARED aplicado, pero PDE falló: ${pdeError.message}`);
+            }
+          } catch (sharedError) {
+            showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
+          }
+          
+          // Rehidratar siempre (incluso si hay fallos parciales)
+          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+            const currentLayerView = state.modal.layerView || 'effective';
+            await handleVerItem(item, 'shared', currentLayerView); // Preservar vista effective
+            state.modal.layerView = currentLayerView; // Restaurar vista effective
+          }
+        });
+        actionsDiv.appendChild(btnSP);
+      } else {
+        // Estado effective === 'reviewed': no mostrar botones (ya está limpio)
+        const noActionText = document.createElement('span');
+        noActionText.textContent = '✓ Revisado';
+        noActionText.style.cssText = 'color: #10b981; font-size: 0.75rem; font-weight: 600;';
+        actionsDiv.appendChild(noActionText);
+      }
     } else {
       // SHARED o PDE: un solo botón
       const cleanLayer = layerView === 'pde' ? 'pde' : 'shared';
