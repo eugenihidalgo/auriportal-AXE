@@ -966,6 +966,9 @@
     
     // Renderizar items agrupados por estado
     if (state.projection.data && state.projection.data.items) {
+      // PDUI: Extraer view_layer al principio (derivado de proyección)
+      const viewLayer = state.projection.view_layer;
+      
       const itemsByState = {
         never: [],
         pending: [],
@@ -974,12 +977,12 @@
       };
       
       state.projection.data.items.forEach(item => {
-        const state = item.state_by_view_layer?.[state.projection.view_layer]?.state || 'never';
-        if (state === 'reviewed' || state === 'completed') {
+        const itemState = item.state_by_view_layer?.[viewLayer]?.state || 'never';
+        if (itemState === 'reviewed' || itemState === 'completed') {
           itemsByState.reviewed.push(item);
-        } else if (state === 'pending' || state === 'in_progress') {
+        } else if (itemState === 'pending' || itemState === 'in_progress') {
           itemsByState.pending.push(item);
-        } else if (state === 'important') {
+        } else if (itemState === 'important') {
           itemsByState.important.push(item);
         } else {
           itemsByState.never.push(item);
