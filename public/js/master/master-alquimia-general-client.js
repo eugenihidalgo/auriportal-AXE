@@ -25,6 +25,9 @@
   const BUILD_TIMESTAMP = Date.now();
   window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ = `MASTER_ALQUIMIA_GENERAL@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=float-layers-shared-pde-combo+simetric-dto`;
   
+  // BUILD MARKER FORENSE (FASE 0)
+  console.log('[BOOT][ALQUIMIA_GENERAL] build_marker', 'AG_BUILD_2026-01-13T00:00Z');
+  
   // CLIENT SENTINEL: Log al cargar el módulo
   console.info('[MASTER][ALQ_FLOAT] build', APP_VERSION, BUILD_ID, 'layers: shared/pde/combo enabled');
   console.log('[MASTER][ALQUIMIA_GENERAL] client loaded', {
@@ -70,9 +73,9 @@
   // Estado global de la aplicación
   const state = {
     tipoActivo: 'recurrente', // 'recurrente' | 'una_vez'
-    listaActiva: null,
+    list_id: null, // Estado intencional: ID de lista seleccionada (NO derivado de listaActiva)
+    listaActiva: null, // Dato derivado: objeto lista completa (SOLO datos, NO condición de render)
     listas: [],
-    listasReady: false, // Flag canónico: listas del item_kind actual cargadas completamente
     items: [],
     itemsSortPipeline: [], // [{key, dir}] para order pipeline
     groups: [], // Grupos de items
@@ -109,11 +112,12 @@
   /**
    * Obtiene el viewState canónico consolidado
    * PRINCIPIO CANÓNICO: La vista activa es un vector de parámetros
+   * REGLA ABSOLUTA: list_id viene EXCLUSIVAMENTE del estado intencional, NO de listaActiva
    */
   function getViewState() {
     return {
       item_kind: state.tipoActivo,
-      list_id: state.listaActiva?.id || null,
+      list_id: state.list_id, // Estado intencional explícito (NO derivado)
       viewMode: state.projection.mode,
       view_layer: state.projection.view_layer,
       scope: state.projection.scope,
@@ -128,6 +132,7 @@
    * B) Cambio de scope/alumno: mantiene list_id, view_layer
    * C) Cambio de lista: mantiene item_kind, viewMode, view_layer, scope
    * D) Cambio de item_kind: limpia list_id, mantiene viewMode, view_layer, scope
+   * PRINCIPIO CANÓNICO: list_id es estado intencional, listaActiva es dato derivado
    */
   function updateViewState(updates) {
     const oldViewState = getViewState();
@@ -137,7 +142,8 @@
       state.tipoActivo = updates.item_kind;
       // REGLA D: Cambio de item_kind limpia list_id
       if (updates.item_kind !== oldViewState.item_kind) {
-        state.listaActiva = null;
+        state.list_id = null;
+        state.listaActiva = null; // Dato derivado se limpia también
         console.log('[UI][VIEW_STATE_CHANGE] item_kind changed, list_id cleared', {
           old: oldViewState.item_kind,
           new: updates.item_kind
@@ -146,7 +152,9 @@
     }
     
     if (updates.list_id !== undefined) {
-      // Encontrar la lista en state.listas
+      // ACTUALIZAR estado intencional PRIMERO
+      state.list_id = updates.list_id;
+      // LUEGO actualizar dato derivado (búsqueda en listas)
       const lista = state.listas.find(l => l.id === updates.list_id);
       state.listaActiva = lista || null;
       console.log('[UI][VIEW_STATE_CHANGE] list_id changed', {
@@ -201,8 +209,25 @@
    * Decide si puede renderizar y qué renderizar según viewState
    */
   function renderView() {
+    // LOGS FORENSES (FASE 1)
+    console.log('[TRACE][renderView] enter', {
+      list_id: state.list_id,
+      listaActivaId: state.listaActiva?.id || null,
+      viewMode: state.projection.mode,
+      itemsLen: Array.isArray(state.items) ? state.items.length : null,
+      hasProjection: !!state.projection.data
+    });
+    
+    // VALIDAR DOM ROOT (FASE 1)
+    if (!listaContent) {
+      console.error('[FATAL][renderView] listaContent not found. CHECK DOM ID');
+      return;
+    }
+    
     const viewState = getViewState();
     const canRender = viewState.list_id !== null;
+    
+    console.log('[TRACE][renderView] decision', { canRender, list_id: state.list_id });
     
     console.log('[UI][RENDER_DECISION]', {
       canRender,
@@ -225,6 +250,11 @@
         listaContent.appendChild(waitingMsg);
       }
       return;
+    }
+    
+    // FIX: Remover clase hidden cuando canRender === true (contenedor debe ser visible)
+    if (listaContent) {
+      listaContent.classList.remove('hidden');
     }
     
     // Tabs Operativa / Proyección (siempre presentes cuando hay lista)
@@ -280,10 +310,14 @@
   /**
    * Renderiza la vista operativa (tabla de items)
    * Esta función es llamada por renderView() cuando viewMode === 'operativa'
-   * NO modifica la lógica existente, solo la extrae para integración formal
+   * PRINCIPIO CANÓNICO: NO decide si renderiza (esa decisión ya se tomó en renderView)
+   * state.listaActiva es SOLO datos, NO condición de render
    */
   function renderOperativeView() {
-    if (!listaContent || !state.listaActiva) return;
+    // LOGS FORENSES (FASE 1)
+    console.log('[TRACE][renderOperativeView] enter', { list_id: state.list_id, itemsLen: state.items?.length });
+    
+    if (!listaContent) return;
     
     // Header con título y botón configurar
     const header = document.createElement('div');
@@ -510,6 +544,20 @@
     
     // Cargar listas iniciales
     await loadListas('recurrente');
+    
+    // FASE 4: Auto-selección inicial usando función canónica
+    const viewState = getViewState();
+    if (viewState.list_id === null && state.listas.length > 0) {
+      const firstListId = state.listas[0].id;
+      console.log('[UI][AUTO_SELECT_LIST]', {
+        list_id: firstListId,
+        item_kind: viewState.item_kind
+      });
+      await selectListAndRender(firstListId);
+    } else {
+      // Si no hay listas, renderizar estado vacío
+      renderView();
+    }
     
     // Cargar diagnóstico
     await loadDiagnostics();
@@ -760,14 +808,18 @@
         tab.style.borderBottomColor = '#6366f1';
       }
       
-      tab.addEventListener('click', () => {
-        // REGLA D: Cambio de item_kind limpia list_id y resetea listasReady
+      tab.addEventListener('click', async () => {
+        // REGLA D: Cambio de item_kind limpia list_id
         console.log('[UI][ITEM_KIND_CHANGE]', { item_kind: tipo.id });
-        state.listasReady = false; // Resetear flag: las listas del nuevo item_kind aún no están cargadas
         updateViewState({ item_kind: tipo.id, list_id: null });
         renderTabsTipo();
-        loadListas(tipo.id);
-        // No renderizar hasta que se seleccione una lista
+        await loadListas(tipo.id);
+        // Auto-seleccionar primera lista si hay listas disponibles
+        if (state.listas.length > 0) {
+          const firstListId = state.listas[0].id;
+          updateViewState({ list_id: firstListId });
+          await loadLista(firstListId);
+        }
         renderView();
       });
       
@@ -776,38 +828,11 @@
   }
 
   /**
-   * AUTO-SELECCIÓN CANÓNICA: Selecciona la primera lista si no hay ninguna seleccionada
-   * REGLA: Solo se ejecuta cuando listasReady === true y viewState.list_id === null
-   */
-  async function autoSelectInitialListIfNeeded() {
-    const viewState = getViewState();
-    
-    // Condición canónica: listas cargadas + sin lista seleccionada + hay listas disponibles
-    if (
-      state.listasReady === true &&
-      viewState.list_id === null &&
-      state.listas.length > 0
-    ) {
-      const firstListId = state.listas[0].id;
-      console.log('[UI][AUTO_SELECT_LIST]', {
-        list_id: firstListId,
-        item_kind: viewState.item_kind
-      });
-      updateViewState({ list_id: firstListId });
-      await loadLista(firstListId);
-      renderView();
-    }
-  }
-
-  /**
    * Carga las listas del tipo especificado
    */
   async function loadListas(tipo) {
     try {
       console.log(`[MasterAlquimiaGeneral] Cargando listas tipo: ${tipo}`);
-      
-      // Resetear flag al inicio de carga
-      state.listasReady = false;
       
       const response = await fetch(`/master/api/alquimia-general/listas?tipo=${tipo}`);
       
@@ -824,16 +849,6 @@
       // FIX: El endpoint devuelve { ok: true, listas: [...] }, no { data: [...] }
       state.listas = result.listas || result.data || [];
       renderListasTabs();
-      
-      // FASE 2: Marcar listas como listas (flag canónico)
-      state.listasReady = true;
-      console.log('[UI][LISTAS_READY]', {
-        item_kind: tipo,
-        listas_count: state.listas.length
-      });
-      
-      // FASE 3: Auto-selección canónica (solo si corresponde)
-      await autoSelectInitialListIfNeeded();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando listas:', error);
       
@@ -842,9 +857,6 @@
       errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
       errorBox.textContent = `⚠️ Error cargando listas: ${error.message || 'Error desconocido'}`;
       rootContainer.appendChild(errorBox);
-      
-      // En caso de error, mantener listasReady = false
-      state.listasReady = false;
     }
   }
 
@@ -894,15 +906,40 @@
         tab.style.color = '#ffffff';
       }
       
-      tab.addEventListener('click', () => {
-        // REGLA C: Cambio de lista mantiene item_kind, viewMode, view_layer, scope
-        updateViewState({ list_id: lista.id });
-        loadLista(lista.id);
-        renderView();
+      tab.addEventListener('click', async () => {
+        try {
+          // FASE 3: Usar función canónica async
+          await selectListAndRender(lista.id);
+        } catch (e) {
+          console.error('[ACTION][selectListAndRender] failed', e);
+        }
       });
       
       listasTabsContainer.appendChild(tab);
     });
+  }
+
+  /**
+   * FASE 3: Función canónica para seleccionar lista y renderizar
+   * Patrón único: set intent → await data → render final
+   */
+  async function selectListAndRender(listId) {
+    console.log('[ACTION][selectListAndRender] start', { listId });
+    
+    // Set estado intencional
+    updateViewState({ list_id: listId });
+    
+    // Await datos (loadLista ya carga lista + items internamente)
+    await loadLista(listId);
+    
+    console.log('[ACTION][selectListAndRender] data_ready', {
+      listId,
+      listaActivaId: state.listaActiva?.id || null,
+      itemsLen: state.items?.length || 0
+    });
+    
+    // Render FINAL cuando datos están listos
+    renderView();
   }
 
   /**
@@ -941,6 +978,7 @@
 
   /**
    * Carga los items de una lista
+   * NOTA: NO llama a renderView() - el render se gestiona desde handlers de UI
    */
   async function loadItems(listaId) {
     try {
@@ -949,12 +987,11 @@
       
       if (!result.ok) {
         console.error('[MasterAlquimiaGeneral] Error cargando items:', result.error);
-      return;
-    }
+        return;
+      }
 
       // FIX: El endpoint devuelve { ok: true, items: [...] }, no { data: [...] }
       state.items = result.items || result.data || [];
-      renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando items:', error);
       
@@ -1259,11 +1296,12 @@
 
   /**
    * LPM v1: Renderiza vista de proyección
+   * PRINCIPIO CANÓNICO: NO decide si renderiza (esa decisión ya se tomó en renderView)
+   * state.listaActiva es SOLO datos, NO condición de render
    */
   function renderProjectionView() {
-    if (!state.listaActiva) return;
     
-    const itemKind = getItemKindExplicit(null, state.listaActiva) || state.listaActiva.tipo;
+    const itemKind = state.listaActiva ? (getItemKindExplicit(null, state.listaActiva) || state.listaActiva.tipo) : state.tipoActivo;
     
     // Selector de view_layer
     const viewLayerContainer = document.createElement('div');
