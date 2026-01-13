@@ -963,3 +963,19 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       REFERENCIAS:
       - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
       - scripts/check-view-authority.js
+
+# =========================================
+# PROJECTION-DRIVEN UI (PDUI) v1
+# =========================================
+
+## PROJECTION-DRIVEN UI (PDUI)
+
+- El backend es la única autoridad de estado.
+- Todo GET debe aceptar parámetros explícitos.
+- El backend debe devolver proyecciones completas.
+- El frontend debe consumir state_by_* o estructuras equivalentes.
+- El frontend no puede calcular ni inferir estados.
+- Toda mutación requiere refetch inmediato.
+- Está prohibido el render optimista basado en inferencias.
+
+Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
