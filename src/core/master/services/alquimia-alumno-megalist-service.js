@@ -16,7 +16,7 @@ import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-cat
 import { getDefaultStudentRepo } from '../../../infra/repos/student-repo-pg.js';
 import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
-import { computeVisualState } from '../../../services/alquimia-general-service.js';
+import { computeVisualState } from './cleaning-projection-model.js';
 import { validateViewLayer } from './cleaning-layer-constants.js';
 
 /**

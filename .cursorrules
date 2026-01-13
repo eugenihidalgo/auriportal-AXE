@@ -1015,6 +1015,107 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
 
 # =========================================
+# CLEANING PROJECTION MODEL (CPM) v1
+# =========================================
+
+  - id: cpm-v1-canonical-authority
+    title: CPM como única autoridad de proyección de estado
+    content: >
+      Cleaning Projection Model (CPM) es la ÚNICA capa autorizada para interpretar estado bruto de limpieza
+      y generar proyecciones por view_layer.
+      PROHIBIDO:
+      - Calcular estados fuera de CPM
+      - Duplicar lógica de cálculo de estado
+      - Inferir estados desde datos raw en servicios o UI
+      - Escribir desde CPM (CPM es función pura, NO escribe)
+      OBLIGATORIO:
+      - Importar CPM: import { computeCleaningProjection } from '../services/cleaning-projection-model.js'
+      - Delegar TODO cálculo de estado a CPM
+      - Consumir state_by_view_layer[view_layer] en frontend
+      - Validar coherencia view_layer + item_kind antes de calcular
+      REFERENCIAS:
+      - docs/CLEANING_PROJECTION_MODEL_V1.md (documentación canónica)
+      - src/core/master/services/cleaning-projection-model.js (implementación)
+
+  - id: cpm-separation-write-read
+    title: Separación estricta Cleaning Engine (WRITE) vs CPM (READ)
+    content: >
+      Cleaning Engine y CPM tienen responsabilidades absolutamente separadas.
+      PROHIBIDO:
+      - CPM escribiendo en cleaning_item_state
+      - Cleaning Engine calculando estados visibles
+      - Mezclar lógica de escritura y lectura
+      OBLIGATORIO:
+      - Cleaning Engine SOLO escribe (contadores, fechas, remaining)
+      - CPM SOLO lee y proyecta (función pura)
+      - Servicios orquestan: Cleaning Engine para escribir, CPM para leer
+      REFERENCIAS:
+      - docs/CLEANING_PROJECTION_MODEL_V1.md (sección "Separación Estricta")
+
+  - id: cpm-view-layer-coherence
+    title: Coherencia obligatoria view_layer + item_kind
+    content: >
+      view_layer debe ser coherente con item_kind.
+      PROHIBIDO:
+      - Usar effective en una_vez
+      - Usar combo en recurrente
+      - Permitir view_layer sin validar item_kind
+      OBLIGATORIO:
+      - Validar con validateViewLayerItemKindCoherence() antes de calcular
+      - Error HTTP 400 explícito si no es coherente
+      - effective solo para recurrente
+      - combo solo para una_vez
+      REFERENCIAS:
+      - src/core/master/services/cleaning-layer-constants.js (validateViewLayerItemKindCoherence)
+
+  - id: cpm-state-by-view-layer-mandatory
+    title: state_by_view_layer obligatorio en todas las respuestas
+    content: >
+      Toda respuesta que calcula estado DEBE incluir state_by_view_layer para todas las view_layers.
+      PROHIBIDO:
+      - Devolver estado sin state_by_view_layer
+      - Calcular solo para view_layer solicitada (debe calcular para todas)
+      - Omitir state_by_view_layer en respuestas
+      OBLIGATORIO:
+      - Calcular state_by_view_layer.shared, .pde, .combo (si aplica), .effective (si aplica)
+      - Frontend consume EXCLUSIVAMENTE state_by_view_layer[view_layer]
+      - Backend devuelve proyección completa (no solo la activa)
+      REFERENCIAS:
+      - docs/CLEANING_PROJECTION_MODEL_V1.md (sección "Outputs Obligatorios")
+
+  - id: cpm-no-inference-frontend
+    title: Frontend NO puede calcular estados ni inferir desde datos raw
+    content: >
+      El frontend NO puede calcular estados de limpieza.
+      PROHIBIDO:
+      - Calcular days_since_last_clean en frontend
+      - Comparar con threshold_days en frontend
+      - Usar shared_last_cleaned_at o pde_last_cleaned_at directamente
+      - Inferir estado desde campos raw
+      OBLIGATORIO:
+      - Consumir EXCLUSIVAMENTE state_by_view_layer[view_layer]
+      - Solicitar datos con view_layer explícita
+      - Re-renderizar cuando cambia view_layer
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md (regla constitucional)
+
+  - id: cpm-refetch-after-mutations
+    title: Refetch obligatorio tras mutaciones (preserva view_layer)
+    content: >
+      Tras cualquier mutación de limpieza, hacer refetch completo preservando view_layer activa.
+      PROHIBIDO:
+      - Asumir que el estado cambió sin refetch
+      - Actualizar estado local sin verificar con GET
+      - Cambiar view_layer durante refetch
+      OBLIGATORIO:
+      - POST con clean_layer explícita
+      - GET inmediato con view_layer activa
+      - Re-renderizar desde datos frescos del backend
+      - Preservar view_layer activa durante refetch
+      REFERENCIAS:
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md (sección "Re-renderizado Post-Acción")
+
+# =========================================
 # PROJECTION-DRIVEN UI (PDUI) v1
 # =========================================
 

@@ -12,6 +12,7 @@ import { getDefaultMasterStudentTransmutationReadRepo } from '../infra/repos/mas
 import { getDefaultPdeDailyCleanLogRepo } from '../infra/repos/pde-daily-clean-log-repo-pg.js';
 import { getDefaultPdeTransmutationItemGroupsRepo } from '../infra/repos/pde-transmutation-item-groups-repo-pg.js';
 import { validateViewLayer, ALLOWED_VIEW_LAYERS } from '../core/master/services/cleaning-layer-constants.js';
+import { computeVisualState } from '../core/master/services/cleaning-projection-model.js';
 
 /**
  * Lista listas de transmutaciones según filtros
@@ -492,6 +493,9 @@ export async function archiveItem(id) {
 /**
  * Calcula estado visual según view_layer, item_kind y datos
  * 
+ * DEPRECATED: Esta función ahora delega a Cleaning Projection Model (CPM).
+ * Se mantiene para compatibilidad con código existente.
+ * 
  * REGLA CANÓNICA:
  * - RECURRENTE: usa days_since_last_clean de la capa indicada por view_layer
  * - UNA_VEZ: usa combo (shared + pde) si view_layer='combo', sino usa la capa indicada
@@ -504,156 +508,10 @@ export async function archiveItem(id) {
  * @param {string} params.view_layer - Capa de vista ('shared' | 'pde' | 'combo')
  * @param {Object} params.config - Configuración { threshold_days, critical_multiplier, required_count }
  * @returns {Object} { state, visual_state, computed_state }
+ * 
+ * @see src/core/master/services/cleaning-projection-model.js (CPM canónico)
  */
-export function computeVisualState({ shared, pde, combo, item_kind, view_layer, config }) {
-  const { threshold_days = 7, critical_multiplier = 2.0, required_count = 1 } = config || {};
-  const criticalThreshold = threshold_days * critical_multiplier;
-  
-  if (item_kind === 'recurrente') {
-    // RECURRENTE: usa days_since_last_clean de la capa indicada
-    // O calcula 'effective' como proyección agregada de shared + pde
-    
-    if (view_layer === 'effective') {
-      // EFFECTIVE: proyección agregada (mejor estado entre shared y pde)
-      // NO escribe nada, solo calcula proyección
-      
-      // Calcular estado de shared
-      const sharedDaysSince = shared?.days_since_last_clean ?? null;
-      let sharedState;
-      if (sharedDaysSince === null || sharedDaysSince === undefined) {
-        sharedState = 'never';
-      } else if (sharedDaysSince < threshold_days) {
-        sharedState = 'reviewed';
-      } else if (sharedDaysSince < criticalThreshold) {
-        sharedState = 'pending';
-      } else {
-        sharedState = 'important';
-      }
-      
-      // Calcular estado de pde
-      const pdeDaysSince = pde?.days_since_last_clean ?? null;
-      let pdeState;
-      if (pdeDaysSince === null || pdeDaysSince === undefined) {
-        pdeState = 'never';
-      } else if (pdeDaysSince < threshold_days) {
-        pdeState = 'reviewed';
-      } else if (pdeDaysSince < criticalThreshold) {
-        pdeState = 'pending';
-      } else {
-        pdeState = 'important';
-      }
-      
-      // Regla canónica: effective = mejor estado resultante
-      // Prioridad: reviewed > pending > important > never
-      let effectiveState;
-      if (sharedState === 'reviewed' || pdeState === 'reviewed') {
-        effectiveState = 'reviewed';
-      } else if (sharedState === 'pending' || pdeState === 'pending') {
-        effectiveState = 'pending';
-      } else if (sharedState === 'important' || pdeState === 'important') {
-        effectiveState = 'important';
-      } else {
-        effectiveState = 'never';
-      }
-      
-      // Para effective, days_since_last_clean es el mínimo (mejor caso)
-      const effectiveDaysSince = sharedDaysSince !== null && pdeDaysSince !== null
-        ? Math.min(sharedDaysSince, pdeDaysSince)
-        : (sharedDaysSince !== null ? sharedDaysSince : pdeDaysSince);
-      
-      return {
-        state: effectiveState,
-        visual_state: effectiveState, // RECURRENTE: visual_state = state
-        computed_state: {
-          view_layer: 'effective',
-          days_since_last_clean: effectiveDaysSince,
-          threshold_days,
-          critical_threshold: criticalThreshold,
-          shared_state: sharedState,
-          pde_state: pdeState,
-          shared_days_since: sharedDaysSince,
-          pde_days_since: pdeDaysSince
-        }
-      };
-    }
-    
-    // view_layer === 'shared' o 'pde'
-    let daysSince;
-    if (view_layer === 'pde') {
-      daysSince = pde?.days_since_last_clean ?? null;
-    } else {
-      // view_layer === 'shared' (default)
-      daysSince = shared?.days_since_last_clean ?? null;
-    }
-    
-    let state;
-    if (daysSince === null || daysSince === undefined) {
-      state = 'never';
-    } else if (daysSince < threshold_days) {
-      state = 'reviewed';
-    } else if (daysSince < criticalThreshold) {
-      state = 'pending';
-    } else {
-      state = 'important';
-    }
-    
-    return {
-      state,
-      visual_state: state, // RECURRENTE: visual_state = state
-      computed_state: {
-        view_layer,
-        days_since_last_clean: daysSince,
-        threshold_days,
-        critical_threshold: criticalThreshold
-      }
-    };
-  } else {
-    // UNA_VEZ: usa combo si view_layer='combo', sino usa la capa indicada
-    let cleanCount;
-    let remaining;
-    
-    if (view_layer === 'combo') {
-      // COMBO: suma shared + pde
-      cleanCount = combo?.clean_count ?? 0;
-      remaining = combo?.remaining ?? null;
-    } else if (view_layer === 'pde') {
-      cleanCount = pde?.clean_count ?? 0;
-      remaining = pde?.remaining ?? null;
-    } else {
-      // view_layer === 'shared' (default)
-      cleanCount = shared?.clean_count ?? 0;
-      remaining = shared?.remaining ?? null;
-    }
-    
-    let visualState;
-    let state;
-    
-    if (cleanCount === 0) {
-      visualState = 'never';
-      state = 'pending';
-    } else if (cleanCount < required_count) {
-      visualState = 'in_progress';
-      state = 'pending';
-    } else if (cleanCount >= required_count && cleanCount < (required_count * 10)) {
-      visualState = 'completed';
-      state = 'completed';
-    } else {
-      visualState = 'empowered';
-      state = 'completed';
-    }
-    
-    return {
-      state,
-      visual_state: visualState,
-      computed_state: {
-        view_layer,
-        clean_count: cleanCount,
-        remaining,
-        required_count
-      }
-    };
-  }
-}
+export { computeVisualState };
 
 /**
  * Obtiene estado de alumnos para un item
