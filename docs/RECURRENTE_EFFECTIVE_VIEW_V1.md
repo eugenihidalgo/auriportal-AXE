@@ -1,0 +1,224 @@
+# RECURRENTE EFFECTIVE VIEW v1
+
+## Definición Canónica
+
+`effective` es una nueva `view_layer` exclusiva para items RECURRENTES que representa **el estado total efectivo resultante de combinar**:
+- lo limpiado por el alumno (`shared`)
+- lo limpiado por la PDE (`pde`)
+
+### Características
+
+- **Tipo**: `view_layer` (NO es `clean_layer`)
+- **Ámbito**: EXCLUSIVO de `item_kind = 'recurrente'`
+- **Naturaleza**: Proyección calculada (NO escribe nada, NO modifica estado)
+- **Semántica**: "Estado efectivo total teniendo en cuenta alumno + PDE"
+
+### Importante
+
+- `combo` **NO SE TOCA**
+- `combo` sigue siendo exclusivo de `item_kind = 'una_vez'`
+- `effective` **NO sustituye ni renombra** a `combo`
+
+---
+
+## Matriz Canónica de Validez
+
+| item_kind   | view_layer válidas          |
+|------------|-----------------------------|
+| recurrente | shared · pde · effective     |
+| una_vez    | combo                        |
+
+Cualquier otra combinación es **ERROR CONSTITUCIONAL** (HTTP 400).
+
+---
+
+## Regla de Cálculo
+
+Para RECURRENTE con `view_layer = 'effective'`:
+
+1. Calcular estado de `shared`:
+   - `days_since_last_clean` desde `shared`
+   - Estado: `never` | `reviewed` | `pending` | `important`
+
+2. Calcular estado de `pde`:
+   - `days_since_last_clean` desde `pde`
+   - Estado: `never` | `reviewed` | `pending` | `important`
+
+3. Calcular `effective` (mejor estado resultante):
+   - Si `shared` o `pde` está `reviewed` → `effective = reviewed`
+   - Si ambos están `pending` → `effective = pending`
+   - Si ambos están `important` → `effective = important`
+   - Si ambos están `never` → `effective = never`
+
+4. `days_since_last_clean` para `effective`:
+   - Mínimo entre `shared_days_since` y `pde_days_since` (mejor caso)
+
+### Ejemplo
+
+```
+shared: days_since = 3  → state = 'reviewed'
+pde:    days_since = 10 → state = 'pending'
+effective: state = 'reviewed' (mejor estado), days_since = 3 (mínimo)
+```
+
+---
+
+## Implementación Backend
+
+### Validación
+
+- `validateViewLayerItemKindCoherence(viewLayer, itemKind)` valida:
+  - `effective` solo si `itemKind === 'recurrente'`
+  - `combo` solo si `itemKind === 'una_vez'`
+
+### Cálculo
+
+- `computeVisualState()` calcula `effective` cuando:
+  - `view_layer === 'effective'`
+  - `item_kind === 'recurrente'`
+
+### Proyección
+
+- `alquimia-alumno-megalist-service.js` incluye `state_by_view_layer.effective` para items recurrentes
+- `state_by_view_layer.effective` contiene:
+  - `state`: estado efectivo calculado
+  - `visual_state`: igual a `state` (RECURRENTE)
+  - `computed_state`: metadatos (shared_state, pde_state, days_since, etc.)
+
+---
+
+## Implementación Frontend
+
+### Selector de Vista
+
+En el tab "Recurrente" de Alquimia del Alumno:
+
+- Selector visual con 3 opciones:
+  - **Shared**: vista del trabajo del alumno
+  - **PDE**: vista del trabajo de la PDE
+  - **Effective**: vista agregada (alumno + PDE)
+
+### Comportamiento
+
+- El selector **SOLO cambia** `state.viewLayer`
+- Dispara `loadMegalist()` automáticamente
+- **NO calcula nada** (todo viene del backend)
+- **NO guarda estado** (solo durante la sesión)
+
+### PDUI Estricto
+
+- El frontend consume EXCLUSIVAMENTE `state_by_view_layer[view_layer]`
+- No distingue si es `shared` / `pde` / `effective`
+- No contiene lógica condicional por vista
+- Refetch completo tras mutaciones preservando `view_layer` activa
+
+---
+
+## Logs Forenses
+
+### Backend
+
+```
+[ALQUIMIA_ALUMNO][STATE][RECURRENTE][EFFECTIVE] Estado effective calculado
+{
+  shared_state: 'reviewed',
+  pde_state: 'pending',
+  effective_state: 'reviewed',
+  shared_days_since: 3,
+  pde_days_since: 10,
+  effective_days_since: 3
+}
+```
+
+### Frontend
+
+```
+[UI][VIEW_LAYER_CHANGE] Cambio de vista
+{
+  from: 'shared',
+  to: 'effective',
+  item_kind: 'recurrente',
+  student_uuid: '...'
+}
+```
+
+---
+
+## Relación con View Authority v1
+
+`effective` cumple con **View Authority v1**:
+
+- ✅ Backend es única autoridad de estado
+- ✅ Frontend NO calcula estados
+- ✅ `view_layer` obligatorio en GET
+- ✅ `state_by_view_layer` presente en respuestas
+- ✅ Refetch tras mutaciones
+
+---
+
+## Casos de Uso
+
+### Master
+
+- Ver estado total efectivo de un alumno (alumno + PDE)
+- Identificar items que necesitan atención (mejor estado entre ambos)
+- Contextos de grupo (futuro): ver estado agregado de múltiples alumnos
+
+### Contextos Futuros
+
+- Grupos: estado efectivo del grupo
+- Pares: estado efectivo del par
+- Clases: estado efectivo de la clase
+
+---
+
+## Diferencias con `combo`
+
+| Aspecto | `combo` (UNA_VEZ) | `effective` (RECURRENTE) |
+|---------|-------------------|---------------------------|
+| `item_kind` | `una_vez` | `recurrente` |
+| Cálculo | Suma `clean_count` (shared + pde) | Mejor estado (shared o pde) |
+| Estado | `never` \| `in_progress` \| `completed` \| `empowered` | `never` \| `reviewed` \| `pending` \| `important` |
+| Métrica | `clean_count`, `remaining` | `days_since_last_clean` |
+| Propósito | Ver progreso total hacia `veces_limpiar` | Ver estado total efectivo de limpieza |
+
+---
+
+## Reglas Constitucionales
+
+1. `effective` solo permitido en `recurrente`
+2. `combo` solo permitido en `una_vez`
+3. Prohibido inferir vistas en frontend
+4. Toda vista debe venir del backend
+5. `effective` NO escribe nada (solo proyección)
+6. `effective` NO modifica contadores
+7. `effective` NO afecta `clean_layer`
+
+---
+
+## Verificación
+
+Checklist obligatorio:
+
+- [ ] RECURRENTE muestra shared / pde / effective
+- [ ] effective suma correctamente shared + pde (mejor estado)
+- [ ] UNA_VEZ sigue usando combo sin cambios
+- [ ] Ninguna mutación escribe en effective
+- [ ] Assembly checks pasan
+- [ ] Logs forenses presentes
+
+---
+
+## Referencias
+
+- `docs/CONSTITUTION_VIEW_AUTHORITY_V1.md`
+- `docs/ALQUIMIA_CANONICA_V1.md`
+- `src/core/master/services/cleaning-layer-constants.js`
+- `src/services/alquimia-general-service.js` (computeVisualState)
+- `src/core/master/services/alquimia-alumno-megalist-service.js`
+
+---
+
+**Versión**: v1  
+**Fecha**: 2024  
+**Estado**: CANÓNICO

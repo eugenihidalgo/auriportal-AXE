@@ -964,6 +964,56 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
       - scripts/check-view-authority.js
 
+  - id: view-layer-effective-recurrente-only
+    title: view_layer effective solo permitido en recurrente
+    content: >
+      view_layer='effective' es EXCLUSIVO de item_kind='recurrente'.
+      PROHIBIDO:
+      - Usar effective en una_vez
+      - Permitir effective sin validar item_kind
+      - Inferir effective desde contexto sin validar
+      OBLIGATORIO:
+      - Validar coherencia view_layer + item_kind con validateViewLayerItemKindCoherence()
+      - Error HTTP 400 explícito si effective se usa en una_vez
+      - effective solo se calcula para items recurrentes
+      REFERENCIAS:
+      - docs/RECURRENTE_EFFECTIVE_VIEW_V1.md
+      - src/core/master/services/cleaning-layer-constants.js
+
+  - id: view-layer-combo-una-vez-only
+    title: view_layer combo solo permitido en una_vez
+    content: >
+      view_layer='combo' es EXCLUSIVO de item_kind='una_vez'.
+      PROHIBIDO:
+      - Usar combo en recurrente
+      - Permitir combo sin validar item_kind
+      - Inferir combo desde contexto sin validar
+      OBLIGATORIO:
+      - Validar coherencia view_layer + item_kind con validateViewLayerItemKindCoherence()
+      - Error HTTP 400 explícito si combo se usa en recurrente
+      - combo solo se calcula para items una_vez
+      REFERENCIAS:
+      - docs/RECURRENTE_EFFECTIVE_VIEW_V1.md
+      - src/core/master/services/cleaning-layer-constants.js
+
+  - id: effective-projection-only-no-write
+    title: effective es solo proyección (NO escribe nada)
+    content: >
+      view_layer='effective' es SOLO una proyección calculada, NO modifica estado.
+      PROHIBIDO:
+      - Escribir en effective (no existe clean_layer='effective')
+      - Modificar contadores desde effective
+      - Usar effective como clean_layer
+      - Asumir que effective persiste estado
+      OBLIGATORIO:
+      - effective se calcula en runtime desde shared + pde
+      - effective NO escribe en cleaning_item_state
+      - effective NO afecta clean_layer
+      - effective solo aparece en state_by_view_layer (proyección)
+      REFERENCIAS:
+      - docs/RECURRENTE_EFFECTIVE_VIEW_V1.md
+      - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md
+
 # =========================================
 # PROJECTION-DRIVEN UI (PDUI) v1
 # =========================================

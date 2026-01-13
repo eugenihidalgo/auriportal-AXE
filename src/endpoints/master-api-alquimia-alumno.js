@@ -16,7 +16,7 @@ import { ensureCleaningItemStateSeedForStudent } from '../core/master/services/c
 import { buildHumanPanelForItemHistory } from '../core/master/services/alquimia-history-resolver-service.js';
 import { buildAlquimiaReport } from '../core/master/services/alquimia-report-service.js';
 import { getDefaultStudentIdentityRepo } from '../infra/repos/student-identity-repo-pg.js';
-import { validateViewLayer } from '../core/master/services/cleaning-layer-constants.js';
+import { validateViewLayer, validateViewLayerItemKindCoherence } from '../core/master/services/cleaning-layer-constants.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -122,7 +122,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       // GUARD CONSTITUCIONAL: view_layer es OBLIGATORIO
       // ============================================================================
       if (!viewLayer) {
-        return jsonError('view_layer es requerido. Debe ser uno de: shared, pde, combo', 'MISSING_VIEW_LAYER', 400, traceId);
+        return jsonError('view_layer es requerido. Debe ser uno de: shared, pde, combo (una_vez), effective (recurrente)', 'MISSING_VIEW_LAYER', 400, traceId);
       }
       
       // Validar view_layer
@@ -141,6 +141,15 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       if (listaTipo !== 'recurrente' && listaTipo !== 'una_vez') {
         return jsonError('lista_tipo inválido. Debe ser "recurrente" o "una_vez"', 'INVALID_LISTA_TIPO', 400, traceId);
+      }
+      
+      // ============================================================================
+      // GUARD CONSTITUCIONAL: Validar coherencia view_layer + lista_tipo
+      // ============================================================================
+      try {
+        validateViewLayerItemKindCoherence(viewLayer, listaTipo);
+      } catch (coherenceError) {
+        return jsonError(`Coherencia inválida: ${coherenceError.message}`, 'INVALID_VIEW_LAYER_ITEM_KIND_COHERENCE', 400, traceId);
       }
       
       // CAMBIADO: Validar student_uuid (UUID canónico) en lugar de student_id

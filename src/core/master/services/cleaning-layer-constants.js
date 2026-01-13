@@ -18,8 +18,13 @@ export const ALLOWED_CLEAN_LAYERS = ['shared', 'pde'];
 /**
  * Capas de vista permitidas (view_layer)
  * Decide QUÉ ESTADO se calcula y QUÉ COLUMNA UI se muestra
+ * 
+ * REGLAS:
+ * - shared, pde: válidas para recurrente y una_vez
+ * - combo: SOLO válida para una_vez
+ * - effective: SOLO válida para recurrente (proyección agregada)
  */
-export const ALLOWED_VIEW_LAYERS = ['shared', 'pde', 'combo'];
+export const ALLOWED_VIEW_LAYERS = ['shared', 'pde', 'combo', 'effective'];
 
 /**
  * Valida clean_layer
@@ -59,6 +64,24 @@ export function validateCleanLayerNotCombo(cleanLayer) {
 export function validateViewLayer(viewLayer) {
   if (!isValidViewLayer(viewLayer)) {
     throw new Error(`view_layer must be one of: ${ALLOWED_VIEW_LAYERS.join(', ')}. Got: ${viewLayer}`);
+  }
+}
+
+/**
+ * Valida coherencia entre view_layer e item_kind
+ * REGLAS CONSTITUCIONALES:
+ * - effective: SOLO válido para item_kind='recurrente'
+ * - combo: SOLO válido para item_kind='una_vez'
+ * @param {string} viewLayer - Capa de vista a validar
+ * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez')
+ * @throws {Error} Si la combinación es inválida
+ */
+export function validateViewLayerItemKindCoherence(viewLayer, itemKind) {
+  if (viewLayer === 'effective' && itemKind !== 'recurrente') {
+    throw new Error(`view_layer='effective' is only valid for item_kind='recurrente'. Got item_kind='${itemKind}'`);
+  }
+  if (viewLayer === 'combo' && itemKind !== 'una_vez') {
+    throw new Error(`view_layer='combo' is only valid for item_kind='una_vez'. Got item_kind='${itemKind}'`);
   }
 }
 

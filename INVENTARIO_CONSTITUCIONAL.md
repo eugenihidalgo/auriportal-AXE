@@ -289,6 +289,7 @@ Este inventario identifica **110+ documentos** relacionados con el movimiento es
 | `docs/UI_PROJECTION_MODEL_V1.md` | UI Projection Model (PDUI) v1 | Modelo constitucional base para todas las UIs de AuriPortal. Define PDUI (Projection-Driven UI) como patrón obligatorio: backend calcula proyecciones, frontend solo renderiza. | ✅ VIGENTE |
 | `docs/MASTER_CONSTITUTION_ASSEMBLY_CHECKS_V1.md` | Master Constitution Assembly Checks v1 | Assembly checks para verificar cumplimiento de reglas constitucionales MASTER (View Authority). Checks automáticos, qué detectan, cómo arreglar. | ✅ VIGENTE |
 | `docs/ALQUIMIA_ALUMNO_CONTRACT_V1.md` | Alquimia Alumno Contract v1 | Contrato canónico de endpoints de Alquimia del Alumno. Parámetros, respuestas, semántica clean_layer vs view_layer, compatibilidad GOD. | ✅ VIGENTE |
+| `docs/RECURRENTE_EFFECTIVE_VIEW_V1.md` | Recurrente Effective View v1 | Definición canónica de view_layer 'effective' para items RECURRENTES. Proyección agregada alumno + PDE, reglas de cálculo, diferencia con combo. | ✅ VIGENTE |
 | `docs/CONTRACT_OF_CONTRACTS.md` | Contract of Contracts | Sistema de contratos. Relación entre contratos, jerarquía, cumplimiento. | ✅ VIGENTE |
 
 ### 10.2. Documentos Estructurales (Nivel: ESTRUCTURAL)

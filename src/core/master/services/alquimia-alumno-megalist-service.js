@@ -529,6 +529,33 @@ export async function getMegalistForStudent(options = {}) {
         };
       }
       
+      // Calcular para 'effective' (solo RECURRENTE)
+      if (itemKind === 'recurrente') {
+        try {
+          stateByViewLayer.effective = computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: comboData,
+            item_kind: itemKind,
+            view_layer: 'effective',
+            config
+          });
+        } catch (error) {
+          logWarn('AlquimiaAlumnoMegalist', 'Error calculando state_by_view_layer[effective]', {
+            traceId,
+            student_id,
+            item_ref: state.item_ref,
+            error: error.message
+          });
+          // Fallback seguro
+          stateByViewLayer.effective = {
+            state: 'never',
+            visual_state: 'never',
+            computed_state: { view_layer: 'effective', error: error.message }
+          };
+        }
+      }
+      
       // Calcular para 'combo' (solo UNA_VEZ)
       if (itemKind === 'una_vez') {
         try {
@@ -557,6 +584,22 @@ export async function getMegalistForStudent(options = {}) {
       }
       
       // Log forense obligatorio
+      // Log específico para effective (RECURRENTE)
+      if (itemKind === 'recurrente' && stateByViewLayer.effective) {
+        logInfo('AlquimiaAlumnoMegalist', '[ALQUIMIA_ALUMNO][STATE][RECURRENTE][EFFECTIVE] Estado effective calculado', {
+          traceId,
+          student_id,
+          item_ref: state.item_ref,
+          item_kind: itemKind,
+          shared_state: stateByViewLayer.shared?.state || 'never',
+          pde_state: stateByViewLayer.pde?.state || 'never',
+          effective_state: stateByViewLayer.effective?.state || 'never',
+          shared_days_since: stateByViewLayer.effective?.computed_state?.shared_days_since ?? null,
+          pde_days_since: stateByViewLayer.effective?.computed_state?.pde_days_since ?? null,
+          effective_days_since: stateByViewLayer.effective?.computed_state?.days_since_last_clean ?? null
+        });
+      }
+      
       logInfo('AlquimiaAlumnoMegalist', '[ALQUIMIA_ALUMNO][STATE][view_layer] Estado calculado', {
         traceId,
         student_id,

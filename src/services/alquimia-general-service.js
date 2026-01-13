@@ -511,6 +511,73 @@ export function computeVisualState({ shared, pde, combo, item_kind, view_layer, 
   
   if (item_kind === 'recurrente') {
     // RECURRENTE: usa days_since_last_clean de la capa indicada
+    // O calcula 'effective' como proyección agregada de shared + pde
+    
+    if (view_layer === 'effective') {
+      // EFFECTIVE: proyección agregada (mejor estado entre shared y pde)
+      // NO escribe nada, solo calcula proyección
+      
+      // Calcular estado de shared
+      const sharedDaysSince = shared?.days_since_last_clean ?? null;
+      let sharedState;
+      if (sharedDaysSince === null || sharedDaysSince === undefined) {
+        sharedState = 'never';
+      } else if (sharedDaysSince < threshold_days) {
+        sharedState = 'reviewed';
+      } else if (sharedDaysSince < criticalThreshold) {
+        sharedState = 'pending';
+      } else {
+        sharedState = 'important';
+      }
+      
+      // Calcular estado de pde
+      const pdeDaysSince = pde?.days_since_last_clean ?? null;
+      let pdeState;
+      if (pdeDaysSince === null || pdeDaysSince === undefined) {
+        pdeState = 'never';
+      } else if (pdeDaysSince < threshold_days) {
+        pdeState = 'reviewed';
+      } else if (pdeDaysSince < criticalThreshold) {
+        pdeState = 'pending';
+      } else {
+        pdeState = 'important';
+      }
+      
+      // Regla canónica: effective = mejor estado resultante
+      // Prioridad: reviewed > pending > important > never
+      let effectiveState;
+      if (sharedState === 'reviewed' || pdeState === 'reviewed') {
+        effectiveState = 'reviewed';
+      } else if (sharedState === 'pending' || pdeState === 'pending') {
+        effectiveState = 'pending';
+      } else if (sharedState === 'important' || pdeState === 'important') {
+        effectiveState = 'important';
+      } else {
+        effectiveState = 'never';
+      }
+      
+      // Para effective, days_since_last_clean es el mínimo (mejor caso)
+      const effectiveDaysSince = sharedDaysSince !== null && pdeDaysSince !== null
+        ? Math.min(sharedDaysSince, pdeDaysSince)
+        : (sharedDaysSince !== null ? sharedDaysSince : pdeDaysSince);
+      
+      return {
+        state: effectiveState,
+        visual_state: effectiveState, // RECURRENTE: visual_state = state
+        computed_state: {
+          view_layer: 'effective',
+          days_since_last_clean: effectiveDaysSince,
+          threshold_days,
+          critical_threshold: criticalThreshold,
+          shared_state: sharedState,
+          pde_state: pdeState,
+          shared_days_since: sharedDaysSince,
+          pde_days_since: pdeDaysSince
+        }
+      };
+    }
+    
+    // view_layer === 'shared' o 'pde'
     let daysSince;
     if (view_layer === 'pde') {
       daysSince = pde?.days_since_last_clean ?? null;

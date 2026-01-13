@@ -300,11 +300,13 @@
       showLoading();
       
       // REGLA CONSTITUCIONAL: Traducción tab → parámetros (SIN lógica extra)
-      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = 'shared'
+      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = state.viewLayer (shared/pde/effective)
       // Si activeTab === 'una_vez': lista_tipo = 'una_vez', view_layer = 'combo'
       const activeTab = state.activeTab || 'recurrente';
       const listaTipo = activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
-      const viewLayer = activeTab === 'recurrente' ? 'shared' : 'combo';
+      const viewLayer = activeTab === 'recurrente' 
+        ? (state.viewLayer || 'shared') // Usar state.viewLayer para recurrente (shared/pde/effective)
+        : 'combo'; // UNA_VEZ siempre usa combo
       
       // Construir URL con view_layer (OBLIGATORIO), lista_tipo (OBLIGATORIO) y level_cap si viene
       let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}&view_layer=${viewLayer}&lista_tipo=${listaTipo}`;
@@ -381,6 +383,10 @@
     tabRecurrente.addEventListener('click', () => {
       if (state.activeTab !== 'recurrente') {
         state.activeTab = 'recurrente';
+        // Resetear viewLayer a 'shared' por defecto al cambiar a recurrente
+        if (!state.viewLayer || state.viewLayer === 'combo') {
+          state.viewLayer = 'shared';
+        }
         renderTabs(); // Re-renderizar tabs para actualizar estilos
         if (state.selectedStudentUuid) {
           loadMegalist(state.selectedStudentUuid);
@@ -410,9 +416,58 @@
     
     tabsContainer.appendChild(tabsFlex);
     
+    // Selector de vista (solo para RECURRENTE)
+    if (state.activeTab === 'recurrente') {
+      const viewSelectorContainer = document.createElement('div');
+      viewSelectorContainer.className = 'mt-4 flex items-center gap-2';
+      
+      const viewLabel = document.createElement('span');
+      viewLabel.className = 'text-sm font-medium text-gray-700';
+      viewLabel.textContent = 'Vista:';
+      viewSelectorContainer.appendChild(viewLabel);
+      
+      const viewOptions = [
+        { value: 'shared', label: 'Shared' },
+        { value: 'pde', label: 'PDE' },
+        { value: 'effective', label: 'Effective' }
+      ];
+      
+      viewOptions.forEach(option => {
+        const viewButton = document.createElement('button');
+        viewButton.className = `px-3 py-1 text-sm rounded transition-colors ${
+          state.viewLayer === option.value
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+        }`;
+        viewButton.textContent = option.label;
+        viewButton.addEventListener('click', () => {
+          if (state.viewLayer !== option.value) {
+            const previousViewLayer = state.viewLayer;
+            state.viewLayer = option.value;
+            renderTabs(); // Re-renderizar para actualizar estilos
+            if (state.selectedStudentUuid) {
+              loadMegalist(state.selectedStudentUuid);
+            }
+            // Log forense
+            console.log('[MasterAlquimiaAlumno] [UI][VIEW_LAYER_CHANGE] Cambio de vista', {
+              from: previousViewLayer,
+              to: option.value,
+              item_kind: 'recurrente',
+              student_uuid: state.selectedStudentUuid
+            });
+          }
+        });
+        viewSelectorContainer.appendChild(viewButton);
+      });
+      
+      tabsContainer.appendChild(viewSelectorContainer);
+    }
+    
     // Log forense
     const listaTipo = state.activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
-    const viewLayer = state.activeTab === 'recurrente' ? 'shared' : 'combo';
+    const viewLayer = state.activeTab === 'recurrente' 
+      ? (state.viewLayer || 'shared')
+      : 'combo';
     console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][TAB_RENDER] Tabs renderizados', {
       tab: state.activeTab,
       view_layer: viewLayer,
