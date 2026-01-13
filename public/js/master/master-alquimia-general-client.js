@@ -72,6 +72,7 @@
     tipoActivo: 'recurrente', // 'recurrente' | 'una_vez'
     listaActiva: null,
     listas: [],
+    listasReady: false, // Flag canónico: listas del item_kind actual cargadas completamente
     items: [],
     itemsSortPipeline: [], // [{key, dir}] para order pipeline
     groups: [], // Grupos de items
@@ -760,8 +761,10 @@
       }
       
       tab.addEventListener('click', () => {
-        // REGLA D: Cambio de item_kind limpia list_id
-        updateViewState({ item_kind: tipo.id });
+        // REGLA D: Cambio de item_kind limpia list_id y resetea listasReady
+        console.log('[UI][ITEM_KIND_CHANGE]', { item_kind: tipo.id });
+        state.listasReady = false; // Resetear flag: las listas del nuevo item_kind aún no están cargadas
+        updateViewState({ item_kind: tipo.id, list_id: null });
         renderTabsTipo();
         loadListas(tipo.id);
         // No renderizar hasta que se seleccione una lista
@@ -773,11 +776,38 @@
   }
 
   /**
+   * AUTO-SELECCIÓN CANÓNICA: Selecciona la primera lista si no hay ninguna seleccionada
+   * REGLA: Solo se ejecuta cuando listasReady === true y viewState.list_id === null
+   */
+  async function autoSelectInitialListIfNeeded() {
+    const viewState = getViewState();
+    
+    // Condición canónica: listas cargadas + sin lista seleccionada + hay listas disponibles
+    if (
+      state.listasReady === true &&
+      viewState.list_id === null &&
+      state.listas.length > 0
+    ) {
+      const firstListId = state.listas[0].id;
+      console.log('[UI][AUTO_SELECT_LIST]', {
+        list_id: firstListId,
+        item_kind: viewState.item_kind
+      });
+      updateViewState({ list_id: firstListId });
+      await loadLista(firstListId);
+      renderView();
+    }
+  }
+
+  /**
    * Carga las listas del tipo especificado
    */
   async function loadListas(tipo) {
     try {
       console.log(`[MasterAlquimiaGeneral] Cargando listas tipo: ${tipo}`);
+      
+      // Resetear flag al inicio de carga
+      state.listasReady = false;
       
       const response = await fetch(`/master/api/alquimia-general/listas?tipo=${tipo}`);
       
@@ -795,15 +825,15 @@
       state.listas = result.listas || result.data || [];
       renderListasTabs();
       
-      // AUTO-SELECCIÓN INICIAL CANÓNICA: Si no hay list_id en viewState y hay listas disponibles
-      const viewState = getViewState();
-      if (viewState.list_id === null && state.listas.length > 0) {
-        const firstListId = state.listas[0].id;
-        console.log('[UI][AUTO_SELECT_LIST]', { list_id: firstListId });
-        updateViewState({ list_id: firstListId });
-        await loadLista(firstListId);
-        renderView();
-      }
+      // FASE 2: Marcar listas como listas (flag canónico)
+      state.listasReady = true;
+      console.log('[UI][LISTAS_READY]', {
+        item_kind: tipo,
+        listas_count: state.listas.length
+      });
+      
+      // FASE 3: Auto-selección canónica (solo si corresponde)
+      await autoSelectInitialListIfNeeded();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando listas:', error);
       
@@ -812,6 +842,9 @@
       errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
       errorBox.textContent = `⚠️ Error cargando listas: ${error.message || 'Error desconocido'}`;
       rootContainer.appendChild(errorBox);
+      
+      // En caso de error, mantener listasReady = false
+      state.listasReady = false;
     }
   }
 
