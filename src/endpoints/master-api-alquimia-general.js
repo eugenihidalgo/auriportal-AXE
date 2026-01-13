@@ -18,6 +18,7 @@ import {
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
+import { computeListProjection } from '../core/master/services/list-projection-model.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -599,6 +600,127 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
       const items = await listItems(listaId, { onlyActive: true });
       return jsonSuccess({ items }, traceId);
+    }
+
+    // GET /master/api/alquimia-general/list-projection
+    if (path === '/master/api/alquimia-general/list-projection' && method === 'GET') {
+      try {
+        const listId = url.searchParams.get('list_id');
+        const itemKind = url.searchParams.get('item_kind');
+        const viewLayer = url.searchParams.get('view_layer');
+        const scope = url.searchParams.get('scope');
+        const studentUuid = url.searchParams.get('student_uuid');
+
+        logInfo('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] GET iniciado', {
+          traceId,
+          list_id: listId,
+          item_kind: itemKind,
+          view_layer: viewLayer,
+          scope,
+          student_uuid: studentUuid
+        });
+
+        // Validaciones
+        if (!listId) {
+          return jsonError('list_id es requerido', 'MISSING_LIST_ID', 400, traceId);
+        }
+        if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+          return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
+        }
+        if (!viewLayer) {
+          return jsonError('view_layer es requerido', 'MISSING_VIEW_LAYER', 400, traceId);
+        }
+        if (!scope || (scope !== 'all' && scope !== 'student')) {
+          return jsonError('scope es requerido y debe ser "all" o "student"', 'INVALID_SCOPE', 400, traceId);
+        }
+        if (scope === 'student' && !studentUuid) {
+          return jsonError('student_uuid es requerido cuando scope="student"', 'MISSING_STUDENT_UUID', 400, traceId);
+        }
+
+        // Calcular proyección usando LPM
+        const projection = await computeListProjection({
+          list_id: parseInt(listId, 10),
+          item_kind: itemKind,
+          view_layer: viewLayer,
+          scope: scope,
+          student_uuid: scope === 'student' ? studentUuid : null
+        });
+
+        // Obtener lista con clasificaciones para list_meta
+        const lista = await getListaById(parseInt(listId, 10));
+        if (!lista) {
+          return jsonError(`Lista no encontrada: ${listId}`, 'LISTA_NOT_FOUND', 404, traceId);
+        }
+
+        let listaWithClassification = null;
+        let listaTags = [];
+        try {
+          listaWithClassification = await getListWithClassification(lista.id);
+          listaTags = await getListaTags(lista.id);
+        } catch (error) {
+          logWarn('MasterApiAlquimiaGeneral', 'Error obteniendo classification para lista en list-projection', {
+            traceId,
+            lista_id: lista.id,
+            error: error.message
+          });
+          // Fail-open: continuar sin classification
+        }
+
+        const listMeta = {
+          id: lista.id,
+          nombre: lista.nombre,
+          tipo: lista.tipo,
+          classification: {
+            category_key: listaWithClassification?.category_key || null,
+            subtype_key: listaWithClassification?.subtype_key || null,
+            tags: listaTags || []
+          }
+        };
+
+        logInfo('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] GET completado', {
+          traceId,
+          list_id: listId,
+          total_items: projection.metrics.total_items,
+          reviewed_pct: projection.metrics.reviewed_pct,
+          dominant_state: projection.list_state.dominant_state,
+          health_bucket: projection.list_state.health_bucket
+        });
+
+        return jsonSuccess({
+          list_meta: listMeta,
+          context: {
+            view_layer: viewLayer,
+            item_kind: itemKind,
+            scope: scope,
+            student_uuid: scope === 'student' ? studentUuid : null,
+            trace_id: traceId
+          },
+          metrics: projection.metrics,
+          list_state: projection.list_state,
+          items: projection.items
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] Error en GET', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        
+        // Si es error de validación, devolver 400
+        if (error.code === 'MISSING_VIEW_LAYER' || error.code === 'INVALID_VIEW_LAYER' || 
+            error.code === 'INVALID_ITEM_KIND' || error.message.includes('coherente')) {
+          return jsonError(error.message, error.code || 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // Si es error de no encontrado, devolver 404
+        if (error.message.includes('no encontrada') || error.message.includes('no encontrado')) {
+          return jsonError(error.message, 'NOT_FOUND', 404, traceId);
+        }
+        
+        // Otros errores: 500
+        return jsonError(error.message || 'Error interno', 'INTERNAL_ERROR', 500, traceId);
+      }
     }
 
     // POST /master/api/alquimia-general/items

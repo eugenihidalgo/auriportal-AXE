@@ -291,6 +291,7 @@ Este inventario identifica **110+ documentos** relacionados con el movimiento es
 | `docs/ALQUIMIA_ALUMNO_CONTRACT_V1.md` | Alquimia Alumno Contract v1 | Contrato canónico de endpoints de Alquimia del Alumno. Parámetros, respuestas, semántica clean_layer vs view_layer, compatibilidad GOD. | ✅ VIGENTE |
 | `docs/RECURRENTE_EFFECTIVE_VIEW_V1.md` | Recurrente Effective View v1 | Definición canónica de view_layer 'effective' para items RECURRENTES. Proyección agregada alumno + PDE, reglas de cálculo, diferencia con combo. | ✅ VIGENTE |
 | `docs/CLEANING_PROJECTION_MODEL_V1.md` | Cleaning Projection Model (CPM) v1 | Modelo constitucional de proyección de estado de limpiezas. Capa de lectura única, base de PDUI y View Authority. | ✅ VIGENTE |
+| `docs/LIST_PROJECTION_MODEL_V1.md` | List Projection Model (LPM) v1 | Modelo canónico de proyección de LISTAS. Permite ver listas agrupadas por estados, métricas agregadas, mantiene PDUI y reutiliza CPM. | ✅ VIGENTE |
 | `docs/CONTRACT_OF_CONTRACTS.md` | Contract of Contracts | Sistema de contratos. Relación entre contratos, jerarquía, cumplimiento. | ✅ VIGENTE |
 
 ### 10.2. Documentos Estructurales (Nivel: ESTRUCTURAL)

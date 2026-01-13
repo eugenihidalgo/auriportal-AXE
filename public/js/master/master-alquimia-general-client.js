@@ -93,6 +93,15 @@
       item: null,
       cleanLayer: 'shared', // 'shared' | 'pde' (legacy, para compatibilidad)
       layerView: 'shared' // 'shared' | 'pde' | 'combo' (vista actual del flotante)
+    },
+    // LPM v1: Estado de proyección
+    projection: {
+      mode: 'operativa', // 'operativa' | 'proyeccion'
+      view_layer: 'shared', // 'shared' | 'pde' | 'combo' | 'effective'
+      scope: 'all', // 'all' | 'student'
+      student_uuid: null, // UUID del estudiante si scope='student'
+      data: null, // Datos de proyección desde endpoint
+      loading: false
     }
   };
 
@@ -657,8 +666,50 @@
 
     classificationSection.appendChild(classificationRow);
     listaContent.appendChild(classificationSection);
+
+    // LPM v1: Tabs Operativa / Proyección
+    const tabsContainer = document.createElement('div');
+    tabsContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #334155;';
     
-    // Tabla editable de items
+    const tabOperativa = document.createElement('button');
+    tabOperativa.textContent = 'Operativa';
+    tabOperativa.style.cssText = 'padding: 0.5rem 1rem; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; font-size: 0.875rem; font-weight: 500;';
+    if (state.projection.mode === 'operativa') {
+      tabOperativa.style.color = '#6366f1';
+      tabOperativa.style.borderBottomColor = '#6366f1';
+    }
+    tabOperativa.addEventListener('click', () => {
+      state.projection.mode = 'operativa';
+      renderListaContent();
+    });
+    tabsContainer.appendChild(tabOperativa);
+    
+    const tabProyeccion = document.createElement('button');
+    tabProyeccion.textContent = 'Proyección';
+    tabProyeccion.style.cssText = 'padding: 0.5rem 1rem; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; font-size: 0.875rem; font-weight: 500;';
+    if (state.projection.mode === 'proyeccion') {
+      tabProyeccion.style.color = '#6366f1';
+      tabProyeccion.style.borderBottomColor = '#6366f1';
+    }
+    tabProyeccion.addEventListener('click', () => {
+      state.projection.mode = 'proyeccion';
+      renderListaContent();
+      // Cargar proyección si no está cargada
+      if (!state.projection.data) {
+        loadListProjection();
+      }
+    });
+    tabsContainer.appendChild(tabProyeccion);
+    
+    listaContent.appendChild(tabsContainer);
+
+    // Si está en modo Proyección, renderizar vista de proyección
+    if (state.projection.mode === 'proyeccion') {
+      renderProjectionView();
+      return; // Salir temprano, no renderizar tabla operativa
+    }
+    
+    // Tabla editable de items (modo Operativa)
     const itemsTableContainer = document.createElement('div');
     itemsTableContainer.style.cssText = 'overflow-x: auto; margin-top: 1rem;';
     
@@ -752,6 +803,229 @@
     itemsTable.appendChild(tbody);
     itemsTableContainer.appendChild(itemsTable);
     listaContent.appendChild(itemsTableContainer);
+  }
+
+  /**
+   * LPM v1: Carga proyección de lista desde endpoint
+   */
+  async function loadListProjection() {
+    if (!state.listaActiva) return;
+    
+    const itemKind = getItemKindExplicit(null, state.listaActiva) || state.listaActiva.tipo;
+    if (!itemKind) {
+      console.warn('[MasterAlquimiaGeneral][LPM] No se pudo determinar item_kind');
+      return;
+    }
+    
+    state.projection.loading = true;
+    
+    try {
+      const params = new URLSearchParams({
+        list_id: state.listaActiva.id,
+        item_kind: itemKind,
+        view_layer: state.projection.view_layer,
+        scope: state.projection.scope
+      });
+      
+      if (state.projection.scope === 'student' && state.projection.student_uuid) {
+        params.append('student_uuid', state.projection.student_uuid);
+      }
+      
+      console.log('[UI][LPM] fetch', {
+        list_id: state.listaActiva.id,
+        item_kind: itemKind,
+        view_layer: state.projection.view_layer,
+        scope: state.projection.scope,
+        student_uuid: state.projection.student_uuid
+      });
+      
+      const response = await fetch(`/master/api/alquimia-general/list-projection?${params.toString()}`);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error cargando proyección');
+      }
+      
+      state.projection.data = result.data;
+      
+      console.log('[UI][LPM] render', {
+        counts: result.data.metrics.by_state_counts,
+        reviewed_pct: result.data.metrics.reviewed_pct
+      });
+      
+      renderListaContent(); // Re-renderizar con datos de proyección
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral][LPM] Error cargando proyección:', error);
+      
+      // Mostrar error visible
+      const errorBox = document.createElement('div');
+      errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
+      errorBox.textContent = `⚠️ Error cargando proyección: ${error.message || 'Error desconocido'}`;
+      listaContent.appendChild(errorBox);
+    } finally {
+      state.projection.loading = false;
+    }
+  }
+
+  /**
+   * LPM v1: Renderiza vista de proyección
+   */
+  function renderProjectionView() {
+    if (!state.listaActiva) return;
+    
+    const itemKind = getItemKindExplicit(null, state.listaActiva) || state.listaActiva.tipo;
+    
+    // Selector de view_layer
+    const viewLayerContainer = document.createElement('div');
+    viewLayerContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+    
+    const viewLayerLabel = document.createElement('span');
+    viewLayerLabel.textContent = 'Vista:';
+    viewLayerLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; font-weight: 500;';
+    viewLayerContainer.appendChild(viewLayerLabel);
+    
+    const viewLayers = itemKind === 'recurrente' 
+      ? ['shared', 'pde', 'effective']
+      : ['shared', 'pde', 'combo'];
+    
+    viewLayers.forEach(vl => {
+      const btn = document.createElement('button');
+      btn.textContent = vl.charAt(0).toUpperCase() + vl.slice(1);
+      btn.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.view_layer === vl ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+      btn.addEventListener('click', () => {
+        state.projection.view_layer = vl;
+        loadListProjection();
+      });
+      viewLayerContainer.appendChild(btn);
+    });
+    
+    listaContent.appendChild(viewLayerContainer);
+    
+    // Selector de scope
+    const scopeContainer = document.createElement('div');
+    scopeContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+    
+    const scopeLabel = document.createElement('span');
+    scopeLabel.textContent = 'Alcance:';
+    scopeLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; font-weight: 500;';
+    scopeContainer.appendChild(scopeLabel);
+    
+    const btnAll = document.createElement('button');
+    btnAll.textContent = 'All';
+    btnAll.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'all' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+    btnAll.addEventListener('click', () => {
+      state.projection.scope = 'all';
+      state.projection.student_uuid = null;
+      loadListProjection();
+    });
+    scopeContainer.appendChild(btnAll);
+    
+    const btnStudent = document.createElement('button');
+    btnStudent.textContent = 'Alumno';
+    btnStudent.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'student' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+    btnStudent.addEventListener('click', () => {
+      // TODO: Abrir selector de alumno (por ahora, usar prompt)
+      const studentUuid = prompt('UUID del estudiante:');
+      if (studentUuid) {
+        state.projection.scope = 'student';
+        state.projection.student_uuid = studentUuid;
+        loadListProjection();
+      }
+    });
+    scopeContainer.appendChild(btnStudent);
+    
+    listaContent.appendChild(scopeContainer);
+    
+    // Mostrar métricas si hay datos
+    if (state.projection.data) {
+      const metricsContainer = document.createElement('div');
+      metricsContainer.style.cssText = 'padding: 1rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 1rem;';
+      
+      const metricsTitle = document.createElement('div');
+      metricsTitle.textContent = 'Métricas:';
+      metricsTitle.style.cssText = 'color: #cbd5e1; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.875rem;';
+      metricsContainer.appendChild(metricsTitle);
+      
+      const metricsRow = document.createElement('div');
+      metricsRow.style.cssText = 'display: flex; gap: 1rem; flex-wrap: wrap;';
+      
+      const reviewedPct = document.createElement('div');
+      reviewedPct.textContent = `Revisado: ${(state.projection.data.metrics.reviewed_pct * 100).toFixed(1)}%`;
+      reviewedPct.style.cssText = 'color: #86efac; font-size: 0.875rem;';
+      metricsRow.appendChild(reviewedPct);
+      
+      const counts = state.projection.data.metrics.by_state_counts;
+      const countsText = document.createElement('div');
+      countsText.textContent = `Never: ${counts.never} | Pending: ${counts.pending} | Important: ${counts.important} | Reviewed: ${counts.reviewed}`;
+      countsText.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
+      metricsRow.appendChild(countsText);
+      
+      metricsContainer.appendChild(metricsRow);
+      listaContent.appendChild(metricsContainer);
+    }
+    
+    // Renderizar items agrupados por estado
+    if (state.projection.data && state.projection.data.items) {
+      const itemsByState = {
+        never: [],
+        pending: [],
+        important: [],
+        reviewed: []
+      };
+      
+      state.projection.data.items.forEach(item => {
+        const state = item.state_by_view_layer?.[state.projection.view_layer]?.state || 'never';
+        if (state === 'reviewed' || state === 'completed') {
+          itemsByState.reviewed.push(item);
+        } else if (state === 'pending' || state === 'in_progress') {
+          itemsByState.pending.push(item);
+        } else if (state === 'important') {
+          itemsByState.important.push(item);
+        } else {
+          itemsByState.never.push(item);
+        }
+      });
+      
+      // Renderizar grupos
+      const groups = [
+        { key: 'reviewed', label: 'Revisado', items: itemsByState.reviewed },
+        { key: 'pending', label: 'Pendiente', items: itemsByState.pending },
+        { key: 'important', label: 'Importante Revisar', items: itemsByState.important },
+        { key: 'never', label: 'Nunca', items: itemsByState.never }
+      ];
+      
+      groups.forEach(group => {
+        if (group.items.length === 0) return;
+        
+        const groupContainer = document.createElement('div');
+        groupContainer.style.cssText = 'margin-bottom: 1.5rem;';
+        
+        const groupTitle = document.createElement('h3');
+        groupTitle.textContent = `${group.label} (${group.items.length})`;
+        groupTitle.style.cssText = 'color: #f1f5f9; font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;';
+        groupContainer.appendChild(groupTitle);
+        
+        // Tabla simple para items del grupo
+        const itemsTable = document.createElement('table');
+        itemsTable.style.cssText = 'width: 100%; border-collapse: collapse; background: #0f172a;';
+        
+        const tbody = document.createElement('tbody');
+        
+        group.items.forEach(item => {
+          const itemRow = createItemTableRow(item, false);
+          tbody.appendChild(itemRow);
+        });
+        
+        itemsTable.appendChild(tbody);
+        groupContainer.appendChild(itemsTable);
+        listaContent.appendChild(groupContainer);
+      });
+    } else if (state.projection.loading) {
+      const loadingMsg = document.createElement('div');
+      loadingMsg.textContent = 'Cargando proyección...';
+      loadingMsg.style.cssText = 'color: #94a3b8; padding: 1rem; text-align: center;';
+      listaContent.appendChild(loadingMsg);
+    }
   }
 
   /**
@@ -1095,9 +1369,15 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // Recargar items para refrescar estado
-      if (state.listaActiva && state.listaActiva.id) {
-        await loadItems(state.listaActiva.id);
+      // LPM v1: Si está en modo proyección, refetch de proyección
+      if (state.projection.mode === 'proyeccion') {
+        console.log('[UI][LPM] post-action refetch');
+        await loadListProjection();
+      } else {
+        // Modo operativa: recargar items
+        if (state.listaActiva && state.listaActiva.id) {
+          await loadItems(state.listaActiva.id);
+        }
       }
       
       // Refrescar modal si está abierto con view_layer activo

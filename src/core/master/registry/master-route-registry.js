@@ -76,6 +76,13 @@ export const MASTER_ROUTES = [
     // Handler maneja: GET
   },
   {
+    key: 'master-api-alquimia-list-projection',
+    path: '/master/api/alquimia-general/list-projection',
+    type: 'api',
+    method: 'GET'
+    // Handler: GET con query params (list_id, item_kind, view_layer, scope, student_uuid)
+  },
+  {
     key: 'master-api-alquimia-items',
     path: '/master/api/alquimia-general/items',
     type: 'api'
