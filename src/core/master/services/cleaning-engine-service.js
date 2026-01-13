@@ -255,15 +255,15 @@ export async function markCleanStudent(options, client = null) {
     }
     
     // 3. Verificar nivel (si item tiene nivel > nivel_efectivo, no aplica)
-    // EXCEPCIÓN: Master desde alquimia_general NO valida nivel (puede limpiar cualquier item)
+    // REGLA CONSTITUCIONAL: MASTER no está sujeto a restricciones de nivel
     // EXCEPCIÓN: Master Override en alquimia_alumno (guards estrictos)
-    const isMasterFromGeneral = actor_type === 'master' && surface_key === 'master.alquimia_general';
+    const isMasterContext = actor_type === 'master';
     const nivelEfectivo = await getStudentEffectiveLevel(student_uuid);
     let nivelCapAplicar = nivelEfectivo;
     let overrideAplicado = false;
     
-    // Si es Master desde alquimia_general, NO validar nivel (bypass completo)
-    if (!isMasterFromGeneral) {
+    // Si es Master, NO validar nivel (bypass completo) - REGLA CONSTITUCIONAL
+    if (!isMasterContext) {
       // Guards estrictos para Master Override en alquimia_alumno:
       // - actor_type === 'master'
       // - surface_key === 'master.alquimia_alumno'
@@ -300,12 +300,15 @@ export async function markCleanStudent(options, client = null) {
         return null; // No aplica, pero no es error
       }
     } else {
-      logInfo('CleaningEngine', 'Master desde alquimia_general: bypass de validación de nivel', {
+      // Log forense: MASTER bypass de validación de nivel
+      logInfo('CleaningEngine', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
         traceId,
         student_uuid,
         item_ref,
         item_nivel: item.nivel,
-        nivel_efectivo: nivelEfectivo
+        nivel_efectivo: nivelEfectivo,
+        actor_type,
+        surface_key
       });
     }
     
@@ -752,9 +755,13 @@ export async function markCleanAllStudents(options, client = null) {
     for (const { uuid: studentUuid } of activeStudentUuids) {
       try {
         // Verificar si aplica por nivel antes de limpiar
+        // REGLA CONSTITUCIONAL: MASTER no está sujeto a restricciones de nivel
         // REGLA: Filtro por nivel SOLO cuando item_kind === 'recurrente' y skip_level_filter !== true
         // Para UNA_VEZ o cuando skip_level_filter === true, NO filtrar por nivel
-        if (!skip_level_filter && itemKind === 'recurrente') {
+        // EXCEPCIÓN: Si actor_type === 'master', OMITIR completamente validación de nivel
+        const isMasterContext = actor_type === 'master';
+        
+        if (!isMasterContext && !skip_level_filter && itemKind === 'recurrente') {
           const nivelEfectivo = await getStudentEffectiveLevel(studentUuid, product_key);
           
           if (nivelEfectivo < itemNivel) {
@@ -762,6 +769,16 @@ export async function markCleanAllStudents(options, client = null) {
             skippedBreakdown.not_applicable_level++;
             continue;
           }
+        } else if (isMasterContext) {
+          // Log forense: MASTER bypass de validación de nivel
+          logInfo('CleaningEngine', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
+            traceId,
+            student_uuid: studentUuid,
+            item_ref,
+            item_nivel: itemNivel,
+            actor_type,
+            surface_key
+          });
         }
         
         // Para recurrentes: verificar si ya está limpio (mismo día) antes de llamar a markCleanStudent
