@@ -1277,6 +1277,34 @@
       return;
     }
     
+    // GATE: Validar que si scope='student', student_uuid esté presente
+    if (state.projection.scope === 'student' && !state.projection.student_uuid) {
+      console.warn('[LPM][GATE] scope=student sin student_uuid. Esperando selección de alumno.');
+      
+      // Renderizar estado de espera en UI
+      if (listaContent) {
+        // Limpiar contenido previo de proyección
+        const existingProjection = listaContent.querySelector('[data-projection-content]');
+        if (existingProjection) {
+          existingProjection.remove();
+        }
+        
+        const waitingContainer = document.createElement('div');
+        waitingContainer.setAttribute('data-projection-content', 'true');
+        waitingContainer.style.cssText = 'padding: 2rem; text-align: center; color: #94a3b8; font-style: italic;';
+        
+        const waitingMsg = document.createElement('div');
+        waitingMsg.textContent = 'Selecciona un alumno para ver la proyección';
+        waitingMsg.style.cssText = 'font-size: 1rem; margin-bottom: 0.5rem;';
+        waitingContainer.appendChild(waitingMsg);
+        
+        listaContent.appendChild(waitingContainer);
+      }
+      
+      state.projection.loading = false;
+      return;
+    }
+    
     state.projection.loading = true;
     
     try {
