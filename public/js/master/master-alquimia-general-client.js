@@ -795,10 +795,13 @@
       state.listas = result.listas || result.data || [];
       renderListasTabs();
       
-      // Si hay listas, cargar la primera
-      if (state.listas.length > 0 && !state.listaActiva) {
-        updateViewState({ list_id: state.listas[0].id });
-        await loadLista(state.listas[0].id);
+      // AUTO-SELECCIÓN INICIAL CANÓNICA: Si no hay list_id en viewState y hay listas disponibles
+      const viewState = getViewState();
+      if (viewState.list_id === null && state.listas.length > 0) {
+        const firstListId = state.listas[0].id;
+        console.log('[UI][AUTO_SELECT_LIST]', { list_id: firstListId });
+        updateViewState({ list_id: firstListId });
+        await loadLista(firstListId);
         renderView();
       }
     } catch (error) {
