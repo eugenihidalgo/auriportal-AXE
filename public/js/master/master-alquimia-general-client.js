@@ -989,12 +989,12 @@
         }
       });
       
-      // Renderizar grupos
+      // Renderizar grupos en orden canónico: never, important, pending, reviewed
       const groups = [
-        { key: 'reviewed', label: 'Revisado', items: itemsByState.reviewed },
-        { key: 'pending', label: 'Pendiente', items: itemsByState.pending },
+        { key: 'never', label: 'Nunca', items: itemsByState.never },
         { key: 'important', label: 'Importante Revisar', items: itemsByState.important },
-        { key: 'never', label: 'Nunca', items: itemsByState.never }
+        { key: 'pending', label: 'Pendiente', items: itemsByState.pending },
+        { key: 'reviewed', label: 'Revisado', items: itemsByState.reviewed }
       ];
       
       groups.forEach(group => {
@@ -1016,6 +1016,11 @@
         
         group.items.forEach(item => {
           const itemRow = createItemTableRow(item, false);
+          // Estilizar filas reviewed
+          if (group.key === 'reviewed') {
+            itemRow.classList.add('row-reviewed');
+            itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(34, 197, 94, 0.1);';
+          }
           tbody.appendChild(itemRow);
         });
         
@@ -3370,19 +3375,25 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // Refetch items y flotante si está abierto
-      await loadItems(state.listaActiva.id);
-      // Si hay flotante abierto, recargarlo y cambiar a vista PDE
-      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
-        state.modal.layerView = activeViewLayer;
-        state.modal.cleanLayer = 'pde';
-        console.log('[UI][COLUMN] Refetch post-acción masiva (PDE clean-all)', {
-          item_ref: item.item_ref,
-          action_clean_layer: 'pde',
-          active_view_layer: activeViewLayer
-        });
-        await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
+      // LPM v1: Si está en modo proyección, refetch de proyección
+      if (state.projection.mode === 'proyeccion') {
+        console.log('[UI][LPM] post-action refetch (PDE clean-all)');
+        await loadListProjection();
+      } else {
+        // Modo operativa: refetch items y flotante si está abierto
+        await loadItems(state.listaActiva.id);
+        // Si hay flotante abierto, recargarlo y cambiar a vista PDE
+        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+          const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
+          state.modal.layerView = activeViewLayer;
+          state.modal.cleanLayer = 'pde';
+          console.log('[UI][COLUMN] Refetch post-acción masiva (PDE clean-all)', {
+            item_ref: item.item_ref,
+            action_clean_layer: 'pde',
+            active_view_layer: activeViewLayer
+          });
+          await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
+        }
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
@@ -3443,20 +3454,26 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // Refresh determinista: recargar items y flotante si está abierto
-      if (state.listaActiva && state.listaActiva.id) {
-        await loadItems(state.listaActiva.id);
-      }
-      
-      // Refrescar flotante si está abierto para este item con view_layer activo
-      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const activeViewLayer = state.modal.layerView || 'combo'; // Default 'combo' para UNA_VEZ
-        console.log('[UI][COLUMN] Refetch post-acción masiva (increment-all)', {
-          item_ref: item.item_ref,
-          action_clean_layer: cleanLayer,
-          active_view_layer: activeViewLayer
-        });
-        await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
+      // LPM v1: Si está en modo proyección, refetch de proyección
+      if (state.projection.mode === 'proyeccion') {
+        console.log('[UI][LPM] post-action refetch (increment-all)');
+        await loadListProjection();
+      } else {
+        // Modo operativa: recargar items y flotante si está abierto
+        if (state.listaActiva && state.listaActiva.id) {
+          await loadItems(state.listaActiva.id);
+        }
+        
+        // Refrescar flotante si está abierto para este item con view_layer activo
+        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+          const activeViewLayer = state.modal.layerView || 'combo'; // Default 'combo' para UNA_VEZ
+          console.log('[UI][COLUMN] Refetch post-acción masiva (increment-all)', {
+            item_ref: item.item_ref,
+            action_clean_layer: cleanLayer,
+            active_view_layer: activeViewLayer
+          });
+          await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
+        }
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
@@ -3519,18 +3536,24 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // Recargar items y flotante si está abierto
-      await loadItems(state.listaActiva.id);
-      // Si hay flotante abierto, recargarlo y cambiar a vista PDE
-      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
-        state.modal.layerView = activeViewLayer;
-        console.log('[UI][COLUMN] Refetch post-acción masiva (PDE increment-all)', {
-          item_ref: item.item_ref,
-          action_clean_layer: cleanLayer,
-          active_view_layer: activeViewLayer
-        });
-        await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer=activeViewLayer (estado)
+      // LPM v1: Si está en modo proyección, refetch de proyección
+      if (state.projection.mode === 'proyeccion') {
+        console.log('[UI][LPM] post-action refetch (PDE increment-all)');
+        await loadListProjection();
+      } else {
+        // Modo operativa: recargar items y flotante si está abierto
+        await loadItems(state.listaActiva.id);
+        // Si hay flotante abierto, recargarlo y cambiar a vista PDE
+        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+          const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
+          state.modal.layerView = activeViewLayer;
+          console.log('[UI][COLUMN] Refetch post-acción masiva (PDE increment-all)', {
+            item_ref: item.item_ref,
+            action_clean_layer: cleanLayer,
+            active_view_layer: activeViewLayer
+          });
+          await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer=activeViewLayer (estado)
+        }
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);
