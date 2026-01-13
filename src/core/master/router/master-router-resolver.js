@@ -42,6 +42,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-listas': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista-items': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-list-projection': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-items': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-students': () => import('../../../endpoints/master-api-alquimia-general.js'),
