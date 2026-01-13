@@ -15,7 +15,7 @@
 // - docs/CLEANING_PROJECTION_MODEL_V1.md (CPM como base)
 // - docs/CONSTITUTION_VIEW_AUTHORITY_V1.md (View Authority)
 
-import { query } from '../../../database/pg.js';
+import { query } from '../../../../database/pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { validateViewLayer, validateViewLayerItemKindCoherence } from './cleaning-layer-constants.js';
