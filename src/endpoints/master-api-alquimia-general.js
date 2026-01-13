@@ -687,17 +687,16 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
 
         return jsonSuccess({
-          list_meta: listMeta,
-          context: {
+          data: {
+            items: projection.items,
+            metrics: projection.metrics,
+            list_state: projection.list_state,
             view_layer: viewLayer,
             item_kind: itemKind,
             scope: scope,
             student_uuid: scope === 'student' ? studentUuid : null,
-            trace_id: traceId
-          },
-          metrics: projection.metrics,
-          list_state: projection.list_state,
-          items: projection.items
+            list_meta: listMeta
+          }
         }, traceId);
       } catch (error) {
         logError('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] Error en GET', {
