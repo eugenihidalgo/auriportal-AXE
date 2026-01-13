@@ -21,7 +21,6 @@ import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { validateViewLayer, validateViewLayerItemKindCoherence } from './cleaning-layer-constants.js';
 import { computeCleaningProjection } from './cleaning-projection-model.js';
 import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-catalog-repo-pg.js';
-import { getDefaultStudentRepo } from '../../../infra/repos/student-repo-pg.js';
 
 /**
  * Calcula métricas agregadas por estado
@@ -305,18 +304,21 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     // Validar coherencia view_layer + item_kind
     validateViewLayerItemKindCoherence(view_layer, item_kind);
     
-    // Resolver student_uuid -> student_id si scope='student'
+    // Resolver student_uuid -> legacy_alumno_id si scope='student'
     let studentId = null;
     if (scope === 'student' && student_uuid) {
-      const studentRepo = getDefaultStudentRepo();
-      const student = await studentRepo.getByUuid(student_uuid);
-      if (!student) {
-        throw new Error(`Estudiante no encontrado: ${student_uuid}`);
+      // FIX: Usar query directa a tabla students (UUID canónico) para obtener legacy_alumno_id
+      // student_uuid es students.id (UUID), necesitamos legacy_alumno_id para compatibilidad
+      const studentResult = await query(
+        'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+        [student_uuid]
+      );
+      
+      if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
+        throw new Error(`Estudiante no encontrado o sin legacy_alumno_id: ${student_uuid}`);
       }
-      studentId = student.legacy_alumno_id;
-      if (!studentId) {
-        throw new Error(`Estudiante sin legacy_alumno_id: ${student_uuid}`);
-      }
+      
+      studentId = studentResult.rows[0].legacy_alumno_id;
     }
     
     // Obtener lista
