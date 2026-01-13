@@ -26,9 +26,11 @@
 | item_kind   | view_layer válidas          |
 |------------|-----------------------------|
 | recurrente | shared · pde · effective     |
-| una_vez    | combo                        |
+| una_vez    | shared · pde · combo         |
 
 Cualquier otra combinación es **ERROR CONSTITUCIONAL** (HTTP 400).
+
+**Nota:** `effective` está disponible en el flotante de Alquimia General para items RECURRENTES. En Alquimia del Alumno, solo están disponibles `shared`, `pde` y `combo` (para `una_vez`).
 
 ---
 

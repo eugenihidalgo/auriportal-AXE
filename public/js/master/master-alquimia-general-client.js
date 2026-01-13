@@ -1177,14 +1177,24 @@
     const currentLayerView = state.modal.layerView || savedLayerView;
     state.modal.layerView = currentLayerView;
     
-    // Función para cambiar vista (sin recargar, solo re-render)
-    const changeLayerView = (newView) => {
+    // Función para cambiar vista (refetch obligatorio según PDUI)
+    const changeLayerView = async (newView) => {
       if (newView === currentLayerView) return;
+      
+      console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] Cambiando vista', {
+        item_ref: item.item_ref,
+        item_kind: state.modal?.itemKind || getItemKindExplicit(item, state.listaActiva),
+        view_layer_before: currentLayerView,
+        view_layer_after: newView
+      });
+      
       state.modal.layerView = newView;
       localStorage.setItem('ap_master_alquimia_float_layer', newView);
-      // Re-renderizar flotante con misma data pero nueva vista
+      
+      // REGLA CONSTITUCIONAL PDUI: Refetch obligatorio tras cambio de vista
+      // NO re-renderizar con datos antiguos, hacer refetch completo
       overlay.remove();
-      showFlotanteVer(item, normalized);
+      await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
     };
     
     const btnShared = document.createElement('button');
@@ -1198,6 +1208,41 @@
     btnPde.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'pde' ? '#8b5cf6' : 'transparent'}; color: ${currentLayerView === 'pde' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
     btnPde.addEventListener('click', () => changeLayerView('pde'));
     toggleContainer.appendChild(btnPde);
+    
+    // EFFECTIVE solo disponible para RECURRENTE
+    // REGLA CONSTITUCIONAL: effective SOLO para item_kind='recurrente'
+    // Usar state.modal.itemKind si está disponible (ya validado en handleVerItem)
+    // Si no, obtenerlo explícitamente
+    let itemKindForEffective = state.modal?.itemKind;
+    if (!itemKindForEffective) {
+      itemKindForEffective = getItemKindExplicit(item, state.listaActiva);
+    }
+    
+    // Si aún no está disponible, es error crítico (no debería pasar si handleVerItem validó correctamente)
+    if (!itemKindForEffective || (itemKindForEffective !== 'recurrente' && itemKindForEffective !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en showFlotanteVer (effective):', {
+        item_kind: itemKindForEffective,
+        item: item,
+        lista: state.listaActiva,
+        modal_itemKind: state.modal?.itemKind
+      });
+      // Bloquear render si no hay item_kind válido
+      showToastError('ERROR: item_kind no definido. No se puede mostrar el flotante.');
+      return;
+    }
+    if (itemKindForEffective === 'recurrente') {
+      const btnEffective = document.createElement('button');
+      btnEffective.textContent = 'EFFECTIVE';
+      btnEffective.style.cssText = `padding: 0.25rem 0.5rem; background: ${currentLayerView === 'effective' ? '#f59e0b' : 'transparent'}; color: ${currentLayerView === 'effective' ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+      btnEffective.addEventListener('click', () => {
+        console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] Cambiando a effective', {
+          item_ref: item.item_ref,
+          item_kind: itemKindForEffective
+        });
+        changeLayerView('effective');
+      });
+      toggleContainer.appendChild(btnEffective);
+    }
     
     // COMBO solo disponible para UNA_VEZ
     // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)

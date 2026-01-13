@@ -105,6 +105,15 @@ El CPM es responsable de:
 - ❌ Inferir desde contexto
 - ❌ Decidir UX
 
+## Matriz Canónica de Validez
+
+| item_kind | view_layer válidas | Notas |
+|-----------|-------------------|-------|
+| `recurrente` | `shared`, `pde`, `effective` | `effective` solo lectura (proyección agregada) |
+| `una_vez` | `shared`, `pde`, `combo` | `combo` combina shared + pde |
+
+**Cualquier otra combinación es ERROR CONSTITUCIONAL (HTTP 400).**
+
 ## Definición Canónica de View Layers
 
 ### shared

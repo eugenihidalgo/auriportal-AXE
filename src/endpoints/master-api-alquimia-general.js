@@ -8,7 +8,7 @@
 import { requireAdminContext } from '../core/auth-context.js';
 import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo, logWarn } from '../core/observability/logger.js';
-import { validateCleanLayer, validateCleanLayerNotCombo, validateViewLayer } from '../core/master/services/cleaning-layer-constants.js';
+import { validateCleanLayer, validateCleanLayerNotCombo, validateViewLayer, validateViewLayerItemKindCoherence } from '../core/master/services/cleaning-layer-constants.js';
 import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista, deleteLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
@@ -881,6 +881,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // ============================================================================
         if (tipo === 'recurrente' && !viewLayer) {
           return jsonError('view_layer is required for RECURRENTE items. It determines which layer state to calculate.', 'VIEW_LAYER_REQUIRED', 400, traceId);
+        }
+        
+        // ============================================================================
+        // REGLA CONSTITUCIONAL: Validar coherencia view_layer + item_kind
+        // ============================================================================
+        if (viewLayer) {
+          try {
+            validateViewLayerItemKindCoherence(viewLayer, tipo);
+          } catch (coherenceError) {
+            return jsonError(`view_layer '${viewLayer}' is not valid for item_kind '${tipo}': ${coherenceError.message}`, 'VIEW_LAYER_ITEM_KIND_MISMATCH', 400, traceId);
+          }
         }
         
         // Llamar servicio con try/catch para fail-open

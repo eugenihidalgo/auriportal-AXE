@@ -300,13 +300,33 @@
       showLoading();
       
       // REGLA CONSTITUCIONAL: Traducción tab → parámetros (SIN lógica extra)
-      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = state.viewLayer (shared/pde/effective)
-      // Si activeTab === 'una_vez': lista_tipo = 'una_vez', view_layer = 'combo'
+      // Si activeTab === 'recurrente': lista_tipo = 'recurrente', view_layer = state.viewLayer (shared/pde, NO effective)
+      // Si activeTab === 'una_vez': lista_tipo = 'una_vez', view_layer = state.viewLayer (shared/pde/combo)
       const activeTab = state.activeTab || 'recurrente';
       const listaTipo = activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
-      const viewLayer = activeTab === 'recurrente' 
-        ? (state.viewLayer || 'shared') // Usar state.viewLayer para recurrente (shared/pde/effective)
-        : 'combo'; // UNA_VEZ siempre usa combo
+      const viewLayer = state.viewLayer || (activeTab === 'recurrente' ? 'shared' : 'combo');
+      
+      // REGLA CONSTITUCIONAL: Validar coherencia view_layer + item_kind
+      // effective NO permitido en Alquimia del Alumno (solo en flotante Alquimia General)
+      if (viewLayer === 'effective') {
+        console.error('[MasterAlquimiaAlumno] view_layer=effective NO permitido en Alquimia del Alumno', {
+          student_uuid: studentUuid,
+          active_tab: activeTab
+        });
+        showError('Error: view_layer=effective no está permitido en Alquimia del Alumno. Use Shared o PDE.');
+        return;
+      }
+      
+      // combo solo permitido para una_vez
+      if (viewLayer === 'combo' && activeTab !== 'una_vez') {
+        console.error('[MasterAlquimiaAlumno] view_layer=combo solo permitido para una_vez', {
+          student_uuid: studentUuid,
+          active_tab: activeTab,
+          view_layer: viewLayer
+        });
+        showError('Error: view_layer=combo solo está permitido para items una_vez.');
+        return;
+      }
       
       // Construir URL con view_layer (OBLIGATORIO), lista_tipo (OBLIGATORIO) y level_cap si viene
       let url = `/master/api/alquimia-alumno/megalist?student_uuid=${studentUuid}&view_layer=${viewLayer}&lista_tipo=${listaTipo}`;
@@ -416,52 +436,65 @@
     
     tabsContainer.appendChild(tabsFlex);
     
-    // Selector de vista (solo para RECURRENTE)
+    // Tabs de vista a nivel de pantalla (Shared / PDE / Combo)
+    // REGLA CONSTITUCIONAL: 
+    // - Shared y PDE siempre disponibles
+    // - Combo solo para una_vez
+    // - Effective NO permitido aquí (solo en Alquimia General flotante)
+    const viewTabsContainer = document.createElement('div');
+    viewTabsContainer.className = 'mt-4 flex items-center gap-2';
+    viewTabsContainer.id = 'view-tabs-container';
+    
+    const viewLabel = document.createElement('span');
+    viewLabel.className = 'text-sm font-medium text-gray-700';
+    viewLabel.textContent = 'Vista:';
+    viewTabsContainer.appendChild(viewLabel);
+    
+    // Definir opciones según activeTab
+    const viewOptions = [];
     if (state.activeTab === 'recurrente') {
-      const viewSelectorContainer = document.createElement('div');
-      viewSelectorContainer.className = 'mt-4 flex items-center gap-2';
-      
-      const viewLabel = document.createElement('span');
-      viewLabel.className = 'text-sm font-medium text-gray-700';
-      viewLabel.textContent = 'Vista:';
-      viewSelectorContainer.appendChild(viewLabel);
-      
-      const viewOptions = [
+      // RECURRENTE: Shared y PDE (effective NO permitido aquí)
+      viewOptions.push(
+        { value: 'shared', label: 'Shared' },
+        { value: 'pde', label: 'PDE' }
+      );
+    } else {
+      // UNA_VEZ: Shared, PDE y Combo
+      viewOptions.push(
         { value: 'shared', label: 'Shared' },
         { value: 'pde', label: 'PDE' },
-        { value: 'effective', label: 'Effective' }
-      ];
-      
-      viewOptions.forEach(option => {
-        const viewButton = document.createElement('button');
-        viewButton.className = `px-3 py-1 text-sm rounded transition-colors ${
-          state.viewLayer === option.value
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-        }`;
-        viewButton.textContent = option.label;
-        viewButton.addEventListener('click', () => {
-          if (state.viewLayer !== option.value) {
-            const previousViewLayer = state.viewLayer;
-            state.viewLayer = option.value;
-            renderTabs(); // Re-renderizar para actualizar estilos
-            if (state.selectedStudentUuid) {
-              loadMegalist(state.selectedStudentUuid);
-            }
-            // Log forense
-            console.log('[MasterAlquimiaAlumno] [UI][VIEW_LAYER_CHANGE] Cambio de vista', {
-              from: previousViewLayer,
-              to: option.value,
-              item_kind: 'recurrente',
-              student_uuid: state.selectedStudentUuid
-            });
-          }
-        });
-        viewSelectorContainer.appendChild(viewButton);
-      });
-      
-      tabsContainer.appendChild(viewSelectorContainer);
+        { value: 'combo', label: 'Combo' }
+      );
     }
+    
+    viewOptions.forEach(option => {
+      const viewButton = document.createElement('button');
+      viewButton.className = `px-3 py-1 text-sm rounded transition-colors ${
+        state.viewLayer === option.value
+          ? 'bg-blue-500 text-white'
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      }`;
+      viewButton.textContent = option.label;
+      viewButton.addEventListener('click', () => {
+        if (state.viewLayer !== option.value) {
+          console.log('[ALQUIMIA_ALUMNO][TAB_VIEW_LAYER_CHANGE] Cambiando vista', {
+            student_uuid: state.selectedStudentUuid,
+            view_layer_before: state.viewLayer,
+            view_layer_after: option.value,
+            active_tab: state.activeTab
+          });
+          
+          state.viewLayer = option.value;
+          renderTabs(); // Re-renderizar para actualizar estilos
+          if (state.selectedStudentUuid) {
+            loadMegalist(state.selectedStudentUuid);
+          }
+        }
+      });
+      viewTabsContainer.appendChild(viewButton);
+    });
+    
+    tabsContainer.appendChild(viewTabsContainer);
     
     // Log forense
     const listaTipo = state.activeTab === 'recurrente' ? 'recurrente' : 'una_vez';
