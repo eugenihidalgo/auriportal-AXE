@@ -106,7 +106,8 @@
       student_uuid: null, // UUID del estudiante si scope='student'
       data: null, // Datos de proyección desde endpoint
       loading: false
-    }
+    },
+    students: [] // Lista de estudiantes para selector
   };
 
   /**
@@ -536,7 +537,8 @@
     // Cargar datasets necesarios
     await Promise.all([
       loadClassifications(),
-      loadItemGroups()
+      loadItemGroups(),
+      loadStudents()
     ]);
     
     // Renderizar tabs de tipo
@@ -565,6 +567,37 @@
     // Event listeners
     if (btnCrearLista) {
       btnCrearLista.addEventListener('click', handleCrearLista);
+    }
+  }
+
+  /**
+   * Carga la lista de alumnos desde endpoint canónico
+   */
+  async function loadStudents() {
+    try {
+      const response = await fetch('/master/api/students?limit=200');
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.error('[MasterAlquimiaGeneral] Error cargando alumnos:', result.error);
+        return;
+      }
+      
+      // Normalizar a formato esperado por UI (student_uuid como id)
+      const students = result.data.students || result.data.items || [];
+      state.students = students.map(student => ({
+        id: student.student_uuid || student.id,
+        student_uuid: student.student_uuid || student.id,
+        display_name: student.display_name || student.name || student.apodo || student.email,
+        email: student.email,
+        apodo: student.apodo || null,
+        nombre_completo: student.nombre_completo || null,
+        paused: student.paused || false
+      }));
+      
+      console.log('[MasterAlquimiaGeneral] Alumnos cargados:', state.students.length);
+    } catch (error) {
+      console.error('[MasterAlquimiaGeneral] Error cargando alumnos:', error);
     }
   }
 
@@ -1355,18 +1388,66 @@
     btnStudent.textContent = 'Alumno';
     btnStudent.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'student' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
     btnStudent.addEventListener('click', () => {
-      // TODO: Abrir selector de alumno (por ahora, usar prompt)
-      const studentUuid = prompt('UUID del estudiante:');
-      if (studentUuid) {
-        // REGLA B: Cambio de scope mantiene list_id, view_layer
-        updateViewState({ scope: 'student', student_uuid: studentUuid });
-        loadListProjection();
-        renderView();
-      }
+      // Cambiar scope a 'student' y mostrar selector
+      updateViewState({ scope: 'student', student_uuid: null });
+      loadListProjection();
+      renderView();
     });
     scopeContainer.appendChild(btnStudent);
     
     listaContent.appendChild(scopeContainer);
+    
+    // Selector de alumno (solo visible cuando scope === 'student')
+    if (state.projection.scope === 'student') {
+      const studentSelectorContainer = document.createElement('div');
+      studentSelectorContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+      
+      const studentLabel = document.createElement('span');
+      studentLabel.textContent = 'Alumno:';
+      studentLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem; font-weight: 500;';
+      studentSelectorContainer.appendChild(studentLabel);
+      
+      const studentSelect = document.createElement('select');
+      studentSelect.id = 'select-alumno-proyeccion';
+      studentSelect.style.cssText = 'padding: 0.375rem 0.75rem; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 0.375rem; font-size: 0.875rem; flex: 1; max-width: 400px;';
+      
+      // Opción por defecto
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'Seleccionar alumno...';
+      studentSelect.appendChild(defaultOption);
+      
+      // Poblar opciones desde state.students
+      state.students.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.student_uuid;
+        const displayName = student.display_name || student.apodo || student.nombre_completo || student.email || 'Sin nombre';
+        option.textContent = `${displayName}${student.email ? ` (${student.email})` : ''}`;
+        if (state.projection.student_uuid === student.student_uuid) {
+          option.selected = true;
+        }
+        studentSelect.appendChild(option);
+      });
+      
+      // Event listener para cambio de selección
+      studentSelect.addEventListener('change', (e) => {
+        const studentUuid = e.target.value;
+        if (studentUuid && studentUuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+          // REGLA B: Cambio de alumno mantiene list_id, view_layer, scope
+          updateViewState({ student_uuid: studentUuid });
+          loadListProjection();
+          renderView();
+        } else {
+          // Si se selecciona opción vacía, limpiar selección
+          updateViewState({ student_uuid: null });
+          loadListProjection();
+          renderView();
+        }
+      });
+      
+      studentSelectorContainer.appendChild(studentSelect);
+      listaContent.appendChild(studentSelectorContainer);
+    }
     
     // Mostrar métricas si hay datos
     if (state.projection.data) {
