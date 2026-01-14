@@ -255,7 +255,26 @@
   - Verificación: checklist de pruebas manuales y casos límite
 - **Referencias:** `public/js/master/master-alquimia-general-client.js`, `src/core/master/services/cleaning-engine-service.js`
 
-### 2.4 Diagnósticos
+### 2.4 Overrides UI
+
+#### `docs/ALQUIMIA_OVERRIDES_UI_V1.md`
+- **Tipo:** Documentación canónica UI
+- **Fecha:** 2026-01-XX
+- **Estado:** ✅ IMPLEMENTADO
+- **Contenido:**
+  - UI de overrides en proyección de alumno
+  - Campos editables: threshold_days, required_count, nivel, descripcion
+  - Condición de visibilidad: solo en scope='student' con student_uuid
+  - Indicadores visuales: borde rojo cuando hay override activo
+  - Edición de campos: envío de override al backend
+  - Eliminación automática cuando valor vuelve al base
+  - Botón Reset Overrides (visible solo con overrides activos)
+  - Backend como única autoridad (valores efectivos desde LPM)
+  - Diferencias RECURRENTE vs UNA_VEZ
+  - Fuera de alcance (qué NO está implementado)
+- **Referencias:** `public/js/master/master-alquimia-general-client.js`, `src/core/master/services/list-projection-model.js`
+
+### 2.5 Diagnósticos
 
 #### `docs/MASTER_DIAGNOSTIC_REPORT.md`
 - **Tipo:** Reporte de diagnóstico forense
