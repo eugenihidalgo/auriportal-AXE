@@ -1,7 +1,7 @@
 # ALQUIMIA FLOTANTE VER v1 - Sistema Canónico de Visualización de Alumnos
 
-**Versión:** v1.0  
-**Fecha:** 2025-01-XX  
+**Versión:** v1.1  
+**Fecha:** 2025-01-XX (v1.0), 2026-01-13 (v1.1 - persistencia tamaño)  
 **Estado:** ✅ Implementado
 
 ---
@@ -80,18 +80,18 @@ En cada fila de alumno dentro del flotante (excepto REVISADO):
 
 ## 5. TIPOS DE LISTAS
 
-### 5.1. Recurrentes
+### 6.1. Recurrentes
 - **Usa:** `threshold_days` y `critical_multiplier`
 - **Lógica temporal:** Descrita arriba
 - **Campo "Días":** Corresponde a `frecuencia_dias` del ítem → `threshold_days`
 
-### 5.2. Una sola vez (one_time_count)
+### 6.2. Una sola vez (one_time_count)
 - **Usa:** `required_count`
 - **Comportamiento:** El alumno pasa a "COMPLETADO" cuando alcanza el total
 - **NO vuelve a aparecer** como pendiente una vez completado
 - **Campo "Días":** Contexto informativo (no usado para cálculo)
 
-### 5.3. NUNCA (categoría colapsable)
+### 6.3. NUNCA (categoría colapsable)
 - **Existe como categoría visible**
 - **Colapsable por defecto**
 - **Indica:** Ítems sin obligación activa
