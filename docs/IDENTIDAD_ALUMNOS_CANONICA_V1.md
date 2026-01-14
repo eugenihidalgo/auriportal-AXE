@@ -1,23 +1,36 @@
 # IDENTIDAD DE ALUMNOS CANÓNICA v1
+
+⚠️ **DEPRECATED** ⚠️
+
+**Este documento está DEPRECADO. Ver:** [`docs/IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md`](./IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md)
+
+---
+
 **AuriPortal / Aurelín — Dominio MASTER**  
 **Versión:** 1.0.0  
 **Fecha:** 2026-01-13  
-**Estado:** CANÓNICO  
+**Estado:** **DEPRECATED** (2026-01-14)  
 **Commit:** 4967588 (v5.68.2-students-endpoint-uuid)
 
 ---
 
-## PROPÓSITO
+## ⚠️ ADVERTENCIA
 
-Documentación canónica de la identidad de alumnos en AuriPortal.
+**Este documento refleja el estado PRE-migración UUID-only (v5.70.0).**
 
-Este documento refleja **EXACTAMENTE** la implementación canónica después de la migración UUID-first v5.68.2. Es la referencia definitiva para:
-- Entender la identidad canónica de alumnos (UUID-first)
-- Implementar nuevos módulos relacionados con alumnos
-- Mantener coherencia con el diseño canónico
-- Verificar que no se usa legacy en runtime
+**Legacy alumnos fue ELIMINADO completamente en v5.70.0-5.70.2.**
 
-**OBLIGATORIO:** Cualquier cambio relacionado con identidad de alumnos debe respetar este documento.
+**Para la documentación canónica actual, ver:** [`docs/IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md`](./IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md)
+
+---
+
+## PROPÓSITO (HISTÓRICO)
+
+Documentación canónica de la identidad de alumnos en AuriPortal (PRE-migración).
+
+Este documento reflejaba la implementación canónica después de la migración UUID-first v5.68.2, pero **ANTES** de la eliminación completa de legacy en v5.70.0.
+
+**Ya no es válido.** Legacy alumnos está MUERTO.
 
 ---
 

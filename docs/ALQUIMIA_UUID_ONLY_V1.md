@@ -1,19 +1,38 @@
 # ALQUIMIA UUID-ONLY v1
+
+⚠️ **DEPRECATED** ⚠️
+
+**Este documento está DEPRECADO. Ver:** [`docs/IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md`](./IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md)
+
+---
+
 **AuriPortal / Aurelín — Dominio MASTER**  
 **Versión:** 1.0.0  
 **Fecha:** 2026-01-13  
-**Estado:** CANÓNICO  
+**Estado:** **DEPRECATED** (2026-01-14)  
 **Commit:** (pendiente - v5.70.0)
 
 ---
 
-## PROPÓSITO
+## ⚠️ ADVERTENCIA
 
-Documentación canónica de la eliminación total del legacy de alumnos en el sistema de Alquimia.
+**Este documento refleja el estado PRE-migración completa UUID-only (v5.70.0).**
 
-Este documento establece que Alquimia funciona 100% UUID-only, sin dependencias de `legacy_alumno_id`, `student_item_state`, o JOINs con `alumnos` en el motor.
+**Legacy alumnos fue ELIMINADO completamente en v5.70.0-5.70.2.**
 
-**OBLIGATORIO:** Cualquier código relacionado con Alquimia debe cumplir estas reglas.
+**Las tablas ahora usan `student_id UUID` (no INTEGER).**
+
+**Para la documentación canónica actual, ver:** [`docs/IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md`](./IDENTIDAD_ALUMNOS_UUID_ONLY_V2.md)
+
+---
+
+## PROPÓSITO (HISTÓRICO)
+
+Documentación canónica de la eliminación total del legacy de alumnos en el sistema de Alquimia (PRE-migración completa).
+
+Este documento establecía que Alquimia funcionaba 100% UUID-only, pero **ANTES** de que las tablas fueran migradas a `student_id UUID`.
+
+**Ya no es válido.** Legacy alumnos está MUERTO.
 
 ---
 
@@ -37,12 +56,12 @@ Este documento establece que Alquimia funciona 100% UUID-only, sin dependencias 
 ### 2.1 Tablas Canónicas (UUID-only)
 
 **`cleaning_events`:**
-- `student_id` (INTEGER) - **LEGACY**: Los repositorios resuelven internamente
+- `student_id` (UUID) - **UUID-ONLY**: Migrado en v5.70.0
 - Event log append-only
 - Source of Truth para eventos de limpieza
 
 **`cleaning_item_state`:**
-- `student_id` (INTEGER) - **LEGACY**: Los repositorios resuelven internamente
+- `student_id` (UUID) - **UUID-ONLY**: Migrado en v5.70.0
 - Proyección optimizada de `cleaning_events`
 - Source of Truth para estado de limpieza
 
