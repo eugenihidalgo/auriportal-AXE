@@ -212,7 +212,33 @@
   - Endpoints legacy vs canónicos
   - Plan de migración
 
-### 2.2 Diagnósticos
+### 2.2 List Projection Model (LPM)
+
+#### `docs/LPM_ALL_WORST_STATE_V1.md`
+- **Tipo:** Documentación canónica constitucional
+- **Fecha:** 2026-01-14
+- **Estado:** ✅ ENFORCED
+- **Contenido:**
+  - Fix canónico del bug de "peor estado" en proyección ALL
+  - Causa raíz: query solo devolvía students con fila
+  - Solución: CROSS JOIN + LEFT JOIN para traer TODOS los estudiantes
+  - Cómo se materializa "student sin fila" (NULL para recurrente, clean_count=0 para una_vez)
+  - Contrato de salida (no romper)
+  - Prueba canónica reproducible (script de diagnóstico)
+  - Guards y prevención
+  - UUID-only enforcement
+- **Referencias:** `src/core/master/services/list-projection-model.js`, `scripts/diagnose-all-projection-uuid-only.js`
+
+#### `docs/CANONICAL_RULES_PROJECTION_ALL_WORST_STATE_V1.md`
+- **Tipo:** Reglas canónicas constitucionales
+- **Fecha:** 2026-01-13
+- **Contenido:** Reglas absolutas de proyección ALL (principio fundamental, definición de "peor estado", etc.)
+
+#### `docs/LIST_PROJECTION_MODEL_V1.md`
+- **Tipo:** Documentación canónica completa
+- **Contenido:** Documentación completa del List Projection Model (LPM)
+
+### 2.3 Diagnósticos
 
 #### `docs/MASTER_DIAGNOSTIC_REPORT.md`
 - **Tipo:** Reporte de diagnóstico forense
