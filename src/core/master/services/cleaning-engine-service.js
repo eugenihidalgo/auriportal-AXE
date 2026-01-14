@@ -391,6 +391,29 @@ export async function markCleanStudent(options, client = null) {
       }
     };
     
+    // LOG TEMPORAL: Verificar estado antes de insertar evento
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    const existingState = await stateRepo.getState({
+      student_uuid,
+      product_key,
+      domain_type,
+      item_ref
+    }, client);
+    
+    console.log('[CLEAN][CHECK] Estado antes de insertar evento', {
+      student_uuid,
+      item_ref,
+      action_clean_layer: clean_layer,
+      execution_key: executionKey,
+      execution_mode: effectiveExecutionMode,
+      existing_state: existingState ? {
+        shared_last_cleaned_at: existingState.shared_last_cleaned_at,
+        pde_last_cleaned_at: existingState.pde_last_cleaned_at,
+        shared_clean_count: existingState.shared_clean_count,
+        pde_clean_count: existingState.pde_clean_count
+      } : null
+    });
+    
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
     logInfo('CleaningEngine', 'evento insertado', {
@@ -406,8 +429,7 @@ export async function markCleanStudent(options, client = null) {
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
       // Obtener estado actual para verificar days_since_last_clean de la capa
-      const stateRepo = getDefaultCleaningItemStateRepo();
-      const currentState = await stateRepo.getState({
+      const currentState = existingState || await stateRepo.getState({
         student_uuid,
         product_key,
         domain_type,

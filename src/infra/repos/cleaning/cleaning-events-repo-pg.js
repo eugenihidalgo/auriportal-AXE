@@ -75,8 +75,7 @@ export class CleaningEventsRepoPg {
       if (!result.rows || result.rows.length === 0) {
         logInfo('CleaningEventsRepo', 'Evento ya aplicado (idempotencia)', {
           execution_key: event.execution_key,
-          student_uuid: event.student_uuid,
-          student_id: legacyStudentId
+          student_uuid: event.student_uuid
         });
         return { already_executed: true };
       }
