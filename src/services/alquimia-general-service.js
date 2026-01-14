@@ -606,7 +606,6 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
     const { getStudentEffectiveLevel } = await import('../core/master/services/cleaning-engine-service.js');
     const { getDefaultPausaRepo } = await import('../infra/repos/pausa-repo-pg.js');
-    const { getDefaultStudentIdentityRepo } = await import('../infra/repos/student-identity-repo-pg.js');
 
     // UUID-ONLY: Leer EXCLUSIVAMENTE desde Cleaning Engine
     logInfo('AlquimiaGeneralService', '[GET_STUDENTS] Leyendo desde Cleaning Engine (UUID-only)', {
@@ -640,18 +639,14 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
     const studentsNoAplica = []; // Alumnos cuyo nivel no aplica (solo para logging, no se excluyen en Master)
     
     for (const student of rawResult.students) {
-      // UUID-ONLY: Verificar pausa usando student_uuid
+      // UUID-ONLY: Verificar pausa usando student_uuid directamente
       // Nota: getStudentsForItemFromCleaningEngine ya filtra pausados, pero verificamos por seguridad
       if (clean_layer && student.student_uuid) {
-        // Resolver legacy_id solo para verificar pausa (tabla pausas usa alumno_id)
-        const identityRepo = getDefaultStudentIdentityRepo();
-        const legacyId = await identityRepo.resolveLegacyId(student.student_uuid);
-        if (legacyId) {
-          const pausaRepo = getDefaultPausaRepo();
-          const pausaActiva = await pausaRepo.getPausaActiva(legacyId);
-          if (pausaActiva) {
-            continue; // Saltar estudiantes en pausa
-          }
+        // UUID-ONLY: pausas.student_id ahora es UUID (migrado en v5.70.0)
+        const pausaRepo = getDefaultPausaRepo();
+        const pausaActiva = await pausaRepo.getPausaActiva(student.student_uuid);
+        if (pausaActiva) {
+          continue; // Saltar estudiantes en pausa
         }
       }
       
