@@ -73,8 +73,13 @@ export async function resetStudentItemProgress(options) {
         throw new Error(`Item con item_ref=${item_ref} no encontrado`);
       }
       // domain_type se deriva del item (normalmente 'transmutation' o 'alquimia')
+      // Si el item no tiene domain_type, usar 'transmutation' como default
       if (!finalDomainType) {
         finalDomainType = item.domain_type || 'transmutation';
+      }
+      // Asegurar que nunca sea null (usar 'transmutation' como fallback absoluto)
+      if (!finalDomainType) {
+        finalDomainType = 'transmutation';
       }
       // item_kind se deriva del item si no viene
       if (!finalItemKind) {
@@ -178,7 +183,12 @@ export async function resetStudentListProgress(options) {
         throw new Error(`Lista con id=${list_id} no encontrada`);
       }
       // domain_type se deriva de la lista (normalmente 'transmutation' o 'alquimia')
+      // Si la lista no tiene domain_type, usar 'transmutation' como default
       finalDomainType = lista.domain_type || 'transmutation';
+      // Asegurar que nunca sea null (usar 'transmutation' como fallback absoluto)
+      if (!finalDomainType) {
+        finalDomainType = 'transmutation';
+      }
     }
     
     // Resetear estados: eliminar filas de cleaning_item_state para todos los ítems de la lista

@@ -338,16 +338,22 @@ export const masterSidebarRegistry = [
   },
   {
     id: 'master-informes-limpiezas',
-    label: 'Informes de Limpiezas',
+    label: 'Informe Alumnos',
     icon: '📊',
     route: '/master/comunicaciones/informes-limpiezas',
     section: 'Comunicaciones',
     visible: true,
     order: 4,
     universe: 'templo_luz'
-  }
+  },
+  {
+    id: 'master-informe-total-pde',
+    label: 'Informe Total PDE',
+    icon: '🌍',
+    route: '/master/comunicaciones/informe-total-pde',
+    section: 'Comunicaciones',
     visible: true,
-    order: 3,
+    order: 5,
     universe: 'templo_luz'
   }
 ];

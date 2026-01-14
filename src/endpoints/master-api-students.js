@@ -480,6 +480,11 @@ export default async function masterApiStudentsHandler(request, env, ctx) {
     if (method === 'GET') {
       return await getStudentByIdHandler(request, env, ctx);
     }
+  } else if (path === '/master/api/students/list') {
+    // GET /master/api/students/list → Lista simple (UUID + nombre)
+    if (method === 'GET') {
+      return await listStudentsSimpleHandler(request, env, ctx);
+    }
   } else {
     // No hay nada después de "students" → es GET /master/api/students o POST /master/api/students
     if (method === 'GET') {

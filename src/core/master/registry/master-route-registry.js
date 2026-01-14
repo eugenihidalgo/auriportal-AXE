@@ -272,6 +272,12 @@ export const MASTER_ROUTES = [
     type: 'api',
     method: 'GET'
   },
+  {
+    key: 'master-api-students-list',
+    path: '/master/api/students/list',
+    type: 'api',
+    method: 'GET'
+  },
   
   // ============================================
   // RUTAS API STUDENT OVERRIDES (OVERRIDES SYSTEM v1)
@@ -801,6 +807,11 @@ export const MASTER_ROUTES = [
   {
     key: 'master-informes-limpiezas',
     path: '/master/comunicaciones/informes-limpiezas',
+    type: 'island'
+  },
+  {
+    key: 'master-informe-total-pde',
+    path: '/master/comunicaciones/informe-total-pde',
     type: 'island'
   }
 ];

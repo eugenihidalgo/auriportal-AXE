@@ -1,14 +1,14 @@
 /**
- * MASTER - Informes de Limpiezas
+ * MASTER - Informe Total PDE
  * 
- * Pantalla de Informes de Limpiezas en Comunicaciones.
- * UI read-only para visualizar y copiar informes de historial narrativo.
+ * Pantalla de Informe Total PDE en Comunicaciones.
+ * UI read-only para visualizar informe global diario de limpiezas.
  */
 
 import { renderMasterPage } from '../core/master/layout/master-page-renderer.js';
 import { requireAdminContext } from '../core/auth-context.js';
 
-export default async function masterInformesLimpiezasHandler(request, env, ctx) {
+export default async function masterInformeTotalPdeHandler(request, env, ctx) {
   const url = new URL(request.url);
   const activePath = url.pathname;
   
@@ -24,53 +24,28 @@ export default async function masterInformesLimpiezasHandler(request, env, ctx) 
   }
   
   return renderMasterPage({
-    title: 'Informes de Limpiezas - Comunicaciones',
+    title: 'Informe Total PDE - Comunicaciones',
     contentHtml: `
-      <div id="master-informes-limpiezas-container" style="padding: 2rem;">
-        <h1 style="margin-bottom: 1.5rem; font-size: 1.875rem; font-weight: 700;">Informes de Limpiezas</h1>
+      <div id="master-informe-total-pde-container" style="padding: 2rem;">
+        <h1 style="margin-bottom: 1.5rem; font-size: 1.875rem; font-weight: 700;">Informe Total PDE</h1>
         
         <!-- Filtros -->
         <div style="margin-bottom: 2rem; padding: 1.5rem; background: #f8fafc; border-radius: 0.5rem;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
             <div>
-              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #334155;">Alumno</label>
-              <select 
-                id="filter-student-select" 
+              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #334155;">Fecha</label>
+              <input 
+                type="date" 
+                id="filter-date" 
                 style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;"
-              >
-                <option value="">-- Cargando alumnos... --</option>
-              </select>
-            </div>
-            <div>
-              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #334155;">Periodo</label>
-              <select 
-                id="filter-period" 
-                style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;"
-              >
-                <option value="30">Últimos 30 días</option>
-                <option value="7">Últimos 7 días</option>
-                <option value="90">Últimos 90 días</option>
-                <option value="365">Último año</option>
-              </select>
-            </div>
-            <div>
-              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #334155;">Tipo</label>
-              <select 
-                id="filter-type" 
-                style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;"
-              >
-                <option value="">Todos</option>
-                <option value="action_history">Acciones</option>
-                <option value="narrative_history">Narrativas</option>
-                <option value="silence_history">Silencios</option>
-              </select>
+              />
             </div>
           </div>
           <button 
             id="btn-load-report" 
             style="padding: 0.75rem 1.5rem; background: #4f46e5; color: white; border: none; border-radius: 0.25rem; font-weight: 600; cursor: pointer;"
           >
-            Cargar Informe
+            Cargar Informe Total
           </button>
         </div>
         
@@ -104,7 +79,7 @@ export default async function masterInformesLimpiezasHandler(request, env, ctx) 
     activePath,
     universeId: 'templo_luz',
     extraScripts: [
-      '<script type="module" src="/js/master/master-informes-limpiezas-client.js"></script>'
+      '<script type="module" src="/js/master/master-informe-total-pde-client.js"></script>'
     ]
   });
 }

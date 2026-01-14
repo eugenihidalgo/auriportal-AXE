@@ -51,6 +51,8 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-item-mark-clean-student': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-increment-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-adjust-remaining': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-reset-item': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-reset-list': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-groups': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista-classification': () => import('../../../endpoints/master-api-alquimia-general.js'),
@@ -77,6 +79,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-students': () => import('../../../endpoints/master-api-students.js'),
   'master-api-students-create': () => import('../../../endpoints/master-api-students.js'),
   'master-api-students-id': () => import('../../../endpoints/master-api-students.js'),
+  'master-api-students-list': () => import('../../../endpoints/master-api-students.js'),
   
   // Student Overrides API Handlers (OVERRIDES SYSTEM v1)
   'master-api-student-overrides': () => import('../../../endpoints/master-api-student-overrides.js'),
@@ -183,7 +186,8 @@ const MASTER_HANDLER_MAP = {
   'master-templo-luz-canalizaciones': () => import('../../../endpoints/master-templo-luz-canalizaciones.js'),
   'master-templo-luz-feedback': () => import('../../../endpoints/master-templo-luz-feedback.js'),
   'master-templo-luz-redactor': () => import('../../../endpoints/master-templo-luz-redactor.js'),
-  'master-informes-limpiezas': () => import('../../../endpoints/master-informes-limpiezas.js')
+  'master-informes-limpiezas': () => import('../../../endpoints/master-informes-limpiezas.js'),
+  'master-informe-total-pde': () => import('../../../endpoints/master-informe-total-pde.js')
 };
 
 /**

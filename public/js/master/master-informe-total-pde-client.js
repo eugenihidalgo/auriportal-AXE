@@ -1,7 +1,7 @@
 /**
- * MASTER Informes de Limpiezas Client v1.1
+ * MASTER Informe Total PDE Client v1
  * 
- * Cliente JavaScript para la UI de Informes de Limpiezas.
+ * Cliente JavaScript para la UI de Informe Total PDE.
  * DOM API only - Prohibido innerHTML dinámico (excepto contenido del backend).
  */
 
@@ -10,22 +10,20 @@
   
   // Guard: Solo ejecutar en contexto MASTER
   if (typeof window === 'undefined' || !window.__AP_CONTEXT__ || window.__AP_CONTEXT__ !== 'MASTER') {
-    console.warn('[MasterInformesLimpiezas] Contexto no es MASTER, abortando');
+    console.warn('[MasterInformeTotalPDE] Contexto no es MASTER, abortando');
     return;
   }
   
-  console.log('[MasterInformesLimpiezas] Cliente inicializado');
+  console.log('[MasterInformeTotalPDE] Cliente inicializado');
   
   // Elementos DOM
-  const container = document.getElementById('master-informes-limpiezas-container');
+  const container = document.getElementById('master-informe-total-pde-container');
   if (!container) {
-    console.warn('[MasterInformesLimpiezas] Contenedor no encontrado');
+    console.warn('[MasterInformeTotalPDE] Contenedor no encontrado');
     return;
   }
   
-  const filterStudentSelect = document.getElementById('filter-student-select');
-  const filterPeriod = document.getElementById('filter-period');
-  const filterType = document.getElementById('filter-type');
+  const filterDate = document.getElementById('filter-date');
   const btnLoadReport = document.getElementById('btn-load-report');
   const btnCopyReport = document.getElementById('btn-copy-report');
   const reportResult = document.getElementById('report-result');
@@ -33,13 +31,15 @@
   const reportLoading = document.getElementById('report-loading');
   const reportError = document.getElementById('report-error');
   
-  if (!filterStudentSelect || !filterPeriod || !filterType || !btnLoadReport || !btnCopyReport || !reportResult || !reportContent || !reportLoading || !reportError) {
-    console.error('[MasterInformesLimpiezas] Elementos DOM no encontrados');
+  if (!filterDate || !btnLoadReport || !btnCopyReport || !reportResult || !reportContent || !reportLoading || !reportError) {
+    console.error('[MasterInformeTotalPDE] Elementos DOM no encontrados');
     return;
   }
   
-  // Estado
-  let studentsList = [];
+  // Inicializar fecha a hoy
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  filterDate.value = today.toISOString().split('T')[0];
   
   /**
    * Muestra error
@@ -72,56 +72,6 @@
    */
   function hideLoading() {
     reportLoading.style.display = 'none';
-  }
-  
-  /**
-   * Carga lista de estudiantes desde API
-   */
-  async function loadStudentsList() {
-    try {
-      const response = await fetch('/master/api/students/list', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.ok || !data.data || !data.data.students) {
-        throw new Error('Respuesta inválida del servidor');
-      }
-      
-      studentsList = data.data.students;
-      
-      // Limpiar select
-      filterStudentSelect.innerHTML = '';
-      
-      // Añadir opción vacía
-      const emptyOption = document.createElement('option');
-      emptyOption.value = '';
-      emptyOption.textContent = '-- Selecciona un alumno --';
-      filterStudentSelect.appendChild(emptyOption);
-      
-      // Añadir opciones de estudiantes
-      for (const student of studentsList) {
-        const option = document.createElement('option');
-        option.value = student.uuid;
-        option.textContent = student.name;
-        filterStudentSelect.appendChild(option);
-      }
-      
-      console.log('[MasterInformesLimpiezas] Lista de estudiantes cargada', {
-        count: studentsList.length
-      });
-    } catch (error) {
-      console.error('[MasterInformesLimpiezas] Error cargando lista de estudiantes', error);
-      showError('Error cargando lista de estudiantes: ' + error.message);
-    }
   }
   
   /**
@@ -217,26 +167,27 @@
   }
   
   /**
-   * Carga informe desde API
+   * Carga informe total desde API
    */
   async function loadReport() {
-    const studentUuid = filterStudentSelect.value;
-    const days = parseInt(filterPeriod.value, 10);
-    const type = filterType.value || null;
+    const selectedDate = filterDate.value;
     
-    if (!studentUuid) {
-      showError('Por favor, selecciona un alumno');
+    if (!selectedDate) {
+      showError('Por favor, selecciona una fecha');
       return;
     }
     
     showLoading();
     
     try {
-      // Construir URL de API
-      let apiUrl = `/master/api/history/reports?student_uuid=${encodeURIComponent(studentUuid)}&days=${days}`;
-      if (type) {
-        apiUrl += `&type=${encodeURIComponent(type)}`;
-      }
+      // Construir URL de API para scope=platform
+      // Usar la fecha seleccionada como referencia
+      const date = new Date(selectedDate);
+      date.setHours(0, 0, 0, 0);
+      const days = 1; // Solo el día seleccionado
+      
+      // Para informe total, usar scope=platform
+      let apiUrl = `/master/api/history/reports?scope=platform&scope_ref=global&days=${days}&window=daily`;
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -266,7 +217,7 @@
         const totalEl = document.createElement('p');
         totalEl.style.marginBottom = '1rem';
         totalEl.style.color = '#64748b';
-        totalEl.textContent = `Total: ${report.total_entries} entradas`;
+        totalEl.textContent = `Total: ${report.total_entries} entradas para el ${formatDate(selectedDate)}`;
         reportContent.appendChild(totalEl);
         
         // Entradas
@@ -303,7 +254,7 @@
         // Empty state
         const emptyEl = document.createElement('p');
         emptyEl.style.color = '#64748b';
-        emptyEl.textContent = 'No hay entradas de historial para los filtros seleccionados.';
+        emptyEl.textContent = `No hay entradas de historial para el ${formatDate(selectedDate)}.`;
         reportContent.appendChild(emptyEl);
       }
       
@@ -311,11 +262,12 @@
       reportResult.style.display = 'block';
       hideError();
       
-      console.log('[MasterInformesLimpiezas] Informe cargado', {
-        entries_count: report.entries?.length || 0
+      console.log('[MasterInformeTotalPDE] Informe cargado', {
+        entries_count: report.entries?.length || 0,
+        date: selectedDate
       });
     } catch (error) {
-      console.error('[MasterInformesLimpiezas] Error cargando informe', error);
+      console.error('[MasterInformeTotalPDE] Error cargando informe', error);
       hideLoading();
       showError(error.message || 'Error cargando informe');
     }
@@ -346,9 +298,9 @@
         btnCopyReport.style.background = '#10b981';
       }, 2000);
       
-      console.log('[MasterInformesLimpiezas] Informe copiado al portapapeles');
+      console.log('[MasterInformeTotalPDE] Informe copiado al portapapeles');
     } catch (error) {
-      console.error('[MasterInformesLimpiezas] Error copiando informe', error);
+      console.error('[MasterInformeTotalPDE] Error copiando informe', error);
       showError('Error copiando al portapapeles: ' + error.message);
     }
   }
@@ -357,8 +309,8 @@
   btnLoadReport.addEventListener('click', loadReport);
   btnCopyReport.addEventListener('click', copyReport);
   
-  // Cargar lista de estudiantes al iniciar
-  loadStudentsList();
+  // Cargar informe automáticamente al iniciar
+  loadReport();
   
-  console.log('[MasterInformesLimpiezas] Event listeners registrados');
+  console.log('[MasterInformeTotalPDE] Event listeners registrados');
 })();

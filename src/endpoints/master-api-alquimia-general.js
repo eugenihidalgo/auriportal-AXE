@@ -1540,7 +1540,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
         }
         
-        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item iniciado', {
+        logInfo('[RESET][ITEM]', 'POST /reset-item iniciado', {
           traceId,
           student_uuid,
           item_ref,
@@ -1557,7 +1557,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           domain_type: body.domain_type || null
         });
         
-        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item completado', {
+        logInfo('[RESET][ITEM]', 'POST /reset-item completado', {
           traceId,
           student_uuid,
           item_ref,
@@ -1635,7 +1635,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           domain_type: body.domain_type || null
         });
         
-        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list completado', {
+        logInfo('[RESET][LIST]', 'POST /reset-list completado', {
           traceId,
           student_uuid,
           list_id,

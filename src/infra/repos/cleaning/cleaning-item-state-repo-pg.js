@@ -342,19 +342,32 @@ export class CleaningItemStateRepoPg {
     const productKey = options.product_key || 'pde';
     const domainType = options.domain_type;
 
-    const result = await queryFn(`
-      DELETE FROM cleaning_item_state
-      WHERE student_id = $1
-        AND product_key = $2
-        AND domain_type = $3
-        AND item_ref = $4
-      RETURNING id
-    `, [
-      studentUuid,
-      productKey,
-      domainType,
-      options.item_ref
-    ]);
+    // Manejar domain_type null correctamente
+    let query;
+    let params;
+    if (domainType === null || domainType === undefined) {
+      query = `
+        DELETE FROM cleaning_item_state
+        WHERE student_id = $1
+          AND product_key = $2
+          AND domain_type IS NULL
+          AND item_ref = $3
+        RETURNING id
+      `;
+      params = [studentUuid, productKey, options.item_ref];
+    } else {
+      query = `
+        DELETE FROM cleaning_item_state
+        WHERE student_id = $1
+          AND product_key = $2
+          AND domain_type = $3
+          AND item_ref = $4
+        RETURNING id
+      `;
+      params = [studentUuid, productKey, domainType, options.item_ref];
+    }
+    
+    const result = await queryFn(query, params);
 
     const deleted = result.rows.length > 0;
 
@@ -394,22 +407,38 @@ export class CleaningItemStateRepoPg {
     const domainType = options.domain_type;
 
     // Eliminar estados de items que pertenecen a la lista
-    const result = await queryFn(`
-      DELETE FROM cleaning_item_state cis
-      USING items_transmutaciones it
-      WHERE cis.student_id = $1
-        AND cis.product_key = $2
-        AND cis.domain_type = $3
-        AND cis.item_ref = it.item_ref
-        AND it.lista_id = $4
-        AND it.status = 'active'
-      RETURNING cis.id
-    `, [
-      studentUuid,
-      productKey,
-      domainType,
-      options.list_id
-    ]);
+    // Manejar domain_type null correctamente
+    let query;
+    let params;
+    if (domainType === null || domainType === undefined) {
+      query = `
+        DELETE FROM cleaning_item_state cis
+        USING items_transmutaciones it
+        WHERE cis.student_id = $1
+          AND cis.product_key = $2
+          AND cis.domain_type IS NULL
+          AND cis.item_ref = it.item_ref
+          AND it.lista_id = $3
+          AND it.status = 'active'
+        RETURNING cis.id
+      `;
+      params = [studentUuid, productKey, options.list_id];
+    } else {
+      query = `
+        DELETE FROM cleaning_item_state cis
+        USING items_transmutaciones it
+        WHERE cis.student_id = $1
+          AND cis.product_key = $2
+          AND cis.domain_type = $3
+          AND cis.item_ref = it.item_ref
+          AND it.lista_id = $4
+          AND it.status = 'active'
+        RETURNING cis.id
+      `;
+      params = [studentUuid, productKey, domainType, options.list_id];
+    }
+    
+    const result = await queryFn(query, params);
 
     const deletedCount = result.rows.length;
 

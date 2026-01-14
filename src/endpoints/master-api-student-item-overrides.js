@@ -84,10 +84,21 @@ export async function createStudentItemOverrideHandler(request, env, ctx) {
   
   try {
     const body = await request.json();
-    const { student_uuid, item_ref, override_key, override_value, reason } = body;
+    const { student_uuid, item_ref, override_key, override_value, reason, scope } = body;
+    
+    // GUARD CONSTITUCIONAL: Overrides SOLO en scope='student'
+    if (scope !== undefined && scope !== 'student') {
+      return jsonError('Overrides solo disponibles en scope=student. En scope=all debe actualizarse el ítem base directamente.', 'SCOPE_ERROR', 400, traceId);
+    }
     
     if (!student_uuid || !item_ref || !override_key || override_value === undefined) {
       return jsonError('student_uuid, item_ref, override_key y override_value son requeridos', 'VALIDATION_ERROR', 400, traceId);
+    }
+    
+    // GUARD CONSTITUCIONAL: Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(student_uuid)) {
+      return jsonError('student_uuid debe ser un UUID válido. Overrides solo disponibles en scope=student.', 'VALIDATION_ERROR', 400, traceId);
     }
     
     // Validar override_key permitidos en V1.1
@@ -245,9 +256,21 @@ export async function listStudentItemOverridesHandler(request, env, ctx) {
     const url = new URL(request.url);
     const student_uuid = url.searchParams.get('student_uuid');
     const item_ref = url.searchParams.get('item_ref') || null;
+    const scope = url.searchParams.get('scope');
+    
+    // GUARD CONSTITUCIONAL: Overrides SOLO en scope='student'
+    if (scope !== null && scope !== 'student') {
+      return jsonError('Overrides solo disponibles en scope=student', 'SCOPE_ERROR', 400, traceId);
+    }
     
     if (!student_uuid) {
-      return jsonError('student_uuid es requerido', 'VALIDATION_ERROR', 400, traceId);
+      return jsonError('student_uuid es requerido. Overrides solo disponibles en scope=student.', 'VALIDATION_ERROR', 400, traceId);
+    }
+    
+    // GUARD CONSTITUCIONAL: Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(student_uuid)) {
+      return jsonError('student_uuid debe ser un UUID válido. Overrides solo disponibles en scope=student.', 'VALIDATION_ERROR', 400, traceId);
     }
     
     const repo = getDefaultStudentItemOverridesRepoPg();

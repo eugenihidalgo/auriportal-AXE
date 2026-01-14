@@ -470,6 +470,21 @@
       }
       
       th.appendChild(headerContent);
+      
+      // Añadir resizer para redimensionar columnas (excepto última columna)
+      if (header.key !== 'actions') {
+        const resizer = document.createElement('div');
+        resizer.className = 'column-resizer';
+        resizer.style.cssText = 'position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; z-index: 10;';
+        resizer.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          startResize(e, th, itemsTable);
+        });
+        th.style.cssText += 'position: relative;';
+        th.appendChild(resizer);
+      }
+      
       headerRow.appendChild(th);
     });
     
@@ -1254,6 +1269,21 @@
       }
       
       th.appendChild(headerContent);
+      
+      // Añadir resizer para redimensionar columnas (excepto última columna)
+      if (header.key !== 'actions') {
+        const resizer = document.createElement('div');
+        resizer.className = 'column-resizer';
+        resizer.style.cssText = 'position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; z-index: 10;';
+        resizer.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          startResize(e, th, itemsTable);
+        });
+        th.style.cssText += 'position: relative;';
+        th.appendChild(resizer);
+      }
+      
       headerRow.appendChild(th);
     });
     
@@ -3401,6 +3431,152 @@
   }
 
   /**
+   * Sistema de redimensionamiento de columnas con persistencia
+   */
+  const COLUMN_WIDTHS_STORAGE_KEY = 'ap_alquimia_column_widths_v1';
+  
+  // Mapeo de keys semánticas de columnas
+  const COLUMN_KEY_MAP = {
+    'nivel': 'nivel',
+    'nombre': 'nombre',
+    'descripcion': 'descripcion',
+    'grupo': 'grupo',
+    'frecuencia_dias': 'dias',
+    'veces_limpiar': 'veces',
+    'actions': 'acciones'
+  };
+  
+  let resizeState = {
+    isResizing: false,
+    currentTh: null,
+    startX: 0,
+    startWidth: 0,
+    table: null,
+    columnKey: null
+  };
+  
+  /**
+   * Carga anchos de columnas desde localStorage
+   * @returns {Object} Objeto con anchos por key semántica
+   */
+  function loadColumnWidths() {
+    try {
+      const stored = localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.warn('[MasterAlquimiaGeneral] Error cargando anchos de columnas:', error);
+    }
+    return {};
+  }
+  
+  /**
+   * Guarda anchos de columnas en localStorage
+   * @param {Object} widths - Objeto con anchos por key semántica
+   */
+  function saveColumnWidths(widths) {
+    try {
+      localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(widths));
+    } catch (error) {
+      console.warn('[MasterAlquimiaGeneral] Error guardando anchos de columnas:', error);
+    }
+  }
+  
+  /**
+   * Aplica anchos guardados a una tabla
+   * @param {HTMLTableElement} table - Tabla a la que aplicar anchos
+   * @param {Array} headers - Array de headers con { key, label }
+   */
+  function applyColumnWidths(table, headers) {
+    const savedWidths = loadColumnWidths();
+    if (!savedWidths || Object.keys(savedWidths).length === 0) return;
+    
+    const thead = table.querySelector('thead');
+    if (!thead) return;
+    
+    const headerRow = thead.querySelector('tr');
+    if (!headerRow) return;
+    
+    headers.forEach((header, index) => {
+      const th = headerRow.children[index];
+      if (!th) return;
+      
+      const semanticKey = COLUMN_KEY_MAP[header.key];
+      if (!semanticKey) return;
+      
+      const savedWidth = savedWidths[semanticKey];
+      if (savedWidth && typeof savedWidth === 'number' && savedWidth >= 60) {
+        th.style.width = `${savedWidth}px`;
+        
+        // Aplicar también a las celdas del tbody
+        const tbody = table.querySelector('tbody');
+        if (tbody) {
+          const rows = tbody.querySelectorAll('tr');
+          rows.forEach(row => {
+            const cell = row.children[index];
+            if (cell) {
+              cell.style.width = `${savedWidth}px`;
+            }
+          });
+        }
+      }
+    });
+  }
+
+  function startResize(e, th, table, columnKey) {
+    resizeState.isResizing = true;
+    resizeState.currentTh = th;
+    resizeState.startX = e.clientX;
+    resizeState.startWidth = th.offsetWidth;
+    resizeState.table = table;
+    resizeState.columnKey = columnKey;
+    
+    document.addEventListener('mousemove', handleResize);
+    document.addEventListener('mouseup', stopResize);
+    
+    // Cambiar cursor global
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function handleResize(e) {
+    if (!resizeState.isResizing || !resizeState.currentTh) return;
+    
+    const diff = e.clientX - resizeState.startX;
+    const newWidth = Math.max(60, resizeState.startWidth + diff); // Mínimo 60px
+    
+    // Aplicar ancho a la columna
+    resizeState.currentTh.style.width = `${newWidth}px`;
+    
+    // Aplicar ancho a todas las celdas de esa columna
+    const colIndex = Array.from(resizeState.currentTh.parentElement.children).indexOf(resizeState.currentTh);
+    if (resizeState.table) {
+      const rows = resizeState.table.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cell = row.children[colIndex];
+        if (cell) {
+          cell.style.width = `${newWidth}px`;
+        }
+      });
+    }
+  }
+
+  function stopResize() {
+    if (resizeState.isResizing) {
+      resizeState.isResizing = false;
+      resizeState.currentTh = null;
+      resizeState.table = null;
+      
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', stopResize);
+      
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  }
+
+  /**
    * Crea una fila de tabla (editable o create row)
    * @param {Object} item - Item a renderizar (null si isCreateRow)
    * @param {boolean} isCreateRow - Si es true, crea fila de creación
@@ -3502,13 +3678,34 @@
       } else {
         // Modo operativa: actualizar item base
         nivelInput.addEventListener('change', () => {
-          debouncedUpdateItem(item.id, { nivel: parseInt(nivelInput.value) || null });
+          const newNivel = parseInt(nivelInput.value) || null;
+          // Actualizar localmente primero para reordenación inmediata
+          if (state.items && Array.isArray(state.items)) {
+            const itemIndex = state.items.findIndex(i => i.id === item.id || i.item_ref === item.item_ref);
+            if (itemIndex >= 0) {
+              state.items[itemIndex] = { ...state.items[itemIndex], nivel: newNivel };
+              // Reordenar inmediatamente
+              state.items = applyItemsSort(state.items);
+              // Re-renderizar sin refetch
+              renderView();
+            }
+          }
+          // Guardar en backend (sin refetch, ya reordenamos localmente)
+          debouncedUpdateItem(item.id, { nivel: newNivel }, { skipRefetch: true });
         });
       }
     }
     
     nivelInput.style.cssText = 'width: 60px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-    if (!isOverrideEditable && !isCreateRow) {
+    
+    // REGLA CONSTITUCIONAL: Input habilitado SOLO si:
+    // - Es create row (siempre editable)
+    // - Es override editable (scope='student' con student_uuid) → usa overrides
+    // - Es scope='all' (editable para modificar ítem base) → usa updateItem
+    const isEditableInAll = !isCreateRow && !isOverrideEditable && state.projection.scope === 'all';
+    const shouldBeEditable = isCreateRow || isOverrideEditable || isEditableInAll;
+    
+    if (!shouldBeEditable) {
       nivelInput.disabled = true;
       nivelInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
     }
@@ -3588,7 +3785,9 @@
       }
       
       descInput.value = effectiveValue || '';
-      descInput.placeholder = baseValue || 'Descripción (opcional)';
+      // REGLA CANÓNICA: Placeholder SOLO en formulario de creación, NO en ítems existentes
+      // Si hay descripción base, usarla como placeholder; si no, dejar vacío
+      descInput.placeholder = baseValue || '';
       
       // Hacer editable solo si es override mode
       if (isOverrideEditable) {
@@ -3638,7 +3837,10 @@
     }
     
     descInput.style.cssText = 'width: 100%; min-width: 200px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-    if (!isOverrideEditable && !isCreateRow) {
+    // REGLA CONSTITUCIONAL: Input habilitado SOLO si es create row, override editable, o scope='all'
+    const isEditableInAllDesc = !isCreateRow && !isOverrideEditable && state.projection.scope === 'all';
+    const shouldBeEditableDesc = isCreateRow || isOverrideEditable || isEditableInAllDesc;
+    if (!shouldBeEditableDesc) {
       descInput.disabled = true;
       descInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
     }
@@ -3783,7 +3985,10 @@
       }
       
       diasInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-      if (!isOverrideEditable && !isCreateRow) {
+      // REGLA CONSTITUCIONAL: Input habilitado SOLO si es create row, override editable, o scope='all'
+      const isEditableInAllDias = !isCreateRow && !isOverrideEditable && state.projection.scope === 'all';
+      const shouldBeEditableDias = isCreateRow || isOverrideEditable || isEditableInAllDias;
+      if (!shouldBeEditableDias) {
         diasInput.disabled = true;
         diasInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
       }
@@ -3888,7 +4093,10 @@
       }
       
       vecesInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-      if (!isOverrideEditable && !isCreateRow) {
+      // REGLA CONSTITUCIONAL: Input habilitado SOLO si es create row, override editable, o scope='all'
+      const isEditableInAllVeces = !isCreateRow && !isOverrideEditable && state.projection.scope === 'all';
+      const shouldBeEditableVeces = isCreateRow || isOverrideEditable || isEditableInAllVeces;
+      if (!shouldBeEditableVeces) {
         vecesInput.disabled = true;
         vecesInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
       }
@@ -4119,8 +4327,12 @@
 
   /**
    * Debounced update de item (autosave)
+   * @param {string} itemId - ID del item
+   * @param {Object} patch - Campos a actualizar
+   * @param {Object} options - Opciones adicionales
+   * @param {boolean} options.skipRefetch - Si es true, no hace refetch después de guardar
    */
-  function debouncedUpdateItem(itemId, patch) {
+  function debouncedUpdateItem(itemId, patch, options = {}) {
     // Cancelar timer anterior si existe
     if (state.debounceTimers[itemId]) {
       clearTimeout(state.debounceTimers[itemId]);
@@ -4158,8 +4370,10 @@
           }, 1000);
         }
         
-        // Refetch items para obtener datos frescos
-        await loadItems(state.listaActiva.id);
+        // Refetch items solo si no se indica skipRefetch
+        if (!options.skipRefetch) {
+          await loadItems(state.listaActiva.id);
+        }
       } catch (error) {
         console.error('[MasterAlquimiaGeneral] Error actualizando item:', error);
         if (indicator) {
