@@ -13,8 +13,12 @@ import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista, deleteLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
   getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
-  listItemGroups, resetStudentItemProgress, resetStudentListProgress
+  listItemGroups
 } from '../services/alquimia-general-service.js';
+import {
+  resetStudentItemProgress,
+  resetStudentListProgress
+} from '../core/master/services/alquimia-reset-service.js';
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
@@ -1509,24 +1513,36 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
     // POST /master/api/alquimia-general/reset-item
     // Resetea el progreso de un alumno para un ítem específico
-    // REGLA: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    // REGLA CONSTITUCIONAL: Solo disponible en scope='student' (validado por presencia de student_uuid)
     if (path === '/master/api/alquimia-general/reset-item' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, item_ref } = body;
+        const { student_uuid, item_ref, scope } = body;
         
+        // Validaciones obligatorias
         if (!student_uuid || !item_ref) {
           return jsonError('student_uuid e item_ref son requeridos', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: scope debe ser 'student'
+        if (scope !== 'student') {
+          return jsonError('Reset solo disponible en scope=student', 'SCOPE_ERROR', 400, traceId);
         }
         
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item iniciado', {
           traceId,
           student_uuid,
-          item_ref
+          item_ref,
+          scope
         });
         
-        const productKey = body.product_key || 'pde';
-        const deleted = await resetStudentItemProgress(student_uuid, item_ref, productKey);
+        // Delegar 100% al servicio canónico
+        const deleted = await resetStudentItemProgress({
+          student_uuid,
+          item_ref,
+          product_key: body.product_key || 'pde',
+          domain_type: body.domain_type || null
+        });
         
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item completado', {
           traceId,
@@ -1536,9 +1552,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
         
         return jsonSuccess({
+          ok: true,
           reset: true,
           item_ref,
-          deleted
+          deleted,
+          trace_id: traceId
         }, traceId);
       } catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-item', {
@@ -1558,24 +1576,36 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
 
     // POST /master/api/alquimia-general/reset-list
     // Resetea el progreso de un alumno para todos los ítems de una lista
-    // REGLA: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    // REGLA CONSTITUCIONAL: Solo disponible en scope='student' (validado por presencia de student_uuid)
     if (path === '/master/api/alquimia-general/reset-list' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, list_id } = body;
+        const { student_uuid, list_id, scope } = body;
         
+        // Validaciones obligatorias
         if (!student_uuid || !list_id) {
           return jsonError('student_uuid y list_id son requeridos', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: scope debe ser 'student'
+        if (scope !== 'student') {
+          return jsonError('Reset solo disponible en scope=student', 'SCOPE_ERROR', 400, traceId);
         }
         
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list iniciado', {
           traceId,
           student_uuid,
-          list_id
+          list_id,
+          scope
         });
         
-        const productKey = body.product_key || 'pde';
-        const deletedCount = await resetStudentListProgress(student_uuid, list_id, productKey);
+        // Delegar 100% al servicio canónico
+        const deletedCount = await resetStudentListProgress({
+          student_uuid,
+          list_id,
+          product_key: body.product_key || 'pde',
+          domain_type: body.domain_type || null
+        });
         
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list completado', {
           traceId,
@@ -1585,9 +1615,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
         
         return jsonSuccess({
+          ok: true,
           reset: true,
           list_id,
-          deleted_count: deletedCount
+          deleted_count: deletedCount,
+          trace_id: traceId
         }, traceId);
       } catch (error) {
         logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-list', {

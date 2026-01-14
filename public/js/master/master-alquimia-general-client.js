@@ -3913,7 +3913,9 @@
       actionsDiv.appendChild(btnVer);
       
       // Botón LIMPIAR (solo recurrentes)
-      if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+      // REGLA CONSTITUCIONAL: En scope='student', NO mostrar botones de limpieza general (bulk)
+      // Solo mostrar botones de limpieza por alumno (más abajo en el código)
+      if (state.listaActiva && state.listaActiva.tipo === 'recurrente' && state.projection.scope !== 'student') {
         // ============================================================================
         // REGLA CANÓNICA: clean_layer DEBE ser explícito en acciones masivas
         // ============================================================================
@@ -4005,8 +4007,8 @@
             }
             
             try {
-              const deleted = await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
-              if (deleted) {
+              const result = await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
+              if (result.deleted) {
                 showToastSuccess('Progreso del ítem reseteado');
               } else {
                 showToastSuccess('No había progreso para resetear');
@@ -5271,7 +5273,8 @@
         },
         body: JSON.stringify({
           student_uuid,
-          item_ref
+          item_ref,
+          scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
         })
       });
       
@@ -5287,7 +5290,9 @@
         deleted: result.data?.deleted
       });
       
-      return result.data?.deleted || false;
+      return {
+        deleted: result.data?.deleted || false
+      };
     } catch (error) {
       console.error('[RESET][ITEM] Error:', error);
       throw error;
@@ -5309,7 +5314,8 @@
         },
         body: JSON.stringify({
           student_uuid,
-          list_id
+          list_id,
+          scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
         })
       });
       
