@@ -690,7 +690,7 @@ export async function markCleanAllStudents(options, client = null) {
     const queryFn = client ? client.query.bind(client) : query;
     
     const studentsResult = await queryFn(`
-      SELECT id as student_uuid, legacy_alumno_id
+      SELECT id as student_uuid
       FROM students
       WHERE deleted_at IS NULL
     `, []);
@@ -701,8 +701,7 @@ export async function markCleanAllStudents(options, client = null) {
       const isPaused = await isStudentPaused(row.student_uuid);
       if (!isPaused) {
         activeStudentUuids.push({
-          uuid: row.student_uuid,
-          legacy_id: row.legacy_alumno_id // Solo para referencia, no se usa en runtime
+          uuid: row.student_uuid
         });
       }
     }
