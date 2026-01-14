@@ -182,9 +182,17 @@
     
     if (updates.scope !== undefined) {
       state.projection.scope = updates.scope;
+      
+      // REGLA CANÓNICA A: scope=all fuerza student_uuid=null
+      if (updates.scope === 'all') {
+        state.projection.student_uuid = null;
+        console.log('[UI][VIEW_STATE_CHANGE] scope=all forces student_uuid=null');
+      }
+      
       console.log('[UI][VIEW_STATE_CHANGE] scope changed', {
         old: oldViewState.scope,
-        new: updates.scope
+        new: updates.scope,
+        student_uuid: state.projection.student_uuid
       });
     }
     
@@ -1283,10 +1291,12 @@
     }
     
     // GATE: Validar que si scope='student', student_uuid esté presente
+    // REGLA CANÓNICA C: El gate es protección, no flujo normal
+    // La UX debe evitar caer aquí (botones ya manejan esto correctamente)
     if (state.projection.scope === 'student' && !state.projection.student_uuid) {
-      console.warn('[LPM][GATE] scope=student sin student_uuid. Esperando selección de alumno.');
+      console.log('[LPM][GATE] scope=student sin student_uuid. Mostrando selector de alumno.');
       
-      // Renderizar estado de espera en UI
+      // Renderizar estado de espera en UI (selector ya visible, pero mostrar mensaje claro)
       if (listaContent) {
         // Limpiar contenido previo de proyección
         const existingProjection = listaContent.querySelector('[data-projection-content]');
@@ -1299,7 +1309,7 @@
         waitingContainer.style.cssText = 'padding: 2rem; text-align: center; color: #94a3b8; font-style: italic;';
         
         const waitingMsg = document.createElement('div');
-        waitingMsg.textContent = 'Selecciona un alumno para ver la proyección';
+        waitingMsg.textContent = 'Selecciona un alumno en el selector de arriba para ver su proyección';
         waitingMsg.style.cssText = 'font-size: 1rem; margin-bottom: 0.5rem;';
         waitingContainer.appendChild(waitingMsg);
         
@@ -1410,10 +1420,11 @@
     btnAll.textContent = 'All';
     btnAll.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'all' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
     btnAll.addEventListener('click', () => {
-      // REGLA B: Cambio de scope mantiene list_id, view_layer
+      // REGLA CANÓNICA A: scope=all fuerza student_uuid=null y recarga inmediata
       updateViewState({ scope: 'all', student_uuid: null });
+      // Cargar proyección inmediatamente (scope=all nunca requiere student_uuid)
       loadListProjection();
-      renderView();
+      // renderView() se llama desde loadListProjection() si hay datos
     });
     scopeContainer.appendChild(btnAll);
     
@@ -1421,10 +1432,20 @@
     btnStudent.textContent = 'Alumno';
     btnStudent.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'student' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
     btnStudent.addEventListener('click', () => {
-      // Cambiar scope a 'student' y mostrar selector
-      updateViewState({ scope: 'student', student_uuid: null });
-      loadListProjection();
-      renderView();
+      // REGLA CANÓNICA B: scope=student requiere student_uuid
+      const currentStudentUuid = state.projection.student_uuid;
+      
+      // Cambiar scope a 'student'
+      updateViewState({ scope: 'student' });
+      
+      // Si ya existe student_uuid, cargar proyección inmediatamente
+      if (currentStudentUuid) {
+        loadListProjection();
+      } else {
+        // Si NO hay student_uuid, solo renderizar (mostrar selector)
+        // NO llamar a loadListProjection() hasta que haya uuid
+        renderView();
+      }
     });
     scopeContainer.appendChild(btnStudent);
     
@@ -1466,14 +1487,14 @@
       studentSelect.addEventListener('change', (e) => {
         const studentUuid = e.target.value;
         if (studentUuid && studentUuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-          // REGLA B: Cambio de alumno mantiene list_id, view_layer, scope
+          // REGLA CANÓNICA B: Al seleccionar alumno, cargar proyección inmediatamente
           updateViewState({ student_uuid: studentUuid });
           loadListProjection();
-          renderView();
+          // renderView() se llama desde loadListProjection() si hay datos
         } else {
-          // Si se selecciona opción vacía, limpiar selección
+          // Si se selecciona opción vacía, limpiar selección y mostrar estado de espera
           updateViewState({ student_uuid: null });
-          loadListProjection();
+          // NO cargar proyección si no hay student_uuid (el gate lo manejará)
           renderView();
         }
       });
