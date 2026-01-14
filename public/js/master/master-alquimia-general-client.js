@@ -1582,7 +1582,9 @@
         const tbody = document.createElement('tbody');
         
         group.items.forEach(item => {
-          const itemRow = createItemTableRow(item, false);
+          // REGLA DURA: Solo añadir botones si scope === 'student' y hay student_uuid
+          const isProjectionStudent = state.projection.scope === 'student' && !!state.projection.student_uuid;
+          const itemRow = createItemTableRow(item, false, isProjectionStudent);
           // Estilizar filas reviewed
           if (group.key === 'reviewed') {
             itemRow.classList.add('row-reviewed');
@@ -3371,8 +3373,11 @@
 
   /**
    * Crea una fila de tabla (editable o create row)
+   * @param {Object} item - Item a renderizar (null si isCreateRow)
+   * @param {boolean} isCreateRow - Si es true, crea fila de creación
+   * @param {boolean} isProjectionStudent - Si es true, añade botones de limpieza individual (solo scope='student')
    */
-  function createItemTableRow(item, isCreateRow) {
+  function createItemTableRow(item, isCreateRow, isProjectionStudent = false) {
     const tr = document.createElement('tr');
     tr.style.cssText = 'border-bottom: 1px solid #334155;';
     if (!isCreateRow) {
@@ -3628,19 +3633,89 @@
         actionsDiv.appendChild(btnPde);
       }
       
-      // Botón ELIMINAR
-      const btnEliminar = document.createElement('button');
-      btnEliminar.textContent = '🗑';
-      btnEliminar.style.cssText = 'padding: 0.375rem 0.5rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-      btnEliminar.addEventListener('click', () => handleEliminarItem(item));
-      actionsDiv.appendChild(btnEliminar);
+      // ============================================================================
+      // BOTONES DE LIMPIEZA INDIVIDUAL (SOLO EN PROYECCIÓN SCOPE='student')
+      // ============================================================================
+      // REGLA DURA: Solo renderizar si isProjectionStudent === true
+      // Esto garantiza que NO aparecen en ALL ni OPERATIVA
+      // ============================================================================
+      if (isProjectionStudent && state.projection.scope === 'student' && state.projection.student_uuid) {
+        // Obtener item_kind explícito
+        const itemKind = getItemKindExplicit(item, state.listaActiva);
+        
+        if (itemKind) {
+          // Crear objeto student mínimo para handleLimpiarEstudiante
+          const studentForAction = {
+            student_uuid: state.projection.student_uuid
+          };
+          
+          // Botón "Limpiar" (SHARED)
+          const btnLimpiarShared = document.createElement('button');
+          btnLimpiarShared.textContent = 'Limpiar';
+          btnLimpiarShared.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnLimpiarShared.addEventListener('click', async () => {
+            console.log('[UI][PROJECTION][STUDENT][CLEAN] Limpiar SHARED', {
+              item_ref: item.item_ref,
+              student_uuid: state.projection.student_uuid,
+              action_clean_layer: 'shared',
+              item_kind: itemKind
+            });
+            
+            try {
+              await handleLimpiarEstudiante(studentForAction, item, 'shared', itemKind);
+              
+              // Refrescar proyección tras acción exitosa
+              await loadListProjection();
+              renderView();
+            } catch (error) {
+              console.error('[UI][PROJECTION][STUDENT][CLEAN] Error limpiando SHARED:', error);
+              showToastError(`Error: ${error.message}`);
+            }
+          });
+          actionsDiv.appendChild(btnLimpiarShared);
+          
+          // Botón "Limpiar PDE"
+          const btnLimpiarPde = document.createElement('button');
+          btnLimpiarPde.textContent = 'Limpiar PDE';
+          btnLimpiarPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnLimpiarPde.addEventListener('click', async () => {
+            console.log('[UI][PROJECTION][STUDENT][CLEAN] Limpiar PDE', {
+              item_ref: item.item_ref,
+              student_uuid: state.projection.student_uuid,
+              action_clean_layer: 'pde',
+              item_kind: itemKind
+            });
+            
+            try {
+              await handleLimpiarEstudiante(studentForAction, item, 'pde', itemKind);
+              
+              // Refrescar proyección tras acción exitosa
+              await loadListProjection();
+              renderView();
+            } catch (error) {
+              console.error('[UI][PROJECTION][STUDENT][CLEAN] Error limpiando PDE:', error);
+              showToastError(`Error: ${error.message}`);
+            }
+          });
+          actionsDiv.appendChild(btnLimpiarPde);
+        }
+      }
       
-      // Indicador "guardando..." (se actualiza vía debouncedUpdateItem)
-      const savingIndicator = document.createElement('span');
-      savingIndicator.id = `saving-${item.id}`;
-      savingIndicator.style.cssText = 'color: #64748b; font-size: 0.75rem; display: none;';
-      savingIndicator.textContent = 'guardando...';
-      actionsDiv.appendChild(savingIndicator);
+      // Botón ELIMINAR (solo en vista operativa, no en proyección)
+      if (!isProjectionStudent) {
+        const btnEliminar = document.createElement('button');
+        btnEliminar.textContent = '🗑';
+        btnEliminar.style.cssText = 'padding: 0.375rem 0.5rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
+        btnEliminar.addEventListener('click', () => handleEliminarItem(item));
+        actionsDiv.appendChild(btnEliminar);
+        
+        // Indicador "guardando..." (se actualiza vía debouncedUpdateItem)
+        const savingIndicator = document.createElement('span');
+        savingIndicator.id = `saving-${item.id}`;
+        savingIndicator.style.cssText = 'color: #64748b; font-size: 0.75rem; display: none;';
+        savingIndicator.textContent = 'guardando...';
+        actionsDiv.appendChild(savingIndicator);
+      }
     }
     
     tdActions.appendChild(actionsDiv);
