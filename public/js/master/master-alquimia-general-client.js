@@ -971,8 +971,13 @@
       itemsLen: state.items?.length || 0
     });
     
-    // Render FINAL cuando datos están listos
-    renderView();
+    // FIX: Si está en modo proyección, recargar proyección antes de renderizar
+    if (state.projection.mode === 'proyeccion') {
+      await loadListProjection();
+    } else {
+      // Render FINAL cuando datos están listos (modo operativa)
+      renderView();
+    }
   }
 
   /**
@@ -1656,6 +1661,8 @@
       
       // Recargar items
       await loadItems(listaId);
+      // FIX: Render inmediato tras crear ítem
+      renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando item:', error);
       showToastError(`Error creando item: ${error.message}`);
@@ -3791,6 +3798,8 @@
 
       // Refetch items
       await loadItems(state.listaActiva.id);
+      // FIX: Render inmediato tras crear ítem inline
+      renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando item inline:', error);
       showWarning(`Error: ${error.message}`);
@@ -4126,6 +4135,8 @@
 
       // Refetch items
       await loadItems(state.listaActiva.id);
+      // FIX: Render inmediato tras eliminar ítem
+      renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error eliminando item:', error);
       showWarning(`Error: ${error.message}`);
