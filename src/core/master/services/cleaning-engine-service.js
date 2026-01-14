@@ -464,7 +464,7 @@ export async function markCleanStudent(options, client = null) {
     }
     
     // 7. Aplicar a proyección cleaning_item_state (repositorio resuelve legacy_id internamente)
-    const stateRepo = getDefaultCleaningItemStateRepo();
+    // stateRepo ya está declarado arriba (línea 395), reutilizar
     let state;
     
     logInfo('CleaningEngine', 'Aplicando proyección', {
