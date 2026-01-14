@@ -116,33 +116,51 @@ export async function createStudentItemOverrideHandler(request, env, ctx) {
     }
     
     const repo = getDefaultStudentItemOverridesRepoPg();
-    const overrideRecord = await repo.create({
-      student_uuid,
-      item_ref,
-      override_key,
-      override_value: validatedValue,
-      reason,
-      created_by: authCtx.user?.email || 'system'
-    });
     
-    logInfo('MasterAPIStudentItemOverrides', 'Item override creado', {
-      override_id: overrideRecord.id,
-      student_uuid,
-      item_ref,
-      override_key,
-      traceId
-    });
+    // UPSERT: Verificar si existe override con (student_uuid, item_ref, override_key)
+    const existingOverride = await repo.getByStudentItemAndKey(student_uuid, item_ref, override_key);
+    
+    let overrideRecord;
+    if (existingOverride) {
+      // Actualizar override existente
+      overrideRecord = await repo.update(existingOverride.id, {
+        override_value: validatedValue,
+        reason: reason || existingOverride.reason
+      });
+      
+      logInfo('MasterAPIStudentItemOverrides', 'Item override actualizado', {
+        override_id: overrideRecord.id,
+        student_uuid,
+        item_ref,
+        override_key,
+        traceId
+      });
+    } else {
+      // Crear nuevo override
+      overrideRecord = await repo.create({
+        student_uuid,
+        item_ref,
+        override_key,
+        override_value: validatedValue,
+        reason,
+        created_by: authCtx.user?.email || 'system'
+      });
+      
+      logInfo('MasterAPIStudentItemOverrides', 'Item override creado', {
+        override_id: overrideRecord.id,
+        student_uuid,
+        item_ref,
+        override_key,
+        traceId
+      });
+    }
     
     return jsonSuccess({ override: overrideRecord }, traceId);
   } catch (error) {
-    logError('MasterAPIStudentItemOverrides', 'Error creando item override', {
+    logError('MasterAPIStudentItemOverrides', 'Error en UPSERT de item override', {
       error: error.message,
       traceId
     });
-    
-    if (error.message.includes('ya existe')) {
-      return jsonError(error.message, 'DUPLICATE_ERROR', 409, traceId);
-    }
     
     return jsonError('Error interno del servidor', 'INTERNAL_ERROR', 500, traceId);
   }

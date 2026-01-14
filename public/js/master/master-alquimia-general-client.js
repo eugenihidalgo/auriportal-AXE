@@ -5122,7 +5122,7 @@
         throw new Error(result.error || 'Error creando override');
       }
       
-      console.log('[OVERRIDES][CREATE] Override creado', {
+      console.log('[OVERRIDES][UPSERT] Override creado/actualizado', {
         student_uuid,
         item_ref,
         override_key,
@@ -5224,33 +5224,51 @@
   }
   
   /**
+   * Normaliza un valor para comparación semántica
+   * @param {*} value - Valor a normalizar
+   * @returns {string|number|null} Valor normalizado
+   */
+  function normalizeValue(value) {
+    // null, undefined, "" → null (equivalentes)
+    if (value == null || value === '') {
+      return null;
+    }
+    
+    // Strings: trim() obligatorio
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed === '' ? null : trimmed;
+    }
+    
+    // Números: mantener tal cual
+    if (typeof value === 'number') {
+      return value;
+    }
+    
+    // Otros tipos: convertir a string y trim
+    const str = String(value).trim();
+    return str === '' ? null : str;
+  }
+  
+  /**
    * Compara valor efectivo vs base para detectar overrides
+   * REGLA SEMÁNTICA: null, undefined, "" son equivalentes (no hay override si ambos son vacíos)
    * @param {*} effectiveValue - Valor efectivo (con override aplicado)
    * @param {*} baseValue - Valor base (sin override)
    * @returns {boolean} true si hay override activo
    */
   function hasOverride(effectiveValue, baseValue) {
-    // Comparación estricta (incluye null/undefined)
-    if (effectiveValue === baseValue) {
+    // Normalizar ambos valores
+    const normalizedEffective = normalizeValue(effectiveValue);
+    const normalizedBase = normalizeValue(baseValue);
+    
+    // Si ambos son null (vacíos), NO hay override
+    if (normalizedEffective === null && normalizedBase === null) {
       return false;
     }
     
-    // Comparación numérica
-    if (typeof effectiveValue === 'number' && typeof baseValue === 'number') {
-      return effectiveValue !== baseValue;
-    }
-    
-    // Comparación de strings
-    if (typeof effectiveValue === 'string' && typeof baseValue === 'string') {
-      return effectiveValue !== baseValue;
-    }
-    
-    // Comparación con null/undefined
-    if ((effectiveValue == null) !== (baseValue == null)) {
-      return true;
-    }
-    
-    return false;
+    // Comparación estricta después de normalización
+    return normalizedEffective !== normalizedBase;
   }
 
   // Inicializar cuando el DOM esté listo (envuelto en try/catch)
