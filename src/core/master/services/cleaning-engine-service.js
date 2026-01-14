@@ -558,7 +558,7 @@ export async function markCleanStudent(options, client = null) {
     try {
       const { emitSignal } = await import('../../services/pde-signal-emitter.js');
       
-      await emitSignal('clean.executed', {
+      const signalPayload = {
         signal: 'clean.executed',
         scope: 'student',
         student_uuid, // UUID canónico (único identificador)
@@ -569,11 +569,30 @@ export async function markCleanStudent(options, client = null) {
         source: actor_type,
         clean_layer,
         executed_at: new Date().toISOString()
-      }, {}, {}, {
+      };
+      
+      await emitSignal('clean.executed', signalPayload, {}, {}, {
         trace_id: traceId,
         source: 'cleaning-engine-service',
         action: 'markCleanStudent'
       });
+      
+      // 8.1. Generar historial desde señal (asíncrono, fail-open)
+      try {
+        const { handleHistorySignal } = await import('./history-signal-listener.js');
+        await handleHistorySignal({
+          signal_key: 'clean.executed',
+          payload: signalPayload,
+          runtime: { trace_id: traceId },
+          context: {}
+        });
+      } catch (historyError) {
+        logWarn('CleaningEngine', 'Error generando historial (fail-open)', {
+          traceId,
+          error: historyError.message
+        });
+        // Fail-open: no bloquear la limpieza si falla el historial
+      }
     } catch (signalError) {
       logWarn('CleaningEngine', 'Error emitiendo señales (fail-open)', {
         traceId,
