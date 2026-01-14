@@ -1087,6 +1087,9 @@ export async function setRemainingShared(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
+    // Declarar stateRepo una sola vez al inicio (reutilizar en todo el scope)
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
       logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
@@ -1096,7 +1099,6 @@ export async function setRemainingShared(options, client = null) {
         item_ref
       });
       // Devolver estado actual (repositorio resuelve legacy_id internamente)
-      const stateRepo = getDefaultCleaningItemStateRepo();
       return await stateRepo.getState({
         student_uuid,
         product_key,
@@ -1106,7 +1108,6 @@ export async function setRemainingShared(options, client = null) {
     }
     
     // 6. Aplicar a proyección (repositorio resuelve legacy_id internamente)
-    const stateRepo = getDefaultCleaningItemStateRepo();
     const state = await stateRepo.upsertApplyOneTimeSetRemainingShared({
       student_uuid,
       product_key,
