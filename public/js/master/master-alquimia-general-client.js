@@ -3411,10 +3411,11 @@
       });
     } else {
       // Obtener valores base y efectivo
-      const baseValue = item.nivel || 9;
+      // IMPORTANTE: Usar nivel_base si existe (desde LPM), sino item.nivel como fallback
+      const baseValue = item.nivel_base !== undefined ? item.nivel_base : (item.nivel || 9);
       const effectiveValue = item.nivel !== undefined ? item.nivel : baseValue;
       
-      // Detectar override (nivel puede venir del override)
+      // Detectar override: comparar efectivo vs base
       const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
       
       // Aplicar borde rojo si hay override
@@ -3436,8 +3437,11 @@
           }
           
           try {
+            // Obtener valor base real (desde LPM o fallback)
+            const realBaseValue = item.nivel_base !== undefined ? item.nivel_base : (item.nivel || 9);
+            
             // Si el nuevo valor es igual al base, eliminar override
-            if (newValue === baseValue) {
+            if (newValue === realBaseValue) {
               // Buscar y eliminar override existente
               const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
               const nivelOverride = overrides.find(o => o.override_key === 'nivel');
@@ -3542,10 +3546,11 @@
       });
     } else {
       // Obtener valores base y efectivo
-      const baseValue = item.descripcion || '';
+      // IMPORTANTE: Usar descripcion_base si existe (desde LPM), sino item.descripcion como fallback
+      const baseValue = item.descripcion_base !== undefined ? item.descripcion_base : (item.descripcion || '');
       const effectiveValue = item.descripcion !== undefined ? item.descripcion : baseValue;
       
-      // Detectar override
+      // Detectar override: comparar efectivo vs base
       const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
       
       // Aplicar borde rojo si hay override
@@ -3562,8 +3567,11 @@
           const newValue = descInput.value.trim() || null;
           
           try {
+            // Obtener valor base real (desde LPM o fallback)
+            const realBaseValue = item.descripcion_base !== undefined ? item.descripcion_base : (item.descripcion || '');
+            
             // Si el nuevo valor es igual al base, eliminar override
-            if (newValue === baseValue || (newValue === null && baseValue === '')) {
+            if (newValue === realBaseValue || (newValue === null && realBaseValue === '')) {
               // Buscar y eliminar override existente
               const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
               const descripcionOverride = overrides.find(o => o.override_key === 'descripcion');

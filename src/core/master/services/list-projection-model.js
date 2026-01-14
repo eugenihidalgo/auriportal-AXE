@@ -732,8 +732,12 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       }
       
       // Construir item con valores efectivos (incluyendo overrides de nivel, descripcion, threshold_days, required_count)
+      // IMPORTANTE: Mantener valores base originales para comparación en UI
       const effectiveItem = {
         ...item,
+        // Valores base originales (para comparación en UI)
+        nivel_base: item.nivel || 9,
+        descripcion_base: item.descripcion || '',
         // Aplicar overrides de nivel y descripcion si existen en effectiveConfig
         nivel: effectiveConfig.nivel !== undefined ? effectiveConfig.nivel : item.nivel,
         descripcion: effectiveConfig.descripcion !== undefined ? effectiveConfig.descripcion : item.descripcion,
