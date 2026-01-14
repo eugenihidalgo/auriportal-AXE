@@ -161,13 +161,15 @@ export class MasterStudentTransmutationReadRepoPg {
     const domainType = 'transmutation';
 
     // UUID-ONLY: Obtener estudiantes desde students (UUID canónico)
-    // JOIN con cleaning_item_state usando legacy_alumno_id resuelto internamente
-    // NO hacer JOIN con alumnos directamente
+    // JOIN con cleaning_item_state usando student_id UUID directamente
+    // NO hacer JOIN con alumnos (legacy eliminado)
     // SIMÉTRICO: Seleccionar TODAS las columnas de ambas capas siempre
     let sql = `
       SELECT 
         s.id as student_uuid,
-        s.legacy_alumno_id as legacy_student_id,
+        s.email,
+        s.apodo,
+        s.nombre_completo,
         -- SHARED layer (siempre presente)
         c.shared_last_cleaned_at,
         COALESCE(c.shared_clean_count, 0) as shared_clean_count,
@@ -182,14 +184,14 @@ export class MasterStudentTransmutationReadRepoPg {
         c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
         COALESCE(c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'}, 0) as clean_count
       FROM students s
-      LEFT JOIN cleaning_item_state c ON c.student_id = s.legacy_alumno_id
+      LEFT JOIN cleaning_item_state c ON c.student_id = s.id
         AND c.product_key = $1
         AND c.domain_type = $2
         AND c.item_ref = $3
-      LEFT JOIN pausas p ON p.alumno_id = s.legacy_alumno_id AND p.fin IS NULL
+      LEFT JOIN pausas p ON p.student_id = s.id AND p.fin IS NULL
       WHERE s.deleted_at IS NULL
         AND p.id IS NULL  -- Excluir estudiantes en pausa
-      ORDER BY s.id ASC
+      ORDER BY COALESCE(s.email, s.id::text) ASC
     `;
 
     const params = [productKey, domainType, itemRef];
@@ -206,33 +208,13 @@ export class MasterStudentTransmutationReadRepoPg {
       ? { reviewed: 0, pending: 0, important: 0, never: 0 }
       : { incomplete: 0, complete: 0 };
 
-    // UUID-ONLY: Obtener display_name desde alumnos solo si es necesario (para compatibilidad)
-    // En el futuro, esto debería venir de students directamente
+    // UUID-ONLY: Obtener display_name directamente desde students (sin JOIN a alumnos)
     for (const row of result.rows) {
-      // Resolver display_name desde alumnos (solo para compatibilidad, no decisor)
-      let studentName = null;
-      let studentEmail = null;
-      let apodo = null;
-      let nombreCompleto = null;
-      
-      if (row.legacy_student_id) {
-        try {
-          const alumnoResult = await queryFn(
-            'SELECT email, apodo, nombre_completo FROM alumnos WHERE id = $1 LIMIT 1',
-            [row.legacy_student_id]
-          );
-          if (alumnoResult.rows[0]) {
-            const alumno = alumnoResult.rows[0];
-            studentEmail = alumno.email;
-            apodo = alumno.apodo;
-            nombreCompleto = alumno.nombre_completo;
-            studentName = alumno.nombre_completo || alumno.apodo || alumno.email || 'Sin nombre';
-          }
-        } catch (error) {
-          // Fail-open: si no se puede obtener, usar valores por defecto
-          studentName = 'Sin nombre';
-        }
-      }
+      // Obtener display_name desde students directamente (UUID-only)
+      const studentEmail = row.email;
+      const apodo = row.apodo;
+      const nombreCompleto = row.nombre_completo;
+      const studentName = nombreCompleto || apodo || studentEmail || 'Sin nombre';
       
       // SIMÉTRICO: Construir DTO con shared y pde siempre presentes
       const sharedCleanCount = row.shared_clean_count !== null ? parseInt(row.shared_clean_count, 10) : 0;
@@ -321,7 +303,7 @@ export class MasterStudentTransmutationReadRepoPg {
     const totalResult = await queryFn(
       `SELECT COUNT(*) as total 
        FROM students s
-       LEFT JOIN pausas p ON p.alumno_id = s.legacy_alumno_id AND p.fin IS NULL
+       LEFT JOIN pausas p ON p.student_id = s.id AND p.fin IS NULL
        WHERE s.deleted_at IS NULL
          AND p.id IS NULL`,
       []
