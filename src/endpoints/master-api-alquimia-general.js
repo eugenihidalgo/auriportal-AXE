@@ -1517,7 +1517,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path === '/master/api/alquimia-general/reset-item' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, item_ref, scope } = body;
+        const { student_uuid, item_ref, item_kind, scope } = body;
         
         // Validaciones obligatorias
         if (!student_uuid || !item_ref) {
@@ -1529,10 +1529,22 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('Reset solo disponible en scope=student', 'SCOPE_ERROR', 400, traceId);
         }
         
+        // Validar item_kind si se proporciona
+        if (item_kind && item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+          return jsonError('item_kind debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // UUID-only: validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(student_uuid)) {
+          return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item iniciado', {
           traceId,
           student_uuid,
           item_ref,
+          item_kind,
           scope
         });
         
@@ -1540,6 +1552,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         const deleted = await resetStudentItemProgress({
           student_uuid,
           item_ref,
+          item_kind: item_kind || null,
           product_key: body.product_key || 'pde',
           domain_type: body.domain_type || null
         });
@@ -1548,6 +1561,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           traceId,
           student_uuid,
           item_ref,
+          item_kind,
           deleted
         });
         
@@ -1555,6 +1569,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           ok: true,
           reset: true,
           item_ref,
+          item_kind: item_kind || null,
           deleted,
           trace_id: traceId
         }, traceId);
@@ -1580,7 +1595,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path === '/master/api/alquimia-general/reset-list' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, list_id, scope } = body;
+        const { student_uuid, list_id, item_kind, scope } = body;
         
         // Validaciones obligatorias
         if (!student_uuid || !list_id) {
@@ -1592,10 +1607,22 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('Reset solo disponible en scope=student', 'SCOPE_ERROR', 400, traceId);
         }
         
+        // Validar item_kind si se proporciona
+        if (item_kind && item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+          return jsonError('item_kind debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // UUID-only: validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(student_uuid)) {
+          return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
         logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list iniciado', {
           traceId,
           student_uuid,
           list_id,
+          item_kind,
           scope
         });
         
@@ -1603,6 +1630,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         const deletedCount = await resetStudentListProgress({
           student_uuid,
           list_id,
+          item_kind: item_kind || null,
           product_key: body.product_key || 'pde',
           domain_type: body.domain_type || null
         });
@@ -1611,6 +1639,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           traceId,
           student_uuid,
           list_id,
+          item_kind,
           deleted_count: deletedCount
         });
         
@@ -1618,6 +1647,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           ok: true,
           reset: true,
           list_id,
+          item_kind: item_kind || null,
           deleted_count: deletedCount,
           trace_id: traceId
         }, traceId);

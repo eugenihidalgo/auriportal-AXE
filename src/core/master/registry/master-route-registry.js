@@ -190,6 +190,22 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API HISTORIAL DE LIMPIEZAS v1
+  // ============================================
+  {
+    key: 'master-api-history',
+    path: '/master/api/history',
+    type: 'api',
+    method: 'GET'
+  },
+  {
+    key: 'master-api-history-reports',
+    path: '/master/api/history/reports',
+    type: 'api',
+    method: 'GET'
+  },
+  
+  // ============================================
   // RUTAS API TAGS (TAG SOT GLOBAL v1)
   // ============================================
   // Las rutas /master/api/** deben declararse explícitamente como api.
@@ -780,6 +796,11 @@ export const MASTER_ROUTES = [
   {
     key: 'master-templo-luz-redactor',
     path: '/master/templo-luz/comunicaciones/redactor',
+    type: 'island'
+  },
+  {
+    key: 'master-informes-limpiezas',
+    path: '/master/comunicaciones/informes-limpiezas',
     type: 'island'
   }
 ];

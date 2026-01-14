@@ -334,6 +334,18 @@ export const masterSidebarRegistry = [
     icon: '✍️', // Emoji fantasy: escritura/redacción
     route: '/master/templo-luz/comunicaciones/redactor',
     section: 'Comunicaciones',
+    visible: true
+  },
+  {
+    id: 'master-informes-limpiezas',
+    label: 'Informes de Limpiezas',
+    icon: '📊',
+    route: '/master/comunicaciones/informes-limpiezas',
+    section: 'Comunicaciones',
+    visible: true,
+    order: 4,
+    universe: 'templo_luz'
+  }
     visible: true,
     order: 3,
     universe: 'templo_luz'

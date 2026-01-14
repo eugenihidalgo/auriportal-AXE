@@ -76,12 +76,40 @@ export async function generateActionHistory(signalPayload) {
       trace_id: traceId
     });
 
-    // Crear vínculo con la señal
-    await historyRepo.createLink({
-      history_entry_id: entry.id,
-      source_type: 'signal',
-      source_ref: traceId
-    });
+    // Crear vínculo con el cleaning_event (obtener desde execution_key o trace_id)
+    // Buscar cleaning_event más reciente para este estudiante e item_ref
+    try {
+      const { query } = await import('../../../database/pg.js');
+      const eventResult = await query(`
+        SELECT id FROM cleaning_events
+        WHERE student_id = $1
+          AND item_ref = $2
+          AND trace_id = $3
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [signalPayload.student_uuid, signalPayload.item_ref, traceId]);
+      
+      if (eventResult.rows && eventResult.rows.length > 0) {
+        await historyRepo.createLink({
+          history_entry_id: entry.id,
+          source_type: 'cleaning_event',
+          source_ref: eventResult.rows[0].id
+        });
+      } else {
+        // Fallback: vincular con señal si no se encuentra el evento
+        await historyRepo.createLink({
+          history_entry_id: entry.id,
+          source_type: 'signal',
+          source_ref: traceId
+        });
+      }
+    } catch (linkError) {
+      logWarn('HistoryGeneration', 'Error creando vínculo (fail-open)', {
+        traceId,
+        error: linkError.message
+      });
+      // Fail-open: continuar aunque falle el vínculo
+    }
 
     logInfo('HistoryGeneration', 'ACTION_HISTORY generado', {
       traceId,

@@ -60,6 +60,8 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-alumno-clean': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-alquimia-alumno-item-history': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-alquimia-alumno-report': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-history': () => import('../../../endpoints/master-api-history.js'),
+  'master-api-history-reports': () => import('../../../endpoints/master-api-history.js'),
   
   // Tags API Handlers (TAG SOT GLOBAL v1)
   'master-api-tags': () => import('../../../endpoints/master-api-tags.js'),
@@ -180,7 +182,8 @@ const MASTER_HANDLER_MAP = {
   'master-templo-luz-investigacion-diario': () => import('../../../endpoints/master-templo-luz-investigacion-diario.js'),
   'master-templo-luz-canalizaciones': () => import('../../../endpoints/master-templo-luz-canalizaciones.js'),
   'master-templo-luz-feedback': () => import('../../../endpoints/master-templo-luz-feedback.js'),
-  'master-templo-luz-redactor': () => import('../../../endpoints/master-templo-luz-redactor.js')
+  'master-templo-luz-redactor': () => import('../../../endpoints/master-templo-luz-redactor.js'),
+  'master-informes-limpiezas': () => import('../../../endpoints/master-informes-limpiezas.js')
 };
 
 /**
