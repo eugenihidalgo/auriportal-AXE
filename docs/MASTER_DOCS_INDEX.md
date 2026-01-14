@@ -389,6 +389,28 @@
 
 ---
 
+## 🔧 SECCIÓN 3.7: OVERRIDES SYSTEM
+
+### 3.7.1 Documentación Principal
+
+#### `docs/OVERRIDES_SYSTEM_V1.md`
+- **Tipo:** Sistema canónico completo
+- **Fecha:** 2026-01-XX
+- **Estado:** ✅ IMPLEMENTADO
+- **Contenido:**
+  - Sistema canónico para sobrescribir valores base a nivel de alumno individual
+  - Overrides de alumno: nivel, fecha_creacion, apodo
+  - Overrides de items: required_count (una_vez), threshold_days (recurrente)
+  - Modelo de datos (tablas: `student_overrides`, `student_item_overrides`)
+  - Integración en Level Engine y LPM/CPM
+  - Endpoints API MASTER (`/master/api/student-overrides`, `/master/api/student-item-overrides`)
+  - Reglas constitucionales (Backend autoridad, UUID-only, Override ≠ Mutación)
+  - Casos de uso validados
+  - Fuera de alcance (qué NO existe todavía)
+- **Referencias:** `src/core/master/services/override-resolution-service.js`, `src/endpoints/master-api-student-overrides.js`, `src/endpoints/master-api-student-item-overrides.js`
+
+---
+
 ## 🏷️ SECCIÓN 4: CLASIFICACIONES Y TAGS
 
 ### 4.1 Clasificaciones (Categories/Subtypes)
