@@ -2045,6 +2045,9 @@
         view_layer_after: newView
       });
       
+      // Preservar tamaño antes de refetch
+      const savedSize = localStorage.getItem(SIZE_STORAGE_KEY);
+      
       state.modal.layerView = newView;
       localStorage.setItem('ap_master_alquimia_float_layer', newView);
       
@@ -2052,6 +2055,8 @@
       // NO re-renderizar con datos antiguos, hacer refetch completo
       overlay.remove();
       await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
+      
+      // El tamaño se reaplicará automáticamente al abrir el nuevo flotante (showFlotanteVer)
     };
     
     const btnShared = document.createElement('button');
@@ -2132,6 +2137,95 @@
     
     titleDiv.appendChild(toggleContainer);
     header.appendChild(titleDiv);
+
+    // ============================================================================
+    // PERSISTENCIA DE TAMAÑO DEL FLOTANTE (FEATURE CANÓNICA)
+    // ============================================================================
+    // Clave única: master_alquimia_flotante_size
+    // Valores: 'expanded' | 'collapsed'
+    // ============================================================================
+    const SIZE_STORAGE_KEY = 'master_alquimia_flotante_size';
+    const EXPANDED_WIDTH = '1400px';
+    const EXPANDED_HEIGHT = '800px';
+    const COLLAPSED_WIDTH = '800px';
+    const COLLAPSED_HEIGHT = '500px';
+    
+    // Leer estado persistido (default: null = usar tamaño actual)
+    const savedSize = localStorage.getItem(SIZE_STORAGE_KEY);
+    const isExpanded = savedSize === 'expanded';
+    const isCollapsed = savedSize === 'collapsed';
+    
+    // Función para aplicar tamaño
+    const applySize = (size) => {
+      if (size === 'expanded') {
+        modal.style.width = EXPANDED_WIDTH;
+        modal.style.height = EXPANDED_HEIGHT;
+        modal.style.minWidth = EXPANDED_WIDTH;
+        modal.style.minHeight = EXPANDED_HEIGHT;
+      } else if (size === 'collapsed') {
+        modal.style.width = COLLAPSED_WIDTH;
+        modal.style.height = COLLAPSED_HEIGHT;
+        modal.style.minWidth = COLLAPSED_WIDTH;
+        modal.style.minHeight = COLLAPSED_HEIGHT;
+      }
+      // Si size es null, mantener tamaño actual (default)
+    };
+    
+    // Aplicar tamaño inicial desde localStorage
+    if (isExpanded) {
+      applySize('expanded');
+    } else if (isCollapsed) {
+      applySize('collapsed');
+    }
+    
+    // Función para actualizar estado visual de botones
+    const updateSizeButtons = () => {
+      const currentSize = localStorage.getItem(SIZE_STORAGE_KEY);
+      const isExpandedNow = currentSize === 'expanded';
+      const isCollapsedNow = currentSize === 'collapsed';
+      
+      btnExpand.style.background = isExpandedNow ? '#4f46e5' : 'transparent';
+      btnExpand.style.color = isExpandedNow ? '#fff' : '#cbd5e1';
+      
+      btnCollapse.style.background = isCollapsedNow ? '#4f46e5' : 'transparent';
+      btnCollapse.style.color = isCollapsedNow ? '#fff' : '#cbd5e1';
+    };
+    
+    // Función para cambiar tamaño y persistir
+    const changeSize = (newSize) => {
+      if (newSize !== 'expanded' && newSize !== 'collapsed') {
+        console.warn('[MasterAlquimiaGeneral] Tamaño inválido:', newSize);
+        return;
+      }
+      
+      applySize(newSize);
+      localStorage.setItem(SIZE_STORAGE_KEY, newSize);
+      updateSizeButtons(); // Actualizar estado visual de botones
+      
+      console.log('[MasterAlquimiaGeneral] [FLOTANTE][SIZE] Tamaño cambiado y persistido', {
+        size: newSize,
+        storage_key: SIZE_STORAGE_KEY
+      });
+    };
+    
+    // Botones de tamaño (expandir/reducir)
+    const sizeControls = document.createElement('div');
+    sizeControls.style.cssText = 'display: flex; gap: 0.5rem; align-items: center; margin-left: 1rem;';
+    
+    const btnExpand = document.createElement('button');
+    btnExpand.textContent = '⛶ Expandir';
+    btnExpand.style.cssText = `padding: 0.25rem 0.5rem; background: ${isExpanded ? '#4f46e5' : 'transparent'}; color: ${isExpanded ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnExpand.addEventListener('click', () => changeSize('expanded'));
+    sizeControls.appendChild(btnExpand);
+    
+    const btnCollapse = document.createElement('button');
+    btnCollapse.textContent = '⊟ Reducir';
+    btnCollapse.style.cssText = `padding: 0.25rem 0.5rem; background: ${isCollapsed ? '#4f46e5' : 'transparent'}; color: ${isCollapsed ? '#fff' : '#cbd5e1'}; border: 1px solid #334155; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;`;
+    btnCollapse.addEventListener('click', () => changeSize('collapsed'));
+    sizeControls.appendChild(btnCollapse);
+    
+    header.appendChild(sizeControls);
+    // ============================================================================
 
     const btnCerrar = document.createElement('button');
     btnCerrar.textContent = '❌';
