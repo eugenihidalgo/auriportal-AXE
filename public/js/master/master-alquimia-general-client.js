@@ -2145,8 +2145,8 @@
     // Valores: 'expanded' | 'collapsed'
     // ============================================================================
     const SIZE_STORAGE_KEY = 'master_alquimia_flotante_size';
-    const EXPANDED_WIDTH = '1400px';
-    const EXPANDED_HEIGHT = '800px';
+    const EXPANDED_WIDTH = '1800px';
+    const EXPANDED_HEIGHT = '1000px';
     const COLLAPSED_WIDTH = '800px';
     const COLLAPSED_HEIGHT = '500px';
     
