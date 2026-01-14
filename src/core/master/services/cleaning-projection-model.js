@@ -34,6 +34,36 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
   const pde = cleaningState.pde || {};
   const combo = cleaningState.combo || {};
   
+  // DIAGNÓSTICO: Log entrada a CPM para scope='all' (detectado por cleaningState sin per-student data)
+  // Nota: Esto es una heurística, el scope real no está disponible aquí
+  const isAggregated = !cleaningState._per_student_states; // Flag temporal para diagnóstico
+  if (isAggregated || viewLayer === 'shared' || viewLayer === 'pde') {
+    console.log('[CPM][DEBUG][STATE_FOR_LAYER][INPUT]', {
+      view_layer: viewLayer,
+      item_kind: itemKind,
+      cleaning_state_input: {
+        shared: {
+          clean_count: shared.clean_count,
+          days_since: shared.days_since_last_clean,
+          completed: shared.completed,
+          last_cleaned_at: shared.last_cleaned_at
+        },
+        pde: {
+          clean_count: pde.clean_count,
+          days_since: pde.days_since_last_clean,
+          completed: pde.completed,
+          last_cleaned_at: pde.last_cleaned_at
+        }
+      },
+      config: {
+        threshold_days,
+        critical_multiplier,
+        critical_threshold,
+        required_count
+      }
+    });
+  }
+  
   if (itemKind === 'recurrente') {
     // RECURRENTE: usa days_since_last_clean de la capa indicada
     // O calcula 'effective' como proyección agregada de shared + pde
@@ -131,7 +161,7 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
       state = 'important';
     }
     
-    return {
+    const result = {
       state,
       visual_state: state, // RECURRENTE: visual_state = state
       computed_state: {
@@ -141,6 +171,19 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
         critical_threshold: criticalThreshold
       }
     };
+    
+    // DIAGNÓSTICO: Log resultado de CPM para recurrente
+    console.log('[CPM][DEBUG][STATE_FOR_LAYER][RECURRENTE]', {
+      view_layer: viewLayer,
+      item_kind: itemKind,
+      input_days_since: daysSince,
+      threshold_days,
+      critical_threshold,
+      calculated_state: state,
+      result: result
+    });
+    
+    return result;
   } else {
     // UNA_VEZ: usa combo si view_layer='combo', sino usa la capa indicada
     let cleanCount;
@@ -176,7 +219,7 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
       state = 'completed';
     }
     
-    return {
+    const result = {
       state,
       visual_state: visualState,
       computed_state: {
@@ -186,6 +229,19 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
         required_count
       }
     };
+    
+    // DIAGNÓSTICO: Log resultado de CPM para una_vez
+    console.log('[CPM][DEBUG][STATE_FOR_LAYER][UNA_VEZ]', {
+      view_layer: viewLayer,
+      item_kind: itemKind,
+      input_clean_count: cleanCount,
+      required_count,
+      calculated_state: state,
+      calculated_visual_state: visualState,
+      result: result
+    });
+    
+    return result;
   }
 }
 

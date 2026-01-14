@@ -76,8 +76,28 @@ function calculateMetrics(items, viewLayer) {
  * @returns {Object} Peor estado de la capa
  */
 function calculateWorstStateForLayer(layerStates, itemKind, item) {
+  // DIAGNÓSTICO: Log estados individuales por alumno
+  if (layerStates && layerStates.length > 0) {
+    console.log('[LPM][DEBUG][WORST_STATE][INPUT]', {
+      item_kind: itemKind,
+      layer_states_count: layerStates.length,
+      per_student_states: layerStates.map((s, idx) => ({
+        student_idx: idx,
+        clean_count: s.clean_count,
+        days_since_last_clean: s.days_since_last_clean,
+        completed: s.completed,
+        remaining: s.remaining,
+        last_cleaned_at: s.last_cleaned_at
+      }))
+    });
+  }
+  
   if (!layerStates || layerStates.length === 0) {
     // Si no hay estados, devolver estado vacío (never)
+    console.log('[LPM][DEBUG][WORST_STATE][EMPTY]', {
+      item_kind: itemKind,
+      reason: 'no layer states'
+    });
     return {
       clean_count: 0,
       days_since_last_clean: null,
@@ -106,13 +126,25 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       }
     });
     
-    return {
+    const worstStateResult = {
       clean_count: 0, // No aplica en agregación para recurrente
       days_since_last_clean: hasNull ? null : worstDaysSince,
       remaining: null, // No aplica en agregación
       completed: false, // No aplica en agregación
       last_cleaned_at: hasNull ? null : worstLastCleanedAt
     };
+    
+    // DIAGNÓSTICO: Log resultado del cálculo de peor estado para recurrente
+    console.log('[LPM][DEBUG][WORST_STATE][RECURRENTE]', {
+      item_kind: itemKind,
+      students_count: layerStates.length,
+      has_null: hasNull,
+      worst_days_since: worstDaysSince,
+      worst_last_cleaned_at: worstLastCleanedAt,
+      result: worstStateResult
+    });
+    
+    return worstStateResult;
   } else {
     // UNA_VEZ: calcular estado de cada alumno y tomar el mínimo
     // Orden de severidad: NEVER < PARTIAL < DONE
@@ -188,13 +220,26 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       worstCleanCount = 0;
     }
     
-    return {
+    const worstStateResult = {
       clean_count: worstCleanCount,
       days_since_last_clean: null, // No aplica en una_vez
       remaining: worstRemaining,
       completed: worstCompleted,
       last_cleaned_at: null // No aplica en una_vez
     };
+    
+    // DIAGNÓSTICO: Log resultado del cálculo de peor estado para una_vez
+    console.log('[LPM][DEBUG][WORST_STATE][UNA_VEZ]', {
+      item_kind: itemKind,
+      students_count: layerStates.length,
+      required_count: item.veces_limpiar || 1,
+      worst_state: worstState,
+      worst_clean_count: worstCleanCount,
+      worst_completed: worstCompleted,
+      result: worstStateResult
+    });
+    
+    return worstStateResult;
   }
 }
 
@@ -404,20 +449,41 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
       const worstShared = calculateWorstStateForLayer(itemStates.shared, itemKindForItem, item);
       const worstPde = calculateWorstStateForLayer(itemStates.pde, itemKindForItem, item);
       
+      // DIAGNÓSTICO: Log detallado de estados individuales por alumno
+      const perStudentStates = {
+        shared: itemStates.shared.map((s, idx) => ({
+          student_idx: idx,
+          clean_count: s.clean_count,
+          days_since: s.days_since_last_clean,
+          completed: s.completed,
+          last_cleaned_at: s.last_cleaned_at
+        })),
+        pde: itemStates.pde.map((s, idx) => ({
+          student_idx: idx,
+          clean_count: s.clean_count,
+          days_since: s.days_since_last_clean,
+          completed: s.completed,
+          last_cleaned_at: s.last_cleaned_at
+        }))
+      };
+      
       logInfo('ListProjectionModel', '[LPM][WORST_STATE] Calculado peor estado para item', {
         traceId,
         item_ref: itemRef,
         item_kind: itemKindForItem,
         students_count: itemStates.shared.length,
+        per_student_states: perStudentStates,
         worst_shared: {
           days_since: worstShared.days_since_last_clean,
           clean_count: worstShared.clean_count,
-          has_null: worstShared.days_since_last_clean === null
+          has_null: worstShared.days_since_last_clean === null,
+          completed: worstShared.completed
         },
         worst_pde: {
           days_since: worstPde.days_since_last_clean,
           clean_count: worstPde.clean_count,
-          has_null: worstPde.days_since_last_clean === null
+          has_null: worstPde.days_since_last_clean === null,
+          completed: worstPde.completed
         }
       });
       
@@ -535,6 +601,33 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         pde: {}
       };
       
+      // DIAGNÓSTICO: Log estado agregado ANTES de CPM
+      if (scope === 'all') {
+        console.log('[LPM][DEBUG][ALL][BEFORE_CPM]', {
+          item_ref: item.item_ref,
+          item_kind,
+          scope,
+          cleaning_state_aggregated: {
+            shared: {
+              clean_count: cleaningState.shared?.clean_count,
+              days_since: cleaningState.shared?.days_since_last_clean,
+              completed: cleaningState.shared?.completed,
+              last_cleaned_at: cleaningState.shared?.last_cleaned_at
+            },
+            pde: {
+              clean_count: cleaningState.pde?.clean_count,
+              days_since: cleaningState.pde?.days_since_last_clean,
+              completed: cleaningState.pde?.completed,
+              last_cleaned_at: cleaningState.pde?.last_cleaned_at
+            }
+          },
+          item_config: {
+            threshold_days: item.frecuencia_dias || 7,
+            required_count: item.veces_limpiar || 1
+          }
+        });
+      }
+      
       // Calcular combo para una_vez
       if (item_kind === 'una_vez') {
         cleaningState.combo = {
@@ -558,6 +651,36 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       
       // Determinar active_state y active_visual_state desde view_layer
       const activeState = projection.state_by_view_layer[view_layer];
+      
+      // DIAGNÓSTICO: Log estado FINAL que se envía a UI
+      if (scope === 'all') {
+        console.log('[LPM][DEBUG][ALL][FINAL_STATE]', {
+          item_ref: item.item_ref,
+          item_kind,
+          scope,
+          view_layer,
+          state_by_view_layer: {
+            shared: {
+              state: projection.state_by_view_layer.shared?.state,
+              visual_state: projection.state_by_view_layer.shared?.visual_state,
+              computed_state: projection.state_by_view_layer.shared?.computed_state
+            },
+            pde: {
+              state: projection.state_by_view_layer.pde?.state,
+              visual_state: projection.state_by_view_layer.pde?.visual_state,
+              computed_state: projection.state_by_view_layer.pde?.computed_state
+            },
+            [view_layer]: {
+              state: activeState?.state,
+              visual_state: activeState?.visual_state,
+              computed_state: activeState?.computed_state
+            }
+          },
+          active_state: activeState?.state || 'never',
+          active_visual_state: activeState?.visual_state || 'never',
+          final_state_sent_to_ui: activeState?.state || 'never'
+        });
+      }
       
       return {
         ...item,
