@@ -3386,26 +3386,102 @@
       tr.style.cssText += 'background: #0f172a; position: sticky; top: 0; z-index: 10;';
     }
     
+    // OVERRIDES UI v1: Editable SOLO en scope='student' con student_uuid
+    // Definir una sola vez al principio de la función
+    const isOverrideEditable = !isCreateRow && state.projection.scope === 'student' && !!state.projection.student_uuid;
+    
     // NIVEL
+    
     const tdNivel = document.createElement('td');
     tdNivel.style.cssText = 'padding: 0.5rem;';
+    
+    // Contenedor para borde rojo si hay override
+    const nivelContainer = document.createElement('div');
+    nivelContainer.style.cssText = 'display: inline-block; width: 100%;';
+    
     const nivelInput = document.createElement('input');
     nivelInput.type = 'number';
     nivelInput.min = '1';
     nivelInput.max = '9';
+    
     if (isCreateRow) {
       nivelInput.value = state.newItemDraft.nivel || '9';
       nivelInput.addEventListener('change', () => {
         state.newItemDraft.nivel = parseInt(nivelInput.value) || 9;
       });
     } else {
-      nivelInput.value = item.nivel || '9';
-      nivelInput.addEventListener('change', () => {
-        debouncedUpdateItem(item.id, { nivel: parseInt(nivelInput.value) || null });
-      });
+      // Obtener valores base y efectivo
+      const baseValue = item.nivel || 9;
+      const effectiveValue = item.nivel !== undefined ? item.nivel : baseValue;
+      
+      // Detectar override (nivel puede venir del override)
+      const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
+      
+      // Aplicar borde rojo si hay override
+      if (hasOverrideActive) {
+        nivelContainer.style.cssText += 'border: 2px solid #ef4444; border-radius: 0.25rem; padding: 2px;';
+      }
+      
+      nivelInput.value = effectiveValue || '';
+      
+      // Hacer editable solo si es override mode
+      if (isOverrideEditable) {
+        nivelInput.addEventListener('change', async () => {
+          const newValue = nivelInput.value === '' ? null : (parseInt(nivelInput.value) || null);
+          
+          if (newValue === null || newValue < 1 || newValue > 9) {
+            showWarning('nivel debe ser entre 1 y 9');
+            nivelInput.value = effectiveValue || '';
+            return;
+          }
+          
+          try {
+            // Si el nuevo valor es igual al base, eliminar override
+            if (newValue === baseValue) {
+              // Buscar y eliminar override existente
+              const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
+              const nivelOverride = overrides.find(o => o.override_key === 'nivel');
+              if (nivelOverride) {
+                await deleteItemOverride(nivelOverride.id);
+                showToastSuccess('Override eliminado (valor vuelve al base)');
+              }
+            } else {
+              // Crear o actualizar override
+              await createOrUpdateItemOverride(
+                state.projection.student_uuid,
+                item.item_ref,
+                'nivel',
+                newValue
+              );
+              showToastSuccess('Override de nivel guardado');
+            }
+            
+            // Refrescar proyección
+            await loadListProjection();
+            renderView();
+          } catch (error) {
+            console.error('[OVERRIDES] Error actualizando nivel:', error);
+            showToastError(`Error: ${error.message}`);
+            // Revertir valor
+            nivelInput.value = effectiveValue || '';
+          }
+        });
+      } else {
+        // Modo operativa: actualizar item base
+        nivelInput.addEventListener('change', () => {
+          debouncedUpdateItem(item.id, { nivel: parseInt(nivelInput.value) || null });
+        });
+      }
     }
+    
     nivelInput.style.cssText = 'width: 60px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-    tdNivel.appendChild(nivelInput);
+    if (!isOverrideEditable && !isCreateRow) {
+      nivelInput.disabled = true;
+      nivelInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
+    }
+    
+    nivelContainer.appendChild(nivelInput);
+    tdNivel.appendChild(nivelContainer);
     tr.appendChild(tdNivel);
     
     // NOMBRE
@@ -3440,10 +3516,19 @@
     tr.appendChild(tdNombre);
     
     // DESCRIPCIÓN
+    // OVERRIDES UI v1: Editable SOLO en scope='student' con student_uuid
+    // Reutilizar isOverrideEditable definido arriba
+    
     const tdDesc = document.createElement('td');
     tdDesc.style.cssText = 'padding: 0.5rem;';
+    
+    // Contenedor para borde rojo si hay override
+    const descContainer = document.createElement('div');
+    descContainer.style.cssText = 'display: inline-block; width: 100%;';
+    
     const descInput = document.createElement('input');
     descInput.type = 'text';
+    
     if (isCreateRow) {
       descInput.placeholder = 'Descripción (opcional)';
       descInput.value = state.newItemDraft.descripcion || '';
@@ -3456,13 +3541,73 @@
         }
       });
     } else {
-      descInput.value = item.descripcion || '';
-      descInput.addEventListener('change', () => {
-        debouncedUpdateItem(item.id, { descripcion: descInput.value.trim() || null });
-      });
+      // Obtener valores base y efectivo
+      const baseValue = item.descripcion || '';
+      const effectiveValue = item.descripcion !== undefined ? item.descripcion : baseValue;
+      
+      // Detectar override
+      const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
+      
+      // Aplicar borde rojo si hay override
+      if (hasOverrideActive) {
+        descContainer.style.cssText += 'border: 2px solid #ef4444; border-radius: 0.25rem; padding: 2px;';
+      }
+      
+      descInput.value = effectiveValue || '';
+      descInput.placeholder = baseValue || 'Descripción (opcional)';
+      
+      // Hacer editable solo si es override mode
+      if (isOverrideEditable) {
+        descInput.addEventListener('change', async () => {
+          const newValue = descInput.value.trim() || null;
+          
+          try {
+            // Si el nuevo valor es igual al base, eliminar override
+            if (newValue === baseValue || (newValue === null && baseValue === '')) {
+              // Buscar y eliminar override existente
+              const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
+              const descripcionOverride = overrides.find(o => o.override_key === 'descripcion');
+              if (descripcionOverride) {
+                await deleteItemOverride(descripcionOverride.id);
+                showToastSuccess('Override eliminado (valor vuelve al base)');
+              }
+            } else {
+              // Crear o actualizar override
+              await createOrUpdateItemOverride(
+                state.projection.student_uuid,
+                item.item_ref,
+                'descripcion',
+                newValue || ''
+              );
+              showToastSuccess('Override de descripcion guardado');
+            }
+            
+            // Refrescar proyección
+            await loadListProjection();
+            renderView();
+          } catch (error) {
+            console.error('[OVERRIDES] Error actualizando descripcion:', error);
+            showToastError(`Error: ${error.message}`);
+            // Revertir valor
+            descInput.value = effectiveValue || '';
+          }
+        });
+      } else {
+        // Modo operativa: actualizar item base
+        descInput.addEventListener('change', () => {
+          debouncedUpdateItem(item.id, { descripcion: descInput.value.trim() || null });
+        });
+      }
     }
+    
     descInput.style.cssText = 'width: 100%; min-width: 200px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-    tdDesc.appendChild(descInput);
+    if (!isOverrideEditable && !isCreateRow) {
+      descInput.disabled = true;
+      descInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
+    }
+    
+    descContainer.appendChild(descInput);
+    tdDesc.appendChild(descContainer);
     tr.appendChild(tdDesc);
     
     // GRUPO
@@ -3509,12 +3654,19 @@
     tr.appendChild(tdGrupo);
     
     // DÍAS RECURRENCIA (solo recurrentes)
+    // Reutilizar isOverrideEditable definido arriba
     if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
       const tdDias = document.createElement('td');
       tdDias.style.cssText = 'padding: 0.5rem;';
+      
+      // Contenedor para borde rojo si hay override
+      const diasContainer = document.createElement('div');
+      diasContainer.style.cssText = 'display: inline-block; width: 100%;';
+      
       const diasInput = document.createElement('input');
       diasInput.type = 'number';
       diasInput.min = '1';
+      
       if (isCreateRow) {
         diasInput.value = state.newItemDraft.frecuencia_dias || '20';
         diasInput.placeholder = '20';
@@ -3527,23 +3679,94 @@
           }
         });
       } else {
-        diasInput.value = item.frecuencia_dias || '';
-        diasInput.placeholder = '20';
-        diasInput.addEventListener('change', () => {
-          const val = diasInput.value === '' ? null : (parseInt(diasInput.value) || null);
-          debouncedUpdateItem(item.id, { frecuencia_dias: val });
-        });
+        // Obtener valores base y efectivo
+        const baseValue = item.frecuencia_dias || 7;
+        const effectiveValue = item.threshold_days !== undefined ? item.threshold_days : baseValue;
+        
+        // Detectar override
+        const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
+        
+        // Aplicar borde rojo si hay override
+        if (hasOverrideActive) {
+          diasContainer.style.cssText += 'border: 2px solid #ef4444; border-radius: 0.25rem; padding: 2px;';
+        }
+        
+        diasInput.value = effectiveValue || '';
+        diasInput.placeholder = String(baseValue);
+        
+        // Hacer editable solo si es override mode
+        if (isOverrideEditable) {
+          diasInput.addEventListener('change', async () => {
+            const newValue = diasInput.value === '' ? null : (parseInt(diasInput.value) || null);
+            
+            if (newValue === null || newValue < 1) {
+              showWarning('threshold_days debe ser >= 1');
+              diasInput.value = effectiveValue || '';
+              return;
+            }
+            
+            try {
+              // Si el nuevo valor es igual al base, eliminar override
+              if (newValue === baseValue) {
+                // Buscar y eliminar override existente
+                const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
+                const thresholdOverride = overrides.find(o => o.override_key === 'threshold_days');
+                if (thresholdOverride) {
+                  await deleteItemOverride(thresholdOverride.id);
+                  showToastSuccess('Override eliminado (valor vuelve al base)');
+                }
+              } else {
+                // Crear o actualizar override
+                await createOrUpdateItemOverride(
+                  state.projection.student_uuid,
+                  item.item_ref,
+                  'threshold_days',
+                  newValue
+                );
+                showToastSuccess('Override de threshold_days guardado');
+              }
+              
+              // Refrescar proyección
+              await loadListProjection();
+              renderView();
+            } catch (error) {
+              console.error('[OVERRIDES] Error actualizando threshold_days:', error);
+              showToastError(`Error: ${error.message}`);
+              // Revertir valor
+              diasInput.value = effectiveValue || '';
+            }
+          });
+        } else {
+          // Modo operativa: actualizar item base
+          diasInput.addEventListener('change', () => {
+            const val = diasInput.value === '' ? null : (parseInt(diasInput.value) || null);
+            debouncedUpdateItem(item.id, { frecuencia_dias: val });
+          });
+        }
       }
+      
       diasInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-      tdDias.appendChild(diasInput);
+      if (!isOverrideEditable && !isCreateRow) {
+        diasInput.disabled = true;
+        diasInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
+      }
+      
+      diasContainer.appendChild(diasInput);
+      tdDias.appendChild(diasContainer);
       tr.appendChild(tdDias);
     } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
       // VECES LIMPIAR (solo una_vez)
       const tdVeces = document.createElement('td');
       tdVeces.style.cssText = 'padding: 0.5rem;';
+      
+      // Contenedor para borde rojo si hay override
+      const vecesContainer = document.createElement('div');
+      vecesContainer.style.cssText = 'display: inline-block; width: 100%;';
+      
       const vecesInput = document.createElement('input');
       vecesInput.type = 'number';
       vecesInput.min = '0';
+      
       if (isCreateRow) {
         vecesInput.value = state.newItemDraft.veces_limpiar || '1';
         vecesInput.placeholder = '1';
@@ -3556,20 +3779,85 @@
           }
         });
       } else {
-        vecesInput.value = item.veces_limpiar || '';
-        vecesInput.placeholder = '1';
-        vecesInput.addEventListener('change', () => {
-          const val = vecesInput.value === '' ? null : (parseInt(vecesInput.value) || null);
-          if (val !== null && val < 0) {
-            showWarning('veces_limpiar debe ser >= 0');
-            vecesInput.value = item.veces_limpiar || '';
-            return;
-          }
-          debouncedUpdateItem(item.id, { veces_limpiar: val });
-        });
+        // Obtener valores base y efectivo
+        const baseValue = item.veces_limpiar || 1;
+        const effectiveValue = item.required_count !== undefined ? item.required_count : baseValue;
+        
+        // Detectar override
+        const hasOverrideActive = isOverrideEditable && hasOverride(effectiveValue, baseValue);
+        
+        // Aplicar borde rojo si hay override
+        if (hasOverrideActive) {
+          vecesContainer.style.cssText += 'border: 2px solid #ef4444; border-radius: 0.25rem; padding: 2px;';
+        }
+        
+        vecesInput.value = effectiveValue || '';
+        vecesInput.placeholder = String(baseValue);
+        
+        // Hacer editable solo si es override mode
+        if (isOverrideEditable) {
+          vecesInput.addEventListener('change', async () => {
+            const newValue = vecesInput.value === '' ? null : (parseInt(vecesInput.value) || null);
+            
+            if (newValue !== null && newValue < 0) {
+              showWarning('required_count debe ser >= 0');
+              vecesInput.value = effectiveValue || '';
+              return;
+            }
+            
+            try {
+              // Si el nuevo valor es igual al base, eliminar override
+              if (newValue === baseValue) {
+                // Buscar y eliminar override existente
+                const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
+                const requiredCountOverride = overrides.find(o => o.override_key === 'required_count');
+                if (requiredCountOverride) {
+                  await deleteItemOverride(requiredCountOverride.id);
+                  showToastSuccess('Override eliminado (valor vuelve al base)');
+                }
+              } else {
+                // Crear o actualizar override
+                await createOrUpdateItemOverride(
+                  state.projection.student_uuid,
+                  item.item_ref,
+                  'required_count',
+                  newValue
+                );
+                showToastSuccess('Override de required_count guardado');
+              }
+              
+              // Refrescar proyección
+              await loadListProjection();
+              renderView();
+            } catch (error) {
+              console.error('[OVERRIDES] Error actualizando required_count:', error);
+              showToastError(`Error: ${error.message}`);
+              // Revertir valor
+              vecesInput.value = effectiveValue || '';
+            }
+          });
+        } else {
+          // Modo operativa: actualizar item base
+          vecesInput.addEventListener('change', () => {
+            const val = vecesInput.value === '' ? null : (parseInt(vecesInput.value) || null);
+            if (val !== null && val < 0) {
+              showWarning('veces_limpiar debe ser >= 0');
+              vecesInput.value = item.veces_limpiar || '';
+              return;
+            }
+            debouncedUpdateItem(item.id, { veces_limpiar: val });
+          });
+        }
       }
+      
       vecesInput.style.cssText = 'width: 100px; padding: 0.375rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; color: #f1f5f9; font-size: 0.875rem;';
-      tdVeces.appendChild(vecesInput);
+      if (!isOverrideEditable && !isCreateRow) {
+        vecesInput.disabled = true;
+        vecesInput.style.cssText += 'opacity: 0.6; cursor: not-allowed;';
+      }
+      
+      vecesContainer.appendChild(vecesInput);
+      tdVeces.appendChild(vecesContainer);
       tr.appendChild(tdVeces);
     }
     
@@ -3631,6 +3919,43 @@
         btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnPde.addEventListener('click', () => handlePdeIncrementAllItem(item));
         actionsDiv.appendChild(btnPde);
+      }
+      
+      // ============================================================================
+      // BOTÓN RESET OVERRIDES (SOLO EN PROYECCIÓN SCOPE='student' CON OVERRIDES)
+      // ============================================================================
+      if (isProjectionStudent && state.projection.scope === 'student' && state.projection.student_uuid) {
+        // Verificar si el item tiene overrides activos
+        (async () => {
+          try {
+            const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
+            if (overrides.length > 0) {
+              const btnReset = document.createElement('button');
+              btnReset.textContent = 'Reset Overrides';
+              btnReset.style.cssText = 'padding: 0.375rem 0.75rem; background: #f59e0b; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+              btnReset.addEventListener('click', async () => {
+                if (!confirm(`¿Eliminar todos los overrides de este item para este alumno?`)) {
+                  return;
+                }
+                
+                try {
+                  const deletedCount = await resetItemOverrides(state.projection.student_uuid, item.item_ref);
+                  showToastSuccess(`${deletedCount} override(s) eliminado(s)`);
+                  
+                  // Refrescar proyección
+                  await loadListProjection();
+                  renderView();
+                } catch (error) {
+                  console.error('[OVERRIDES][RESET] Error:', error);
+                  showToastError(`Error: ${error.message}`);
+                }
+              });
+              actionsDiv.appendChild(btnReset);
+            }
+          } catch (error) {
+            console.error('[OVERRIDES][CHECK] Error verificando overrides:', error);
+          }
+        })();
       }
       
       // ============================================================================
@@ -4751,6 +5076,173 @@
       console.error('[MasterAlquimiaGeneral] Error actualizando clasificación:', error);
       showWarning(`Error: ${error.message}`);
     }
+  }
+
+  /**
+   * OVERRIDES UI v1 - Funciones para gestionar overrides de items
+   * REGLA CONSTITUCIONAL: Overrides SOLO en scope='student', NUNCA en scope='all'
+   */
+  
+  /**
+   * Crea o actualiza un override de item
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} item_ref - Referencia del item
+   * @param {string} override_key - Clave del override (required_count, threshold_days, nivel, descripcion)
+   * @param {*} override_value - Valor del override
+   * @param {string} [reason] - Razón del override (opcional)
+   * @returns {Promise<Object>} Override creado/actualizado
+   */
+  async function createOrUpdateItemOverride(student_uuid, item_ref, override_key, override_value, reason = null) {
+    try {
+      const response = await fetch('/master/api/student-item-overrides', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          student_uuid,
+          item_ref,
+          override_key,
+          override_value,
+          reason: reason || `Override de ${override_key} para ${item_ref}`
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error creando override');
+      }
+      
+      console.log('[OVERRIDES][CREATE] Override creado', {
+        student_uuid,
+        item_ref,
+        override_key,
+        override_value,
+        override_id: result.override?.id
+      });
+      
+      return result.override;
+    } catch (error) {
+      console.error('[OVERRIDES][CREATE] Error:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Elimina un override de item
+   * @param {string} override_id - UUID del override
+   * @returns {Promise<boolean>} true si se eliminó
+   */
+  async function deleteItemOverride(override_id) {
+    try {
+      const response = await fetch(`/master/api/student-item-overrides/${override_id}`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error eliminando override');
+      }
+      
+      console.log('[OVERRIDES][DELETE] Override eliminado', {
+        override_id
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('[OVERRIDES][DELETE] Error:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Obtiene todos los overrides de un item para un estudiante
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} item_ref - Referencia del item
+   * @returns {Promise<Array>} Array de overrides
+   */
+  async function getItemOverrides(student_uuid, item_ref) {
+    try {
+      const params = new URLSearchParams({
+        student_uuid,
+        item_ref
+      });
+      
+      const response = await fetch(`/master/api/student-item-overrides?${params.toString()}`);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error obteniendo overrides');
+      }
+      
+      return result.overrides || [];
+    } catch (error) {
+      console.error('[OVERRIDES][GET] Error:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Elimina todos los overrides de un item para un estudiante
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} item_ref - Referencia del item
+   * @returns {Promise<number>} Número de overrides eliminados
+   */
+  async function resetItemOverrides(student_uuid, item_ref) {
+    try {
+      const overrides = await getItemOverrides(student_uuid, item_ref);
+      
+      if (overrides.length === 0) {
+        return 0;
+      }
+      
+      // Eliminar todos los overrides
+      const deletePromises = overrides.map(override => deleteItemOverride(override.id));
+      await Promise.all(deletePromises);
+      
+      console.log('[OVERRIDES][RESET] Overrides eliminados', {
+        student_uuid,
+        item_ref,
+        count: overrides.length
+      });
+      
+      return overrides.length;
+    } catch (error) {
+      console.error('[OVERRIDES][RESET] Error:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Compara valor efectivo vs base para detectar overrides
+   * @param {*} effectiveValue - Valor efectivo (con override aplicado)
+   * @param {*} baseValue - Valor base (sin override)
+   * @returns {boolean} true si hay override activo
+   */
+  function hasOverride(effectiveValue, baseValue) {
+    // Comparación estricta (incluye null/undefined)
+    if (effectiveValue === baseValue) {
+      return false;
+    }
+    
+    // Comparación numérica
+    if (typeof effectiveValue === 'number' && typeof baseValue === 'number') {
+      return effectiveValue !== baseValue;
+    }
+    
+    // Comparación de strings
+    if (typeof effectiveValue === 'string' && typeof baseValue === 'string') {
+      return effectiveValue !== baseValue;
+    }
+    
+    // Comparación con null/undefined
+    if ((effectiveValue == null) !== (baseValue == null)) {
+      return true;
+    }
+    
+    return false;
   }
 
   // Inicializar cuando el DOM esté listo (envuelto en try/catch)

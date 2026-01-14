@@ -731,12 +731,15 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         });
       }
       
-      // Construir item con valores efectivos (incluyendo overrides de nivel y descripcion)
+      // Construir item con valores efectivos (incluyendo overrides de nivel, descripcion, threshold_days, required_count)
       const effectiveItem = {
         ...item,
         // Aplicar overrides de nivel y descripcion si existen en effectiveConfig
         nivel: effectiveConfig.nivel !== undefined ? effectiveConfig.nivel : item.nivel,
         descripcion: effectiveConfig.descripcion !== undefined ? effectiveConfig.descripcion : item.descripcion,
+        // Aplicar overrides de threshold_days y required_count si existen en effectiveConfig
+        threshold_days: effectiveConfig.threshold_days !== undefined ? effectiveConfig.threshold_days : (item.frecuencia_dias || 7),
+        required_count: effectiveConfig.required_count !== undefined ? effectiveConfig.required_count : (item.veces_limpiar || 1),
         state_by_view_layer: projection.state_by_view_layer,
         active_state: activeState?.state || 'never',
         active_visual_state: activeState?.visual_state || 'never'
