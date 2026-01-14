@@ -238,7 +238,25 @@
 - **Tipo:** Documentación canónica completa
 - **Contenido:** Documentación completa del List Projection Model (LPM)
 
-### 2.3 Diagnósticos
+### 2.3 Acciones Individuales y Persistencia UI
+
+#### `docs/ALQUIMIA_ITEM_OVERRIDES_V1.md`
+- **Tipo:** Documentación canónica
+- **Fecha:** 2026-01-13
+- **Estado:** ✅ CANÓNICO
+- **Contenido:**
+  - Botones de limpieza individual por ítem (solo vista ALUMNO)
+  - Persistencia del tamaño del flotante (expanded/collapsed)
+  - Reglas constitucionales aplicadas (Backend autoridad, UUID-only, etc.)
+  - Modelo de datos (tablas existentes y futuras)
+  - Contratos API (endpoints implementados y futuros)
+  - LPM/CPM: aplicación de overrides (patrón futuro)
+  - UI: botones y persistencia (implementación actual)
+  - Verificación: checklist de pruebas manuales
+  - Known limitations (overrides NO implementados aún)
+- **Referencias:** `public/js/master/master-alquimia-general-client.js`, `src/core/master/services/cleaning-engine-service.js`
+
+### 2.4 Diagnósticos
 
 #### `docs/MASTER_DIAGNOSTIC_REPORT.md`
 - **Tipo:** Reporte de diagnóstico forense
