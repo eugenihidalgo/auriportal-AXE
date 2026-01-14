@@ -316,6 +316,115 @@ export class CleaningItemStateRepoPg {
 
     return result.rows[0];
   }
+
+  /**
+   * Elimina el estado de limpieza para un item específico de un alumno.
+   * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
+   * 
+   * REGLA: Eliminar la fila completa hace que el sistema asuma estado inicial.
+   * 
+   * @param {Object} options - Opciones
+   * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
+   * @param {string} options.item_ref - Referencia del item (OBLIGATORIO)
+   * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
+   * @param {string} [options.domain_type] - Tipo de dominio (opcional)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<boolean>} true si se eliminó, false si no existía
+   */
+  async deleteState(options, client = null) {
+    if (!options || !options.student_uuid || !options.item_ref) {
+      throw new Error('student_uuid e item_ref son requeridos');
+    }
+
+    // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
+    const studentUuid = options.student_uuid;
+    const queryFn = client ? client.query.bind(client) : query;
+    const productKey = options.product_key || 'pde';
+    const domainType = options.domain_type;
+
+    const result = await queryFn(`
+      DELETE FROM cleaning_item_state
+      WHERE student_id = $1
+        AND product_key = $2
+        AND domain_type = $3
+        AND item_ref = $4
+      RETURNING id
+    `, [
+      studentUuid,
+      productKey,
+      domainType,
+      options.item_ref
+    ]);
+
+    const deleted = result.rows.length > 0;
+
+    if (deleted) {
+      logInfo('CleaningItemStateRepo', 'Estado de limpieza eliminado (reset)', {
+        student_uuid: studentUuid,
+        item_ref: options.item_ref,
+        product_key: productKey,
+        domain_type: domainType
+      });
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Elimina todos los estados de limpieza de un alumno para una lista específica.
+   * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
+   * 
+   * @param {Object} options - Opciones
+   * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
+   * @param {string} options.list_id - ID de la lista (OBLIGATORIO)
+   * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
+   * @param {string} [options.domain_type] - Tipo de dominio (opcional)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<number>} Número de estados eliminados
+   */
+  async deleteStatesByList(options, client = null) {
+    if (!options || !options.student_uuid || !options.list_id) {
+      throw new Error('student_uuid y list_id son requeridos');
+    }
+
+    // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
+    const studentUuid = options.student_uuid;
+    const queryFn = client ? client.query.bind(client) : query;
+    const productKey = options.product_key || 'pde';
+    const domainType = options.domain_type;
+
+    // Eliminar estados de items que pertenecen a la lista
+    const result = await queryFn(`
+      DELETE FROM cleaning_item_state cis
+      USING items_transmutaciones it
+      WHERE cis.student_id = $1
+        AND cis.product_key = $2
+        AND cis.domain_type = $3
+        AND cis.item_ref = it.item_ref
+        AND it.lista_id = $4
+        AND it.status = 'active'
+      RETURNING cis.id
+    `, [
+      studentUuid,
+      productKey,
+      domainType,
+      options.list_id
+    ]);
+
+    const deletedCount = result.rows.length;
+
+    if (deletedCount > 0) {
+      logInfo('CleaningItemStateRepo', 'Estados de limpieza eliminados por lista (reset)', {
+        student_uuid: studentUuid,
+        list_id: options.list_id,
+        product_key: productKey,
+        domain_type: domainType,
+        deleted_count: deletedCount
+      });
+    }
+
+    return deletedCount;
+  }
 }
 
 /**

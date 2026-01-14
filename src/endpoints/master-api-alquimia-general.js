@@ -13,7 +13,7 @@ import {
   listListas, getListaById, createLista, updateListaMeta, archiveLista, deleteLista,
   listItems, getItemById, getItemByRef, createItem, updateItem, archiveItem,
   getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
-  listItemGroups
+  listItemGroups, resetStudentItemProgress, resetStudentListProgress
 } from '../services/alquimia-general-service.js';
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
@@ -1500,6 +1500,108 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           stack: error.stack
         });
         throw error;
+      }
+    }
+
+    // ============================================================================
+    // ENDPOINTS DE RESET (PROYECCIÓN DE ALUMNO)
+    // ============================================================================
+
+    // POST /master/api/alquimia-general/reset-item
+    // Resetea el progreso de un alumno para un ítem específico
+    // REGLA: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    if (path === '/master/api/alquimia-general/reset-item' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { student_uuid, item_ref } = body;
+        
+        if (!student_uuid || !item_ref) {
+          return jsonError('student_uuid e item_ref son requeridos', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item iniciado', {
+          traceId,
+          student_uuid,
+          item_ref
+        });
+        
+        const productKey = body.product_key || 'pde';
+        const deleted = await resetStudentItemProgress(student_uuid, item_ref, productKey);
+        
+        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-item completado', {
+          traceId,
+          student_uuid,
+          item_ref,
+          deleted
+        });
+        
+        return jsonSuccess({
+          reset: true,
+          item_ref,
+          deleted
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-item', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error reseteando progreso del ítem',
+          'INTERNAL_ERROR',
+          500,
+          traceId
+        );
+      }
+    }
+
+    // POST /master/api/alquimia-general/reset-list
+    // Resetea el progreso de un alumno para todos los ítems de una lista
+    // REGLA: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    if (path === '/master/api/alquimia-general/reset-list' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { student_uuid, list_id } = body;
+        
+        if (!student_uuid || !list_id) {
+          return jsonError('student_uuid y list_id son requeridos', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list iniciado', {
+          traceId,
+          student_uuid,
+          list_id
+        });
+        
+        const productKey = body.product_key || 'pde';
+        const deletedCount = await resetStudentListProgress(student_uuid, list_id, productKey);
+        
+        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list completado', {
+          traceId,
+          student_uuid,
+          list_id,
+          deleted_count: deletedCount
+        });
+        
+        return jsonSuccess({
+          reset: true,
+          list_id,
+          deleted_count: deletedCount
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-list', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error reseteando progreso de la lista',
+          'INTERNAL_ERROR',
+          500,
+          traceId
+        );
       }
     }
 

@@ -11,6 +11,7 @@ import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-r
 import { getDefaultMasterStudentTransmutationReadRepo } from '../infra/repos/master-student-transmutation-read-repo-pg.js';
 import { getDefaultPdeDailyCleanLogRepo } from '../infra/repos/pde-daily-clean-log-repo-pg.js';
 import { getDefaultPdeTransmutationItemGroupsRepo } from '../infra/repos/pde-transmutation-item-groups-repo-pg.js';
+import { getDefaultCleaningItemStateRepo } from '../infra/repos/cleaning/cleaning-item-state-repo-pg.js';
 import { validateViewLayer, ALLOWED_VIEW_LAYERS } from '../core/master/services/cleaning-layer-constants.js';
 import { computeVisualState } from '../core/master/services/cleaning-projection-model.js';
 
@@ -1372,6 +1373,139 @@ export async function markPdeCleanAll(itemRef, productKey = 'pde', ctx = {}, ite
       code: error.code,
       stack: error.stack,
       itemRef
+    });
+    throw error;
+  }
+}
+
+/**
+ * Resetea el progreso de un alumno para un ítem específico.
+ * REGLA CONSTITUCIONAL: Reset ≠ override, Reset ≠ limpieza
+ * Solo afecta al estado del alumno (cleaning_item_state), no modifica overrides ni definiciones base.
+ * 
+ * @param {string} student_uuid - UUID canónico del estudiante
+ * @param {string} item_ref - Referencia del item
+ * @param {string} [product_key='pde'] - Clave del producto (opcional)
+ * @param {string} [domain_type] - Tipo de dominio (opcional)
+ * @returns {Promise<boolean>} true si se reseteó, false si no existía estado
+ */
+export async function resetStudentItemProgress(student_uuid, item_ref, product_key = 'pde', domain_type = null) {
+  const traceId = getRequestId();
+  
+  try {
+    if (!student_uuid || !item_ref) {
+      throw new Error('student_uuid e item_ref son requeridos');
+    }
+    
+    logInfo('AlquimiaGeneralService', 'resetStudentItemProgress iniciado', {
+      traceId,
+      student_uuid,
+      item_ref,
+      product_key,
+      domain_type
+    });
+    
+    // Obtener item para determinar domain_type si no viene
+    if (!domain_type) {
+      const item = await getItemByRef(item_ref);
+      if (!item) {
+        throw new Error(`Item con item_ref=${item_ref} no encontrado`);
+      }
+      // domain_type se deriva del item (normalmente 'alquimia' o similar)
+      // Por ahora, usar 'alquimia' como default si no está en el item
+      domain_type = item.domain_type || 'alquimia';
+    }
+    
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    const deleted = await stateRepo.deleteState({
+      student_uuid,
+      item_ref,
+      product_key,
+      domain_type
+    });
+    
+    logInfo('AlquimiaGeneralService', 'resetStudentItemProgress completado', {
+      traceId,
+      student_uuid,
+      item_ref,
+      deleted
+    });
+    
+    return deleted;
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en resetStudentItemProgress', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      student_uuid,
+      item_ref
+    });
+    throw error;
+  }
+}
+
+/**
+ * Resetea el progreso de un alumno para todos los ítems de una lista.
+ * REGLA CONSTITUCIONAL: Reset ≠ override, Reset ≠ limpieza
+ * Solo afecta al estado del alumno (cleaning_item_state), no modifica overrides ni definiciones base.
+ * 
+ * @param {string} student_uuid - UUID canónico del estudiante
+ * @param {string} list_id - ID de la lista
+ * @param {string} [product_key='pde'] - Clave del producto (opcional)
+ * @param {string} [domain_type] - Tipo de dominio (opcional)
+ * @returns {Promise<number>} Número de estados reseteados
+ */
+export async function resetStudentListProgress(student_uuid, list_id, product_key = 'pde', domain_type = null) {
+  const traceId = getRequestId();
+  
+  try {
+    if (!student_uuid || !list_id) {
+      throw new Error('student_uuid y list_id son requeridos');
+    }
+    
+    logInfo('AlquimiaGeneralService', 'resetStudentListProgress iniciado', {
+      traceId,
+      student_uuid,
+      list_id,
+      product_key,
+      domain_type
+    });
+    
+    // Obtener lista para determinar domain_type si no viene
+    if (!domain_type) {
+      const lista = await getListaById(list_id);
+      if (!lista) {
+        throw new Error(`Lista con id=${list_id} no encontrada`);
+      }
+      // domain_type se deriva de la lista (normalmente 'alquimia' o similar)
+      domain_type = lista.domain_type || 'alquimia';
+    }
+    
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    const deletedCount = await stateRepo.deleteStatesByList({
+      student_uuid,
+      list_id,
+      product_key,
+      domain_type
+    });
+    
+    logInfo('AlquimiaGeneralService', 'resetStudentListProgress completado', {
+      traceId,
+      student_uuid,
+      list_id,
+      deleted_count: deletedCount
+    });
+    
+    return deletedCount;
+  } catch (error) {
+    logError('AlquimiaGeneralService', 'Error en resetStudentListProgress', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      student_uuid,
+      list_id
     });
     throw error;
   }

@@ -1451,6 +1451,35 @@
     
     listaContent.appendChild(scopeContainer);
     
+    // Botón Reset Lista (solo visible en scope='student' con student_uuid)
+    if (state.projection.scope === 'student' && state.projection.student_uuid && state.listaActiva) {
+      const resetListContainer = document.createElement('div');
+      resetListContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+      
+      const btnResetList = document.createElement('button');
+      btnResetList.textContent = 'Reset lista';
+      btnResetList.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+      btnResetList.addEventListener('click', async () => {
+        if (!confirm(`¿Resetear el progreso de TODOS los ítems de esta lista para este alumno? Esto eliminará todo el estado de limpieza de la lista.`)) {
+          return;
+        }
+        
+        try {
+          const deletedCount = await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
+          showToastSuccess(`${deletedCount} ítem(s) reseteado(s)`);
+          
+          // Refrescar proyección
+          await loadListProjection();
+          renderView();
+        } catch (error) {
+          console.error('[RESET][PROGRESS][LIST] Error:', error);
+          showToastError(`Error: ${error.message}`);
+        }
+      });
+      resetListContainer.appendChild(btnResetList);
+      listaContent.appendChild(resetListContainer);
+    }
+    
     // Selector de alumno (solo visible cuando scope === 'student')
     if (state.projection.scope === 'student') {
       const studentSelectorContainer = document.createElement('div');
@@ -3964,6 +3993,35 @@
             console.error('[OVERRIDES][CHECK] Error verificando overrides:', error);
           }
         })();
+        
+        // Botón Reset Progreso (solo en scope='student')
+        if (isProjectionStudent && state.projection.scope === 'student' && state.projection.student_uuid) {
+          const btnResetProgress = document.createElement('button');
+          btnResetProgress.textContent = 'Reset progreso';
+          btnResetProgress.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnResetProgress.addEventListener('click', async () => {
+            if (!confirm(`¿Resetear el progreso de este ítem para este alumno? Esto eliminará todo el estado de limpieza.`)) {
+              return;
+            }
+            
+            try {
+              const deleted = await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
+              if (deleted) {
+                showToastSuccess('Progreso del ítem reseteado');
+              } else {
+                showToastSuccess('No había progreso para resetear');
+              }
+              
+              // Refrescar proyección
+              await loadListProjection();
+              renderView();
+            } catch (error) {
+              console.error('[RESET][PROGRESS][ITEM] Error:', error);
+              showToastError(`Error: ${error.message}`);
+            }
+          });
+          actionsDiv.appendChild(btnResetProgress);
+        }
       }
       
       // ============================================================================
@@ -5198,6 +5256,82 @@
    * @param {string} item_ref - Referencia del item
    * @returns {Promise<number>} Número de overrides eliminados
    */
+  /**
+   * Resetea el progreso de un alumno para un ítem específico
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} item_ref - Referencia del item
+   * @returns {Promise<boolean>} true si se reseteó
+   */
+  async function resetStudentItemProgress(student_uuid, item_ref) {
+    try {
+      const response = await fetch('/master/api/alquimia-general/reset-item', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          student_uuid,
+          item_ref
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error reseteando progreso del ítem');
+      }
+      
+      console.log('[RESET][ITEM] Progreso reseteado', {
+        student_uuid,
+        item_ref,
+        deleted: result.data?.deleted
+      });
+      
+      return result.data?.deleted || false;
+    } catch (error) {
+      console.error('[RESET][ITEM] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resetea el progreso de un alumno para todos los ítems de una lista
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} list_id - ID de la lista
+   * @returns {Promise<number>} Número de estados reseteados
+   */
+  async function resetStudentListProgress(student_uuid, list_id) {
+    try {
+      const response = await fetch('/master/api/alquimia-general/reset-list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          student_uuid,
+          list_id
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Error reseteando progreso de la lista');
+      }
+      
+      console.log('[RESET][LIST] Progreso reseteado', {
+        student_uuid,
+        list_id,
+        deleted_count: result.data?.deleted_count
+      });
+      
+      return result.data?.deleted_count || 0;
+    } catch (error) {
+      console.error('[RESET][LIST] Error:', error);
+      throw error;
+    }
+  }
+
   async function resetItemOverrides(student_uuid, item_ref) {
     try {
       const overrides = await getItemOverrides(student_uuid, item_ref);
