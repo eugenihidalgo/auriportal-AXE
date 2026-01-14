@@ -109,12 +109,15 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
   
   if (itemKind === 'recurrente') {
     // RECURRENTE: NULL tiene prioridad máxima, luego mayor days_since_last_clean
+    // FIX: Si un estudiante no tiene fila, days_since_last_clean es NULL (nunca trabajado)
     let worstDaysSince = null;
     let worstLastCleanedAt = null;
     let hasNull = false;
     
     layerStates.forEach(state => {
-      if (state.days_since_last_clean === null || state.days_since_last_clean === undefined) {
+      // NULL significa "nunca trabajado" (estudiante sin fila o last_cleaned_at es NULL)
+      if (state.days_since_last_clean === null || state.days_since_last_clean === undefined || 
+          state.last_cleaned_at === null || state.last_cleaned_at === undefined) {
         hasNull = true;
         // NULL es peor absoluto, no necesitamos seguir buscando
       } else if (!hasNull) {
@@ -373,41 +376,52 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
     // REGLA CANÓNICA: Proyección ALL muestra el estado MENOS trabajado del grupo
     // Referencia: docs/CANONICAL_RULES_PROJECTION_ALL_WORST_STATE_V1.md
     
-    // Obtener TODOS los estados por alumno (sin GROUP BY) para calcular peor estado
+    // FIX CANÓNICO: CROSS JOIN + LEFT JOIN para traer TODOS los estudiantes aunque no tengan fila
+    // Esto asegura que si un estudiante no tiene estado, se cuenta como NULL y empeora el estado agregado
+    // UUID-ONLY: Usar student_id UUID directamente (sin resolución legacy)
     const result = await query(`
+      WITH item_refs AS (
+        SELECT unnest($1::text[]) AS item_ref
+      ),
+      active_students AS (
+        SELECT id AS student_uuid
+        FROM students
+        WHERE deleted_at IS NULL
+      )
       SELECT 
-        item_ref,
-        student_id,
-        shared_clean_count,
-        shared_last_cleaned_at,
-        shared_remaining,
-        shared_completed,
-        pde_clean_count,
-        pde_last_cleaned_at,
-        pde_remaining,
-        pde_completed,
-        -- Calcular days_since_last_clean por alumno
+        ir.item_ref,
+        s.student_uuid AS student_id,
+        cis.shared_clean_count,
+        cis.shared_last_cleaned_at,
+        cis.shared_remaining,
+        cis.shared_completed,
+        cis.pde_clean_count,
+        cis.pde_last_cleaned_at,
+        cis.pde_remaining,
+        cis.pde_completed,
+        -- Calcular days_since_last_clean por alumno (NULL si no hay fila)
         CASE 
-          WHEN shared_last_cleaned_at IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - shared_last_cleaned_at)) / 86400
+          WHEN cis.shared_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - cis.shared_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as shared_days_since_last_clean,
         CASE 
-          WHEN pde_last_cleaned_at IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - pde_last_cleaned_at)) / 86400
+          WHEN cis.pde_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - cis.pde_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as pde_days_since_last_clean
-      FROM cleaning_item_state
-      WHERE product_key = 'pde'
-        AND domain_type = 'transmutation'
-        AND item_ref = ANY($1::text[])
-        AND student_id IN (
-          SELECT id FROM students WHERE deleted_at IS NULL
-        )
-      ORDER BY item_ref, student_id
+      FROM item_refs ir
+      CROSS JOIN active_students s
+      LEFT JOIN cleaning_item_state cis
+        ON cis.student_id = s.student_uuid
+       AND cis.item_ref = ir.item_ref
+       AND cis.product_key = 'pde'
+       AND cis.domain_type = 'transmutation'
+      ORDER BY ir.item_ref, s.student_uuid
     `, [itemRefs]);
     
     // Agrupar por item_ref y calcular peor estado
+    // FIX: Ahora TODOS los estudiantes aparecen (incluso sin fila = NULL)
     const statesByItem = {};
     
     result.rows.forEach(row => {
@@ -419,21 +433,46 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         };
       }
       
+      // Si no hay fila (LEFT JOIN devolvió NULL), crear estado NULL explícito
+      // Esto asegura que estudiantes sin estado se cuenten como "nunca trabajado"
       statesByItem[itemRef].shared.push({
         clean_count: row.shared_clean_count || 0,
-        days_since_last_clean: row.shared_days_since_last_clean,
-        remaining: row.shared_remaining,
+        days_since_last_clean: row.shared_days_since_last_clean, // NULL si no hay fila
+        remaining: row.shared_remaining || null,
         completed: row.shared_completed || false,
-        last_cleaned_at: row.shared_last_cleaned_at
+        last_cleaned_at: row.shared_last_cleaned_at || null // NULL si no hay fila
       });
       
       statesByItem[itemRef].pde.push({
         clean_count: row.pde_clean_count || 0,
-        days_since_last_clean: row.pde_days_since_last_clean,
-        remaining: row.pde_remaining,
+        days_since_last_clean: row.pde_days_since_last_clean, // NULL si no hay fila
+        remaining: row.pde_remaining || null,
         completed: row.pde_completed || false,
-        last_cleaned_at: row.pde_last_cleaned_at
+        last_cleaned_at: row.pde_last_cleaned_at || null // NULL si no hay fila
       });
+    });
+    
+    // DIAGNÓSTICO: Verificar que todos los estudiantes están incluidos
+    const activeStudentsCount = await query(`
+      SELECT COUNT(*) as total
+      FROM students
+      WHERE deleted_at IS NULL
+    `);
+    const expectedStudentsCount = parseInt(activeStudentsCount.rows[0]?.total || '0', 10);
+    
+    logInfo('LPM', '[ALL_PROJECTION][FIX] Estados obtenidos con CROSS JOIN + LEFT JOIN', {
+      traceId,
+      item_refs_count: itemRefs.length,
+      expected_students_count: expectedStudentsCount,
+      rows_returned: result.rows.length,
+      expected_rows: itemRefs.length * expectedStudentsCount,
+      per_item_states: Object.keys(statesByItem).map(itemRef => ({
+        item_ref: itemRef,
+        shared_count: statesByItem[itemRef].shared.length,
+        pde_count: statesByItem[itemRef].pde.length,
+        has_null_states: statesByItem[itemRef].shared.some(s => s.days_since_last_clean === null) ||
+                         statesByItem[itemRef].pde.some(s => s.days_since_last_clean === null)
+      }))
     });
     
     // Calcular peor estado por item_ref

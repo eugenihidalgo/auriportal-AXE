@@ -58,7 +58,7 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
       config: {
         threshold_days,
         critical_multiplier,
-        critical_threshold,
+        critical_threshold: criticalThreshold,
         required_count
       }
     });
@@ -178,7 +178,7 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
       item_kind: itemKind,
       input_days_since: daysSince,
       threshold_days,
-      critical_threshold,
+      critical_threshold: criticalThreshold,
       calculated_state: state,
       result: result
     });
