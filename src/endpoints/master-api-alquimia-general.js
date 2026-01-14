@@ -1233,10 +1233,10 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           const { calculateStudentDisplayNames } = await import('../core/helpers/student-display-name-helper.js');
           const { query } = await import('../../database/pg.js');
           // Obtener datos del estudiante desde students (UUID canónico)
+          // UUID-ONLY: display_name ahora está en students (apodo, nombre_completo)
           const studentResult = await query(
-            `SELECT s.id as student_uuid, s.legacy_alumno_id, a.apodo, a.nombre_completo, a.email
+            `SELECT s.id as student_uuid, s.apodo, s.nombre_completo, s.email
              FROM students s
-             LEFT JOIN alumnos a ON a.id = s.legacy_alumno_id
              WHERE s.id = $1 AND s.deleted_at IS NULL
              LIMIT 1`,
             [studentUuid]

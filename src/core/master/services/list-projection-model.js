@@ -402,7 +402,7 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         AND domain_type = 'transmutation'
         AND item_ref = ANY($1::text[])
         AND student_id IN (
-          SELECT legacy_alumno_id FROM students WHERE deleted_at IS NULL
+          SELECT id FROM students WHERE deleted_at IS NULL
         )
       ORDER BY item_ref, student_id
     `, [itemRefs]);
@@ -552,22 +552,8 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     // Validar coherencia view_layer + item_kind
     validateViewLayerItemKindCoherence(view_layer, item_kind);
     
-    // Resolver student_uuid -> legacy_alumno_id si scope='student'
-    let studentId = null;
-    if (scope === 'student' && student_uuid) {
-      // FIX: Usar query directa a tabla students (UUID canónico) para obtener legacy_alumno_id
-      // student_uuid es students.id (UUID), necesitamos legacy_alumno_id para compatibilidad
-      const studentResult = await query(
-        'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-        [student_uuid]
-      );
-      
-      if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
-        throw new Error(`Estudiante no encontrado o sin legacy_alumno_id: ${student_uuid}`);
-      }
-      
-      studentId = studentResult.rows[0].legacy_alumno_id;
-    }
+    // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
+    const studentId = (scope === 'student' && student_uuid) ? student_uuid : null;
     
     // Obtener lista
     const catalogRepo = getDefaultAlquimiaCatalogRepo();

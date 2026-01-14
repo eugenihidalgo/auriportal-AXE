@@ -161,18 +161,10 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('student_uuid debe ser un UUID válido', 'INVALID_STUDENT_UUID', 400, traceId);
       }
       
-      // Resolver legacy_alumno_id internamente (solo para servicios legacy)
-      const identityRepo = getDefaultStudentIdentityRepo();
-      const legacyStudentId = await identityRepo.resolveLegacyId(studentUuid);
-      
-      if (!legacyStudentId) {
-        return jsonError('Student UUID no encontrado o sin legacy_alumno_id', 'STUDENT_NOT_FOUND', 404, traceId);
-      }
-      
+      // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
       logInfo('MasterApiAlquimiaAlumno', '[ALQUIMIA_ALUMNO][MEGALIST] GET megalist', {
         traceId,
         student_uuid: studentUuid,
-        legacy_student_id: legacyStudentId,
         view_layer: viewLayer,
         lista_tipo: listaTipo,
         levels_mode: levelsMode,
@@ -184,7 +176,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       // Esto asegura que todos los items aplicables tengan estado materializado
       // Usar level_cap si viene, si no usar nivel_efectivo (default)
       const seedResult = await ensureCleaningItemStateSeedForStudent({
-        student_id: legacyStudentId, // Usar legacy ID para servicio legacy
+        student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
         product_key: 'pde',
         domain_type: 'transmutation',
         level_cap: levelCap
@@ -193,7 +185,6 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       logInfo('MasterApiAlquimiaAlumno', 'Seed completado', {
         traceId,
         student_uuid: studentUuid,
-        legacy_student_id: legacyStudentId,
         inserted: seedResult.inserted,
         skipped: seedResult.skipped,
         total_applicable: seedResult.total_applicable,
@@ -204,7 +195,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       // Filtrar por level_cap si viene
       // REGLA CONSTITUCIONAL: view_layer y lista_tipo son OBLIGATORIOS
       const result = await getMegalistForStudent({
-        student_id: legacyStudentId, // Usar legacy ID para servicio legacy
+        student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
         view_layer: viewLayer, // OBLIGATORIO según regla constitucional
         lista_tipo: listaTipo, // OBLIGATORIO: filtrar por tipo de lista
         levels_mode: levelsMode,
@@ -245,14 +236,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('student_uuid debe ser un UUID válido', 'INVALID_STUDENT_UUID', 400, traceId);
       }
       
-      // Resolver legacy_alumno_id internamente (solo para servicios/SQL legacy)
-      const identityRepo = getDefaultStudentIdentityRepo();
-      const legacyStudentId = await identityRepo.resolveLegacyId(student_uuid);
-      
-      if (!legacyStudentId) {
-        return jsonError('Student UUID no encontrado o sin legacy_alumno_id', 'STUDENT_NOT_FOUND', 404, traceId);
-      }
-      
+      // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
       if (!item_kind || (item_kind !== 'recurrente' && item_kind !== 'una_vez')) {
         return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
       }
@@ -281,7 +265,6 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       logInfo('MasterApiAlquimiaAlumno', 'POST clean', {
         traceId,
         student_uuid,
-        legacy_student_id: legacyStudentId,
         item_ref,
         domain_type,
         product_key,
@@ -320,13 +303,13 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
           AND product_key = $2
           AND domain_type = $3
           AND item_ref = $4
-      `, [legacyStudentId, product_key, domain_type, item_ref]); // Usar legacy ID para SQL
+      `, [student_uuid, product_key, domain_type, item_ref]); // UUID-ONLY: usar UUID directamente
       
       if (!stateCheck.rows || stateCheck.rows.length === 0) {
         // Si no existe, intentar seed primero (puede ser item nuevo)
         // Usar level_cap si viene
         await ensureCleaningItemStateSeedForStudent({
-          student_id: legacyStudentId, // Usar legacy ID para servicio legacy
+          student_uuid: student_uuid, // UUID-ONLY: usar UUID directamente
           product_key,
           domain_type,
           level_cap: levelCapOverride
@@ -340,7 +323,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
             AND product_key = $2
             AND domain_type = $3
             AND item_ref = $4
-        `, [legacyStudentId, product_key, domain_type, item_ref]); // Usar legacy ID para SQL
+        `, [student_uuid, product_key, domain_type, item_ref]); // UUID-ONLY: usar UUID directamente
         
         if (!stateCheck2.rows || stateCheck2.rows.length === 0) {
           return jsonError(
@@ -401,18 +384,10 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('item_ref es requerido', 'MISSING_ITEM_REF', 400, traceId);
       }
       
-      // Resolver legacy_alumno_id internamente (solo para repositorio legacy)
-      const identityRepo = getDefaultStudentIdentityRepo();
-      const legacyStudentId = await identityRepo.resolveLegacyId(studentUuid);
-      
-      if (!legacyStudentId) {
-        return jsonError('Student UUID no encontrado o sin legacy_alumno_id', 'STUDENT_NOT_FOUND', 404, traceId);
-      }
-      
+      // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
       logInfo('MasterApiAlquimiaAlumno', 'GET item-history', {
         traceId,
         student_uuid: studentUuid,
-        legacy_student_id: legacyStudentId,
         domain_type: domainType,
         item_ref: itemRef,
         limit
@@ -420,7 +395,7 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       const eventsRepo = getDefaultCleaningEventsRepo();
       const events = await eventsRepo.listEventsForStudentItem({
-        student_id: legacyStudentId, // Usar legacy ID para repositorio legacy
+        student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
         item_ref: itemRef,
         product_key: 'pde',
         domain_type: domainType,
@@ -476,24 +451,16 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         return jsonError('student_uuid debe ser un UUID válido', 'INVALID_STUDENT_UUID', 400, traceId);
       }
       
-      // Resolver legacy_alumno_id internamente (solo para servicio legacy)
-      const identityRepo = getDefaultStudentIdentityRepo();
-      const legacyStudentId = await identityRepo.resolveLegacyId(studentUuid);
-      
-      if (!legacyStudentId) {
-        return jsonError('Student UUID no encontrado o sin legacy_alumno_id', 'STUDENT_NOT_FOUND', 404, traceId);
-      }
-      
+      // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
       logInfo('MasterApiAlquimiaAlumno', 'GET report', {
         traceId,
         student_uuid: studentUuid,
-        legacy_student_id: legacyStudentId,
         days
       });
       
       // Construir reporte completo (dos paneles)
       const report = await buildAlquimiaReport({
-        student_id: legacyStudentId, // Usar legacy ID para servicio legacy
+        student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
         days
       });
       

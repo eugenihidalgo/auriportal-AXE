@@ -37,15 +37,14 @@ import { evaluateCondition } from '../../conditions/condition-evaluator.js';
  */
 async function resolveStudentStartDate(studentId, lineKey) {
   if (lineKey === 'pde') {
-    // Para PDE: fecha alta en AuriPortal
-    // Prioridad 1: students.created_at
-    // Prioridad 2: legacy alumnos.fecha_inscripcion (si link existe)
+    // UUID-ONLY: Usar students.created_at como única fuente de verdad
+    // Prioridad: students.created_at
     // Fallback: now() (registrar en meta)
     
     // Consultar directamente la tabla students (UUID)
     try {
       const studentResult = await query(
-        'SELECT id, created_at, legacy_alumno_id FROM students WHERE id = $1',
+        'SELECT id, created_at FROM students WHERE id = $1',
         [studentId]
       );
       
@@ -56,34 +55,9 @@ async function resolveStudentStartDate(studentId, lineKey) {
       
       const student = studentResult.rows[0];
       
-      // Intentar students.created_at
+      // Usar students.created_at (única fuente de verdad)
       if (student.created_at) {
         return new Date(student.created_at);
-      }
-      
-      // Intentar legacy alumnos.fecha_inscripcion si existe link
-      if (student.legacy_alumno_id) {
-        try {
-          const legacyResult = await query(
-            'SELECT fecha_inscripcion FROM alumnos WHERE id = $1',
-            [student.legacy_alumno_id]
-          );
-          if (legacyResult.rows[0] && legacyResult.rows[0].fecha_inscripcion) {
-            const legacyDate = legacyResult.rows[0].fecha_inscripcion;
-            logInfo('LevelEngine', 'Usando fecha legacy alumnos.fecha_inscripcion', {
-              student_id: studentId,
-              legacy_alumno_id: student.legacy_alumno_id,
-              fecha_inscripcion: legacyDate
-            });
-            return new Date(legacyDate);
-          }
-        } catch (error) {
-          logWarn('LevelEngine', 'Error consultando legacy alumnos (continuando)', {
-            student_id: studentId,
-            legacy_alumno_id: student.legacy_alumno_id,
-            error: error.message
-          });
-        }
       }
       
       // Fallback: now() (registrar en meta)

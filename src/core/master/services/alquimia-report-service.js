@@ -10,17 +10,18 @@ import { resolveItemsFromCatalog, resolveListasFromCatalog, resolveListasClassif
 
 /**
  * Construye el reporte completo de alquimia del alumno (dos paneles)
+ * UUID-ONLY: Acepta student_uuid (UUID canónico)
  * @param {Object} options - Opciones
- * @param {number} options.student_id - ID del alumno
+ * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
  * @param {number} options.days - Días hacia atrás (default: 30)
  * @returns {Promise<Object>} Reporte con technical_panel y human_panel
  */
 export async function buildAlquimiaReport(options = {}) {
   const traceId = getRequestId();
-  const { student_id, days = 30 } = options;
+  const { student_uuid, days = 30 } = options;
   
-  if (!student_id) {
-    throw new Error('student_id es requerido');
+  if (!student_uuid) {
+    throw new Error('student_uuid es requerido');
   }
   
   try {
@@ -48,13 +49,13 @@ export async function buildAlquimiaReport(options = {}) {
         AND domain_type = 'transmutation'
         AND created_at >= $2
       ORDER BY created_at DESC
-    `, [student_id, sinceDate.toISOString()]);
+    `, [student_uuid, sinceDate.toISOString()]);
     
     const events = eventsResult.rows || [];
     
     logInfo('AlquimiaReport', 'Eventos obtenidos', {
       traceId,
-      student_id,
+      student_uuid,
       days,
       events_count: events.length
     });
@@ -269,7 +270,7 @@ export async function buildAlquimiaReport(options = {}) {
     
     logInfo('AlquimiaReport', 'Reporte construido', {
       traceId,
-      student_id,
+      student_uuid,
       days,
       technical_events: events.length,
       human_listas: groupedByListaArray.length,
@@ -282,7 +283,7 @@ export async function buildAlquimiaReport(options = {}) {
       metadata: {
         days,
         since_date: sinceDate.toISOString(),
-        student_id,
+        student_uuid,
         total_items: itemRefs.length,
         total_listas: listaIds.length
       }
@@ -290,7 +291,7 @@ export async function buildAlquimiaReport(options = {}) {
   } catch (error) {
     logWarn('AlquimiaReport', 'Error construyendo reporte', {
       traceId,
-      student_id,
+      student_uuid,
       error: error.message
     });
     throw error;

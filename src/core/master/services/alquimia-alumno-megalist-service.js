@@ -46,18 +46,19 @@ function calculateDaysSince(lastCleanedAt) {
 
 /**
  * Obtiene el actor que hizo la última limpieza desde cleaning_events
+ * UUID-ONLY: Acepta student_uuid (UUID canónico)
  * 
- * @param {number} studentId - ID del alumno
+ * @param {string} studentUuid - UUID del estudiante
  * @param {string} itemRef - Referencia del item
  * @returns {Promise<string|null>} 'master' | 'student' | null
  */
-async function getLastCleanActor(studentId, itemRef) {
+async function getLastCleanActor(studentUuid, itemRef) {
   try {
     const { getDefaultCleaningEventsRepo } = await import('../../../infra/repos/cleaning/cleaning-events-repo-pg.js');
     const eventsRepo = getDefaultCleaningEventsRepo();
     
     const events = await eventsRepo.listEventsForStudentItem({
-      student_id: studentId,
+      student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
       item_ref: itemRef,
       product_key: 'pde',
       domain_type: 'transmutation',
@@ -71,7 +72,7 @@ async function getLastCleanActor(studentId, itemRef) {
     return events[0].actor_type || null;
   } catch (error) {
     logWarn('AlquimiaAlumnoMegalist', 'Error obteniendo último actor (fail-open)', {
-      student_id: studentId,
+      student_uuid: studentUuid,
       item_ref: itemRef,
       error: error.message
     });
@@ -93,7 +94,7 @@ async function getLastCleanActor(studentId, itemRef) {
  * - state_by_view_layer contiene estados para todas las view_layers
  * 
  * @param {Object} options - Opciones
- * @param {number} options.student_id - ID del alumno
+ * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
  * @param {string} options.view_layer - Capa de vista ('shared' | 'pde' | 'combo') - OBLIGATORIO
  * @param {string} [options.levels_mode] - Modo de niveles (por ahora solo aceptado, no usado)
  * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
@@ -101,10 +102,10 @@ async function getLastCleanActor(studentId, itemRef) {
  */
 export async function getMegalistForStudent(options = {}) {
   const traceId = getRequestId();
-  const { student_id, view_layer, lista_tipo, levels_mode, level_cap = null } = options;
+  const { student_uuid, view_layer, lista_tipo, levels_mode, level_cap = null } = options;
   
-  if (!student_id) {
-    throw new Error('student_id es requerido');
+  if (!student_uuid) {
+    throw new Error('student_uuid es requerido');
   }
   
   // ============================================================================
@@ -150,12 +151,12 @@ export async function getMegalistForStudent(options = {}) {
       }
     } else {
       // Usar nivel efectivo como default
-      nivelCap = await getStudentEffectiveLevel(student_id);
+      nivelCap = await getStudentEffectiveLevel(student_uuid);
     }
     
     logInfo('AlquimiaAlumnoMegalist', '[ALQUIMIA_ALUMNO][MEGALIST] Construyendo megalista desde estado', {
       traceId,
-      student_id,
+      student_uuid,
       view_layer,
       lista_tipo,
       levels_mode,
@@ -165,19 +166,19 @@ export async function getMegalistForStudent(options = {}) {
     
     // 2. Verificar que el alumno existe
     const studentRepo = getDefaultStudentRepo();
-    const student = await studentRepo.getById(student_id);
+    const student = await studentRepo.getById(student_uuid);
     
     if (!student) {
-      throw new Error(`Alumno no encontrado: ${student_id}`);
+      throw new Error(`Alumno no encontrado: ${student_uuid}`);
     }
     
     // 3. Verificar que no esté en pausa
     const pausaRepo = getDefaultPausaRepo();
-    const pausaActiva = await pausaRepo.getPausaActiva(student_id);
+    const pausaActiva = await pausaRepo.getPausaActiva(student_uuid);
     if (pausaActiva) {
       logWarn('AlquimiaAlumnoMegalist', 'Alumno en pausa', {
         traceId,
-        student_id
+        student_uuid
       });
     }
     
@@ -208,13 +209,13 @@ export async function getMegalistForStudent(options = {}) {
         AND s.domain_type = 'transmutation'
         AND (i.nivel IS NULL OR i.nivel <= $2::integer)
       ORDER BY s.item_ref
-    `, [student_id, nivelCap]);
+    `, [student_uuid, nivelCap]);
     
     const states = statesResult.rows || [];
     
     logInfo('AlquimiaAlumnoMegalist', 'Estados obtenidos desde cleaning_item_state (filtrados por level_cap)', {
       traceId,
-      student_id,
+      student_uuid,
       view_layer,
       level_cap: nivelCap,
       states_count: states.length
@@ -612,7 +613,7 @@ export async function getMegalistForStudent(options = {}) {
       });
       
       // Obtener último actor (para metadata)
-      const lastActor = await getLastCleanActor(student_id, state.item_ref);
+      const lastActor = await getLastCleanActor(student_uuid, state.item_ref);
       
       // Construir datos del item PLANO (NO agrupado)
       const itemData = {
@@ -845,7 +846,7 @@ export async function getMegalistForStudent(options = {}) {
     
     logInfo('AlquimiaAlumnoMegalist', 'Megalista construida desde estado (items planos)', {
       traceId,
-      student_id,
+      student_uuid,
       view_layer,
       total,
       never,
@@ -860,7 +861,7 @@ export async function getMegalistForStudent(options = {}) {
   } catch (error) {
     logError('AlquimiaAlumnoMegalist', 'Error construyendo megalista', {
       traceId,
-      student_id,
+      student_uuid,
       error: error.message,
       code: error.code,
       stack: error.stack

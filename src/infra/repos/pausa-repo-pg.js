@@ -23,63 +23,66 @@ import { query } from '../../../database/pg.js';
 export class PausaRepoPg {
   /**
    * Busca todas las pausas de un alumno
+   * UUID-ONLY: Acepta student_uuid (UUID canónico)
    * 
-   * @param {number} alumnoId - ID del alumno
+   * @param {string} studentUuid - UUID del estudiante
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Array>} Array de objetos pausa o array vacío
    */
-  async findByAlumnoId(alumnoId, client = null) {
-    if (!alumnoId) return [];
+  async findByAlumnoId(studentUuid, client = null) {
+    if (!studentUuid) return [];
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(
-      'SELECT * FROM pausas WHERE alumno_id = $1 ORDER BY inicio DESC',
-      [alumnoId]
+      'SELECT * FROM pausas WHERE student_id = $1 ORDER BY inicio DESC',
+      [studentUuid]
     );
     return result.rows;
   }
 
   /**
    * Obtiene la pausa activa (sin fin) más reciente de un alumno
+   * UUID-ONLY: Acepta student_uuid (UUID canónico)
    * 
-   * @param {number} alumnoId - ID del alumno
+   * @param {string} studentUuid - UUID del estudiante
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object|null>} Objeto pausa o null si no hay pausa activa
    */
-  async getPausaActiva(alumnoId, client = null) {
-    if (!alumnoId) return null;
+  async getPausaActiva(studentUuid, client = null) {
+    if (!studentUuid) return null;
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
       SELECT * FROM pausas
-      WHERE alumno_id = $1
+      WHERE student_id = $1
         AND fin IS NULL
       ORDER BY inicio DESC
       LIMIT 1
-    `, [alumnoId]);
+    `, [studentUuid]);
 
     return result.rows[0] || null;
   }
 
   /**
    * Crea una nueva pausa
+   * UUID-ONLY: Acepta student_id (UUID canónico)
    * 
    * @param {Object} pausaData - Datos de la pausa
-   * @param {number} pausaData.alumno_id - ID del alumno
+   * @param {string} pausaData.student_id - UUID del estudiante
    * @param {Date|string} [pausaData.inicio] - Fecha de inicio (default: ahora)
    * @param {Date|string|null} [pausaData.fin] - Fecha de fin (default: null)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object>} Objeto pausa creado
    */
   async create(pausaData, client = null) {
-    const { alumno_id, inicio, fin, motivo } = pausaData;
+    const { student_id, inicio, fin, motivo } = pausaData;
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
-      INSERT INTO pausas (alumno_id, inicio, fin, motivo)
+      INSERT INTO pausas (student_id, inicio, fin, motivo)
       VALUES ($1, $2, $3, $4)
       RETURNING *
-    `, [alumno_id, inicio || new Date(), fin || null, motivo || null]);
+    `, [student_id, inicio || new Date(), fin || null, motivo || null]);
 
     return result.rows[0];
   }
@@ -109,13 +112,14 @@ export class PausaRepoPg {
   /**
    * Calcula el total de días pausados para un alumno
    * Si hay una pausa activa (sin fin), cuenta hasta la fecha actual.
+   * UUID-ONLY: Acepta student_uuid (UUID canónico)
    * 
-   * @param {number} alumnoId - ID del alumno
+   * @param {string} studentUuid - UUID del estudiante
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<number>} Total de días pausados (entero)
    */
-  async calcularDiasPausados(alumnoId, client = null) {
-    if (!alumnoId) return 0;
+  async calcularDiasPausados(studentUuid, client = null) {
+    if (!studentUuid) return 0;
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
@@ -123,22 +127,23 @@ export class PausaRepoPg {
         EXTRACT(EPOCH FROM (COALESCE(fin, CURRENT_TIMESTAMP) - inicio)) / 86400
       ), 0)::INTEGER as dias_pausados
       FROM pausas
-      WHERE alumno_id = $1
-    `, [alumnoId]);
+      WHERE student_id = $1
+    `, [studentUuid]);
 
     return result.rows[0]?.dias_pausados || 0;
   }
 
   /**
    * Calcula los días pausados hasta una fecha límite específica
+   * UUID-ONLY: Acepta student_uuid (UUID canónico)
    * 
-   * @param {number} alumnoId - ID del alumno
+   * @param {string} studentUuid - UUID del estudiante
    * @param {Date|string} fechaLimite - Fecha límite hasta la cual calcular
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<number>} Total de días pausados hasta la fecha límite (entero)
    */
-  async calcularDiasPausadosHastaFecha(alumnoId, fechaLimite, client = null) {
-    if (!alumnoId || !fechaLimite) return 0;
+  async calcularDiasPausadosHastaFecha(studentUuid, fechaLimite, client = null) {
+    if (!studentUuid || !fechaLimite) return 0;
     
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(`
@@ -148,9 +153,9 @@ export class PausaRepoPg {
         )) / 86400
       ), 0)::INTEGER as dias_pausados
       FROM pausas
-      WHERE alumno_id = $1
+      WHERE student_id = $1
         AND inicio < $2::timestamp
-    `, [alumnoId, fechaLimite]);
+    `, [studentUuid, fechaLimite]);
 
     return result.rows[0]?.dias_pausados || 0;
   }

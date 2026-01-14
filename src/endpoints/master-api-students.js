@@ -169,27 +169,25 @@ export async function listStudentsHandler(request, env, ctx) {
     const countResult = await query(
       `SELECT COUNT(*) as total 
        FROM students s
-       LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
        ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0]?.total || 0, 10);
     
     // Obtener estudiantes desde students (UUID) como SOT
-    // LEFT JOIN con alumnos para display_name (apodo, nombre_completo, email)
-    // LEFT JOIN con pausas para verificar pausa
+    // UUID-ONLY: display_name ahora está en students (apodo, nombre_completo, email)
+    // LEFT JOIN con pausas para verificar pausa (pausas.student_id ahora es UUID)
     const itemsResult = await query(
       `SELECT 
          s.id as student_uuid,
-         a.email,
-         a.apodo,
-         a.nombre_completo,
+         s.email,
+         s.apodo,
+         s.nombre_completo,
          CASE WHEN p.id IS NOT NULL THEN true ELSE false END as paused
        FROM students s
-       LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
-       LEFT JOIN pausas p ON p.alumno_id = a.id AND p.fin IS NULL
+       LEFT JOIN pausas p ON p.student_id = s.id AND p.fin IS NULL
        ${whereClause}
-       ORDER BY COALESCE(a.email, s.id::text) ASC
+       ORDER BY COALESCE(s.email, s.id::text) ASC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, limit, offset]
     );

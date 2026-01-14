@@ -67,7 +67,6 @@ export async function createStudentCanonical(options, client = null) {
     logInfo('StudentCreationService', 'Alumno creado o existente (idempotencia)', {
       traceId,
       student_uuid: result.student_uuid,
-      legacy_alumno_id: result.legacy_alumno_id,
       email: result.email
     });
     
@@ -85,7 +84,6 @@ export async function createStudentCanonical(options, client = null) {
     logInfo('StudentCreationService', 'Alumno creado exitosamente (UUID-first)', {
       traceId,
       student_uuid: result.student_uuid,
-      legacy_alumno_id: result.legacy_alumno_id,
       email: result.email,
       display_name: displayName
     });

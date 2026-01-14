@@ -75,20 +75,9 @@ async function isStudentPaused(studentUuid) {
   if (!studentUuid) return false;
   
   try {
-    // Resolver legacy_id internamente en el repositorio (tabla pausas usa alumno_id)
-    const { query } = await import('../../../../database/pg.js');
-    const studentResult = await query(
-      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-      [studentUuid]
-    );
-    
-    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
-      return false; // Si no hay legacy_id, asumir no pausado
-    }
-    
-    const legacyAlumnoId = studentResult.rows[0].legacy_alumno_id;
+    // UUID-ONLY: pausas.student_id ahora es UUID, usar directamente
     const pausaRepo = getDefaultPausaRepo();
-    const pausaActiva = await pausaRepo.getPausaActiva(legacyAlumnoId);
+    const pausaActiva = await pausaRepo.getPausaActiva(studentUuid);
     return !!pausaActiva;
   } catch (error) {
     logWarn('CleaningEngine', 'Error verificando pausa (fail-open: no pausado)', {
@@ -335,20 +324,7 @@ export async function markCleanStudent(options, client = null) {
     
     const itemKind = item_kind; // Usar siempre el proporcionado (sin fallback)
     
-    // Resolver legacy_id SOLO para escribir en tablas legacy (repositorios lo hacen internamente)
-    // Los repositorios de cleaning necesitan legacy_id para escribir en cleaning_events y cleaning_item_state
-    const { query } = await import('../../../../database/pg.js');
-    const queryFn = client ? client.query.bind(client) : query;
-    const studentResult = await queryFn(
-      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-      [student_uuid]
-    );
-    
-    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
-      throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
-    }
-    
-    const legacyStudentId = studentResult.rows[0].legacy_alumno_id; // Solo para escribir en tablas legacy
+    // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
     
     // 5. REGLA MASTER: Para UNA_VEZ en dominio MASTER, usar CERTIFY para permitir múltiples incrementos
     // En MASTER no hay límite diario para UNA_VEZ (puede sumar varias veces el mismo día)
@@ -390,8 +366,7 @@ export async function markCleanStudent(options, client = null) {
     const eventData = {
       trace_id: traceId,
       execution_key: executionKey,
-      student_uuid, // UUID canónico
-      student_id: legacyStudentId, // Legacy ID solo para escribir en tabla legacy
+      student_uuid, // UUID canónico (student_id en tabla ahora es UUID)
       product_key,
       domain_type,
       item_ref,
@@ -1060,19 +1035,7 @@ export async function setRemainingShared(options, client = null) {
       throw new Error(`setRemainingShared solo aplica a items una_vez`);
     }
     
-    // Resolver legacy_id SOLO para escribir en tablas legacy (repositorios lo hacen internamente)
-    const { query } = await import('../../../../database/pg.js');
-    const queryFn = client ? client.query.bind(client) : query;
-    const studentResult = await queryFn(
-      'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-      [student_uuid]
-    );
-    
-    if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
-      throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${student_uuid}`);
-    }
-    
-    const legacyStudentId = studentResult.rows[0].legacy_alumno_id; // Solo para escribir en tablas legacy
+    // UUID-ONLY: Ya no se resuelve legacy, usar student_uuid directamente
     
     // 4. Generar execution_key para idempotencia (usar UUID)
     const executionKey = generateExecutionKey('set_remaining', item_ref, student_uuid);
@@ -1082,8 +1045,7 @@ export async function setRemainingShared(options, client = null) {
     const eventData = {
       trace_id: traceId,
       execution_key: executionKey,
-      student_uuid,
-      student_id: legacyStudentId, // Legacy ID solo para escribir en tabla legacy
+      student_uuid, // UUID canónico (student_id en tabla ahora es UUID)
       product_key,
       domain_type,
       item_ref,

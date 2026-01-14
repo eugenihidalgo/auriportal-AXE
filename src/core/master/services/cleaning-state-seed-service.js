@@ -14,9 +14,10 @@ import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 
 /**
  * Asegura que todos los items aplicables del catálogo tengan estado en cleaning_item_state
+ * UUID-ONLY: Acepta student_uuid (UUID canónico)
  * 
  * @param {Object} options - Opciones
- * @param {number} options.student_id - ID del alumno
+ * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
  * @param {string} [options.product_key='pde'] - Product key
  * @param {string} [options.domain_type='transmutation'] - Domain type
  * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
@@ -26,14 +27,14 @@ import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 export async function ensureCleaningItemStateSeedForStudent(options = {}, client = null) {
   const traceId = getRequestId();
   const { 
-    student_id, 
+    student_uuid, 
     product_key = 'pde', 
     domain_type = 'transmutation',
     level_cap = null
   } = options;
   
-  if (!student_id) {
-    throw new Error('student_id es requerido');
+  if (!student_uuid) {
+    throw new Error('student_uuid es requerido');
   }
   
   const queryFn = client ? client.query.bind(client) : query;
@@ -49,12 +50,12 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       }
     } else {
       // Usar nivel efectivo como default
-      nivelCap = await getStudentEffectiveLevel(student_id);
+      nivelCap = await getStudentEffectiveLevel(student_uuid);
     }
     
     logInfo('SEED_CLEAN_STATE', 'Iniciando seed de estados', {
       traceId,
-      student_id,
+      student_uuid,
       product_key,
       domain_type,
       level_cap: nivelCap,
@@ -87,7 +88,7 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
         updated_at
       )
       SELECT 
-        $1::integer as student_id,
+        $1::uuid as student_id,
         $2::text as product_key,
         $3::text as domain_type,
         i.item_ref,
@@ -125,13 +126,13 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
         AND NOT EXISTS (
           SELECT 1 
           FROM cleaning_item_state s
-          WHERE s.student_id = $1::integer
+          WHERE s.student_id = $1::uuid
             AND s.product_key = $2::text
             AND s.domain_type = $3::text
             AND s.item_ref = i.item_ref
         )
       ON CONFLICT (student_id, product_key, domain_type, item_ref) DO NOTHING
-    `, [student_id, product_key, domain_type, nivelCap]);
+    `, [student_uuid, product_key, domain_type, nivelCap]);
     
     const inserted = insertResult.rowCount || 0;
     
@@ -153,14 +154,14 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       WHERE student_id = $1
         AND product_key = $2
         AND domain_type = $3
-    `, [student_id, product_key, domain_type]);
+    `, [student_uuid, product_key, domain_type]);
     
     const existing = parseInt(existingResult.rows[0]?.total || '0', 10);
     const skipped = existing - (totalApplicable - inserted);
     
     logInfo('SEED_CLEAN_STATE', 'Seed completado', {
       traceId,
-      student_id,
+      student_uuid,
       product_key,
       domain_type,
       level_cap: nivelCap,
@@ -180,7 +181,7 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
   } catch (error) {
     logWarn('SEED_CLEAN_STATE', 'Error en seed (fail-open)', {
       traceId,
-      student_id,
+      student_uuid,
       product_key,
       domain_type,
       error: error.message,

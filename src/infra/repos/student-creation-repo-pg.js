@@ -1,14 +1,13 @@
 // src/infra/repos/student-creation-repo-pg.js
-// Implementación PostgreSQL del Repositorio de Creación de Alumnos (UUID-first)
+// Implementación PostgreSQL del Repositorio de Creación de Alumnos (UUID-only)
 //
 // Esta es la implementación concreta que encapsula TODAS las queries
 // relacionadas con creación de alumnos en PostgreSQL.
 // 
 // REGLAS:
 // - Este es el ÚNICO lugar donde se importa database/pg.js para creación de alumnos
-// - Creación UUID-first (students como SOT)
-// - Creación en alumnos (legacy) solo para compatibilidad
-// - Transacción atómica (students + alumnos en misma transacción)
+// - Creación UUID-only (students como SOT único)
+// - display_name (apodo, nombre_completo) ahora está en students
 // - Idempotencia por email (retorna existente si ya existe)
 
 import { query, getPool } from '../../../database/pg.js';
@@ -17,21 +16,21 @@ import { query, getPool } from '../../../database/pg.js';
  * Repositorio de Creación de Alumnos - Implementación PostgreSQL
  * 
  * Encapsula todas las operaciones de creación de alumnos.
- * Retorna objetos con { student_uuid, legacy_alumno_id, email }.
+ * UUID-ONLY: Retorna objetos con { student_uuid, email, apodo, nombre_completo }.
  * 
  * Todos los métodos aceptan un parámetro opcional `client` para transacciones.
  * Si se proporciona, usa ese client; si no, usa el pool por defecto.
  */
 export class StudentCreationRepoPg {
   /**
-   * Crea un alumno canónico (UUID-first)
+   * Crea un alumno canónico (UUID-only)
    * 
    * @param {Object} data - Datos del alumno
    * @param {string} data.email - Email (obligatorio, único)
    * @param {string} [data.apodo] - Apodo (opcional)
    * @param {string} [data.nombre_completo] - Nombre completo (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
-   * @returns {Promise<Object>} { student_uuid, legacy_alumno_id, email }
+   * @returns {Promise<Object>} { student_uuid, email, apodo, nombre_completo }
    * @throws {Error} Si email es requerido o hay error de base de datos
    */
   async createStudent(data, client = null) {
@@ -45,11 +44,11 @@ export class StudentCreationRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     
     // Verificar si ya existe (idempotencia por email)
+    // UUID-ONLY: Buscar directamente en students (sin JOIN a alumnos)
     const existingResult = await queryFn(`
-      SELECT s.id as student_uuid, s.legacy_alumno_id, a.email, a.apodo, a.nombre_completo
-      FROM students s
-      LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
-      WHERE a.email = $1 AND s.deleted_at IS NULL
+      SELECT id as student_uuid, email, apodo, nombre_completo
+      FROM students
+      WHERE email = $1 AND deleted_at IS NULL
       LIMIT 1
     `, [normalizedEmail]);
     
@@ -57,14 +56,13 @@ export class StudentCreationRepoPg {
       const existing = existingResult.rows[0];
       return {
         student_uuid: existing.student_uuid,
-        legacy_alumno_id: existing.legacy_alumno_id,
         email: existing.email,
         apodo: existing.apodo || null,
         nombre_completo: existing.nombre_completo || null
       };
     }
     
-    // Si no existe, crear en transacción
+    // Si no existe, crear SOLO en students (UUID-only)
     // Usar transacción explícita si no se proporciona client
     if (!client) {
       const pool = getPool();
@@ -73,33 +71,23 @@ export class StudentCreationRepoPg {
       try {
         await transactionClient.query('BEGIN');
         
-        // Crear en alumnos (legacy) primero
-        const alumnoResult = await transactionClient.query(`
-          INSERT INTO alumnos (email, apodo, nombre_completo, fecha_inscripcion, nivel_actual, streak, estado_suscripcion)
-          VALUES ($1, $2, $3, now(), 1, 0, 'activa')
+        // Crear SOLO en students (UUID-only, sin legacy)
+        const studentResult = await transactionClient.query(`
+          INSERT INTO students (status, email, apodo, nombre_completo, created_at, updated_at)
+          VALUES ('NORMAL', $1, $2, $3, now(), now())
           RETURNING id, email, apodo, nombre_completo
         `, [normalizedEmail, apodo || null, nombre_completo || null]);
         
-        const alumnoId = alumnoResult.rows[0].id;
-        const alumno = alumnoResult.rows[0];
-        
-        // Crear en students (UUID) con legacy_alumno_id
-        const studentResult = await transactionClient.query(`
-          INSERT INTO students (status, legacy_alumno_id, created_at, updated_at)
-          VALUES ('NORMAL', $1, now(), now())
-          RETURNING id
-        `, [alumnoId]);
-        
-        const studentUuid = studentResult.rows[0].id;
+        const student = studentResult.rows[0];
+        const studentUuid = student.id;
         
         await transactionClient.query('COMMIT');
         
         return {
           student_uuid: studentUuid,
-          legacy_alumno_id: alumnoId,
-          email: normalizedEmail,
-          apodo: alumno.apodo || null,
-          nombre_completo: alumno.nombre_completo || null
+          email: student.email,
+          apodo: student.apodo || null,
+          nombre_completo: student.nombre_completo || null
         };
       } catch (error) {
         await transactionClient.query('ROLLBACK');
@@ -108,10 +96,9 @@ export class StudentCreationRepoPg {
         if (error.code === '23505' && error.constraint?.includes('email')) {
           // Buscar el existente y retornarlo
           const existingResult = await query(`
-            SELECT s.id as student_uuid, s.legacy_alumno_id, a.email, a.apodo, a.nombre_completo
-            FROM students s
-            LEFT JOIN alumnos a ON s.legacy_alumno_id = a.id
-            WHERE a.email = $1 AND s.deleted_at IS NULL
+            SELECT id as student_uuid, email, apodo, nombre_completo
+            FROM students
+            WHERE email = $1 AND deleted_at IS NULL
             LIMIT 1
           `, [normalizedEmail]);
           
@@ -119,7 +106,6 @@ export class StudentCreationRepoPg {
             const existing = existingResult.rows[0];
             return {
               student_uuid: existing.student_uuid,
-              legacy_alumno_id: existing.legacy_alumno_id,
               email: existing.email,
               apodo: existing.apodo || null,
               nombre_completo: existing.nombre_completo || null
@@ -133,31 +119,21 @@ export class StudentCreationRepoPg {
       }
     } else {
       // Si se proporciona client, usar transacción externa
-      // Crear en alumnos (legacy) primero
-      const alumnoResult = await queryFn(`
-        INSERT INTO alumnos (email, apodo, nombre_completo, fecha_inscripcion, nivel_actual, streak, estado_suscripcion)
-        VALUES ($1, $2, $3, now(), 1, 0, 'activa')
+      // Crear SOLO en students (UUID-only, sin legacy)
+      const studentResult = await queryFn(`
+        INSERT INTO students (status, email, apodo, nombre_completo, created_at, updated_at)
+        VALUES ('NORMAL', $1, $2, $3, now(), now())
         RETURNING id, email, apodo, nombre_completo
       `, [normalizedEmail, apodo || null, nombre_completo || null]);
       
-      const alumnoId = alumnoResult.rows[0].id;
-      const alumno = alumnoResult.rows[0];
-      
-      // Crear en students (UUID) con legacy_alumno_id
-      const studentResult = await queryFn(`
-        INSERT INTO students (status, legacy_alumno_id, created_at, updated_at)
-        VALUES ('NORMAL', $1, now(), now())
-        RETURNING id
-      `, [alumnoId]);
-      
-      const studentUuid = studentResult.rows[0].id;
+      const student = studentResult.rows[0];
+      const studentUuid = student.id;
       
       return {
         student_uuid: studentUuid,
-        legacy_alumno_id: alumnoId,
-        email: normalizedEmail,
-        apodo: alumno.apodo || null,
-        nombre_completo: alumno.nombre_completo || null
+        email: student.email,
+        apodo: student.apodo || null,
+        nombre_completo: student.nombre_completo || null
       };
     }
   }

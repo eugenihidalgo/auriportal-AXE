@@ -19,45 +19,24 @@ export class StudentIdentityRepoPg extends StudentIdentityRepo {
   /**
    * Resuelve legacy_alumno_id desde student_uuid
    * 
+   * ⚠️ DEPRECATED: Esta función está PROHIBIDA en runtime MASTER.
+   * legacy_alumno_id fue eliminado de la tabla students (v5.70.1).
+   * 
    * @param {string} student_uuid - UUID canónico del estudiante
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
-   * @returns {Promise<number|null>} legacy_alumno_id o null si no se encuentra
+   * @returns {Promise<number|null>} Siempre lanza error (legacy_alumno_id eliminado)
+   * @throws {Error} Siempre lanza error con código LEGACY_ALUMNO_ID_FORBIDDEN
    */
   async resolveLegacyId(student_uuid, client = null) {
-    if (!student_uuid) {
-      return null;
-    }
-
-    const queryFn = client ? client.query.bind(client) : query;
     const traceId = getRequestId();
-
-    try {
-      const result = await queryFn(`
-        SELECT legacy_alumno_id
-        FROM students
-        WHERE id = $1
-          AND deleted_at IS NULL
-        LIMIT 1
-      `, [student_uuid]);
-
-      const legacyId = result.rows[0]?.legacy_alumno_id || null;
-
-      if (!legacyId) {
-        logWarn('StudentIdentityRepo', 'Student UUID sin legacy_alumno_id', {
-          traceId,
-          student_uuid
-        });
-      }
-
-      return legacyId;
-    } catch (error) {
-      logWarn('StudentIdentityRepo', 'Error resolviendo legacy_id (fail-open)', {
-        traceId,
-        student_uuid,
-        error: error.message
-      });
-      return null;
-    }
+    const error = new Error('LEGACY alumno_id is FORBIDDEN. legacy_alumno_id fue eliminado en v5.70.1. Use student_uuid directamente.');
+    error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
+    logError('StudentIdentityRepo', 'Intento de usar resolveLegacyId() en runtime UUID-only', {
+      traceId,
+      student_uuid,
+      error: error.message
+    });
+    throw error;
   }
 
   /**

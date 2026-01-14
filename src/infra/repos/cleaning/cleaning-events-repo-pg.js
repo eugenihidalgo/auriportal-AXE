@@ -23,34 +23,20 @@ export class CleaningEventsRepoPg {
    * Inserta un evento de limpieza. Respeta idempotencia vía execution_key.
    * Si ya existe un evento con el mismo execution_key y student_id, devuelve "already_applied".
    * 
-   * UUID-ONLY: Acepta student_uuid y resuelve internamente legacy_alumno_id para escribir en tabla legacy.
+   * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
    * 
    * @param {Object} event - Datos del evento
-   * @param {string} event.student_uuid - UUID canónico del estudiante
-   * @param {number} [event.student_id] - Legacy ID (opcional, se resuelve desde student_uuid si no se proporciona)
+   * @param {string} event.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Object|string>} Objeto evento creado o "already_applied" si es duplicado
    */
   async insertEvent(event, client = null) {
-    if (!event || !event.execution_key || !event.item_ref) {
-      throw new Error('execution_key e item_ref son requeridos');
+    if (!event || !event.execution_key || !event.item_ref || !event.student_uuid) {
+      throw new Error('execution_key, item_ref y student_uuid son requeridos');
     }
 
-    // UUID-ONLY: Resolver legacy_id internamente si no se proporciona
-    let legacyStudentId = event.student_id;
-    if (!legacyStudentId && event.student_uuid) {
-      const queryFn = client ? client.query.bind(client) : query;
-      const studentResult = await queryFn(
-        'SELECT legacy_alumno_id FROM students WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-        [event.student_uuid]
-      );
-      if (!studentResult.rows[0] || !studentResult.rows[0].legacy_alumno_id) {
-        throw new Error(`Student UUID no encontrado o sin legacy_alumno_id: ${event.student_uuid}`);
-      }
-      legacyStudentId = studentResult.rows[0].legacy_alumno_id;
-    } else if (!legacyStudentId) {
-      throw new Error('student_uuid o student_id es requerido');
-    }
+    // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
+    const studentUuid = event.student_uuid;
 
     const queryFn = client ? client.query.bind(client) : query;
 
@@ -70,7 +56,7 @@ export class CleaningEventsRepoPg {
       `, [
         event.trace_id || 'unknown',
         event.execution_key,
-        legacyStudentId,
+        studentUuid,
         event.product_key || 'pde',
         event.domain_type,
         event.item_ref,
@@ -99,7 +85,6 @@ export class CleaningEventsRepoPg {
         event_id: result.rows[0]?.id,
         execution_key: event.execution_key,
         student_uuid: event.student_uuid,
-        student_id: legacyStudentId,
         item_ref: event.item_ref
       });
 
@@ -109,8 +94,7 @@ export class CleaningEventsRepoPg {
         error: error.message,
         code: error.code,
         execution_key: event.execution_key,
-        student_uuid: event.student_uuid,
-        student_id: legacyStudentId
+        student_uuid: event.student_uuid
       });
       throw error;
     }
@@ -118,13 +102,15 @@ export class CleaningEventsRepoPg {
 
   /**
    * Lista eventos de limpieza para un item específico de un alumno.
+   * UUID-ONLY: Acepta student_uuid (UUID canónico)
    * 
    * @param {Object} options - Opciones de búsqueda
+   * @param {string} options.student_uuid - UUID canónico del estudiante
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<Array>} Array de eventos ordenados por created_at DESC
    */
   async listEventsForStudentItem(options, client = null) {
-    if (!options || !options.student_id || !options.item_ref) {
+    if (!options || !options.student_uuid || !options.item_ref) {
       return [];
     }
 
@@ -141,7 +127,7 @@ export class CleaningEventsRepoPg {
     `;
 
     const params = [
-      options.student_id,
+      options.student_uuid,
       options.product_key || 'pde',
       options.domain_type,
       options.item_ref
