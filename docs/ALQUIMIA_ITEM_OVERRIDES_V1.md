@@ -1,4 +1,4 @@
-# ALQUIMIA ITEM OVERRIDES v1
+# ALQUIMIA ITEM ACTIONS v1
 **AuriPortal / Aurelín — Dominio MASTER**  
 **Versión:** 1.0.0  
 **Fecha:** 2026-01-13  
@@ -31,8 +31,6 @@ Permitir al Master realizar acciones de limpieza individuales por ítem directam
 - **Vista:** Solo Proyección ALUMNO (scope='student')
 - **Acciones:** Limpieza SHARED y PDE por ítem individual
 - **Persistencia:** Tamaño del flotante (expanded/collapsed)
-
-**NOTA:** Este sistema NO es "override global de todo AuriPortal", pero es extensible por patrón para futuras funcionalidades.
 
 ---
 
@@ -74,11 +72,7 @@ Permitir al Master realizar acciones de limpieza individuales por ítem directam
 
 ## 3) MODELO DE DATOS
 
-### 3.1 Tablas Existentes (No Overrides)
-
-**IMPORTANTE:** El sistema de "overrides" de `threshold_days` o `required_count` **NO está implementado** en esta versión.
-
-Las tablas actuales son:
+### 3.1 Tablas Existentes
 
 #### cleaning_item_state (Proyección Materializada)
 
@@ -133,43 +127,10 @@ CREATE TABLE cleaning_events (
   
   UNIQUE(execution_key, student_id)
 );
+
+CREATE UNIQUE INDEX idx_cleaning_events_execution_student 
+  ON cleaning_events(execution_key, student_id);
 ```
-
-### 3.2 Tabla Futura: student_item_overrides (NO IMPLEMENTADA)
-
-**NOTA:** Esta tabla NO existe actualmente. Se documenta aquí como patrón para futuras implementaciones.
-
-```sql
--- FUTURA: Tabla de overrides por estudiante/ítem
-CREATE TABLE student_item_overrides (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  item_ref VARCHAR(255) NOT NULL,
-  product_key VARCHAR(50) NOT NULL DEFAULT 'pde',
-  domain_type VARCHAR(50) NOT NULL DEFAULT 'transmutation',
-  
-  -- Tipos de override
-  override_type VARCHAR(50) NOT NULL, -- 'threshold_days' | 'required_count'
-  override_value INTEGER NOT NULL,
-  
-  -- Metadata
-  actor_type VARCHAR(50) NOT NULL, -- 'master' | 'automation'
-  actor_ref VARCHAR(255),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  deleted_at TIMESTAMP,
-  
-  UNIQUE(student_id, item_ref, product_key, domain_type, override_type)
-);
-
-CREATE INDEX idx_student_item_overrides_student_item 
-  ON student_item_overrides(student_id, item_ref, product_key, domain_type) 
-  WHERE deleted_at IS NULL;
-```
-
-**Semántica por item_kind:**
-- **recurrente:** `override_type='threshold_days'` → Override de `frecuencia_dias` del ítem
-- **una_vez:** `override_type='required_count'` → Override de `veces_limpiar` del ítem
 
 ---
 
@@ -222,38 +183,9 @@ await handleLimpiarEstudiante(
 );
 ```
 
-### 4.2 Endpoints Futuros: Overrides (NO IMPLEMENTADOS)
-
-**NOTA:** Estos endpoints NO existen actualmente. Se documentan como patrón para futuras implementaciones.
-
-#### POST /master/api/alquimia-general/items/:item_ref/students/:student_uuid/override
-
-**Descripción:** Crea o actualiza un override para un estudiante/ítem.
-
-**Body (JSON):**
-```json
-{
-  "override_type": "threshold_days" | "required_count",
-  "override_value": 20,
-  "actor_type": "master"
-}
-```
-
-#### DELETE /master/api/alquimia-general/items/:item_ref/students/:student_uuid/override
-
-**Descripción:** Elimina un override (soft delete).
-
-#### POST /master/api/alquimia-general/items/:item_ref/reset-pending-all
-
-**Descripción:** Resetea estado "pending" para todos los estudiantes (recurrente).
-
-#### POST /master/api/alquimia-general/items/:item_ref/clear-overrides
-
-**Descripción:** Elimina todos los overrides de `required_count` para un ítem (una_vez).
-
 ---
 
-## 5) LPM/CPM: APLICACIÓN DE OVERRIDES
+## 5) LPM/CPM: CÁLCULO DE ESTADO
 
 ### 5.1 Estado Actual (Sin Overrides)
 
@@ -267,39 +199,18 @@ await handleLimpiarEstudiante(
 - En `scope='all'`: calcula worst-of-students
 - En `scope='student'`: devuelve estado individual
 
-### 5.2 Futuro: Aplicación de Overrides (NO IMPLEMENTADO)
+### 5.2 Proyección ALL: Worst-of-Students
 
-**Patrón propuesto:**
+**Implementación:**
+- CROSS JOIN entre `active_students` y `item_refs`
+- LEFT JOIN con `cleaning_item_state`
+- Resultado: todos los estudiantes incluidos (incluso sin fila = NULL)
 
-```javascript
-// En CPM: computeStateForLayer()
-const thresholdDays = item.frecuencia_dias; // Base
-const override = await getOverride(student_uuid, item_ref, 'threshold_days');
-const effectiveThreshold = override?.override_value || thresholdDays;
+**Cálculo de worst state:**
+- **Recurrente:** Si ANY estudiante tiene `days_since_last_clean = null` → worst = null
+- **Una_vez:** Si ANY estudiante tiene `clean_count = 0` → worst = 'never'
 
-// Calcular estado con effectiveThreshold
-if (daysSinceLastClean > effectiveThreshold) {
-  state = 'important';
-}
-```
-
-**Ejemplo: required_count override:**
-
-```javascript
-// En CPM: computeStateForLayer() (una_vez)
-const requiredCount = item.veces_limpiar; // Base: 10
-const override = await getOverride(student_uuid, item_ref, 'required_count');
-const effectiveRequired = override?.override_value || requiredCount; // Override: 20
-
-// Calcular remaining
-const remaining = Math.max(effectiveRequired - cleanCount, 0);
-```
-
-**Impacto en ALL projection:**
-- Si un estudiante tiene `required_count=20` (override) y otro tiene `required_count=10` (base):
-- El estado agregado en ALL debe reflejar el **peor estado** (mayor remaining)
-- Ejemplo: Estudiante A tiene `remaining=5` (de 20), Estudiante B tiene `remaining=0` (de 10)
-- ALL debe mostrar `remaining=5` (worst-of-students)
+**Referencia:** `docs/LPM_ALL_WORST_STATE_V1.md`
 
 ---
 
@@ -354,6 +265,8 @@ if (isProjectionStudent && state.projection.scope === 'student' && state.project
 - El estudiante se reubica automáticamente en la columna correcta
 - Respeta Regla Acción → Proyección → Ubicación
 
+**Archivo:** `public/js/master/master-alquimia-general-client.js` (líneas 3642-3700)
+
 ### 6.2 Persistencia del Tamaño del Flotante
 
 **Clave localStorage:**
@@ -404,17 +317,7 @@ const changeSize = (newSize) => {
 };
 ```
 
-### 6.3 Botones Futuros: Reset Overrides (NO IMPLEMENTADOS)
-
-**NOTA:** Estos botones NO existen actualmente. Se documentan como patrón para futuras implementaciones.
-
-**Botón "Resetear todo" (solo Proyección):**
-- **recurrente:** Resetea estado "pending" para todos los estudiantes
-- **una_vez:** Elimina todos los overrides de `required_count` para el ítem
-
-**Semántica distinta por tipo:**
-- **recurrente:** `reset-pending-all` → Marca como "never" todos los estudiantes con estado "pending"
-- **una_vez:** `clear-overrides` → Elimina overrides, vuelve a `required_count` base del ítem
+**Archivo:** `public/js/master/master-alquimia-general-client.js` (líneas 2143-2210)
 
 ---
 
@@ -456,22 +359,21 @@ const changeSize = (newSize) => {
   - [ ] `localStorage.getItem('master_alquimia_flotante_size')` devuelve valor correcto
   - [ ] Valor persiste entre sesiones
 
-### 7.2 Known Limitations
+### 7.2 Casos Límite
 
-1. **Overrides NO implementados:**
-   - No existe sistema de overrides de `threshold_days` o `required_count`
-   - No hay endpoints de override
-   - No hay tabla `student_item_overrides`
+1. **Estudiante sin fila en cleaning_item_state:**
+   - En proyección ALL: cuenta como NULL (nunca trabajado)
+   - En proyección STUDENT: aparece como 'never'
+   - Botones funcionan correctamente (crean estado)
 
-2. **Botones solo en vista ALUMNO:**
-   - Los botones de limpieza individual NO aparecen en vista ALL
-   - Los botones de limpieza individual NO aparecen en vista OPERATIVA
-   - Esto es por diseño (regla dura)
+2. **Acción idempotente:**
+   - Pulsar botón dos veces seguidas → segunda vez devuelve 'already_applied'
+   - No duplica eventos en `cleaning_events`
+   - Estado se mantiene correcto
 
-3. **Tamaño del flotante:**
-   - Solo dos tamaños: expanded (1800×1000) y collapsed (800×500)
-   - No hay tamaño intermedio
-   - No hay redimensionamiento manual (solo botones)
+3. **Estudiante pausado:**
+   - Cleaning Engine excluye automáticamente
+   - Botones NO aparecen (estudiante no está en proyección)
 
 ---
 
@@ -515,6 +417,9 @@ const changeSize = (newSize) => {
 ### 9.2 Código Fuente
 
 - `public/js/master/master-alquimia-general-client.js` - Cliente JavaScript
+  - Líneas 1586-1587: Condición de visibilidad
+  - Líneas 3642-3700: Botones de limpieza individual
+  - Líneas 2143-2210: Persistencia del tamaño del flotante
 - `src/core/master/services/cleaning-engine-service.js` - Cleaning Engine
 - `src/core/master/services/list-projection-model.js` - List Projection Model
 - `src/core/master/services/cleaning-projection-model.js` - Cleaning Projection Model

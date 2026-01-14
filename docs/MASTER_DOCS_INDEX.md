@@ -248,12 +248,11 @@
   - Botones de limpieza individual por ítem (solo vista ALUMNO)
   - Persistencia del tamaño del flotante (expanded/collapsed)
   - Reglas constitucionales aplicadas (Backend autoridad, UUID-only, etc.)
-  - Modelo de datos (tablas existentes y futuras)
-  - Contratos API (endpoints implementados y futuros)
-  - LPM/CPM: aplicación de overrides (patrón futuro)
+  - Modelo de datos (tablas existentes: cleaning_item_state, cleaning_events)
+  - Contratos API (endpoints implementados: mark-clean-student)
+  - LPM/CPM: cálculo de estado (sin overrides)
   - UI: botones y persistencia (implementación actual)
-  - Verificación: checklist de pruebas manuales
-  - Known limitations (overrides NO implementados aún)
+  - Verificación: checklist de pruebas manuales y casos límite
 - **Referencias:** `public/js/master/master-alquimia-general-client.js`, `src/core/master/services/cleaning-engine-service.js`
 
 ### 2.4 Diagnósticos
