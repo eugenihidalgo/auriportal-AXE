@@ -246,6 +246,34 @@ export const MASTER_ROUTES = [
   },
   
   // ============================================
+  // RUTAS API STUDENT OVERRIDES (OVERRIDES SYSTEM v1)
+  // ============================================
+  {
+    key: 'master-api-student-overrides',
+    path: '/master/api/student-overrides',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-student-overrides-id',
+    path: '/master/api/student-overrides/:id',
+    type: 'api',
+    method: 'DELETE'
+  },
+  {
+    key: 'master-api-student-item-overrides',
+    path: '/master/api/student-item-overrides',
+    type: 'api'
+    // Handler maneja: GET, POST
+  },
+  {
+    key: 'master-api-student-item-overrides-id',
+    path: '/master/api/student-item-overrides/:id',
+    type: 'api',
+    method: 'DELETE'
+  },
+  
+  // ============================================
   // RUTAS API UTE (UTE CORE v1)
   // ============================================
   {

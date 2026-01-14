@@ -21,6 +21,7 @@ import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { validateViewLayer, validateViewLayerItemKindCoherence } from './cleaning-layer-constants.js';
 import { computeCleaningProjection } from './cleaning-projection-model.js';
 import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-catalog-repo-pg.js';
+import { resolveItemConfigForStudent } from './override-resolution-service.js';
 
 /**
  * Calcula métricas agregadas por estado
@@ -620,7 +621,8 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     const cleaningStatesMap = await getCleaningStatesForItems(items, scope, studentId, item_kind);
     
     // Para cada item, calcular state_by_view_layer usando CPM
-    const itemsWithProjection = items.map(item => {
+    // NOTA: Usar Promise.all con map async porque necesitamos await dentro del callback
+    const itemsWithProjection = await Promise.all(items.map(async (item) => {
       const cleaningState = cleaningStatesMap[item.item_ref] || {
         shared: {},
         pde: {}
@@ -662,16 +664,38 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         };
       }
       
-      // Usar CPM para calcular proyección
+      // Aplicar overrides si scope='student'
+      // GUARD CONSTITUCIONAL: Overrides SOLO en scope='student', NUNCA en scope='all'
+      if (scope === 'all') {
+        // En scope='all', usar valores base (sin overrides)
+        // Esto es constitucional: ALL muestra estado agregado sin personalizaciones
+      } else if (scope === 'student' && !studentId) {
+        throw new Error('ERROR_CANONICO: scope=student requiere studentId');
+      }
+      
+      let effectiveConfig = {
+        threshold_days: item.frecuencia_dias || 7,
+        critical_multiplier: 2.0,
+        required_count: item.veces_limpiar || 1,
+        nivel: item.nivel || null,
+        descripcion: item.descripcion || null
+      };
+      
+      if (scope === 'student' && studentId) {
+        // Aplicar overrides de configuración de item
+        effectiveConfig = await resolveItemConfigForStudent(
+          effectiveConfig,
+          studentId,
+          item.item_ref
+        );
+      }
+      
+      // Usar CPM para calcular proyección con configuración efectiva
       const projection = computeCleaningProjection({
         cleaning_state: cleaningState,
         item_kind: item_kind,
         view_layer: view_layer,
-        config: {
-          threshold_days: item.frecuencia_dias || 7,
-          critical_multiplier: 2.0,
-          required_count: item.veces_limpiar || 1
-        }
+        config: effectiveConfig
       });
       
       // Determinar active_state y active_visual_state desde view_layer
@@ -707,13 +731,19 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         });
       }
       
-      return {
+      // Construir item con valores efectivos (incluyendo overrides de nivel y descripcion)
+      const effectiveItem = {
         ...item,
+        // Aplicar overrides de nivel y descripcion si existen en effectiveConfig
+        nivel: effectiveConfig.nivel !== undefined ? effectiveConfig.nivel : item.nivel,
+        descripcion: effectiveConfig.descripcion !== undefined ? effectiveConfig.descripcion : item.descripcion,
         state_by_view_layer: projection.state_by_view_layer,
         active_state: activeState?.state || 'never',
         active_visual_state: activeState?.visual_state || 'never'
       };
-    });
+      
+      return effectiveItem;
+    }));
     
     // Calcular métricas
     const metrics = calculateMetrics(itemsWithProjection, view_layer);

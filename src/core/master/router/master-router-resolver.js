@@ -76,6 +76,12 @@ const MASTER_HANDLER_MAP = {
   'master-api-students-create': () => import('../../../endpoints/master-api-students.js'),
   'master-api-students-id': () => import('../../../endpoints/master-api-students.js'),
   
+  // Student Overrides API Handlers (OVERRIDES SYSTEM v1)
+  'master-api-student-overrides': () => import('../../../endpoints/master-api-student-overrides.js'),
+  'master-api-student-overrides-id': () => import('../../../endpoints/master-api-student-overrides.js'),
+  'master-api-student-item-overrides': () => import('../../../endpoints/master-api-student-item-overrides.js'),
+  'master-api-student-item-overrides-id': () => import('../../../endpoints/master-api-student-item-overrides.js'),
+  
   // UTE API Handlers (UTE CORE v1)
   'master-api-ute-definitions': () => import('../../../endpoints/master-api-ute.js'),
   'master-api-ute-states': () => import('../../../endpoints/master-api-ute.js'),

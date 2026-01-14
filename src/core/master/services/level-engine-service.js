@@ -26,6 +26,7 @@ import { logInfo, logWarn, logError } from '../../observability/logger.js';
 import { randomUUID } from 'crypto';
 import { isEnabled } from '../../feature-flags/feature-flag-service.js';
 import { evaluateCondition } from '../../conditions/condition-evaluator.js';
+import { resolveStudentField } from './override-resolution-service.js';
 
 /**
  * Resuelve la fecha de inicio de un alumno para una línea específica.
@@ -56,9 +57,19 @@ async function resolveStudentStartDate(studentId, lineKey) {
       const student = studentResult.rows[0];
       
       // Usar students.created_at (única fuente de verdad)
+      let baseDate = null;
       if (student.created_at) {
-        return new Date(student.created_at);
+        baseDate = new Date(student.created_at);
       }
+      
+      // Aplicar override de fecha_creacion si existe
+      const effectiveDate = await resolveStudentField(
+        { id: studentId },
+        'fecha_creacion',
+        baseDate || new Date()
+      );
+      
+      return effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
       
       // Fallback: now() (registrar en meta)
       logWarn('LevelEngine', 'Usando fallback now() para fecha de inicio (registrar en meta)', {
