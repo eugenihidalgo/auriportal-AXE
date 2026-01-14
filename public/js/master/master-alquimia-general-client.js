@@ -3639,6 +3639,7 @@
         throw new Error(result.error || 'Error creando item');
       }
 
+      // FIX: Limpiar estado de creación inline ANTES de renderizar
       // Sticky: mantener nivel, grupo y frecuencia_dias, limpiar solo nombre/desc
       state.newItemDraft.nombre = '';
       state.newItemDraft.descripcion = '';
@@ -3646,6 +3647,8 @@
 
       // Refetch items y re-render (mantiene focus en nombre)
       await loadItems(state.listaActiva.id);
+      // FIX: Render inmediato tras crear ítem inline sticky (con estado limpio)
+      renderView();
       
       // Re-focus en nombre input (en la nueva fila create)
       setTimeout(() => {
@@ -3789,7 +3792,13 @@
         throw new Error(result.error || 'Error creando item');
       }
 
-      // Limpiar inputs
+      // FIX: Limpiar estado de creación inline ANTES de renderizar
+      // Resetear state.newItemDraft para evitar warnings falsos
+      state.newItemDraft.nombre = '';
+      state.newItemDraft.descripcion = '';
+      // Mantener nivel, grupo, frecuencia_dias, veces_limpiar (sticky)
+      
+      // Limpiar inputs del DOM
       nombreInput.value = '';
       descInput.value = '';
       nivelInput.value = '9';
@@ -3798,7 +3807,7 @@
 
       // Refetch items
       await loadItems(state.listaActiva.id);
-      // FIX: Render inmediato tras crear ítem inline
+      // FIX: Render inmediato tras crear ítem inline (con estado limpio)
       renderView();
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando item inline:', error);
