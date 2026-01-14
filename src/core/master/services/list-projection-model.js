@@ -67,6 +67,138 @@ function calculateMetrics(items, viewLayer) {
 }
 
 /**
+ * Calcula el peor estado para una capa (shared o pde) en scope='all'
+ * REGLA CANÓNICA: Proyección ALL muestra el estado MENOS trabajado del grupo
+ * 
+ * @param {Array} layerStates - Array de estados por alumno para una capa
+ * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez')
+ * @param {Object} item - Item completo (para obtener required_count, frecuencia_dias)
+ * @returns {Object} Peor estado de la capa
+ */
+function calculateWorstStateForLayer(layerStates, itemKind, item) {
+  if (!layerStates || layerStates.length === 0) {
+    // Si no hay estados, devolver estado vacío (never)
+    return {
+      clean_count: 0,
+      days_since_last_clean: null,
+      remaining: null,
+      completed: false,
+      last_cleaned_at: null
+    };
+  }
+  
+  if (itemKind === 'recurrente') {
+    // RECURRENTE: NULL tiene prioridad máxima, luego mayor days_since_last_clean
+    let worstDaysSince = null;
+    let worstLastCleanedAt = null;
+    let hasNull = false;
+    
+    layerStates.forEach(state => {
+      if (state.days_since_last_clean === null || state.days_since_last_clean === undefined) {
+        hasNull = true;
+        // NULL es peor absoluto, no necesitamos seguir buscando
+      } else if (!hasNull) {
+        // Solo actualizar si no hay NULL
+        if (worstDaysSince === null || state.days_since_last_clean > worstDaysSince) {
+          worstDaysSince = state.days_since_last_clean;
+          worstLastCleanedAt = state.last_cleaned_at;
+        }
+      }
+    });
+    
+    return {
+      clean_count: 0, // No aplica en agregación para recurrente
+      days_since_last_clean: hasNull ? null : worstDaysSince,
+      remaining: null, // No aplica en agregación
+      completed: false, // No aplica en agregación
+      last_cleaned_at: hasNull ? null : worstLastCleanedAt
+    };
+  } else {
+    // UNA_VEZ: calcular estado de cada alumno y tomar el mínimo
+    // Orden de severidad: NEVER < PARTIAL < DONE
+    // REGLA CANÓNICA: Si al menos un alumno está en NEVER, el estado ALL es NEVER
+    const requiredCount = item.veces_limpiar || 1;
+    
+    let worstState = null; // 'never' | 'partial' | 'done'
+    let worstCleanCount = 0;
+    let worstRemaining = null;
+    let worstCompleted = false;
+    
+    layerStates.forEach(state => {
+      const cleanCount = state.clean_count || 0;
+      const remaining = state.remaining;
+      const completed = state.completed || false;
+      
+      // Calcular estado del alumno
+      let studentState; // 'never' | 'partial' | 'done'
+      
+      if (cleanCount === 0) {
+        studentState = 'never';
+      } else if (cleanCount < requiredCount) {
+        studentState = 'partial';
+      } else {
+        studentState = 'done';
+      }
+      
+      // Actualizar peor estado según orden: never < partial < done
+      if (worstState === null) {
+        // Inicializar con el primer estado
+        worstState = studentState;
+        worstCleanCount = cleanCount;
+        worstRemaining = remaining;
+        worstCompleted = completed;
+      } else if (worstState === 'never') {
+        // Ya tenemos NEVER (peor absoluto), mantener
+        // No actualizar porque nunca es peor que never
+      } else if (worstState === 'partial') {
+        // Si encontramos NEVER, es peor que partial
+        if (studentState === 'never') {
+          worstState = 'never';
+          worstCleanCount = cleanCount;
+          worstRemaining = remaining;
+          worstCompleted = completed;
+        } else if (studentState === 'partial') {
+          // Mantener partial, pero actualizar si este tiene menos clean_count (menos trabajado)
+          if (cleanCount < worstCleanCount) {
+            worstCleanCount = cleanCount;
+            worstRemaining = remaining;
+            worstCompleted = completed;
+          }
+        }
+        // Si es 'done', no actualizar (done es mejor que partial)
+      } else if (worstState === 'done') {
+        // Cualquier estado peor (never o partial) reemplaza done
+        if (studentState === 'never' || studentState === 'partial') {
+          worstState = studentState;
+          worstCleanCount = cleanCount;
+          worstRemaining = remaining;
+          worstCompleted = completed;
+        } else if (studentState === 'done' && cleanCount < worstCleanCount) {
+          // Si ambos son done, tomar el que tiene menos clean_count (menos trabajado)
+          worstCleanCount = cleanCount;
+          worstRemaining = remaining;
+          worstCompleted = completed;
+        }
+      }
+    });
+    
+    // Si no hay estados, devolver never
+    if (worstState === null) {
+      worstState = 'never';
+      worstCleanCount = 0;
+    }
+    
+    return {
+      clean_count: worstCleanCount,
+      days_since_last_clean: null, // No aplica en una_vez
+      remaining: worstRemaining,
+      completed: worstCompleted,
+      last_cleaned_at: null // No aplica en una_vez
+    };
+  }
+}
+
+/**
  * Calcula list_state (dominant_state, reviewed_pct, health_bucket)
  * 
  * @param {Object} metrics - Métricas calculadas
@@ -113,12 +245,13 @@ function calculateListState(metrics) {
 /**
  * Obtiene estados de limpieza para items de una lista
  * 
- * @param {Array} items - Items de la lista
+ * @param {Array} items - Items de la lista (con item_kind o tipo)
  * @param {string} scope - 'all' | 'student'
  * @param {number|null} studentId - ID del estudiante (si scope='student')
+ * @param {string} itemKind - Tipo de item ('recurrente' | 'una_vez')
  * @returns {Promise<Object>} Map de item_ref -> cleaning_state
  */
-async function getCleaningStatesForItems(items, scope, studentId = null) {
+async function getCleaningStatesForItems(items, scope, studentId = null, itemKind = null) {
   const traceId = getRequestId();
   
   if (items.length === 0) {
@@ -130,9 +263,9 @@ async function getCleaningStatesForItems(items, scope, studentId = null) {
     return {};
   }
   
-  // Para scope='all', necesitamos obtener estados agregados o por estudiante
-  // Por ahora, v1: obtenemos estados para todos los estudiantes activos
-  // y calculamos proyección agregada (mejor estado entre todos)
+  // Para scope='all', necesitamos obtener estados agregados
+  // REGLA CANÓNICA: Proyección ALL muestra el PEOR estado del grupo
+  // Referencia: docs/CANONICAL_RULES_PROJECTION_ALL_WORST_STATE_V1.md
   
   if (scope === 'student') {
     if (!studentId) {
@@ -191,30 +324,34 @@ async function getCleaningStatesForItems(items, scope, studentId = null) {
     
     return statesMap;
   } else {
-    // scope='all': obtener estados agregados (mejor estado entre todos los estudiantes)
-    // Por ahora, v1: obtenemos el estado "más reciente" o "mejor" entre todos
-    // Esto es una simplificación; en v2 podríamos calcular agregaciones más sofisticadas
+    // scope='all': obtener estados agregados (PEOR estado entre todos los estudiantes)
+    // REGLA CANÓNICA: Proyección ALL muestra el estado MENOS trabajado del grupo
+    // Referencia: docs/CANONICAL_RULES_PROJECTION_ALL_WORST_STATE_V1.md
     
+    // Obtener TODOS los estados por alumno (sin GROUP BY) para calcular peor estado
     const result = await query(`
       SELECT 
         item_ref,
-        -- Agregar: mejor estado shared (más reciente last_cleaned_at)
-        MAX(shared_last_cleaned_at) as shared_last_cleaned_at,
-        MAX(pde_last_cleaned_at) as pde_last_cleaned_at,
-        -- Calcular days_since_last_clean desde el más reciente
+        student_id,
+        shared_clean_count,
+        shared_last_cleaned_at,
+        shared_remaining,
+        shared_completed,
+        pde_clean_count,
+        pde_last_cleaned_at,
+        pde_remaining,
+        pde_completed,
+        -- Calcular days_since_last_clean por alumno
         CASE 
-          WHEN MAX(shared_last_cleaned_at) IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - MAX(shared_last_cleaned_at))) / 86400
+          WHEN shared_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - shared_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as shared_days_since_last_clean,
         CASE 
-          WHEN MAX(pde_last_cleaned_at) IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - MAX(pde_last_cleaned_at))) / 86400
+          WHEN pde_last_cleaned_at IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - pde_last_cleaned_at)) / 86400
           ELSE NULL
-        END::integer as pde_days_since_last_clean,
-        -- Para una_vez: sumar clean_count
-        SUM(shared_clean_count) as shared_clean_count,
-        SUM(pde_clean_count) as pde_clean_count
+        END::integer as pde_days_since_last_clean
       FROM cleaning_item_state
       WHERE product_key = 'pde'
         AND domain_type = 'transmutation'
@@ -222,26 +359,71 @@ async function getCleaningStatesForItems(items, scope, studentId = null) {
         AND student_id IN (
           SELECT legacy_alumno_id FROM students WHERE deleted_at IS NULL
         )
-      GROUP BY item_ref
+      ORDER BY item_ref, student_id
     `, [itemRefs]);
     
-    const statesMap = {};
+    // Agrupar por item_ref y calcular peor estado
+    const statesByItem = {};
+    
     result.rows.forEach(row => {
-      statesMap[row.item_ref] = {
-        shared: {
-          clean_count: row.shared_clean_count || 0,
-          days_since_last_clean: row.shared_days_since_last_clean,
-          remaining: null, // No aplica en agregación
-          completed: false, // No aplica en agregación
-          last_cleaned_at: row.shared_last_cleaned_at
+      const itemRef = row.item_ref;
+      if (!statesByItem[itemRef]) {
+        statesByItem[itemRef] = {
+          shared: [],
+          pde: []
+        };
+      }
+      
+      statesByItem[itemRef].shared.push({
+        clean_count: row.shared_clean_count || 0,
+        days_since_last_clean: row.shared_days_since_last_clean,
+        remaining: row.shared_remaining,
+        completed: row.shared_completed || false,
+        last_cleaned_at: row.shared_last_cleaned_at
+      });
+      
+      statesByItem[itemRef].pde.push({
+        clean_count: row.pde_clean_count || 0,
+        days_since_last_clean: row.pde_days_since_last_clean,
+        remaining: row.pde_remaining,
+        completed: row.pde_completed || false,
+        last_cleaned_at: row.pde_last_cleaned_at
+      });
+    });
+    
+    // Calcular peor estado por item_ref
+    const statesMap = {};
+    
+    items.forEach(item => {
+      const itemRef = item.item_ref;
+      const itemKindForItem = itemKind || item.tipo || item.item_kind;
+      const itemStates = statesByItem[itemRef] || { shared: [], pde: [] };
+      
+      // Calcular peor estado por capa (shared y pde independientes)
+      // REGLA CANÓNICA: Cada capa calcula su peor estado independientemente
+      const worstShared = calculateWorstStateForLayer(itemStates.shared, itemKindForItem, item);
+      const worstPde = calculateWorstStateForLayer(itemStates.pde, itemKindForItem, item);
+      
+      logInfo('ListProjectionModel', '[LPM][WORST_STATE] Calculado peor estado para item', {
+        traceId,
+        item_ref: itemRef,
+        item_kind: itemKindForItem,
+        students_count: itemStates.shared.length,
+        worst_shared: {
+          days_since: worstShared.days_since_last_clean,
+          clean_count: worstShared.clean_count,
+          has_null: worstShared.days_since_last_clean === null
         },
-        pde: {
-          clean_count: row.pde_clean_count || 0,
-          days_since_last_clean: row.pde_days_since_last_clean,
-          remaining: null, // No aplica en agregación
-          completed: false, // No aplica en agregación
-          last_cleaned_at: row.pde_last_cleaned_at
+        worst_pde: {
+          days_since: worstPde.days_since_last_clean,
+          clean_count: worstPde.clean_count,
+          has_null: worstPde.days_since_last_clean === null
         }
+      });
+      
+      statesMap[itemRef] = {
+        shared: worstShared,
+        pde: worstPde
       };
     });
     
@@ -343,7 +525,8 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     });
     
     // Obtener estados de limpieza para todos los items
-    const cleaningStatesMap = await getCleaningStatesForItems(items, scope, studentId);
+    // FIX: Pasar item_kind para calcular peor estado correctamente en scope='all'
+    const cleaningStatesMap = await getCleaningStatesForItems(items, scope, studentId, item_kind);
     
     // Para cada item, calcular state_by_view_layer usando CPM
     const itemsWithProjection = items.map(item => {
