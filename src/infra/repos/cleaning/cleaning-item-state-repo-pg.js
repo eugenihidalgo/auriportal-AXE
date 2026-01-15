@@ -349,7 +349,6 @@ export class CleaningItemStateRepoPg {
           AND product_key = $2
           AND domain_type IS NULL
           AND item_ref = $3
-        RETURNING id
       `
       : `
         DELETE FROM cleaning_item_state
@@ -357,7 +356,6 @@ export class CleaningItemStateRepoPg {
           AND product_key = $2
           AND domain_type = $3
           AND item_ref = $4
-        RETURNING id
       `;
     
     const params = (domainType === null || domainType === undefined)
@@ -367,7 +365,7 @@ export class CleaningItemStateRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(sqlQuery, params);
 
-    const deleted = result.rows.length > 0;
+    const deleted = result.rowCount > 0;
 
     if (deleted) {
       logInfo('CleaningItemStateRepo', 'Estado de limpieza eliminado (reset)', {
@@ -415,7 +413,6 @@ export class CleaningItemStateRepoPg {
           AND cis.item_ref = it.item_ref
           AND it.lista_id = $3
           AND it.status = 'active'
-        RETURNING cis.id
       `
       : `
         DELETE FROM cleaning_item_state cis
@@ -426,7 +423,6 @@ export class CleaningItemStateRepoPg {
           AND cis.item_ref = it.item_ref
           AND it.lista_id = $4
           AND it.status = 'active'
-        RETURNING cis.id
       `;
     
     const params = (domainType === null || domainType === undefined)
@@ -436,7 +432,7 @@ export class CleaningItemStateRepoPg {
     const queryFn = client ? client.query.bind(client) : query;
     const result = await queryFn(sqlQuery, params);
 
-    const deletedCount = result.rows.length;
+    const deletedCount = result.rowCount;
 
     if (deletedCount > 0) {
       logInfo('CleaningItemStateRepo', 'Estados de limpieza eliminados por lista (reset)', {
