@@ -1059,6 +1059,13 @@
    */
   async function loadItems(listaId) {
     try {
+      // Log forense (FASE 4)
+      console.log('[REFRESH][GET] items', {
+        endpoint: `/master/api/alquimia-general/listas/${listaId}/items`,
+        list_id: listaId,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch(`/master/api/alquimia-general/listas/${listaId}/items`);
       const result = await response.json();
       
@@ -1429,6 +1436,19 @@
         view_layer: state.projection.view_layer,
         scope: state.projection.scope,
         student_uuid: state.projection.student_uuid
+      });
+      
+      // Log forense (FASE 4)
+      console.log('[REFRESH][GET] list-projection', {
+        endpoint: '/master/api/alquimia-general/list-projection',
+        params: {
+          list_id: state.listaActiva.id,
+          item_kind: itemKind,
+          view_layer: state.projection.view_layer,
+          scope: state.projection.scope,
+          student_uuid: state.projection.student_uuid
+        },
+        timestamp: new Date().toISOString()
       });
       
       const response = await fetch(`/master/api/alquimia-general/list-projection?${params.toString()}`);
@@ -1996,6 +2016,16 @@
         state_modal_layerView: state.modal.layerView
       });
       
+      // Log forense (FASE 4)
+      console.log('[REFRESH][GET] flotante (students)', {
+        endpoint: `/master/api/alquimia-general/items/${item.item_ref}/students`,
+        params: {
+          clean_layer: cleanLayer,
+          view_layer: activeViewLayer
+        },
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/students?${urlParams.toString()}`);
       
       // Verificar content-type
@@ -2123,6 +2153,16 @@
         clean_layer: cleanLayer,
         actor_type: 'master',
         surface_key: 'master.alquimia_general'
+      });
+      
+      // Log forense (FASE 4)
+      console.log('[REFRESH][POST] mark-clean-all', {
+        endpoint: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`,
+        payload: {
+          clean_layer: cleanLayer,
+          item_kind: itemKind
+        },
+        timestamp: new Date().toISOString()
       });
       
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
@@ -3384,6 +3424,18 @@
         layerView: state.modal.layerView,
         viewMode: 'flotante',
         expected_column_change: itemKind === 'recurrente' ? `Estado calculado según ${activeViewLayer}.days_since_last_clean` : 'COMBO (shared+pde)'
+      });
+      
+      // Log forense (FASE 4)
+      console.log('[REFRESH][POST] mark-clean-student', {
+        endpoint: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`,
+        payload: {
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          item_kind: itemKind,
+          clean_layer: cleanLayer
+        },
+        timestamp: new Date().toISOString()
       });
       
       response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
@@ -5742,6 +5794,13 @@
     };
 
     try {
+      // Log forense (FASE 4)
+      console.log('[REFRESH][POST] reset-item', {
+        endpoint: '/master/api/alquimia-general/reset-item',
+        payload: query,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch('/master/api/alquimia-general/reset-item', {
         method: 'POST',
         headers: {
@@ -5796,6 +5855,13 @@
     };
 
     try {
+      // Log forense (FASE 4)
+      console.log('[REFRESH][POST] reset-list', {
+        endpoint: '/master/api/alquimia-general/reset-list',
+        payload: query,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch('/master/api/alquimia-general/reset-list', {
         method: 'POST',
         headers: {
@@ -5945,11 +6011,25 @@
     /**
      * Refetch según el tipo de mutación y vista activa
      * FIX CANÓNICO: Refresca TODAS las superficies afectadas (proyección, items, flotante)
+     * REGLA CONSTITUCIONAL: El flotante puede estar abierto en cualquier modo (proyección u operativa)
      */
     async refetch(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
       
-      // Log forense estructurado
+      // Log forense estructurado (FASE 4)
+      console.log('[REFRESH][POST] Mutación ejecutada', {
+        mutation_type,
+        view_mode: state.projection.mode,
+        view_layer: scope.view_layer || state.projection.view_layer,
+        clean_layer: context.clean_layer,
+        item_ref: context.item_ref,
+        student_uuid: context.student_uuid,
+        list_id: context.list_id || state.listaActiva?.id,
+        modal_open: !!(state.modal?.item),
+        modal_item_ref: state.modal?.item?.item_ref,
+        timestamp: new Date().toISOString()
+      });
+      
       console.log('[REFRESH_ENGINE][ALQG][REFETCH] Iniciando', {
         mutation_type,
         view_mode: state.projection.mode,
@@ -5966,10 +6046,22 @@
       // Si la mutación especifica view_layer, usarla; sino mantener la activa
       const activeViewLayer = scope.view_layer || state.projection.view_layer || 'shared';
       
+      // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto y la mutación afecta ese item
+      // INDEPENDIENTEMENTE del view_mode (el flotante puede estar abierto en cualquier modo)
+      const shouldRefreshFlotante = state.modal?.item && 
+                                     context.item_ref && 
+                                     state.modal.item.item_ref === context.item_ref;
+      
       // Determinar qué refetch hacer según vista activa
       if (state.projection.mode === 'proyeccion') {
         // FIX: Asegurar que loadListProjection usa el view_layer correcto
         // (loadListProjection ya usa state.projection.view_layer, pero lo preservamos)
+        console.log('[REFRESH][GET] Ejecutando loadListProjection', {
+          view_layer: state.projection.view_layer,
+          student_uuid: state.projection.student_uuid,
+          list_id: state.listaActiva?.id,
+          timestamp: new Date().toISOString()
+        });
         await loadListProjection();
         console.log('[REFRESH_ENGINE][ALQG][REFETCH] Proyección refetcheada', {
           view_layer: state.projection.view_layer,
@@ -5979,32 +6071,48 @@
       } else if (state.projection.mode === 'operativa') {
         // FIX 3.2: Refrescar items Y flotante si está abierto
         if (state.listaActiva && state.listaActiva.id) {
+          console.log('[REFRESH][GET] Ejecutando loadItems', {
+            list_id: state.listaActiva.id,
+            timestamp: new Date().toISOString()
+          });
           await loadItems(state.listaActiva.id);
           console.log('[REFRESH_ENGINE][ALQG][REFETCH] Items refetcheados', {
             list_id: state.listaActiva.id
           });
         }
+      }
+      
+      // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto (independiente del view_mode)
+      if (shouldRefreshFlotante) {
+        // Usar view_layer del modal (flotante), no de proyección
+        const modalViewLayer = state.modal.layerView || 'shared';
+        const modalCleanLayer = context.clean_layer || 'shared';
         
-        // FIX CRÍTICO: Refrescar flotante si está abierto y la mutación afecta ese item
-        if (state.modal?.item && context.item_ref && state.modal.item.item_ref === context.item_ref) {
-          // Usar view_layer del modal (flotante), no de proyección
-          const modalViewLayer = state.modal.layerView || 'shared';
-          console.log('[REFRESH_ENGINE][ALQG][REFETCH] Refrescando flotante', {
-            item_ref: context.item_ref,
-            view_layer: modalViewLayer,
-            clean_layer: context.clean_layer
-          });
-          // FIX: Usar clean_layer de la mutación si está disponible, sino 'shared' como fallback
-          const modalCleanLayer = context.clean_layer || 'shared';
-          await handleVerItem(state.modal.item, modalCleanLayer, modalViewLayer);
-        }
+        console.log('[REFRESH][GET] Ejecutando handleVerItem (flotante)', {
+          item_ref: context.item_ref,
+          view_layer: modalViewLayer,
+          clean_layer: modalCleanLayer,
+          view_mode: state.projection.mode, // Para debugging
+          timestamp: new Date().toISOString()
+        });
+        
+        console.log('[REFRESH_ENGINE][ALQG][REFETCH] Refrescando flotante', {
+          item_ref: context.item_ref,
+          view_layer: modalViewLayer,
+          clean_layer: modalCleanLayer,
+          view_mode: state.projection.mode
+        });
+        
+        await handleVerItem(state.modal.item, modalCleanLayer, modalViewLayer);
       }
       
       console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado', {
         mutation_type,
         view_mode: state.projection.mode,
-        surfaces_refreshed: state.projection.mode === 'proyeccion' ? 'projection' : 
-                           (state.modal?.item && context.item_ref ? 'items+flotante' : 'items')
+        surfaces_refreshed: state.projection.mode === 'proyeccion' 
+          ? (shouldRefreshFlotante ? 'projection+flotante' : 'projection')
+          : (shouldRefreshFlotante ? 'items+flotante' : 'items'),
+        flotante_refreshed: shouldRefreshFlotante
       });
     },
     
@@ -6032,8 +6140,9 @@
     
     /**
      * Refresh modal si está abierto y corresponde
-     * FIX: Este método se llama ANTES de render, pero el flotante ya se refrescó en refetch()
-     * Mantenemos esto como backup por si el flotante se abre después del refetch
+     * NOTA: El flotante ya se refrescó en refetch() si estaba abierto
+     * Este método es backup por si el flotante se abre después del refetch
+     * (no debería pasar, pero mantenemos como seguridad)
      */
     async refreshModal(mutation) {
       const { context = {} } = mutation;
@@ -6048,12 +6157,14 @@
       if (state.modal?.item && state.modal.item.item_ref === item_ref) {
         const activeViewLayer = state.modal.layerView || 'shared';
         const modalCleanLayer = context.clean_layer || 'shared';
-        console.log('[REFRESH_ENGINE][ALQG][REFRESH_MODAL] Backup refresh', {
+        console.log('[REFRESH_ENGINE][ALQG][REFRESH_MODAL] Backup refresh (no debería ejecutarse)', {
           item_ref,
           view_layer: activeViewLayer,
-          clean_layer: modalCleanLayer
+          clean_layer: modalCleanLayer,
+          reason: 'Flotante ya refrescado en refetch(), esto es backup'
         });
-        await handleVerItem(state.modal.item, modalCleanLayer, activeViewLayer);
+        // NO ejecutar aquí para evitar doble refresh
+        // await handleVerItem(state.modal.item, modalCleanLayer, activeViewLayer);
       }
     }
   };
