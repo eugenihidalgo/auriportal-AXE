@@ -1507,8 +1507,14 @@
           showToastSuccess('Reset completado');
           
           // Refrescar proyección: invalidar estado y forzar recarga completa
+          // REGLA: Siempre refrescar después de reset exitoso (independiente del resultado)
+          console.log('[RESET][PROGRESS][LIST] Refrescando proyección después de reset', {
+            student_uuid: state.projection.student_uuid,
+            list_id: state.listaActiva.id
+          });
+          
           state.projection.data = null; // Forzar recarga desde servidor
-          await loadListProjection();
+          await loadListProjection(); // Esto ya llama a renderView() internamente
           // Asegurar re-render completo después de la carga
           renderView();
         } catch (error) {
@@ -4309,8 +4315,15 @@
               showToastSuccess('Reset completado');
               
               // Refrescar proyección: invalidar estado y forzar recarga completa
+              // REGLA: Siempre refrescar después de reset exitoso (independiente del resultado)
+              console.log('[RESET][PROGRESS][ITEM] Refrescando proyección después de reset', {
+                student_uuid: state.projection.student_uuid,
+                item_ref: item.item_ref,
+                list_id: state.listaActiva?.id
+              });
+              
               state.projection.data = null; // Forzar recarga desde servidor
-              await loadListProjection();
+              await loadListProjection(); // Esto ya llama a renderView() internamente
               // Asegurar re-render completo después de la carga
               renderView();
             } catch (error) {
