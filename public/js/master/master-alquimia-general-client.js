@@ -1553,26 +1553,43 @@
       btnResetList.textContent = 'Reset lista';
       btnResetList.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
       btnResetList.addEventListener('click', async () => {
-        if (!confirm(`¿Resetear el progreso de TODOS los ítems de esta lista para este alumno? Esto eliminará todo el estado de limpieza de la lista.`)) {
-          return;
-        }
-        
+        // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
+        // Usar toasts no bloqueantes
         try {
-          await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
-          showToastSuccess('Reset completado');
+          const viewLayer = state.projection.view_layer || 'shared';
+          const itemKind = state.tipoActivo; // Usar tipo activo de la vista
+          
+          const resetResult = await resetStudentListProgress(
+            state.projection.student_uuid, 
+            state.listaActiva.id,
+            itemKind,
+            viewLayer
+          );
+          
+          showToastSuccess(`Reset completado (${resetResult.applied} items, ${resetResult.skipped} omitidos)`);
 
-          // REFRESH ENGINE V1: Usar engine.afterMutation
+          // REFRESH ENGINE V1: Usar engine.afterMutation (OBLIGATORIO)
+          console.log('[REFRESH_ENGINE][ALQG][MUTATION] reset-list', {
+            list_id: state.listaActiva.id,
+            student_uuid: state.projection.student_uuid,
+            item_kind: itemKind,
+            view_layer: viewLayer,
+            layers_affected: resetResult.layers_affected
+          });
+
           if (window.MasterRefreshEngineV1) {
             await window.MasterRefreshEngineV1.afterMutation({
               module: 'alquimia_general',
               mutation_type: 'alquimia.reset.list',
               scope: {
                 view_mode: state.projection.mode,
-                view_layer: state.projection.view_layer || 'shared'
+                view_layer: viewLayer
               },
               context: {
                 list_id: state.listaActiva.id,
-                student_uuid: state.projection.student_uuid
+                student_uuid: state.projection.student_uuid,
+                item_kind: itemKind,
+                layers_affected: resetResult.layers_affected
               }
             });
           } else {
@@ -3410,14 +3427,15 @@
       
       // REFRESH ENGINE V1: Usar engine.afterMutation en lugar de refreshAfterProjectionMutation
       // FIX: Determinar view_layer correcto según modo y superficie activa
-      const activeViewLayer = state.projection.mode === 'proyeccion'
+      // Reutilizar activeViewLayer ya calculado arriba, pero ajustar según modo
+      const refreshViewLayer = state.projection.mode === 'proyeccion'
         ? (state.projection.view_layer || 'shared')
-        : (state.modal.layerView || 'shared');
+        : activeViewLayer; // Ya calculado arriba para el flotante
       
       console.log('[REFRESH_ENGINE][ALQG][MUTATION] clean-student', {
         mutation_type: 'alquimia.clean.student',
         view_mode: state.projection.mode,
-        view_layer: activeViewLayer,
+        view_layer: refreshViewLayer,
         clean_layer: cleanLayer,
         item_ref: item.item_ref,
         student_uuid: student.student_uuid,
@@ -3430,7 +3448,7 @@
           mutation_type: 'alquimia.clean.student',
           scope: {
             view_mode: state.projection.mode,
-            view_layer: activeViewLayer
+            view_layer: refreshViewLayer
           },
           context: {
             item_ref: item.item_ref,
@@ -4389,26 +4407,44 @@
           btnResetProgress.textContent = 'Reset progreso';
           btnResetProgress.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
           btnResetProgress.addEventListener('click', async () => {
-            if (!confirm(`¿Resetear el progreso de este ítem para este alumno? Esto eliminará todo el estado de limpieza.`)) {
-              return;
-            }
-            
+            // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
+            // Usar toasts no bloqueantes
             try {
-              await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
-              showToastSuccess('Reset completado');
+              // Obtener item_kind explícito
+              const itemKind = getItemKindExplicit(item, state.listaActiva);
+              const viewLayer = state.projection.view_layer || 'shared';
+              
+              const resetResult = await resetStudentItemProgress(
+                state.projection.student_uuid, 
+                item.item_ref,
+                itemKind,
+                viewLayer
+              );
+              
+              showToastSuccess(`Reset completado (${resetResult.applied} aplicado, ${resetResult.skipped} omitido)`);
 
-              // REFRESH ENGINE V1: Usar engine.afterMutation
+              // REFRESH ENGINE V1: Usar engine.afterMutation (OBLIGATORIO)
+              console.log('[REFRESH_ENGINE][ALQG][MUTATION] reset-item', {
+                item_ref: item.item_ref,
+                student_uuid: state.projection.student_uuid,
+                item_kind: itemKind,
+                view_layer: viewLayer,
+                layers_affected: resetResult.layers_affected
+              });
+
               if (window.MasterRefreshEngineV1) {
                 await window.MasterRefreshEngineV1.afterMutation({
                   module: 'alquimia_general',
                   mutation_type: 'alquimia.reset.item',
                   scope: {
                     view_mode: state.projection.mode,
-                    view_layer: state.projection.view_layer || 'shared'
+                    view_layer: viewLayer
                   },
                   context: {
                     item_ref: item.item_ref,
-                    student_uuid: state.projection.student_uuid
+                    student_uuid: state.projection.student_uuid,
+                    item_kind: itemKind,
+                    layers_affected: resetResult.layers_affected
                   }
                 });
               } else {
@@ -5689,16 +5725,20 @@
    * @returns {Promise<number>} Número de overrides eliminados
    */
   /**
-   * Resetea el progreso de un alumno para un ítem específico
+   * Resetea el progreso de un alumno para un ítem específico (RESET CANÓNICO v1)
    * @param {string} student_uuid - UUID del estudiante
    * @param {string} item_ref - Referencia del item
-   * @returns {Promise<boolean>} true si se reseteó
+   * @param {string} [item_kind] - Tipo de item ('recurrente' | 'una_vez')
+   * @param {string} [view_layer] - Capa de vista activa (para derivar clean_layer)
+   * @returns {Promise<Object>} { applied, skipped, layers_affected }
    */
-  async function resetStudentItemProgress(student_uuid, item_ref) {
+  async function resetStudentItemProgress(student_uuid, item_ref, item_kind = null, view_layer = null) {
     const query = {
       student_uuid,
       item_ref,
-      scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
+      item_kind: item_kind || state.tipoActivo, // Usar tipo activo si no viene
+      scope: 'student', // REGLA CONSTITUCIONAL: scope='student' obligatorio
+      view_layer: view_layer || state.projection.view_layer || 'shared'
     };
 
     try {
@@ -5716,14 +5756,21 @@
         throw new Error(result.error || 'Error reseteando progreso del ítem');
       }
       
-      console.log('[RESET][ITEM] Progreso reseteado', {
+      console.log('[RESET][ITEM][CANONICAL] Progreso reseteado', {
         student_uuid,
         item_ref,
-        deleted: result.data?.deleted
+        item_kind: query.item_kind,
+        applied: result.data?.applied,
+        skipped: result.data?.skipped,
+        layers_affected: result.data?.layers_affected,
+        mode: result.data?.mode
       });
       
       return {
-        deleted: result.data?.deleted || false
+        applied: result.data?.applied || false,
+        skipped: result.data?.skipped || 0,
+        layers_affected: result.data?.layers_affected || [],
+        mode: result.data?.mode || 'event'
       };
     } catch (error) {
       console.error('[RESET][ITEM] Error:', error);
@@ -5732,16 +5779,20 @@
   }
 
   /**
-   * Resetea el progreso de un alumno para todos los ítems de una lista
+   * Resetea el progreso de un alumno para todos los ítems de una lista (RESET CANÓNICO v1)
    * @param {string} student_uuid - UUID del estudiante
    * @param {string} list_id - ID de la lista
-   * @returns {Promise<number>} Número de estados reseteados
+   * @param {string} [item_kind] - Tipo de item ('recurrente' | 'una_vez')
+   * @param {string} [view_layer] - Capa de vista activa (para derivar clean_layer)
+   * @returns {Promise<Object>} { applied, skipped, layers_affected }
    */
-  async function resetStudentListProgress(student_uuid, list_id) {
+  async function resetStudentListProgress(student_uuid, list_id, item_kind = null, view_layer = null) {
     const query = {
       student_uuid,
       list_id,
-      scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
+      item_kind: item_kind || null, // Opcional: si no viene, resetea todos los tipos
+      scope: 'student', // REGLA CONSTITUCIONAL: scope='student' obligatorio
+      view_layer: view_layer || state.projection.view_layer || 'shared'
     };
 
     try {
@@ -5759,13 +5810,22 @@
         throw new Error(result.error || 'Error reseteando progreso de la lista');
       }
       
-      console.log('[RESET][LIST] Progreso reseteado', {
+      console.log('[RESET][LIST][CANONICAL] Progreso reseteado', {
         student_uuid,
         list_id,
-        deleted_count: result.data?.deleted_count
+        item_kind: query.item_kind,
+        applied: result.data?.applied,
+        skipped: result.data?.skipped,
+        layers_affected: result.data?.layers_affected,
+        mode: result.data?.mode
       });
       
-      return result.data?.deleted_count || 0;
+      return {
+        applied: result.data?.applied || 0,
+        skipped: result.data?.skipped || 0,
+        layers_affected: result.data?.layers_affected || [],
+        mode: result.data?.mode || 'event'
+      };
     } catch (error) {
       console.error('[RESET][LIST] Error:', error);
       throw error;

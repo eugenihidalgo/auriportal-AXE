@@ -104,7 +104,9 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       days_since_last_clean: null,
       remaining: null,
       completed: false,
-      last_cleaned_at: null
+      last_cleaned_at: null,
+      effective_since: null,
+      had_history: false
     };
   }
   
@@ -130,12 +132,29 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       }
     });
     
+    // RESET CANÓNICO v1: Incluir effective_since y had_history en peor estado
+    // Si algún estudiante tiene effective_since, el peor estado debe reflejarlo
+    let worstEffectiveSince = null;
+    let worstHadHistory = false;
+    layerStates.forEach(state => {
+      if (state.effective_since) {
+        if (worstEffectiveSince === null || state.effective_since > worstEffectiveSince) {
+          worstEffectiveSince = state.effective_since;
+        }
+      }
+      if (state.had_history) {
+        worstHadHistory = true;
+      }
+    });
+
     const worstStateResult = {
       clean_count: 0, // No aplica en agregación para recurrente
       days_since_last_clean: hasNull ? null : worstDaysSince,
       remaining: null, // No aplica en agregación
       completed: false, // No aplica en agregación
-      last_cleaned_at: hasNull ? null : worstLastCleanedAt
+      last_cleaned_at: hasNull ? null : worstLastCleanedAt,
+      effective_since: worstEffectiveSince,
+      had_history: worstHadHistory
     };
     
     // DIAGNÓSTICO: Log resultado del cálculo de peor estado para recurrente
@@ -224,12 +243,28 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       worstCleanCount = 0;
     }
     
+    // RESET CANÓNICO v1: Incluir effective_since y had_history en peor estado para una_vez
+    let worstEffectiveSince = null;
+    let worstHadHistory = false;
+    layerStates.forEach(state => {
+      if (state.effective_since) {
+        if (worstEffectiveSince === null || state.effective_since > worstEffectiveSince) {
+          worstEffectiveSince = state.effective_since;
+        }
+      }
+      if (state.had_history) {
+        worstHadHistory = true;
+      }
+    });
+
     const worstStateResult = {
       clean_count: worstCleanCount,
       days_since_last_clean: null, // No aplica en una_vez
       remaining: worstRemaining,
       completed: worstCompleted,
-      last_cleaned_at: null // No aplica en una_vez
+      last_cleaned_at: null, // No aplica en una_vez
+      effective_since: worstEffectiveSince,
+      had_history: worstHadHistory
     };
     
     // DIAGNÓSTICO: Log resultado del cálculo de peor estado para una_vez
@@ -322,6 +357,7 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
     }
     
     // Obtener estados para un estudiante específico
+    // RESET CANÓNICO v1: Incluir effective_since y had_history
     const result = await query(`
       SELECT 
         item_ref,
@@ -329,18 +365,30 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         shared_last_cleaned_at,
         shared_remaining,
         shared_completed,
+        shared_effective_since,
+        shared_had_history,
         pde_clean_count,
         pde_last_cleaned_at,
         pde_remaining,
         pde_completed,
-        -- Calcular days_since_last_clean
+        pde_effective_since,
+        pde_had_history,
+        -- Calcular days_since_last_effective_clean (usando effective_since si existe)
         CASE 
+          WHEN shared_effective_since IS NOT NULL THEN
+            -- Reset aplicado: usar effective_since como base
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(shared_effective_since, COALESCE(shared_last_cleaned_at, shared_effective_since)))) / 86400
           WHEN shared_last_cleaned_at IS NOT NULL THEN
+            -- Sin reset: usar last_cleaned_at
             EXTRACT(EPOCH FROM (NOW() - shared_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as shared_days_since_last_clean,
         CASE 
+          WHEN pde_effective_since IS NOT NULL THEN
+            -- Reset aplicado: usar effective_since como base
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(pde_effective_since, COALESCE(pde_last_cleaned_at, pde_effective_since)))) / 86400
           WHEN pde_last_cleaned_at IS NOT NULL THEN
+            -- Sin reset: usar last_cleaned_at
             EXTRACT(EPOCH FROM (NOW() - pde_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as pde_days_since_last_clean
@@ -359,14 +407,18 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
           days_since_last_clean: row.shared_days_since_last_clean,
           remaining: row.shared_remaining,
           completed: row.shared_completed || false,
-          last_cleaned_at: row.shared_last_cleaned_at
+          last_cleaned_at: row.shared_last_cleaned_at,
+          effective_since: row.shared_effective_since,
+          had_history: row.shared_had_history || false
         },
         pde: {
           clean_count: row.pde_clean_count || 0,
           days_since_last_clean: row.pde_days_since_last_clean,
           remaining: row.pde_remaining,
           completed: row.pde_completed || false,
-          last_cleaned_at: row.pde_last_cleaned_at
+          last_cleaned_at: row.pde_last_cleaned_at,
+          effective_since: row.pde_effective_since,
+          had_history: row.pde_had_history || false
         }
       };
     });
@@ -396,17 +448,26 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         cis.shared_last_cleaned_at,
         cis.shared_remaining,
         cis.shared_completed,
+        cis.shared_effective_since,
+        cis.shared_had_history,
         cis.pde_clean_count,
         cis.pde_last_cleaned_at,
         cis.pde_remaining,
         cis.pde_completed,
-        -- Calcular days_since_last_clean por alumno (NULL si no hay fila)
+        cis.pde_effective_since,
+        cis.pde_had_history,
+        -- Calcular days_since_last_effective_clean por alumno (NULL si no hay fila)
+        -- RESET CANÓNICO v1: Usar effective_since si existe
         CASE 
+          WHEN cis.shared_effective_since IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(cis.shared_effective_since, COALESCE(cis.shared_last_cleaned_at, cis.shared_effective_since)))) / 86400
           WHEN cis.shared_last_cleaned_at IS NOT NULL THEN
             EXTRACT(EPOCH FROM (NOW() - cis.shared_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as shared_days_since_last_clean,
         CASE 
+          WHEN cis.pde_effective_since IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(cis.pde_effective_since, COALESCE(cis.pde_last_cleaned_at, cis.pde_effective_since)))) / 86400
           WHEN cis.pde_last_cleaned_at IS NOT NULL THEN
             EXTRACT(EPOCH FROM (NOW() - cis.pde_last_cleaned_at)) / 86400
           ELSE NULL
@@ -441,7 +502,9 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         days_since_last_clean: row.shared_days_since_last_clean, // NULL si no hay fila
         remaining: row.shared_remaining || null,
         completed: row.shared_completed || false,
-        last_cleaned_at: row.shared_last_cleaned_at || null // NULL si no hay fila
+        last_cleaned_at: row.shared_last_cleaned_at || null, // NULL si no hay fila
+        effective_since: row.shared_effective_since || null,
+        had_history: row.shared_had_history || false
       });
       
       statesByItem[itemRef].pde.push({
@@ -449,7 +512,9 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         days_since_last_clean: row.pde_days_since_last_clean, // NULL si no hay fila
         remaining: row.pde_remaining || null,
         completed: row.pde_completed || false,
-        last_cleaned_at: row.pde_last_cleaned_at || null // NULL si no hay fila
+        last_cleaned_at: row.pde_last_cleaned_at || null, // NULL si no hay fila
+        effective_since: row.pde_effective_since || null,
+        had_history: row.pde_had_history || false
       });
     });
     

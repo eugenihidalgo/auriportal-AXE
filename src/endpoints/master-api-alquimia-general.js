@@ -15,10 +15,9 @@ import {
   getStudentsForItem, markCleanStudent, markCleanAll, markPdeCleanAll, incrementAll, adjustRemaining,
   listItemGroups
 } from '../services/alquimia-general-service.js';
-import {
-  resetStudentItemProgress,
-  resetStudentListProgress
-} from '../core/master/services/alquimia-reset-service.js';
+// DEPRECATED: alquimia-reset-service.js (usa delete, no eventos)
+// Ahora usamos Cleaning Engine resetStudentItemProgress directamente
+import { resetStudentItemProgress as cleaningEngineResetItem } from '../core/master/services/cleaning-engine-service.js';
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
@@ -1512,12 +1511,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // ============================================================================
 
     // POST /master/api/alquimia-general/reset-item
-    // Resetea el progreso de un alumno para un ítem específico
+    // Resetea el progreso de un alumno para un ítem específico (RESET CANÓNICO v1)
     // REGLA CONSTITUCIONAL: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    // RESET CANÓNICO v1: Reset es evento del Cleaning Engine, no delete
     if (path === '/master/api/alquimia-general/reset-item' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, item_ref, item_kind, scope } = body;
+        const { student_uuid, item_ref, item_kind, scope, view_layer, clean_layer } = body;
         
         // Validaciones obligatorias
         if (!student_uuid || !item_ref) {
@@ -1529,9 +1529,9 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('Reset solo disponible en scope=student', 'SCOPE_ERROR', 400, traceId);
         }
         
-        // Validar item_kind si se proporciona
-        if (item_kind && item_kind !== 'recurrente' && item_kind !== 'una_vez') {
-          return jsonError('item_kind debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
+        // Validar item_kind (OBLIGATORIO)
+        if (!item_kind || (item_kind !== 'recurrente' && item_kind !== 'una_vez')) {
+          return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
         }
         
         // UUID-only: validar formato UUID
@@ -1540,37 +1540,55 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
         }
         
-        logInfo('[RESET][ITEM]', 'POST /reset-item iniciado', {
+        logInfo('[RESET][ITEM][CANONICAL]', 'POST /reset-item iniciado', {
           traceId,
           student_uuid,
           item_ref,
           item_kind,
-          scope
+          scope,
+          view_layer,
+          clean_layer
         });
         
-        // Delegar 100% al servicio canónico
-        const deleted = await resetStudentItemProgress({
+        // RESET CANÓNICO v1: Usar Cleaning Engine (eventos, no delete)
+        const result = await cleaningEngineResetItem({
           student_uuid,
           item_ref,
-          item_kind: item_kind || null,
+          item_kind,
+          clean_layer: clean_layer || null,
+          view_layer: view_layer || null,
           product_key: body.product_key || 'pde',
-          domain_type: body.domain_type || null
+          domain_type: body.domain_type || 'transmutation',
+          actor_type: 'master',
+          actor_ref: authCtx?.adminId || null,
+          surface_key: 'master.alquimia_general',
+          execution_mode: 'APPLY',
+          meta: {
+            scope: 'student',
+            endpoint: '/master/api/alquimia-general/reset-item'
+          }
         });
         
-        logInfo('[RESET][ITEM]', 'POST /reset-item completado', {
+        logInfo('[RESET][ITEM][CANONICAL]', 'POST /reset-item completado', {
           traceId,
           student_uuid,
           item_ref,
           item_kind,
-          deleted
+          applied: result.applied,
+          skipped: result.skipped,
+          layers_affected: result.layers_affected
         });
         
         return jsonSuccess({
           ok: true,
           reset: true,
           item_ref,
-          item_kind: item_kind || null,
-          deleted,
+          item_kind,
+          applied: result.applied,
+          skipped: result.skipped,
+          layers_affected: result.layers_affected,
+          mode: 'event', // Indica que es reset canónico (evento, no delete)
+          deleted: false, // Compatibilidad: nunca hay delete en reset canónico
           trace_id: traceId
         }, traceId);
       } catch (error) {
@@ -1590,12 +1608,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     }
 
     // POST /master/api/alquimia-general/reset-list
-    // Resetea el progreso de un alumno para todos los ítems de una lista
+    // Resetea el progreso de un alumno para todos los ítems de una lista (RESET CANÓNICO v1)
     // REGLA CONSTITUCIONAL: Solo disponible en scope='student' (validado por presencia de student_uuid)
+    // RESET CANÓNICO v1: Reset es evento del Cleaning Engine, no delete
     if (path === '/master/api/alquimia-general/reset-list' && method === 'POST') {
       try {
         const body = await request.json();
-        const { student_uuid, list_id, item_kind, scope } = body;
+        const { student_uuid, list_id, item_kind, scope, view_layer, clean_layer } = body;
         
         // Validaciones obligatorias
         if (!student_uuid || !list_id) {
@@ -1618,29 +1637,89 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
         }
         
-        logInfo('MasterApiAlquimiaGeneral', 'POST /reset-list iniciado', {
+        logInfo('[RESET][LIST][CANONICAL]', 'POST /reset-list iniciado', {
           traceId,
           student_uuid,
           list_id,
           item_kind,
-          scope
+          scope,
+          view_layer,
+          clean_layer
         });
         
-        // Delegar 100% al servicio canónico
-        const deletedCount = await resetStudentListProgress({
-          student_uuid,
-          list_id,
-          item_kind: item_kind || null,
-          product_key: body.product_key || 'pde',
-          domain_type: body.domain_type || null
-        });
+        // RESET CANÓNICO v1: Obtener items de la lista y resetear cada uno
+        const catalogRepo = getDefaultAlquimiaCatalogRepo();
+        const lista = await catalogRepo.getListaById(parseInt(list_id, 10));
+        if (!lista) {
+          return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+        }
         
-        logInfo('[RESET][LIST]', 'POST /reset-list completado', {
+        // Obtener items de la lista (filtrar por item_kind si viene)
+        const items = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
+        const filteredItems = item_kind 
+          ? items.filter(item => {
+              // Validar item_kind desde lista.tipo
+              const itemKindFromList = lista.tipo;
+              return itemKindFromList === item_kind;
+            })
+          : items;
+        
+        // Resetear cada item usando Cleaning Engine
+        let totalApplied = 0;
+        let totalSkipped = 0;
+        const allLayersAffected = [];
+        
+        for (const item of filteredItems) {
+          try {
+            const itemKindForReset = item_kind || lista.tipo;
+            const result = await cleaningEngineResetItem({
+              student_uuid,
+              item_ref: item.item_ref,
+              item_kind: itemKindForReset,
+              clean_layer: clean_layer || null,
+              view_layer: view_layer || null,
+              product_key: body.product_key || 'pde',
+              domain_type: body.domain_type || 'transmutation',
+              actor_type: 'master',
+              actor_ref: authCtx?.adminId || null,
+              surface_key: 'master.alquimia_general',
+              execution_mode: 'APPLY',
+              meta: {
+                scope: 'student',
+                list_id: parseInt(list_id, 10),
+                endpoint: '/master/api/alquimia-general/reset-list'
+              }
+            });
+            
+            if (result.applied) {
+              totalApplied++;
+            } else {
+              totalSkipped++;
+            }
+            
+            // Acumular layers_affected
+            if (result.layers_affected && result.layers_affected.length > 0) {
+              allLayersAffected.push(...result.layers_affected);
+            }
+          } catch (itemError) {
+            logWarn('MasterApiAlquimiaGeneral', 'Error reseteando item en lista (continuando)', {
+              traceId,
+              item_ref: item.item_ref,
+              error: itemError.message
+            });
+            totalSkipped++;
+          }
+        }
+        
+        logInfo('[RESET][LIST][CANONICAL]', 'POST /reset-list completado', {
           traceId,
           student_uuid,
           list_id,
           item_kind,
-          deleted_count: deletedCount
+          total_items: filteredItems.length,
+          applied: totalApplied,
+          skipped: totalSkipped,
+          layers_affected: [...new Set(allLayersAffected)] // Únicos
         });
         
         return jsonSuccess({
@@ -1648,7 +1727,11 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           reset: true,
           list_id,
           item_kind: item_kind || null,
-          deleted_count: deletedCount,
+          applied: totalApplied,
+          skipped: totalSkipped,
+          layers_affected: [...new Set(allLayersAffected)],
+          mode: 'event', // Indica que es reset canónico (evento, no delete)
+          deleted_count: 0, // Compatibilidad: nunca hay delete en reset canónico
           trace_id: traceId
         }, traceId);
       } catch (error) {

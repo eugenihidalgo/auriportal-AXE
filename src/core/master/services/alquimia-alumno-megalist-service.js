@@ -190,15 +190,23 @@ export async function getMegalistForStudent(options = {}) {
       SELECT 
         s.*,
         i.nivel as item_nivel,
-        -- Calcular days_since_last_clean para shared
+        -- Calcular days_since_last_effective_clean para shared (RESET CANÓNICO v1)
         CASE 
+          WHEN s.shared_effective_since IS NOT NULL THEN
+            -- Reset aplicado: usar effective_since como base
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(s.shared_effective_since, COALESCE(s.shared_last_cleaned_at, s.shared_effective_since)))) / 86400
           WHEN s.shared_last_cleaned_at IS NOT NULL THEN
+            -- Sin reset: usar last_cleaned_at
             EXTRACT(EPOCH FROM (NOW() - s.shared_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as shared_days_since_last_clean,
-        -- Calcular days_since_last_clean para pde
+        -- Calcular days_since_last_effective_clean para pde (RESET CANÓNICO v1)
         CASE 
+          WHEN s.pde_effective_since IS NOT NULL THEN
+            -- Reset aplicado: usar effective_since como base
+            EXTRACT(EPOCH FROM (NOW() - GREATEST(s.pde_effective_since, COALESCE(s.pde_last_cleaned_at, s.pde_effective_since)))) / 86400
           WHEN s.pde_last_cleaned_at IS NOT NULL THEN
+            -- Sin reset: usar last_cleaned_at
             EXTRACT(EPOCH FROM (NOW() - s.pde_last_cleaned_at)) / 86400
           ELSE NULL
         END::integer as pde_days_since_last_clean
@@ -448,6 +456,8 @@ export async function getMegalistForStudent(options = {}) {
         clean_count: state.pde_clean_count || 0,
         last_cleaned_at: state.pde_last_cleaned_at || null,
         days_since_last_clean: state.pde_days_since_last_clean ?? null,
+        effective_since: state.pde_effective_since ?? null,
+        had_history: state.pde_had_history || false,
         remaining: state.pde_remaining ?? null,
         completed: state.pde_completed || 0
       };

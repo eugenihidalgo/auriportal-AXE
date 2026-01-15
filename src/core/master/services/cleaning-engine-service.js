@@ -33,17 +33,18 @@ import { validateCleanLayer, validateCleanLayerNotCombo } from './cleaning-layer
  * REGLA CANÓNICA: Idempotencia por clean_layer en RECURRENTE
  * - RECURRENTE: {action_type}:{item_ref}:{student_uuid}:{clean_layer}:{timestamp_day}
  * - UNA_VEZ: {action_type}:{item_ref}:{student_uuid}:{timestamp_day} (sin clean_layer, combo suma)
+ * - RESET: {action_type}:{item_ref}:{student_uuid}:{clean_layer}:{timestamp_day} (siempre incluye capa)
  * 
- * APPLY: Formato idempotente (por día y capa para RECURRENTE)
+ * APPLY: Formato idempotente (por día y capa para RECURRENTE y RESET)
  * CERTIFY: Formato no idempotente (timestamp completo)
  * 
- * @param {string} actionType - Tipo de acción ('mark_clean', etc.)
+ * @param {string} actionType - Tipo de acción ('mark_clean', 'reset', etc.)
  * @param {string} itemRef - Referencia del item
  * @param {string} studentUuid - UUID del estudiante
  * @param {Date} timestamp - Timestamp
  * @param {string} executionMode - 'APPLY' (idempotente) o 'CERTIFY' (no idempotente)
  * @param {string} itemKind - 'recurrente' | 'una_vez'
- * @param {string} cleanLayer - 'shared' | 'pde' (solo para RECURRENTE)
+ * @param {string} cleanLayer - 'shared' | 'pde' (solo para RECURRENTE y RESET)
  * @returns {string} execution_key
  */
 function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new Date(), executionMode = 'APPLY', itemKind = null, cleanLayer = null) {
@@ -54,6 +55,11 @@ function generateExecutionKey(actionType, itemRef, studentUuid, timestamp = new 
   }
   // APPLY: usar día para idempotencia
   const day = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  // REGLA CANÓNICA: RESET siempre incluye clean_layer (reset por capa es independiente)
+  if (actionType === 'reset' && cleanLayer) {
+    return `${actionType}:${itemRef}:${studentUuid}:${cleanLayer}:${day}`;
+  }
   
   // REGLA CANÓNICA: RECURRENTE incluye clean_layer en execution_key
   // Esto permite que SHARED y PDE sean independientes (pueden limpiarse el mismo día)
@@ -1150,6 +1156,306 @@ export async function setRemainingShared(options, client = null) {
     return state;
   } catch (error) {
     logError('CleaningEngine', 'Error en setRemainingShared', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      student_uuid,
+      item_ref
+    });
+    throw error;
+  }
+}
+
+/**
+ * Resetea el progreso de un alumno para un ítem específico (RESET CANÓNICO v1)
+ * 
+ * REGLA CONSTITUCIONAL: Reset es un EVENTO del Cleaning Engine, no un delete.
+ * - Inserta evento en cleaning_events con action_type='reset'
+ * - Actualiza cleaning_item_state estableciendo effective_since (NO borra)
+ * - Conserva historia (contadores, fechas históricas)
+ * - Reset nunca produce estado 'never' (si hubo reset, siempre es 'pending')
+ * 
+ * @param {Object} options - Opciones
+ * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
+ * @param {string} options.item_ref - Referencia del item (OBLIGATORIO)
+ * @param {string} options.item_kind - Tipo de item ('recurrente' | 'una_vez') (OBLIGATORIO)
+ * @param {string} [options.clean_layer] - Capa de limpieza ('shared' | 'pde')
+ *   Si no se proporciona:
+ *     - Para view_layer='effective' (recurrente): reset BOTH layers
+ *     - Para view_layer='combo' (una_vez): reset BOTH layers
+ *     - Para view_layer='shared' o 'pde': reset solo esa capa
+ * @param {string} [options.view_layer] - Capa de vista (para derivar clean_layer si no viene)
+ * @param {string} [options.product_key='pde'] - Clave del producto
+ * @param {string} [options.domain_type='transmutation'] - Tipo de dominio
+ * @param {string} options.actor_type - Tipo de actor ('master' | 'student' | 'automation')
+ * @param {string} [options.actor_ref] - Referencia del actor
+ * @param {string} [options.surface_key] - Superficie de origen
+ * @param {string} [options.execution_mode='APPLY'] - 'APPLY' (idempotente) o 'CERTIFY' (no idempotente)
+ * @param {Object} [options.meta={}] - Metadatos adicionales
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object>} Estado actualizado con { applied: boolean, skipped: number, layers_affected: Array }
+ */
+export async function resetStudentItemProgress(options, client = null) {
+  const traceId = getRequestId();
+  const {
+    student_uuid,
+    item_ref,
+    item_kind,
+    clean_layer = null,
+    view_layer = null,
+    product_key = 'pde',
+    domain_type = 'transmutation',
+    actor_type,
+    actor_ref = null,
+    surface_key = null,
+    execution_mode = 'APPLY',
+    meta = {}
+  } = options;
+
+  logInfo('CleaningEngine', '[RESET][CANONICAL] resetStudentItemProgress entrada', {
+    traceId,
+    student_uuid,
+    item_ref,
+    item_kind,
+    clean_layer,
+    view_layer,
+    product_key,
+    actor_type,
+    surface_key
+  });
+
+  // ============================================================================
+  // GUARD CONSTITUCIONAL: UUID-only Alquimia
+  // ============================================================================
+  if (options.legacy_alumno_id || options.student_id) {
+    const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
+    error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
+    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en reset', {
+      traceId,
+      student_uuid,
+      legacy_alumno_id: options.legacy_alumno_id,
+      student_id: options.student_id
+    });
+    throw error;
+  }
+
+  // Validar campos requeridos
+  if (!student_uuid || !item_ref || !actor_type || !item_kind || !surface_key) {
+    const missing = [];
+    if (!student_uuid) missing.push('student_uuid');
+    if (!item_ref) missing.push('item_ref');
+    if (!actor_type) missing.push('actor_type');
+    if (!item_kind) missing.push('item_kind');
+    if (!surface_key) missing.push('surface_key');
+    throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+  }
+
+  // Validar item_kind
+  if (item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
+
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(student_uuid)) {
+    throw new Error(`student_uuid debe ser un UUID válido: ${student_uuid}`);
+  }
+
+  try {
+    // 1. Verificar si alumno está en pausa (UUID-only)
+    const isPaused = await isStudentPaused(student_uuid);
+    if (isPaused) {
+      logInfo('CleaningEngine', 'Alumno en pausa, reset excluido', {
+        traceId,
+        student_uuid,
+        item_ref
+      });
+      return { applied: false, skipped: 1, layers_affected: [], reason: 'paused' };
+    }
+
+    // 2. Obtener item para validar
+    const catalogRepo = getDefaultAlquimiaCatalogRepo();
+    const item = await catalogRepo.getItemByRef(item_ref);
+    
+    if (!item) {
+      throw new Error(`Item no encontrado: ${item_ref}`);
+    }
+
+    // 3. Validar coherencia con lista
+    const lista = await catalogRepo.getListaById(item.lista_id);
+    if (!lista) {
+      throw new Error(`Lista no encontrada para item: ${item_ref}`);
+    }
+
+    if (item_kind !== lista.tipo) {
+      throw new Error(`item_kind no coincide con lista.tipo: item_kind=${item_kind}, lista.tipo=${lista.tipo}`);
+    }
+
+    // 4. Determinar capas a resetear
+    // REGLA V1: Si clean_layer viene explícito, reset solo esa capa
+    // Si no viene, derivar de view_layer:
+    //   - effective (recurrente) => reset BOTH (shared + pde)
+    //   - combo (una_vez) => reset BOTH (shared + pde)
+    //   - shared/pde => reset solo esa capa
+    let layersToReset = [];
+    if (clean_layer) {
+      if (clean_layer !== 'shared' && clean_layer !== 'pde') {
+        throw new Error(`clean_layer debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
+      }
+      layersToReset = [clean_layer];
+    } else if (view_layer) {
+      if (view_layer === 'effective' && item_kind === 'recurrente') {
+        layersToReset = ['shared', 'pde'];
+      } else if (view_layer === 'combo' && item_kind === 'una_vez') {
+        layersToReset = ['shared', 'pde'];
+      } else if (view_layer === 'shared' || view_layer === 'pde') {
+        layersToReset = [view_layer];
+      } else {
+        // Default: reset shared si no se puede determinar
+        logWarn('CleaningEngine', 'view_layer no permite derivar clean_layer, usando shared', {
+          traceId,
+          view_layer,
+          item_kind
+        });
+        layersToReset = ['shared'];
+      }
+    } else {
+      // Default: reset shared si no hay información
+      logWarn('CleaningEngine', 'No se proporcionó clean_layer ni view_layer, usando shared', {
+        traceId
+      });
+      layersToReset = ['shared'];
+    }
+
+    // 5. Aplicar reset a cada capa
+    const eventsRepo = getDefaultCleaningEventsRepo();
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    let applied = 0;
+    let skipped = 0;
+    const layersAffected = [];
+
+    for (const layer of layersToReset) {
+      try {
+        // Generar execution_key para esta capa
+        const executionKey = generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, layer);
+
+        // Insertar evento reset
+        const eventData = {
+          trace_id: traceId,
+          execution_key: executionKey,
+          student_uuid,
+          product_key,
+          domain_type,
+          item_ref,
+          clean_layer: layer,
+          item_kind,
+          action_type: 'reset',
+          delta_completed: null,
+          set_remaining: null,
+          actor_type,
+          actor_ref,
+          surface_key,
+          meta: {
+            ...meta,
+            item_id: item.id,
+            lista_id: item.lista_id,
+            reset_canonical_v1: true
+          }
+        };
+
+        const eventResult = await eventsRepo.insertEvent(eventData, client);
+
+        // Verificar idempotencia
+        if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
+          logInfo('CleaningEngine', '[RESET][IDEMPOTENCY] Reset ya aplicado para esta capa', {
+            traceId,
+            execution_key: executionKey,
+            student_uuid,
+            item_ref,
+            clean_layer: layer
+          });
+          skipped++;
+          continue;
+        }
+
+        // Aplicar reset a proyección (establecer effective_since)
+        await stateRepo.upsertApplyReset({
+          student_uuid,
+          product_key,
+          domain_type,
+          item_ref,
+          clean_layer: layer
+        }, client);
+
+        applied++;
+        layersAffected.push(layer);
+
+        logInfo('CleaningEngine', '[RESET][CANONICAL] Reset aplicado a capa', {
+          traceId,
+          student_uuid,
+          item_ref,
+          clean_layer: layer,
+          item_kind
+        });
+      } catch (layerError) {
+        logError('CleaningEngine', 'Error aplicando reset a capa', {
+          traceId,
+          student_uuid,
+          item_ref,
+          clean_layer: layer,
+          error: layerError.message
+        });
+        // Continuar con siguiente capa (fail-open)
+      }
+    }
+
+    // 6. Obtener estado actualizado
+    const finalState = await stateRepo.getState({
+      student_uuid,
+      product_key,
+      domain_type,
+      item_ref
+    }, client);
+
+    // 7. Emitir señal (fail-open)
+    try {
+      // TODO: Registrar señal en registry canónico
+      // Por ahora, solo log estructurado
+      logInfo('CleaningEngine', '[RESET][SIGNAL] cleaning.reset.executed', {
+        traceId,
+        student_uuid,
+        item_ref,
+        item_kind,
+        layers_affected: layersAffected,
+        actor_type,
+        surface_key
+      });
+    } catch (signalError) {
+      logWarn('CleaningEngine', 'Error emitiendo señal (fail-open)', {
+        traceId,
+        error: signalError.message
+      });
+    }
+
+    logInfo('CleaningEngine', '[RESET][CANONICAL] Reset completado', {
+      traceId,
+      student_uuid,
+      item_ref,
+      item_kind,
+      applied,
+      skipped,
+      layers_affected: layersAffected
+    });
+
+    return {
+      applied: applied > 0,
+      skipped,
+      layers_affected: layersAffected,
+      state: finalState
+    };
+  } catch (error) {
+    logError('CleaningEngine', 'Error en resetStudentItemProgress', {
       traceId,
       error: error.message,
       code: error.code,

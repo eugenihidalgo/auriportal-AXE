@@ -318,10 +318,93 @@ export class CleaningItemStateRepoPg {
   }
 
   /**
+   * Aplica reset canónico: establece effective_since sin borrar historia.
+   * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
+   * 
+   * REGLA CONSTITUCIONAL: Reset invalida validez operativa, no borra datos históricos.
+   * - Establece {layer}_effective_since = NOW()
+   * - Marca {layer}_had_history = true si había last_cleaned_at
+   * - NO borra contadores ni fechas históricas
+   * 
+   * @param {Object} options - Opciones
+   * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
+   * @param {string} options.item_ref - Referencia del item (OBLIGATORIO)
+   * @param {string} options.clean_layer - Capa de limpieza ('shared' | 'pde') (OBLIGATORIO)
+   * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
+   * @param {string} [options.domain_type] - Tipo de dominio (opcional)
+   * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+   * @returns {Promise<Object>} Estado actualizado
+   */
+  async upsertApplyReset(options, client = null) {
+    if (!options || !options.item_ref || !options.clean_layer || !options.student_uuid) {
+      throw new Error('student_uuid, item_ref y clean_layer son requeridos');
+    }
+
+    // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
+    const studentUuid = options.student_uuid;
+    const queryFn = client ? client.query.bind(client) : query;
+    const productKey = options.product_key || 'pde';
+    const domainType = options.domain_type;
+    const now = new Date();
+
+    // Determinar qué columnas actualizar según clean_layer
+    const effectiveSinceColumn = options.clean_layer === 'shared' 
+      ? 'shared_effective_since' 
+      : 'pde_effective_since';
+    const hadHistoryColumn = options.clean_layer === 'shared'
+      ? 'shared_had_history'
+      : 'pde_had_history';
+    const lastCleanedColumn = options.clean_layer === 'shared'
+      ? 'shared_last_cleaned_at'
+      : 'pde_last_cleaned_at';
+
+    // REGLA: Si existe last_cleaned_at, marcar had_history = true
+    // Si no existe, had_history = false (nunca hubo historia)
+    const result = await queryFn(`
+      INSERT INTO cleaning_item_state (
+        student_id, product_key, domain_type, item_ref,
+        ${effectiveSinceColumn}, ${hadHistoryColumn}
+      ) VALUES (
+        $1, $2, $3, $4, $5, false
+      )
+      ON CONFLICT (student_id, product_key, domain_type, item_ref)
+      DO UPDATE SET
+        ${effectiveSinceColumn} = $5,
+        ${hadHistoryColumn} = CASE 
+          WHEN ${lastCleanedColumn} IS NOT NULL THEN true 
+          ELSE COALESCE(${hadHistoryColumn}, false)
+        END,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `, [
+      studentUuid,
+      productKey,
+      domainType,
+      options.item_ref,
+      now
+    ]);
+
+    logInfo('CleaningItemStateRepo', '[RESET][CANONICAL] Reset aplicado (effective_since)', {
+      student_uuid: studentUuid,
+      item_ref: options.item_ref,
+      clean_layer: options.clean_layer,
+      effective_since_column: effectiveSinceColumn,
+      had_history_column: hadHistoryColumn,
+      had_history: result.rows[0]?.[hadHistoryColumn],
+      independence_check: `SOLO ${options.clean_layer === 'shared' ? 'SHARED' : 'PDE'} columns`
+    });
+
+    return result.rows[0];
+  }
+
+  /**
    * Elimina el estado de limpieza para un item específico de un alumno.
    * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
    * 
    * REGLA: Eliminar la fila completa hace que el sistema asuma estado inicial.
+   * 
+   * ⚠️ DEPRECATED: Usar upsertApplyReset() en su lugar para reset canónico.
+   * Este método se mantiene solo para compatibilidad legacy.
    * 
    * @param {Object} options - Opciones
    * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)

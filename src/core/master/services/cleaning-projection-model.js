@@ -67,36 +67,57 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
   if (itemKind === 'recurrente') {
     // RECURRENTE: usa days_since_last_clean de la capa indicada
     // O calcula 'effective' como proyección agregada de shared + pde
+    // RESET CANÓNICO v1: Usar effective_since y had_history para distinguir never vs pending
+    
+    // Helper para calcular estado considerando reset
+    const calculateStateWithReset = (layerData, daysSince) => {
+      const effectiveSince = layerData?.effective_since ?? null;
+      const hadHistory = layerData?.had_history ?? false;
+      
+      // REGLA CONSTITUCIONAL: Si effective_since existe, nunca es 'never'
+      // Reset aplicado fuerza estado operativo 'pending' como mínimo
+      if (effectiveSince !== null) {
+        // Reset aplicado: siempre pending o mejor
+        if (daysSince === null || daysSince === undefined) {
+          // Reset aplicado pero sin días calculados → pending (nunca never)
+          return 'pending';
+        } else if (daysSince < threshold_days) {
+          return 'reviewed';
+        } else if (daysSince < criticalThreshold) {
+          return 'pending';
+        } else {
+          return 'important';
+        }
+      }
+      
+      // Sin reset: lógica normal
+      if (daysSince === null || daysSince === undefined) {
+        // REGLA: Si had_history es true, significa que hubo historia pero se perdió
+        // En este caso, también debe ser pending (no never)
+        if (hadHistory) {
+          return 'pending';
+        }
+        return 'never';
+      } else if (daysSince < threshold_days) {
+        return 'reviewed';
+      } else if (daysSince < criticalThreshold) {
+        return 'pending';
+      } else {
+        return 'important';
+      }
+    };
     
     if (viewLayer === 'effective') {
       // EFFECTIVE: proyección agregada (mejor estado entre shared y pde)
       // NO escribe nada, solo calcula proyección
       
-      // Calcular estado de shared
+      // Calcular estado de shared (con reset)
       const sharedDaysSince = shared?.days_since_last_clean ?? null;
-      let sharedState;
-      if (sharedDaysSince === null || sharedDaysSince === undefined) {
-        sharedState = 'never';
-      } else if (sharedDaysSince < threshold_days) {
-        sharedState = 'reviewed';
-      } else if (sharedDaysSince < criticalThreshold) {
-        sharedState = 'pending';
-      } else {
-        sharedState = 'important';
-      }
+      const sharedState = calculateStateWithReset(shared, sharedDaysSince);
       
-      // Calcular estado de pde
+      // Calcular estado de pde (con reset)
       const pdeDaysSince = pde?.days_since_last_clean ?? null;
-      let pdeState;
-      if (pdeDaysSince === null || pdeDaysSince === undefined) {
-        pdeState = 'never';
-      } else if (pdeDaysSince < threshold_days) {
-        pdeState = 'reviewed';
-      } else if (pdeDaysSince < criticalThreshold) {
-        pdeState = 'pending';
-      } else {
-        pdeState = 'important';
-      }
+      const pdeState = calculateStateWithReset(pde, pdeDaysSince);
       
       // Regla canónica: effective = mejor estado resultante
       // Prioridad: reviewed > pending > important > never
@@ -143,22 +164,50 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
     
     // view_layer === 'shared' o 'pde'
     let daysSince;
+    let layerData;
     if (viewLayer === 'pde') {
       daysSince = pde?.days_since_last_clean ?? null;
+      layerData = pde;
     } else {
       // view_layer === 'shared' (default)
       daysSince = shared?.days_since_last_clean ?? null;
+      layerData = shared;
     }
     
+    // RESET CANÓNICO v1: Usar effective_since y had_history
+    const effectiveSince = layerData?.effective_since ?? null;
+    const hadHistory = layerData?.had_history ?? false;
+    
     let state;
-    if (daysSince === null || daysSince === undefined) {
-      state = 'never';
-    } else if (daysSince < threshold_days) {
-      state = 'reviewed';
-    } else if (daysSince < criticalThreshold) {
-      state = 'pending';
+    // REGLA CONSTITUCIONAL: Si effective_since existe, nunca es 'never'
+    if (effectiveSince !== null) {
+      // Reset aplicado: siempre pending o mejor
+      if (daysSince === null || daysSince === undefined) {
+        state = 'pending'; // Reset aplicado → pending (nunca never)
+      } else if (daysSince < threshold_days) {
+        state = 'reviewed';
+      } else if (daysSince < criticalThreshold) {
+        state = 'pending';
+      } else {
+        state = 'important';
+      }
     } else {
-      state = 'important';
+      // Sin reset: lógica normal
+      if (daysSince === null || daysSince === undefined) {
+        // REGLA: Si had_history es true, significa que hubo historia pero se perdió
+        // En este caso, también debe ser pending (no never)
+        if (hadHistory) {
+          state = 'pending';
+        } else {
+          state = 'never';
+        }
+      } else if (daysSince < threshold_days) {
+        state = 'reviewed';
+      } else if (daysSince < criticalThreshold) {
+        state = 'pending';
+      } else {
+        state = 'important';
+      }
     }
     
     const result = {
@@ -226,7 +275,11 @@ function computeStateForLayer(viewLayer, cleaningState, itemKind, config) {
         view_layer: viewLayer,
         clean_count: cleanCount,
         remaining,
-        required_count
+        required_count,
+        effective_clean_count: effectiveCleanCount,
+        effective_remaining: effectiveRemaining,
+        effective_since: effectiveSince,
+        had_history: hadHistory
       }
     };
     
