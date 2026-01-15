@@ -1,8 +1,8 @@
 # REFRESH ENGINE V1 — MASTER (AuriPortal)
 
-**Versión:** 1.0.0  
+**Versión:** 1.1.0  
 **Fecha:** 2025-01-27  
-**Commit:** `934021a`  
+**Último Commit:** `3109d48`  
 **Estado:** ✅ Implementado y activo
 
 ---
@@ -33,7 +33,178 @@ Después de Refresh Engine v1:
 
 ---
 
-## 2. DEFINICIONES
+## 2. SURFACES (SUPERFICIES DE RENDERIZADO)
+
+**Concepto Clave:** Una mutación puede afectar múltiples "superficies" de la UI que deben refrescarse de forma coordinada.
+
+### 2.1. Projection Surface
+
+**Endpoint:** `GET /master/api/alquimia-general/list-projection`
+
+**Cuándo se refresca:**
+- Modo proyección activo (`state.projection.mode === 'proyeccion'`)
+- Mutaciones que afectan items de la lista activa
+- Cambios de `view_layer` en proyección
+
+**Datos que muestra:**
+- Items agrupados por estado (reviewed/pending/important/never)
+- Métricas (reviewed_pct, by_state_counts)
+- Estado calculado por `state_by_view_layer[view_layer]`
+
+**Evidencia en código:**
+- `AlquimiaGeneralRefreshAdapter.refetch()` línea ~5833-5835
+- `loadListProjection()` línea 1390-1463
+
+### 2.2. Floating Surface (Flotante)
+
+**Endpoint:** `GET /master/api/alquimia-general/items/:item_ref/students`
+
+**Cuándo se refresca:**
+- Modo operativa activo (`state.projection.mode === 'operativa'`)
+- Flotante abierto (`state.modal.item` existe)
+- Mutación afecta el item del flotante (`context.item_ref === state.modal.item.item_ref`)
+
+**Datos que muestra:**
+- Estudiantes agrupados por estado (columnas: REVISADO/PENDIENTE/IMPORTANTE/NUNCA)
+- Estado calculado según `view_layer` del modal (`state.modal.layerView`)
+
+**FIX CRÍTICO (commit `3109d48`):**
+- El adapter ahora refresca el flotante automáticamente cuando está abierto en operativa
+- Usa `handleVerItem()` con el `view_layer` correcto del modal
+- Garantiza que los alumnos se muevan de columna tras limpieza
+
+**Evidencia en código:**
+- `AlquimiaGeneralRefreshAdapter.refetch()` línea ~5841-5850
+- `handleVerItem()` línea 1946-2055
+
+### 2.3. Modal Surface
+
+**Endpoint:** `GET /master/api/alquimia-general/items/:item_ref/students` (mismo que flotante)
+
+**Cuándo se refresca:**
+- Modal abierto (`state.modal.item` existe)
+- Mutación afecta el item del modal
+- Función `refreshModal()` del adapter (opcional, backup)
+
+**Nota:** El flotante y el modal comparten el mismo endpoint, pero el modal es una variante del flotante con detalles adicionales.
+
+**Evidencia en código:**
+- `AlquimiaGeneralRefreshAdapter.refreshModal()` línea ~5873-5890
+
+### 2.4. Regla de Superficies Múltiples
+
+**REGLA CONSTITUCIONAL:** Una mutación puede refrescar 1, 2 o 3 superficies, pero cada superficie sigue el ciclo determinista:
+
+```
+1 mutación = 1 ciclo (invalidate → refetch → render) por superficie
+```
+
+**Ejemplo:**
+- Limpiar item en modo operativa con flotante abierto:
+  1. **Items surface:** invalidate → refetch items → render operativa
+  2. **Flotante surface:** invalidate → refetch students-by-item → render flotante
+
+**Token Guard:**
+- El token guard previene races entre superficies, NO "mata" renders correctos
+- Si dos mutaciones ocurren simultáneamente, solo la última renderiza (token más reciente)
+- Log explícito cuando se salta: `[REFRESH_ENGINE][RENDER_SKIPPED]`
+
+**Evidencia en código:**
+- `master-refresh-engine-v1.js` línea 133-144 (token guard con logs)
+
+---
+
+## 3. LAYER SEMANTICS (SEMÁNTICA DE CAPAS)
+
+**Concepto Clave:** `clean_layer` (acción) y `view_layer` (vista) son conceptos distintos que NO se mezclan.
+
+### 3.1. clean_layer (Capa de Escritura)
+
+**Valores:** `'shared'` | `'pde'`
+
+**Uso:** SOLO en acciones POST (mutaciones)
+- `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-student`
+- `POST /master/api/alquimia-general/items/:item_ref/master/mark-clean-all`
+- `POST /master/api/alquimia-general/items/:item_ref/master/increment-all`
+
+**Significado:**
+- `'shared'`: Escribe en la capa compartida (visible para estudiantes)
+- `'pde'`: Escribe en la capa PDE (solo master)
+
+**PROHIBIDO:**
+- ❌ Usar `clean_layer` en GET (solo POST)
+- ❌ `clean_layer='combo'` (combo es SOLO view_layer)
+- ❌ Inferir `clean_layer` desde `view_layer`
+
+**Evidencia en código:**
+- `handleLimpiarEstudiante()` línea 3259-3426 (clean_layer explícito)
+- `handleLimpiarItem()` línea 2068-2199 (clean_layer explícito)
+
+### 3.2. view_layer (Capa de Vista)
+
+**Valores:** `'shared'` | `'pde'` | `'combo'` | `'effective'`
+
+**Uso:** SOLO en GET (lecturas)
+- `GET /master/api/alquimia-general/list-projection?view_layer=shared`
+- `GET /master/api/alquimia-general/items/:item_ref/students?view_layer=shared`
+
+**Significado:**
+- `'shared'`: Muestra estado de la capa compartida
+- `'pde'`: Muestra estado de la capa PDE
+- `'combo'`: Muestra estado combinado (solo para `item_kind='una_vez'`)
+- `'effective'`: Muestra estado efectivo (solo para `item_kind='recurrente'`)
+
+**PROHIBIDO:**
+- ❌ Usar `view_layer` en POST (solo GET)
+- ❌ `view_layer='combo'` en recurrente (solo una_vez)
+- ❌ `view_layer='effective'` en una_vez (solo recurrente)
+- ❌ Inferir `view_layer` desde `clean_layer`
+
+**Evidencia en código:**
+- `loadListProjection()` línea 1418 (view_layer en params)
+- `handleVerItem()` línea 1970-1973 (view_layer en params)
+
+### 3.3. Regla de Preservación de view_layer
+
+**REGLA CONSTITUCIONAL:** El refresh SIEMPRE preserva `view_layer` activo. Reset NO debe cambiarlo.
+
+**Implementación:**
+- El adapter determina `view_layer` según modo y superficie activa:
+  - **Proyección:** `state.projection.view_layer`
+  - **Operativa con flotante:** `state.modal.layerView`
+  - **Operativa sin flotante:** `'shared'` (default)
+
+**FIX (commit `3109d48`):**
+- Reset preserva `view_layer` (no lo cambia)
+- Refresh usa el `view_layer` correcto según superficie activa
+- Logs forenses capturan `view_layer` vs `clean_layer` para debugging
+
+**Evidencia en código:**
+- `AlquimiaGeneralRefreshAdapter.refetch()` línea ~5832-5848
+- Handlers de reset línea 1564-1586, 4371-4393 (preservan view_layer)
+
+### 3.4. Mismatch Layer (NO Inventar Verde)
+
+**REGLA CONSTITUCIONAL:** Si hay mismatch entre `clean_layer` (acción) y `view_layer` (vista), la UI NO inventa verde.
+
+**Ejemplo:**
+- Acción: `clean_layer='shared'` (limpiar en capa compartida)
+- Vista: `view_layer='pde'` (mostrando capa PDE)
+- **Resultado:** El item NO se pone verde en la vista PDE (correcto, no hay datos en PDE)
+
+**Implementación:**
+- Backend calcula `state_by_view_layer[view_layer]` para cada view_layer
+- Frontend consume `state_by_view_layer[view_layer]` directamente
+- NO se calcula estado en frontend
+- NO se infiere desde `clean_layer`
+
+**Evidencia en código:**
+- Backend devuelve `state_by_view_layer.shared`, `.pde`, `.combo`, `.effective`
+- Frontend agrupa items desde `state_by_view_layer[view_layer]` (línea ~1470-1638)
+
+---
+
+## 4. DEFINICIONES
 
 ### Mutación
 
@@ -174,7 +345,7 @@ async refetch(mutation) {
 
 ---
 
-## 4. CONTRATO DEL ENGINE
+## 6. CONTRATO DEL ENGINE
 
 ### 4.1. API: `afterMutation()`
 
@@ -358,7 +529,7 @@ if (lastRenderToken === currentToken) {
 
 ---
 
-## 6. CHECKLIST DE VERIFICACIÓN (SMOKE TESTS)
+## 8. CHECKLIST DE VERIFICACIÓN (SMOKE TESTS)
 
 ### Test 1: Modo Operativa — Limpiar Item (Flotante ALL)
 
@@ -455,7 +626,7 @@ En la consola del navegador, buscar:
 
 ---
 
-## 7. REGLAS PARA FUTURAS PÁGINAS MASTER
+## 9. REGLAS PARA FUTURAS PÁGINAS MASTER
 
 ### 7.1. Cómo Registrar Adapter del Módulo
 
@@ -637,7 +808,7 @@ const renderPattern = /render\w+\(/g;
 
 ---
 
-## 9. HISTORIAL
+## 11. HISTORIAL
 
 ### Commit `934021a` (2025-01-27)
 
@@ -666,7 +837,7 @@ feat(master): refresh engine v1 + fix alquimia refresh determinism
 
 ---
 
-## 10. REFERENCIAS
+## 12. REFERENCIAS
 
 - **Diagnóstico Forense:** `docs/DIAGNOSTICO_REFRESH_RERENDER_MASTER_V1.md`
 - **Implementación Engine:** `public/js/master/master-refresh-engine-v1.js`
