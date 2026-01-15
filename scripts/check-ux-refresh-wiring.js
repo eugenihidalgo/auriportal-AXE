@@ -202,8 +202,8 @@ if (actionsRegistryContent) {
 // 4) Verificar que cada acción tiene refresh_plan
 if (actionsRegistryContent) {
   info('Verificando refresh_plan en acciones registradas...');
-  // Buscar refresh_plan: seguido de función o array
-  const refreshPlanRegex = /refresh_plan:\s*(buildRefreshPlan|function|\[)/g;
+  // Buscar refresh_plan o refresh: seguido de función o array
+  const refreshPlanRegex = /(refresh_plan|refresh):\s*(buildRefreshPlan|function|\[)/g;
   let refreshPlanMatches = 0;
   while ((match = refreshPlanRegex.exec(actionsRegistryContent)) !== null) {
     refreshPlanMatches++;
@@ -216,9 +216,9 @@ if (actionsRegistryContent) {
   }
   
   if (refreshPlanMatches < actionCount) {
-    error(`Algunas acciones no tienen refresh_plan. Encontradas ${actionCount} acciones pero solo ${refreshPlanMatches} refresh_plans.`);
+    error(`Algunas acciones no tienen refresh/refresh_plan. Encontradas ${actionCount} acciones pero solo ${refreshPlanMatches} refresh_plans.`);
   } else {
-    info(`✓ Todas las acciones tienen refresh_plan (${actionCount} acciones, ${refreshPlanMatches} refresh_plans)`);
+    info(`✓ Todas las acciones tienen refresh/refresh_plan (${actionCount} acciones, ${refreshPlanMatches} refresh_plans)`);
   }
 }
 
