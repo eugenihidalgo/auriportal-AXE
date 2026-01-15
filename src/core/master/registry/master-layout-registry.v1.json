@@ -149,14 +149,24 @@
       "name": "Master Refresh Engine v1"
     },
     {
-      "id": "ux-action-registry",
-      "guard_id": "UX_ACTION_REGISTRY",
-      "path": "/js/core/ux/ux-action-registry.v1.js",
+      "id": "ux-action-registry-loader",
+      "guard_id": "UX_ACTION_REGISTRY_LOADER",
+      "path": "/js/core/ux/action-registry/ux-action-registry-loader.js",
       "type": "module",
       "required": true,
       "critical": true,
       "phase": "core",
-      "name": "UX Action Registry v1"
+      "name": "UX Action Registry Loader v1"
+    },
+    {
+      "id": "ux-action-registry-legacy",
+      "guard_id": "UX_ACTION_REGISTRY_LEGACY",
+      "path": "/js/core/ux/ux-action-registry.v1.js",
+      "type": "module",
+      "required": false,
+      "critical": false,
+      "phase": "core",
+      "name": "UX Action Registry v1 (Legacy - compatibilidad)"
     },
     {
       "id": "refresh-surface-registry",

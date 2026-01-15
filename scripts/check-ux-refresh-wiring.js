@@ -153,20 +153,36 @@ for (const handlerName of handlerFunctions) {
 // 3) Verificar que cada action_id usado existe en registry
 info('Verificando action_ids en código...');
 const actionIdsInCode = [
-  'alquimia.clean.student',
-  'alquimia.clean.all',
-  'alquimia.increment.all',
-  'alquimia.reset.item',
-  'alquimia.reset.list'
+  'alquimia.clean',           // Nueva acción consolidada
+  'alquimia.clean_all',       // Nueva acción consolidada
+  'alquimia.reset',           // Nueva acción consolidada
+  'alquimia.clean.student',   // Legacy (compatibilidad)
+  'alquimia.clean.all',       // Legacy (compatibilidad)
+  'alquimia.increment.all',   // Legacy (compatibilidad)
+  'alquimia.reset.item',      // Legacy (compatibilidad)
+  'alquimia.reset.list'       // Legacy (compatibilidad)
 ];
 
-// Leer registry de acciones
-const actionsRegistryFile = join(projectRoot, 'public/js/master/ux/alquimia-actions-registry.v1.js');
-let actionsRegistryContent;
+// Leer registry de acciones (core primero, fallback a legacy)
+const actionsRegistryCoreFile = join(projectRoot, 'src/core/ux/action-registry/alquimia-actions.js');
+const actionsRegistryLegacyFile = join(projectRoot, 'public/js/master/ux/alquimia-actions-registry.v1.js');
+let actionsRegistryContent = '';
 try {
-  actionsRegistryContent = readFileSync(actionsRegistryFile, 'utf-8');
+  // Intentar leer registry core
+  const coreContent = readFileSync(actionsRegistryCoreFile, 'utf-8');
+  actionsRegistryContent += coreContent;
+  info(`Registry core encontrado: ${actionsRegistryCoreFile}`);
 } catch (err) {
-  warn(`No se pudo leer ${actionsRegistryFile}: ${err.message}. Verificación de action_ids omitida.`);
+  warn(`No se pudo leer ${actionsRegistryCoreFile}: ${err.message}. Intentando legacy...`);
+}
+
+try {
+  // Intentar leer registry legacy (compatibilidad)
+  const legacyContent = readFileSync(actionsRegistryLegacyFile, 'utf-8');
+  actionsRegistryContent += '\n' + legacyContent;
+  info(`Registry legacy encontrado: ${actionsRegistryLegacyFile}`);
+} catch (err) {
+  warn(`No se pudo leer ${actionsRegistryLegacyFile}: ${err.message}.`);
 }
 
 if (actionsRegistryContent) {

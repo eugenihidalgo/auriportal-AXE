@@ -745,17 +745,23 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
  - Toda superficie debe estar registrada en Refresh Surface Registry (src/core/ux/refresh-surface-registry.v1.js)
  - Usar performAction({ action_id, context, uiState }) en lugar de fetch() directo
  - Refresh Engine v2 debe usar surfaces declarativas cuando estén disponibles
+ - action_id sigue formato canónico: {domain}.{feature}.{action} (ej: alquimia.clean.student)
+ - Añadir/actualizar check script cuando se añaden actions/surfaces nuevas
  PROHIBIDO:
- - fetch() POST fuera de performAction() (salvo marcado LEGACY con warning)
+ - fetch() POST fuera de performAction() (salvo marcado LEGACY con [LEGACY_REFRESH_CALL] y warning)
  - Llamadas a loadItems/loadListProjection/handleVerItem dentro de handlers POST (deben estar en refresh_plan)
  - Acciones sin registro en UX Action Registry
  - Acciones sin refresh_plan
  - Refresh manual ad-hoc fuera del Refresh Engine (salvo LEGACY marcado)
+ - Commits con npm run check:ux-refresh fallando (errors > 0)
  VERIFICACIÓN:
- - npm run check:ux-refresh debe dar 0 errors
+ - npm run check:ux-refresh debe dar 0 errors (obligatorio antes de commit)
  - Logs [UX][ACTION][START] seguido de [REFRESH][PLAN] y [REFRESH][GET]
  - Assembly check detecta fetch POST fuera de performAction
+ - Warnings aceptables solo si están marcados como [LEGACY_REFRESH_CALL]
  REFERENCIAS:
+ - docs/UX_CONTRACT_V1.md (documentación canónica completa)
+ - docs/REFRESH_CONTRACT_V1.md (documentación canónica completa)
  - src/core/ux/ux-action-registry.v1.js
  - src/core/ux/refresh-surface-registry.v1.js
  - public/js/master/ux/perform-action.v1.js

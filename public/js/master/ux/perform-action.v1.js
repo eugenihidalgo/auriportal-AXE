@@ -40,49 +40,78 @@
    * Ejecuta una acción UX con contrato formal
    * @param {Object} params - Parámetros de la acción
    * @param {string} params.action_id - ID de acción registrada
-   * @param {Object} params.context - Contexto (item_ref, student_uuid, list_id, etc.)
-   * @param {Object} params.uiState - Estado de UI (view_mode, view_layer, etc.)
+   * @param {Object} [params.payload] - Payload a enviar (compatible con nuevo schema)
+   * @param {Object} [params.context] - Contexto (item_ref, student_uuid, list_id, etc.) (compatible con schema anterior)
+   * @param {Object} [params.uiState] - Estado de UI (view_mode, view_layer, etc.)
    * @param {Object} [params.options] - Opciones adicionales
    * @returns {Promise<Object>} Response de la acción
    */
-  async function performAction({ action_id, context = {}, uiState = {}, options = {} }) {
+  async function performAction({ action_id, payload = {}, context = {}, uiState = {}, options = {} }) {
     // Validaciones básicas
     if (!action_id || typeof action_id !== 'string') {
       throw new Error('[PerformActionV1] action_id es obligatorio y debe ser string');
     }
 
-    // Obtener actionDef del registry
-    const actionRegistry = window.__AP_UX_ACTION_REGISTRY__;
-    if (!actionRegistry) {
-      throw new Error('[PerformActionV1] UX Action Registry no disponible. Asegúrate de que está cargado antes de performAction.');
+    // Obtener actionDef del registry (nuevo core primero, fallback a legacy)
+    let actionRegistry = window.__AP_UX_ACTION_REGISTRY_CORE__;
+    let actionDef = null;
+    
+    if (actionRegistry) {
+      actionDef = actionRegistry.get(action_id);
     }
-
-    const actionDef = actionRegistry.get(action_id);
+    
+    // Fallback a registry legacy si no existe en core
     if (!actionDef) {
-      throw new Error(`[PerformActionV1] Acción ${action_id} no registrada en UX Action Registry`);
+      const legacyRegistry = window.__AP_UX_ACTION_REGISTRY__;
+      if (!legacyRegistry) {
+        throw new Error('[PerformActionV1] UX Action Registry no disponible. Asegúrate de que está cargado antes de performAction.');
+      }
+      actionDef = legacyRegistry.get(action_id);
+      if (!actionDef) {
+        throw new Error(`[PerformActionV1] Acción ${action_id} no registrada en UX Action Registry`);
+      }
     }
 
     // Generar trace_id único
     const trace_id = `ux_action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Construir endpoint y payload
-    const endpoint = actionDef.request.endpointBuilder(context);
-    const payload = actionDef.request.buildPayload(uiState, context);
+    // Compatibilidad: si viene payload explícito, usarlo; sino, construir desde context (legacy)
+    let finalPayload;
+    let endpoint;
+    
+    if (actionDef.handler) {
+      // Nuevo schema (core)
+      endpoint = actionDef.handler.endpointBuilder({ ...context, ...payload });
+      finalPayload = actionDef.handler.buildPayload(uiState, { ...context, ...payload });
+    } else if (actionDef.request) {
+      // Legacy schema
+      endpoint = actionDef.request.endpointBuilder(context);
+      finalPayload = actionDef.request.buildPayload(uiState, context);
+    } else {
+      throw new Error(`[PerformActionV1] Acción ${action_id} no tiene handler definido`);
+    }
 
     // Log forense inicial
-    if (actionDef.telemetry.log_input) {
+    const method = actionDef.handler?.method || actionDef.request?.method || 'POST';
+    const logInput = actionDef.telemetry?.log_input !== false;
+    
+    if (logInput) {
       console.log('[UX][ACTION][START]', {
         action_id,
         trace_id,
         endpoint,
-        method: actionDef.request.method,
-        payload,
+        method,
+        payload: finalPayload,
         context,
         uiState: {
           view_mode: uiState.view_mode,
           view_layer: uiState.view_layer,
           list_id: uiState.list_id
         },
+        allowed_item_kinds: actionDef.allowed_item_kinds,
+        allowed_layers: actionDef.allowed_layers,
+        allowed_scopes: actionDef.allowed_scopes,
         timestamp: new Date().toISOString()
       });
     }
@@ -92,14 +121,15 @@
 
     try {
       // Ejecutar fetch
+      const headers = actionDef.handler?.headers || actionDef.request?.headers || {};
       const fetchOptions = {
-        method: actionDef.request.method,
+        method,
         headers: {
           'Content-Type': 'application/json',
-          ...actionDef.request.headers
+          ...headers
         },
         credentials: 'include',
-        body: actionDef.request.method !== 'GET' ? JSON.stringify(payload) : undefined
+        body: method !== 'GET' ? JSON.stringify(finalPayload) : undefined
       };
 
       const startTime = Date.now();
@@ -124,7 +154,8 @@
       responseData = await response.json();
 
       // Log forense de respuesta
-      if (actionDef.telemetry.log_output) {
+      const logOutput = actionDef.telemetry?.log_output !== false;
+      if (logOutput) {
         console.log('[UX][ACTION][END]', {
           action_id,
           trace_id,
@@ -155,14 +186,15 @@
       if (!refreshEngine) {
         console.warn('[PerformActionV1] Refresh Engine no disponible, saltando refresh');
       } else {
-        // Resolver refresh_plan
+        // Resolver refresh_plan (compatibilidad: refresh_plan o refresh)
+        const refreshPlan = actionDef.refresh || actionDef.refresh_plan;
         let surfacesToRefresh = [];
-        if (typeof actionDef.refresh_plan === 'function') {
-          surfacesToRefresh = actionDef.refresh_plan(context, uiState, responseData);
-        } else if (Array.isArray(actionDef.refresh_plan)) {
-          surfacesToRefresh = actionDef.refresh_plan;
+        if (typeof refreshPlan === 'function') {
+          surfacesToRefresh = refreshPlan({ ...context, ...payload }, uiState, responseData);
+        } else if (Array.isArray(refreshPlan)) {
+          surfacesToRefresh = refreshPlan;
         } else {
-          console.warn('[PerformActionV1] refresh_plan no es función ni array, usando plan vacío');
+          console.warn('[PerformActionV1] refresh/refresh_plan no es función ni array, usando plan vacío');
         }
 
         // Log del plan

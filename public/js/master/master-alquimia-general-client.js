@@ -2180,12 +2180,16 @@
         list_id: state.listaActiva?.id || null
       };
 
+      // Usar acción consolidada 'alquimia.clean_all' (scope='all' implícito)
       const result = await window.performAction({
-        action_id: 'alquimia.clean.all',
-        context: {
+        action_id: 'alquimia.clean_all',
+        payload: {
           item_ref: item.item_ref,
           clean_layer: cleanLayer,
           item_kind: itemKind
+        },
+        context: {
+          item_ref: item.item_ref
         },
         uiState
       });
@@ -3404,11 +3408,26 @@
         modal_layerView: state.modal.layerView || null
       };
 
+      // Usar acción consolidada 'alquimia.clean' con scope='student'
+      // Compatibilidad: si 'alquimia.clean' no existe, usar 'alquimia.clean.student' (legacy)
+      let actionId = 'alquimia.clean';
+      const registry = window.__AP_UX_ACTION_REGISTRY_CORE__ || window.__AP_UX_ACTION_REGISTRY__;
+      if (registry && !registry.get('alquimia.clean')) {
+        actionId = 'alquimia.clean.student'; // Fallback a legacy
+      }
+      
       const result = await window.performAction({
-        action_id: 'alquimia.clean.student',
-        context: {
-          student_uuid: student.student_uuid,
+        action_id: actionId,
+        payload: actionId === 'alquimia.clean' ? {
           item_ref: item.item_ref,
+          item_kind: itemKind,
+          clean_layer: cleanLayer,
+          scope: 'student',
+          student_uuid: student.student_uuid
+        } : undefined,
+        context: {
+          item_ref: item.item_ref,
+          student_uuid: student.student_uuid,
           item_kind: itemKind,
           clean_layer: cleanLayer
         },
@@ -4289,7 +4308,7 @@
         // ============================================================================
         // Botón SHARED: limpiar todos en capa shared
         const btnLimpiarShared = document.createElement('button');
-        btnLimpiarShared.textContent = '🟢 Limpiar SHARED';
+        btnLimpiarShared.textContent = '🟢 Limpiar';
         btnLimpiarShared.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnLimpiarShared.addEventListener('click', () => {
           console.log('[UI][BULK][CLEAN] Botón Limpiar SHARED pulsado', {
@@ -4302,7 +4321,7 @@
         
         // Botón PDE: limpiar todos en capa pde
         const btnPde = document.createElement('button');
-        btnPde.textContent = 'PDE';
+        btnPde.textContent = 'Limpiar interno';
         btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnPde.addEventListener('click', () => {
           console.log('[UI][BULK][CLEAN] Botón Limpiar PDE pulsado', {
@@ -4322,7 +4341,7 @@
         
         // Botón PDE (para una_vez, registra evento PDE)
         const btnPde = document.createElement('button');
-        btnPde.textContent = 'PDE';
+        btnPde.textContent = 'Limpiar interno';
         btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
         btnPde.addEventListener('click', () => handlePdeIncrementAllItem(item));
         actionsDiv.appendChild(btnPde);
@@ -4468,7 +4487,7 @@
           
           // Botón "Limpiar PDE"
           const btnLimpiarPde = document.createElement('button');
-          btnLimpiarPde.textContent = 'Limpiar PDE';
+          btnLimpiarPde.textContent = 'Limpiar interno';
           btnLimpiarPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
           btnLimpiarPde.addEventListener('click', async () => {
             console.log('[UI][PROJECTION][STUDENT][CLEAN] Limpiar PDE', {
@@ -4815,7 +4834,8 @@
   }
 
   /**
-   * Maneja el click en botón PDE (limpieza PDE diaria)
+   * Maneja el click en botón PDE (limpieza masiva PDE para recurrente/una_vez)
+   * UX CONTRACT v1: Migrado a performAction('alquimia.clean_all') con clean_layer='pde'
    */
   async function handlePdeCleanItem(item) {
     if (!item || !item.item_ref) {
@@ -4823,81 +4843,70 @@
       return;
     }
 
-    // Sin confirmación (UX sin fricción)
-
     try {
-      // Obtener item_kind desde la lista activa o del item (OBLIGATORIO según CONTRATO LIMPIEZA v1)
-      const itemKind = state.listaActiva?.tipo || item.tipo || item.item_kind || 'recurrente';
-      if (itemKind !== 'recurrente' && itemKind !== 'una_vez') {
-        console.error('[MasterAlquimiaGeneral] item_kind inválido:', itemKind);
-        showToastError('Error: tipo de item inválido');
+      // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito
+      const itemKind = getItemKindExplicit(item, state.listaActiva);
+      if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+        console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante en PDE clean:', {
+          item_kind: itemKind,
+          item: item,
+          lista: state.listaActiva,
+          contexto: 'handlePdeCleanItem'
+        });
+        showToastError('ERROR: item_kind no definido. Acción bloqueada.');
         return;
       }
-      
-      // ============================================================================
-      // LOG FORENSE: Acción masiva PDE con clean_layer explícito
-      // ============================================================================
-      console.log('[UI][BULK][CLEAN] Enviando mark-pde-clean-all', {
-        item_ref: item.item_ref,
-        item_kind: itemKind,
-        clean_layer: 'pde',
-        actor_type: 'master',
-        surface_key: 'master.alquimia_general'
-      });
-      
-      // LEGACY: handlePdeCleanItem usa endpoint legacy mark-pde-clean-all
-      // TODO: Migrar a performAction() cuando el endpoint se unifique con mark-clean-all
-      console.warn('[LEGACY_REFRESH_CALL] handlePdeCleanItem usando endpoint legacy mark-pde-clean-all. Debe migrarse a performAction()');
-      
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_kind: itemKind, // OBLIGATORIO según CONTRATO LIMPIEZA v1
-          clean_layer: 'pde' // OBLIGATORIO: explícito para PDE
-        })
-      });
 
-      // Error surfacing: leer body como texto primero para diagnóstico
-      const contentType = response.headers.get('content-type') || '';
-      let result;
-      
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        const traceId = response.headers.get('x-trace-id') || 'missing';
-        console.error('[MasterAlquimiaGeneral] PDE clean-all: respuesta no-JSON', {
-          status: response.status,
-          url: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`,
-          trace_id: traceId,
-          content_type: contentType,
-          body_preview: text.substring(0, 300)
-        });
-        throw new Error(`Respuesta no-JSON del servidor (${response.status}). Trace ID: ${traceId}`);
-      }
-      
-      result = await response.json();
-      
-      // Log forense si hay error
-      if (!result.ok || response.status !== 200) {
-        const traceId = result.trace_id || response.headers.get('x-trace-id') || 'missing';
-        console.error('[MasterAlquimiaGeneral] PDE clean-all: error en respuesta', {
-          status: response.status,
-          ok: result.ok,
-          error: result.error,
-          code: result.code,
-          trace_id: traceId,
-          url: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`
-        });
-        throw new Error(result.error || `Error en limpieza PDE (${response.status})`);
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
       }
 
-      const data = result.data || result;
-      const updated = data.updated_students || data.updated || 0;
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: state.projection.mode === 'proyeccion' 
+          ? (state.projection.view_layer || 'pde')
+          : (state.modal.layerView || 'pde'),
+        list_id: state.listaActiva?.id || null,
+        modal_layerView: state.modal.layerView || null
+      };
+
+      // Compatibilidad: usar 'alquimia.clean_all' si existe, sino usar 'alquimia.clean.all' (legacy)
+      const registry = window.__AP_UX_ACTION_REGISTRY_CORE__ || window.__AP_UX_ACTION_REGISTRY__;
+      let actionId = 'alquimia.clean_all';
+      if (registry && !registry.get('alquimia.clean_all')) {
+        actionId = 'alquimia.clean.all'; // Fallback a legacy
+      }
+
+      const result = await window.performAction({
+        action_id: actionId,
+        payload: {
+          item_ref: item.item_ref,
+          clean_layer: 'pde', // OBLIGATORIO: explícito para PDE
+          item_kind: itemKind
+        },
+        context: {
+          item_ref: item.item_ref
+        },
+        uiState
+      });
+
+      if (!result.ok) {
+        throw new Error(result.error || 'Error en limpieza PDE');
+      }
+
+      const data = result.data || {};
+      const updated = data.updated_students || data.updated || data.logged || 0;
       const skipped = data.skipped || 0;
       const skippedAlreadyClean = data.skipped_already_clean || 0;
       const breakdown = data.skipped_breakdown || {};
       
-      let message = `PDE registrado: ${data.logged || updated} alumnos (fecha ${data.cleaned_date || 'hoy'})`;
+      let message = `PDE registrado: ${updated} alumnos`;
+      if (data.cleaned_date) {
+        message += ` (fecha ${data.cleaned_date})`;
+      } else {
+        message += ' (hoy)';
+      }
       if (skippedAlreadyClean > 0) {
         message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
       }
@@ -4920,29 +4929,13 @@
       }
       showWarning(message);
       
-      // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
-      // ============================================================================
-      // LPM v1: Si está en modo proyección, refetch de proyección
-      if (state.projection.mode === 'proyeccion') {
-        console.log('[UI][LPM] post-action refetch (PDE clean-all)');
-        await loadListProjection();
-      } else {
-        // Modo operativa: refetch items y flotante si está abierto
-        await loadItems(state.listaActiva.id);
-        // Si hay flotante abierto, recargarlo y cambiar a vista PDE
-        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-          const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
-          state.modal.layerView = activeViewLayer;
-          state.modal.cleanLayer = 'pde';
-          console.log('[UI][COLUMN] Refetch post-acción masiva (PDE clean-all)', {
-            item_ref: item.item_ref,
-            action_clean_layer: 'pde',
-            active_view_layer: activeViewLayer
-          });
-          await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer='pde' (estado)
-        }
+      // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
+      if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        state.modal.layerView = 'pde';
+        state.modal.cleanLayer = 'pde';
       }
+      
+      // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en limpieza PDE:', error);
       showWarning(`Error: ${error.message}`);
@@ -5679,13 +5672,18 @@
         student_uuid: student_uuid
       };
 
+      // Usar acción consolidada 'alquimia.reset' con item_ref (scope='item' implícito)
       const result = await window.performAction({
-        action_id: 'alquimia.reset.item',
-        context: {
+        action_id: 'alquimia.reset',
+        payload: {
           student_uuid,
           item_ref,
-          item_kind: query.item_kind,
+          item_kind: query.item_kind || 'recurrente', // Reset SOLO para recurrente
           view_layer: query.view_layer
+        },
+        context: {
+          student_uuid,
+          item_ref
         },
         uiState
       });
@@ -5747,13 +5745,18 @@
         student_uuid: student_uuid
       };
 
+      // Usar acción consolidada 'alquimia.reset' con list_id (scope='list' implícito)
       const result = await window.performAction({
-        action_id: 'alquimia.reset.list',
-        context: {
+        action_id: 'alquimia.reset',
+        payload: {
           student_uuid,
           list_id,
-          item_kind: query.item_kind,
+          item_kind: query.item_kind || 'recurrente', // Reset SOLO para recurrente
           view_layer: query.view_layer
+        },
+        context: {
+          student_uuid,
+          list_id
         },
         uiState
       });
