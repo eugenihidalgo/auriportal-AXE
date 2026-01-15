@@ -1,8 +1,9 @@
 # CLEANING RESET CANÓNICO v1
 
 **Fecha:** 2025-01-27  
-**Versión:** v5.73.0  
-**Estado:** Implementado
+**Versión:** v5.73.0 (actualizado v5.74.0)  
+**Estado:** Implementado  
+**Nota v5.74.0:** Reset SOLO aplica a RECURRENTE. UNA_VEZ no tiene reset (hard fail si se intenta).
 
 ---
 
@@ -126,24 +127,29 @@ days_since_last_effective_clean = now - last_effective_clean_at (si existe)
 
 ### UNA_VEZ
 
-**Regla de progreso efectivo post-reset (V1):**
+**REGLA CONSTITUCIONAL CPM v2: Reset PROHIBIDO en UNA_VEZ**
 
-- Si `effective_since` existe, reset reinicia progreso efectivo:
-  - `completed_effective = 0`
-  - `remaining_effective = required_count`
-- Contadores históricos (`clean_count`, `completed`) se conservan intactos
-- Estado se calcula desde valores efectivos (post-reset)
+**Aclaración explícita:**
+- Reset SOLO aplica a RECURRENTE
+- UNA_VEZ NO tiene reset
+- UNA_VEZ NO tiene `effective_since`
+- Overrides ≠ reset (overrides permitidos, reset prohibido)
 
-**Evolución:**
+**Comportamiento:**
+- Si se intenta reset en UNA_VEZ → hard fail (error `RESET_UNA_VEZ_FORBIDDEN`)
+- `effective_since` en UNA_VEZ se ignora (no afecta cálculo de estado)
+- UNA_VEZ solo tiene contadores (`clean_count`, `remaining`, `completed`) + overrides
 
-1. **Antes de reset:** `clean_count = 5`, `remaining = 0` → `reviewed`
-2. **Tras reset:** `effective_since = NOW()`, `completed_effective = 0`, `remaining_effective = required_count` → `pending`
-3. **Tras limpiar de nuevo:** `clean_count = 6`, `completed_effective = 1`, `remaining_effective = required_count - 1` → progresa normal
+**Regla de estado UNA_VEZ (sin reset):**
 
-**Regla final:**
+- `never`: `cleanCount === 0`
+- `pending`: `cleanCount < required_count`
+- `completed`: `cleanCount >= required_count`
 
-- Reset → `pending`, nunca `never`
-- Si `effective_since` existe o `had_history = true` → `pending` (nunca `never`)
+**Overrides permitidos:**
+- Overrides de configuración (`required_count`, `threshold_days`) están permitidos
+- Overrides NO son reset (no invalidan progreso)
+- Overrides se aplican vía `resolveItemConfigForStudent()`
 
 ---
 
