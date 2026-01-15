@@ -1,6 +1,6 @@
 {
   "name": "auriportal-server",
-  "version": "5.74.2",
+  "version": "5.74.3",
   "description": "Portal de Aurelín - Sistema de gestión de estudiantes y rachas de práctica (Servidor Node.js)",
   "main": "server.js",
   "type": "module",
@@ -27,6 +27,7 @@
     "check:signals-registry": "node scripts/check-signals-registry.js",
     "check:view-authority": "node scripts/check-view-authority.js",
     "check:lpm-pdui": "node scripts/check-lpm-pdui.js",
+    "check:ux-refresh": "node scripts/check-ux-refresh-wiring.js",
     "check:master-constitution": "npm run check:view-authority && npm run check:lpm-pdui",
     "check:all": "npm run check:god-ui && npm run check:http-contract && npm run check:student-identity && npm run check:signals-registry && npm run check:view-authority",
     "test:alquimia-ui": "node scripts/test-alquimia-ui-critical.js",

@@ -110,6 +110,10 @@
     students: [] // Lista de estudiantes para selector
   };
 
+  // UX CONTRACT v1: Exponer state y funciones para registries
+  // NOTA: Estas funciones se exponen después de ser definidas (más abajo en el código)
+  // Se actualizarán en boot() después de que todas las funciones estén definidas
+
   /**
    * Obtiene el viewState canónico consolidado
    * PRINCIPIO CANÓNICO: La vista activa es un vector de parámetros
@@ -1865,6 +1869,10 @@
     }
 
     try {
+      // LEGACY: handleCrearLista no usa performAction() (acción de creación, no limpieza)
+      // TODO: Migrar a performAction() cuando se registre acción de creación
+      console.warn('[LEGACY_REFRESH_CALL] handleCrearLista usando fetch() directo. Debe migrarse a performAction() cuando se registre acción de creación.');
+      
       const response = await fetch('/master/api/alquimia-general/listas', {
         method: 'POST',
         headers: {
@@ -1909,6 +1917,10 @@
     }
 
     try {
+      // LEGACY: handleCrearItem no usa performAction() (acción de creación, no limpieza)
+      // TODO: Migrar a performAction() cuando se registre acción de creación
+      console.warn('[LEGACY_REFRESH_CALL] handleCrearItem usando fetch() directo. Debe migrarse a performAction() cuando se registre acción de creación.');
+      
       const response = await fetch('/master/api/alquimia-general/items', {
         method: 'POST',
         headers: {
@@ -2155,40 +2167,41 @@
         surface_key: 'master.alquimia_general'
       });
       
-      // Log forense (FASE 4)
-      console.log('[REFRESH][POST] mark-clean-all', {
-        endpoint: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`,
-        payload: {
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: state.projection.mode === 'proyeccion' 
+          ? (state.projection.view_layer || 'shared')
+          : (state.modal.layerView || 'shared'),
+        list_id: state.listaActiva?.id || null
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.clean.all',
+        context: {
+          item_ref: item.item_ref,
           clean_layer: cleanLayer,
           item_kind: itemKind
         },
-        timestamp: new Date().toISOString()
-      });
-      
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          clean_layer: cleanLayer, // OBLIGATORIO: explícito según botón pulsado
-          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
-        })
+        uiState
       });
 
-      const result = await response.json();
-      
       if (!result.ok) {
         throw new Error(result.error || 'Error limpiando item');
       }
 
-      console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', result);
+      const data = result.data || {};
+      console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', data);
       
       // Mostrar mensaje en UI con breakdown
-      const updated = result.updated || result.data?.updated || 0;
-      const skipped = result.skipped || result.data?.skipped || 0;
-      const skippedAlreadyClean = result.skipped_already_clean || result.data?.skipped_already_clean || 0;
-      const breakdown = result.skipped_breakdown || result.data?.skipped_breakdown || {};
+      const updated = data.updated || 0;
+      const skipped = data.skipped || 0;
+      const skippedAlreadyClean = data.skipped_already_clean || 0;
+      const breakdown = data.skipped_breakdown || {};
       
       let message = `✅ Item limpiado para ${updated} alumnos`;
       if (skippedAlreadyClean > 0) {
@@ -2215,54 +2228,7 @@
       }
       showWarning(message);
       
-      // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
-      // ============================================================================
-      // REFRESH ENGINE V1: Usar engine.afterMutation
-      // FIX: Determinar view_layer correcto según modo y superficie activa
-      const activeViewLayer = state.projection.mode === 'proyeccion' 
-        ? (state.projection.view_layer || 'shared')
-        : (state.modal.layerView || 'shared');
-      
-      console.log('[REFRESH_ENGINE][ALQG][MUTATION] clean-all', {
-        mutation_type: 'alquimia.clean.all',
-        view_mode: state.projection.mode,
-        view_layer: activeViewLayer,
-        clean_layer: cleanLayer,
-        item_ref: item.item_ref,
-        modal_open: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
-      });
-      
-      if (window.MasterRefreshEngineV1) {
-        await window.MasterRefreshEngineV1.afterMutation({
-          module: 'alquimia_general',
-          mutation_type: 'alquimia.clean.all',
-          scope: {
-            view_mode: state.projection.mode,
-            view_layer: activeViewLayer
-          },
-          context: {
-            item_ref: item.item_ref,
-            clean_layer: cleanLayer,
-            item_kind: itemKind
-          }
-        });
-      } else {
-        // Fallback si engine no está disponible
-        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-        if (state.projection.mode === 'proyeccion') {
-          await refreshAfterProjectionMutation({ 
-            reason: 'clean-all', 
-            item_ref: item.item_ref,
-            forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
-          });
-        } else {
-          // Modo operativa: recargar items
-          if (state.listaActiva && state.listaActiva.id) {
-            await loadItems(state.listaActiva.id);
-          }
-        }
-      }
+      // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
       showToastError(`Error: ${error.message}`);
@@ -3426,98 +3392,43 @@
         expected_column_change: itemKind === 'recurrente' ? `Estado calculado según ${activeViewLayer}.days_since_last_clean` : 'COMBO (shared+pde)'
       });
       
-      // Log forense (FASE 4)
-      console.log('[REFRESH][POST] mark-clean-student', {
-        endpoint: `/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`,
-        payload: {
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: activeViewLayer, // Ya calculado arriba
+        list_id: state.listaActiva?.id || null,
+        modal_layerView: state.modal.layerView || null
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.clean.student',
+        context: {
           student_uuid: student.student_uuid,
           item_ref: item.item_ref,
           item_kind: itemKind,
           clean_layer: cleanLayer
         },
-        timestamp: new Date().toISOString()
-      });
-      
-      response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-student`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        uiState
       });
 
-      // Verificar respuesta HTTP
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[AG][ACTION] HTTP Error', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
-        });
-        showToastError(`ERROR HTTP ${response.status}: ${response.statusText}. Trace en consola.`);
-        return;
-      }
-
-      const result = await response.json();
-      
       if (!result.ok) {
         const errorMsg = result.error || 'Error limpiando estudiante';
-        const traceId = result.trace_id || 'N/A';
-        console.error('[AG][ACTION] Backend Error', {
-          error: errorMsg,
-          trace_id: traceId,
-          result
-        });
-        showToastError(`ERROR: ${errorMsg} (trace_id=${traceId})`);
+        showToastError(`ERROR: ${errorMsg}`);
         return;
       }
 
-      console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', result);
+      const data = result.data || {};
+      console.log('[MasterAlquimiaGeneral] Estudiante limpiado:', data);
+      
       // CONTRATO: Backend SIEMPRE entrega display_name en result.student.display_name
-      const displayName = result.data?.student?.display_name || result.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
+      const displayName = data.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // REFRESH ENGINE V1: Usar engine.afterMutation en lugar de refreshAfterProjectionMutation
-      // FIX: Determinar view_layer correcto según modo y superficie activa
-      // Reutilizar activeViewLayer ya calculado arriba, pero ajustar según modo
-      const refreshViewLayer = state.projection.mode === 'proyeccion'
-        ? (state.projection.view_layer || 'shared')
-        : activeViewLayer; // Ya calculado arriba para el flotante
-      
-      console.log('[REFRESH_ENGINE][ALQG][MUTATION] clean-student', {
-        mutation_type: 'alquimia.clean.student',
-        view_mode: state.projection.mode,
-        view_layer: refreshViewLayer,
-        clean_layer: cleanLayer,
-        item_ref: item.item_ref,
-        student_uuid: student.student_uuid,
-        modal_open: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
-      });
-      
-      if (window.MasterRefreshEngineV1) {
-        await window.MasterRefreshEngineV1.afterMutation({
-          module: 'alquimia_general',
-          mutation_type: 'alquimia.clean.student',
-          scope: {
-            view_mode: state.projection.mode,
-            view_layer: refreshViewLayer
-          },
-          context: {
-            item_ref: item.item_ref,
-            student_uuid: student.student_uuid,
-            clean_layer: cleanLayer,
-            item_kind: itemKind
-          }
-        });
-      } else {
-        // Fallback si engine no está disponible (no debería pasar)
-        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-        await refreshAfterProjectionMutation({ 
-          reason: 'clean-student', 
-          item_ref: item.item_ref,
-          forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
-        });
-      }
+      // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       showToastError(`Error: ${error.message}`);
@@ -4934,6 +4845,10 @@
         surface_key: 'master.alquimia_general'
       });
       
+      // LEGACY: handlePdeCleanItem usa endpoint legacy mark-pde-clean-all
+      // TODO: Migrar a performAction() cuando el endpoint se unifique con mark-clean-all
+      console.warn('[LEGACY_REFRESH_CALL] handlePdeCleanItem usando endpoint legacy mark-pde-clean-all. Debe migrarse a performAction()');
+      
       const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/mark-pde-clean-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5064,61 +4979,39 @@
       // clean_layer es 'shared' (explícito para este botón)
       const cleanLayer = 'shared';
       
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: state.projection.mode === 'proyeccion' 
+          ? (state.projection.view_layer || 'shared')
+          : (state.modal.layerView || 'shared'),
+        list_id: state.listaActiva?.id || null,
+        modal_layerView: state.modal.layerView || null
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.increment.all',
+        context: {
+          item_ref: item.item_ref,
           clean_layer: cleanLayer,
-          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
-        })
+          item_kind: itemKind
+        },
+        uiState
       });
 
-      const result = await response.json();
-      
       if (!result.ok) {
         throw new Error(result.error || 'Error incrementando item');
       }
 
-      console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', result);
-      showToastSuccess(`Item incrementado para ${result.data?.updated || result.updated || 0} alumnos`);
+      const data = result.data || {};
+      console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', data);
+      showToastSuccess(`Item incrementado para ${data.updated || 0} alumnos`);
       
-      // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando Refresh Engine v1
-      // ============================================================================
-      // REFRESH ENGINE V1: Usar engine.afterMutation
-      if (window.MasterRefreshEngineV1) {
-        await window.MasterRefreshEngineV1.afterMutation({
-          module: 'alquimia_general',
-          mutation_type: 'alquimia.increment.all',
-          scope: {
-            view_mode: state.projection.mode,
-            view_layer: state.projection.mode === 'proyeccion' 
-              ? (state.projection.view_layer || 'shared')
-              : (state.modal.layerView || 'shared')
-          },
-          context: {
-            item_ref: item.item_ref,
-            clean_layer: cleanLayer,
-            item_kind: itemKind
-          }
-        });
-      } else {
-        // Fallback si engine no está disponible
-        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-        if (state.projection.mode === 'proyeccion') {
-          await loadListProjection();
-        } else {
-          if (state.listaActiva && state.listaActiva.id) {
-            await loadItems(state.listaActiva.id);
-          }
-          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-            const activeViewLayer = state.modal.layerView || 'shared';
-            await handleVerItem(item, 'shared', activeViewLayer);
-          }
-        }
-      }
+      // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
       showToastError(`Error: ${error.message}`);
@@ -5151,70 +5044,50 @@
       // clean_layer es 'pde' (explícito para este botón)
       const cleanLayer = 'pde';
       
-      const response = await fetch(`/master/api/alquimia-general/items/${item.item_ref}/master/increment-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: state.projection.mode === 'proyeccion' 
+          ? (state.projection.view_layer || 'pde')
+          : (state.modal.layerView || 'pde'),
+        list_id: state.listaActiva?.id || null,
+        modal_layerView: state.modal.layerView || null
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.increment.all',
+        context: {
+          item_ref: item.item_ref,
           clean_layer: cleanLayer,
-          item_kind: itemKind // OBLIGATORIO según CONTRATO LIMPIEZA v1
-        })
+          item_kind: itemKind
+        },
+        uiState
       });
 
-      const result = await response.json();
-      
       if (!result.ok) {
         throw new Error(result.error || 'Error en incremento PDE');
       }
 
-      console.log('[MasterAlquimiaGeneral] Incremento PDE registrado:', result);
-      const updated = result.data?.updated || result.updated || 0;
-      const skippedAlreadyClean = result.data?.skipped_already_clean || 0;
+      const data = result.data || {};
+      console.log('[MasterAlquimiaGeneral] Incremento PDE registrado:', data);
+      const updated = data.updated || 0;
+      const skippedAlreadyClean = data.skipped_already_clean || 0;
       let message = `PDE registrado: ${updated} alumnos`;
       if (skippedAlreadyClean > 0) {
         message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
       }
       showToastSuccess(message);
       
-      // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando Refresh Engine v1
-      // ============================================================================
-      // REFRESH ENGINE V1: Usar engine.afterMutation
-      if (window.MasterRefreshEngineV1) {
-        // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
-        if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-          state.modal.layerView = 'pde';
-        }
-        
-        await window.MasterRefreshEngineV1.afterMutation({
-          module: 'alquimia_general',
-          mutation_type: 'alquimia.increment.all.pde',
-          scope: {
-            view_mode: state.projection.mode,
-            view_layer: state.projection.mode === 'proyeccion' 
-              ? (state.projection.view_layer || 'pde')
-              : (state.modal.layerView || 'pde')
-          },
-          context: {
-            item_ref: item.item_ref,
-            clean_layer: cleanLayer,
-            item_kind: itemKind
-          }
-        });
-      } else {
-        // Fallback si engine no está disponible
-        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-        if (state.projection.mode === 'proyeccion') {
-          await loadListProjection();
-        } else {
-          await loadItems(state.listaActiva.id);
-          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-            state.modal.layerView = 'pde';
-            await handleVerItem(item, 'pde', 'pde');
-          }
-        }
+      // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
+      if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        state.modal.layerView = 'pde';
       }
+      
+      // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error en incremento PDE:', error);
       showToastError(`Error: ${error.message}`);
@@ -5794,42 +5667,49 @@
     };
 
     try {
-      // Log forense (FASE 4)
-      console.log('[REFRESH][POST] reset-item', {
-        endpoint: '/master/api/alquimia-general/reset-item',
-        payload: query,
-        timestamp: new Date().toISOString()
-      });
-      
-      const response = await fetch('/master/api/alquimia-general/reset-item', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: 'proyeccion', // Reset siempre se ejecuta desde proyección
+        view_layer: query.view_layer || 'shared',
+        list_id: null,
+        student_uuid: student_uuid
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.reset.item',
+        context: {
+          student_uuid,
+          item_ref,
+          item_kind: query.item_kind,
+          view_layer: query.view_layer
         },
-        body: JSON.stringify(query)
+        uiState
       });
-      
-      const result = await response.json();
-      
+
       if (!result.ok) {
         throw new Error(result.error || 'Error reseteando progreso del ítem');
       }
-      
+
+      const data = result.data || {};
       console.log('[RESET][ITEM][CANONICAL] Progreso reseteado', {
         student_uuid,
         item_ref,
         item_kind: query.item_kind,
-        applied: result.data?.applied,
-        skipped: result.data?.skipped,
-        layers_affected: result.data?.layers_affected,
-        mode: result.data?.mode
+        applied: data.applied,
+        skipped: data.skipped,
+        layers_affected: data.layers_affected,
+        mode: data.mode
       });
       
       return {
-        applied: result.data?.applied || false,
-        skipped: result.data?.skipped || 0,
-        layers_affected: result.data?.layers_affected || [],
-        mode: result.data?.mode || 'event'
+        applied: data.applied || false,
+        skipped: data.skipped || 0,
+        layers_affected: data.layers_affected || [],
+        mode: data.mode || 'event'
       };
     } catch (error) {
       console.error('[RESET][ITEM] Error:', error);
@@ -5855,42 +5735,49 @@
     };
 
     try {
-      // Log forense (FASE 4)
-      console.log('[REFRESH][POST] reset-list', {
-        endpoint: '/master/api/alquimia-general/reset-list',
-        payload: query,
-        timestamp: new Date().toISOString()
-      });
-      
-      const response = await fetch('/master/api/alquimia-general/reset-list', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      // UX CONTRACT v1: Usar performAction() wrapper canónico
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
+
+      const uiState = {
+        view_mode: 'proyeccion', // Reset siempre se ejecuta desde proyección
+        view_layer: query.view_layer || 'shared',
+        list_id: list_id,
+        student_uuid: student_uuid
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.reset.list',
+        context: {
+          student_uuid,
+          list_id,
+          item_kind: query.item_kind,
+          view_layer: query.view_layer
         },
-        body: JSON.stringify(query)
+        uiState
       });
-      
-      const result = await response.json();
-      
+
       if (!result.ok) {
         throw new Error(result.error || 'Error reseteando progreso de la lista');
       }
-      
+
+      const data = result.data || {};
       console.log('[RESET][LIST][CANONICAL] Progreso reseteado', {
         student_uuid,
         list_id,
         item_kind: query.item_kind,
-        applied: result.data?.applied,
-        skipped: result.data?.skipped,
-        layers_affected: result.data?.layers_affected,
-        mode: result.data?.mode
+        applied: data.applied,
+        skipped: data.skipped,
+        layers_affected: data.layers_affected,
+        mode: data.mode
       });
       
       return {
-        applied: result.data?.applied || 0,
-        skipped: result.data?.skipped || 0,
-        layers_affected: result.data?.layers_affected || [],
-        mode: result.data?.mode || 'event'
+        applied: data.applied || 0,
+        skipped: data.skipped || 0,
+        layers_affected: data.layers_affected || [],
+        mode: data.mode || 'event'
       };
     } catch (error) {
       console.error('[RESET][LIST] Error:', error);
@@ -6010,28 +5897,19 @@
     
     /**
      * Refetch según el tipo de mutación y vista activa
+     * UX CONTRACT v1: Usa surfaces declarativas si están disponibles
      * FIX CANÓNICO: Refresca TODAS las superficies afectadas (proyección, items, flotante)
      * REGLA CONSTITUCIONAL: El flotante puede estar abierto en cualquier modo (proyección u operativa)
      */
     async refetch(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
+      const surfaces = context.surfaces || [];
       
-      // Log forense estructurado (FASE 4)
-      console.log('[REFRESH][POST] Mutación ejecutada', {
-        mutation_type,
-        view_mode: state.projection.mode,
-        view_layer: scope.view_layer || state.projection.view_layer,
-        clean_layer: context.clean_layer,
-        item_ref: context.item_ref,
-        student_uuid: context.student_uuid,
-        list_id: context.list_id || state.listaActiva?.id,
-        modal_open: !!(state.modal?.item),
-        modal_item_ref: state.modal?.item?.item_ref,
-        timestamp: new Date().toISOString()
-      });
-      
+      // Log forense estructurado
       console.log('[REFRESH_ENGINE][ALQG][REFETCH] Iniciando', {
         mutation_type,
+        action_id: context.action_id || null,
+        surfaces: surfaces.length > 0 ? surfaces : 'legacy',
         view_mode: state.projection.mode,
         view_layer: scope.view_layer || state.projection.view_layer,
         clean_layer: context.clean_layer,
@@ -6042,20 +5920,62 @@
         modal_item_ref: state.modal?.item?.item_ref
       });
       
+      // UX CONTRACT v1: Si hay surfaces declarativas, usar Refresh Surface Registry
+      if (surfaces.length > 0 && window.__AP_REFRESH_SURFACE_REGISTRY__) {
+        const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
+        const uiState = {
+          view_mode: state.projection.mode,
+          view_layer: scope.view_layer || state.projection.view_layer || 'shared',
+          list_id: context.list_id || state.listaActiva?.id || null,
+          student_uuid: context.student_uuid || state.projection.student_uuid || null,
+          modal_layerView: state.modal.layerView || null
+        };
+
+        console.log('[REFRESH_ENGINE][ALQG][SURFACES] Ejecutando surfaces declarativas', {
+          mutation_type,
+          surfaces,
+          timestamp: new Date().toISOString()
+        });
+
+        // Ejecutar cada surface
+        for (const surface_id of surfaces) {
+          try {
+            await surfaceRegistry.refetch(surface_id, context, uiState);
+          } catch (error) {
+            console.error(`[REFRESH_ENGINE][ALQG][SURFACE_ERROR] ${surface_id}`, {
+              mutation_type,
+              surface_id,
+              error: error.message,
+              timestamp: new Date().toISOString()
+            });
+            // Continuar con otras surfaces aunque una falle
+          }
+        }
+
+        console.log('[REFRESH_ENGINE][ALQG][SURFACES] Completado', {
+          mutation_type,
+          surfaces_executed: surfaces.length,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+      
+      // LEGACY: Fallback a lógica manual si no hay surfaces declarativas
+      console.warn('[REFRESH_ENGINE][ALQG][LEGACY_REFRESH] Sin surfaces declarativas, usando lógica manual', {
+        mutation_type,
+        action_id: context.action_id || null
+      });
+      
       // FIX 3.1: Garantizar coherencia de view_layer
-      // Si la mutación especifica view_layer, usarla; sino mantener la activa
       const activeViewLayer = scope.view_layer || state.projection.view_layer || 'shared';
       
       // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto y la mutación afecta ese item
-      // INDEPENDIENTEMENTE del view_mode (el flotante puede estar abierto en cualquier modo)
       const shouldRefreshFlotante = state.modal?.item && 
                                      context.item_ref && 
                                      state.modal.item.item_ref === context.item_ref;
       
       // Determinar qué refetch hacer según vista activa
       if (state.projection.mode === 'proyeccion') {
-        // FIX: Asegurar que loadListProjection usa el view_layer correcto
-        // (loadListProjection ya usa state.projection.view_layer, pero lo preservamos)
         console.log('[REFRESH][GET] Ejecutando loadListProjection', {
           view_layer: state.projection.view_layer,
           student_uuid: state.projection.student_uuid,
@@ -6069,7 +5989,6 @@
           list_id: state.listaActiva?.id
         });
       } else if (state.projection.mode === 'operativa') {
-        // FIX 3.2: Refrescar items Y flotante si está abierto
         if (state.listaActiva && state.listaActiva.id) {
           console.log('[REFRESH][GET] Ejecutando loadItems', {
             list_id: state.listaActiva.id,
@@ -6084,7 +6003,6 @@
       
       // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto (independiente del view_mode)
       if (shouldRefreshFlotante) {
-        // Usar view_layer del modal (flotante), no de proyección
         const modalViewLayer = state.modal.layerView || 'shared';
         const modalCleanLayer = context.clean_layer || 'shared';
         
@@ -6092,21 +6010,14 @@
           item_ref: context.item_ref,
           view_layer: modalViewLayer,
           clean_layer: modalCleanLayer,
-          view_mode: state.projection.mode, // Para debugging
+          view_mode: state.projection.mode,
           timestamp: new Date().toISOString()
-        });
-        
-        console.log('[REFRESH_ENGINE][ALQG][REFETCH] Refrescando flotante', {
-          item_ref: context.item_ref,
-          view_layer: modalViewLayer,
-          clean_layer: modalCleanLayer,
-          view_mode: state.projection.mode
         });
         
         await handleVerItem(state.modal.item, modalCleanLayer, modalViewLayer);
       }
       
-      console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado', {
+      console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado (legacy)', {
         mutation_type,
         view_mode: state.projection.mode,
         surfaces_refreshed: state.projection.mode === 'proyeccion' 
@@ -6172,6 +6083,17 @@
   // Inicializar cuando el DOM esté listo (envuelto en try/catch)
   function boot() {
     try {
+      // UX CONTRACT v1: Exponer state y funciones para registries
+      if (typeof window !== 'undefined') {
+        window.__AP_ALQUIMIA_STATE__ = state;
+        window.__AP_ALQUIMIA_FUNCTIONS__ = {
+          loadListProjection,
+          loadItems,
+          handleVerItem
+        };
+        console.log('[UX_CONTRACT][ALQUIMIA] State y funciones expuestas para registries');
+      }
+
       // Registrar adapter en Refresh Engine si está disponible
       if (window.MasterRefreshEngineV1) {
         window.MasterRefreshEngineV1.registerModule('alquimia_general', AlquimiaGeneralRefreshAdapter);

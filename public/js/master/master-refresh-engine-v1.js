@@ -199,11 +199,21 @@ if (window.__AP_MASTER_REFRESH_ENGINE_V1_LOADED__) {
       };
     }
 
+    /**
+     * Obtiene adapter de un módulo (útil para v2)
+     * @param {string} moduleName - Nombre del módulo
+     * @returns {Object|null} Adapter o null si no existe
+     */
+    function getModuleAdapter(moduleName) {
+      return modules.get(moduleName) || null;
+    }
+
     return {
       registerModule,
       afterMutation,
       getLastRenderToken,
-      getEngineInfo
+      getEngineInfo,
+      getModuleAdapter
     };
   }
 

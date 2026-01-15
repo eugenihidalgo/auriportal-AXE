@@ -149,6 +149,66 @@
       "name": "Master Refresh Engine v1"
     },
     {
+      "id": "ux-action-registry",
+      "guard_id": "UX_ACTION_REGISTRY",
+      "path": "/js/core/ux/ux-action-registry.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "UX Action Registry v1"
+    },
+    {
+      "id": "refresh-surface-registry",
+      "guard_id": "REFRESH_SURFACE_REGISTRY",
+      "path": "/js/core/ux/refresh-surface-registry.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Refresh Surface Registry v1"
+    },
+    {
+      "id": "perform-action-v1",
+      "guard_id": "PERFORM_ACTION_V1",
+      "path": "/js/master/ux/perform-action.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Perform Action v1 Wrapper"
+    },
+    {
+      "id": "refresh-engine-v2-adapter",
+      "guard_id": "REFRESH_ENGINE_V2_ADAPTER",
+      "path": "/js/master/ux/refresh-engine-v2-adapter.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "core",
+      "name": "Refresh Engine v2 Adapter"
+    },
+    {
+      "id": "alquimia-actions-registry",
+      "guard_id": "ALQUIMIA_ACTIONS_REGISTRY",
+      "path": "/js/master/ux/alquimia-actions-registry.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Alquimia Actions Registry v1"
+    },
+    {
+      "id": "alquimia-surfaces-registry",
+      "guard_id": "ALQUIMIA_SURFACES_REGISTRY",
+      "path": "/js/master/ux/alquimia-surfaces-registry.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "ui",
+      "name": "Alquimia Surfaces Registry v1"
+    },
+    {
       "id": "master-alquimia-general-client",
       "guard_id": "ALQUIMIA_GENERAL_CLIENT",
       "path": "/js/master/master-alquimia-general-client.js",

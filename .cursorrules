@@ -735,6 +735,32 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
  - docs/ALQUIMIA_GENERAL_REFRESH_MODEL.md
  - docs/INVARIANTES_CONSTITUCIONALES.md (invariante 14)
 
+ - id: ux-contract-v1-mandatory
+ title: UX Contract v1 obligatorio para mutaciones UI
+ content: >
+ Toda mutación UI DEBE pasar por performAction() wrapper canónico.
+ OBLIGATORIO:
+ - Toda acción debe estar registrada en UX Action Registry (src/core/ux/ux-action-registry.v1.js)
+ - Toda acción debe declarar refresh_plan (función o array de surface_ids)
+ - Toda superficie debe estar registrada en Refresh Surface Registry (src/core/ux/refresh-surface-registry.v1.js)
+ - Usar performAction({ action_id, context, uiState }) en lugar de fetch() directo
+ - Refresh Engine v2 debe usar surfaces declarativas cuando estén disponibles
+ PROHIBIDO:
+ - fetch() POST fuera de performAction() (salvo marcado LEGACY con warning)
+ - Llamadas a loadItems/loadListProjection/handleVerItem dentro de handlers POST (deben estar en refresh_plan)
+ - Acciones sin registro en UX Action Registry
+ - Acciones sin refresh_plan
+ - Refresh manual ad-hoc fuera del Refresh Engine (salvo LEGACY marcado)
+ VERIFICACIÓN:
+ - npm run check:ux-refresh debe dar 0 errors
+ - Logs [UX][ACTION][START] seguido de [REFRESH][PLAN] y [REFRESH][GET]
+ - Assembly check detecta fetch POST fuera de performAction
+ REFERENCIAS:
+ - src/core/ux/ux-action-registry.v1.js
+ - src/core/ux/refresh-surface-registry.v1.js
+ - public/js/master/ux/perform-action.v1.js
+ - scripts/check-ux-refresh-wiring.js
+
   - id: execution-mode-constitutional
     title: Execution Mode como concepto constitucional (APPLY/CERTIFY)
     content: >
