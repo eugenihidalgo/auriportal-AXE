@@ -1317,6 +1317,50 @@
   }
 
   /**
+   * Helper canónico de refresco post-acción en proyección
+   * Unifica el patrón de invalidación + recarga + refresco de modal
+   * 
+   * @param {Object} options - Opciones
+   * @param {string} options.reason - Razón del refresco (para logs forenses)
+   * @param {string} [options.item_ref] - item_ref si aplica (para refrescar modal)
+   * @param {boolean} [options.forceModalRefresh=false] - Si true, refresca modal si está abierto
+   */
+  async function refreshAfterProjectionMutation({ reason, item_ref = null, forceModalRefresh = false }) {
+    // Guard: solo en modo proyección
+    if (state.projection?.mode !== 'proyeccion') {
+      return;
+    }
+    
+    // Invalidar SIEMPRE
+    state.projection.data = null;
+    
+    // Refrescar modal si aplica
+    if (forceModalRefresh && state.modal?.item && item_ref) {
+      // Verificar que el modal corresponde al item_ref
+      if (state.modal.item.item_ref === item_ref) {
+        const activeViewLayer = state.modal.layerView || 'shared';
+        console.log('[UI][REFRESH_AFTER_MUTATION] Refrescando modal', {
+          item_ref,
+          view_layer: activeViewLayer
+        });
+        await handleVerItem(state.modal.item, 'shared', activeViewLayer);
+      }
+    }
+    
+    // Recargar proyección (ya llama a renderView() internamente)
+    await loadListProjection();
+    
+    // Log forense
+    console.log('[UI][REFRESH_AFTER_MUTATION]', {
+      reason,
+      list_id: state.listaActiva?.id,
+      student_uuid: state.projection.student_uuid,
+      item_ref,
+      forceModalRefresh
+    });
+  }
+
+  /**
    * LPM v1: Carga proyección de lista desde endpoint
    */
   async function loadListProjection() {
@@ -1503,20 +1547,15 @@
         }
         
         try {
-          const deletedCount = await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
-          showToastSuccess(`${deletedCount} ítem(s) reseteado(s)`);
+          await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
+          showToastSuccess('Reset completado');
           
-          // Refrescar proyección: invalidar estado y forzar recarga completa
-          // REGLA: Siempre refrescar después de reset exitoso (independiente del resultado)
-          console.log('[RESET][PROGRESS][LIST] Refrescando proyección después de reset', {
-            student_uuid: state.projection.student_uuid,
-            list_id: state.listaActiva.id
+          // Refrescar proyección usando helper canónico
+          await refreshAfterProjectionMutation({ 
+            reason: 'reset-list', 
+            item_ref: null,
+            forceModalRefresh: false 
           });
-          
-          state.projection.data = null; // Forzar recarga desde servidor
-          await loadListProjection(); // Esto ya llama a renderView() internamente
-          // Asegurar re-render completo después de la carga
-          renderView();
         } catch (error) {
           console.error('[RESET][PROGRESS][LIST] Error:', error);
           showToastError(`Error: ${error.message}`);
@@ -2092,26 +2131,29 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // LPM v1: Si está en modo proyección, refetch de proyección
+      // LPM v1: Si está en modo proyección, usar helper canónico
       if (state.projection.mode === 'proyeccion') {
-        console.log('[UI][LPM] post-action refetch');
-        await loadListProjection();
+        await refreshAfterProjectionMutation({ 
+          reason: 'clean-all', 
+          item_ref: item.item_ref,
+          forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+        });
       } else {
         // Modo operativa: recargar items
         if (state.listaActiva && state.listaActiva.id) {
           await loadItems(state.listaActiva.id);
         }
-      }
-      
-      // Refrescar modal si está abierto con view_layer activo
-      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const activeViewLayer = state.modal.layerView || 'shared';
-        console.log('[UI][COLUMN] Refetch post-acción masiva (mark-clean-all)', {
-          item_ref: item.item_ref,
-          action_clean_layer: cleanLayer,
-          active_view_layer: activeViewLayer
-        });
-        await handleVerItem(state.modal.item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
+        
+        // Refrescar modal si está abierto (solo en operativa, fuera del helper)
+        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+          const activeViewLayer = state.modal.layerView || 'shared';
+          console.log('[UI][COLUMN] Refetch post-acción masiva (mark-clean-all)', {
+            item_ref: item.item_ref,
+            action_clean_layer: cleanLayer,
+            active_view_layer: activeViewLayer
+          });
+          await handleVerItem(state.modal.item, 'shared', activeViewLayer);
+        }
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
@@ -3315,56 +3357,12 @@
       const displayName = result.data?.student?.display_name || result.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
-      // ============================================================================
-      // DIFERENCIACIÓN:
-      // - clean_layer: decide qué columnas se escriben (shared_* o pde_*)
-      // - view_layer: decide qué estado se calcula y qué columna se muestra
-      // PROHIBIDO: hardcodear 'shared' o inferir desde el botón pulsado
-      // OBLIGATORIO: usar state.modal.layerView (vista activa del usuario)
-      // ============================================================================
-      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        // Refetch usando el view_layer ACTIVO (no hardcoded)
-        const activeViewLayer = state.modal.layerView || 'shared';
-        
-        // Log forense: estado antes del refetch
-        const stateBefore = student._last_column_state || null;
-        
-        console.log('[UI][COLUMN] Refetch post-acción', {
-          item_ref: item.item_ref,
-          action_clean_layer: cleanLayer,
-          active_view_layer: activeViewLayer,
-          student_uuid: student.student_uuid,
-          state_before: stateBefore
-        });
-        
-        // Guardar estado antes del refetch para verificación
-        const stateBeforeRefetch = student._last_column_state || null;
-        
-        // Marcar que se espera un cambio de columna (para verificación)
-        student._action_expected_change = {
-          action: 'mark-clean-student',
-          clean_layer: cleanLayer,
-          view_layer: activeViewLayer,
-          state_before: stateBeforeRefetch
-        };
-        
-        // Refetch con view_layer activo
-        await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
-        
-        // Log forense: verificar cambio de columna después del refetch
-        // (se hará en el renderizado de columnas cuando se vuelva a agrupar)
-        console.log('[UI][COLUMN] Refetch completado, esperando re-render de columnas', {
-          item_ref: item.item_ref,
-          view_layer: activeViewLayer,
-          state_before_refetch: stateBeforeRefetch,
-          action_clean_layer: cleanLayer
-        });
-        
-        // Nota: La verificación de cambio de columna se hace en el forEach de agrupación
-        // Si no hay cambio cuando debería haberlo, se logueará allí con warning
-      }
+      // Refrescar proyección usando helper canónico (con refresco de modal)
+      await refreshAfterProjectionMutation({ 
+        reason: 'clean-student', 
+        item_ref: item.item_ref,
+        forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+      });
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       showToastError(`Error: ${error.message}`);
@@ -4311,25 +4309,15 @@
             }
             
             try {
-              const result = await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
-              if (result.deleted) {
-                showToastSuccess('Progreso del ítem reseteado');
-              } else {
-                showToastSuccess('No había progreso para resetear');
-              }
+              await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
+              showToastSuccess('Reset completado');
               
-              // Refrescar proyección: invalidar estado y forzar recarga completa
-              // REGLA: Siempre refrescar después de reset exitoso (independiente del resultado)
-              console.log('[RESET][PROGRESS][ITEM] Refrescando proyección después de reset', {
-                student_uuid: state.projection.student_uuid,
+              // Refrescar proyección usando helper canónico (con refresco de modal)
+              await refreshAfterProjectionMutation({ 
+                reason: 'reset-item', 
                 item_ref: item.item_ref,
-                list_id: state.listaActiva?.id
+                forceModalRefresh: true 
               });
-              
-              state.projection.data = null; // Forzar recarga desde servidor
-              await loadListProjection(); // Esto ya llama a renderView() internamente
-              // Asegurar re-render completo después de la carga
-              renderView();
             } catch (error) {
               console.error('[RESET][PROGRESS][ITEM] Error:', error);
               showToastError(`Error: ${error.message}`);
@@ -4369,10 +4357,7 @@
             
             try {
               await handleLimpiarEstudiante(studentForAction, item, 'shared', itemKind);
-              
-              // Refrescar proyección tras acción exitosa
-              await loadListProjection();
-              renderView();
+              // handleLimpiarEstudiante ya refresca proyección internamente
             } catch (error) {
               console.error('[UI][PROJECTION][STUDENT][CLEAN] Error limpiando SHARED:', error);
               showToastError(`Error: ${error.message}`);
@@ -4394,10 +4379,7 @@
             
             try {
               await handleLimpiarEstudiante(studentForAction, item, 'pde', itemKind);
-              
-              // Refrescar proyección tras acción exitosa
-              await loadListProjection();
-              renderView();
+              // handleLimpiarEstudiante ya refresca proyección internamente
             } catch (error) {
               console.error('[UI][PROJECTION][STUDENT][CLEAN] Error limpiando PDE:', error);
               showToastError(`Error: ${error.message}`);
