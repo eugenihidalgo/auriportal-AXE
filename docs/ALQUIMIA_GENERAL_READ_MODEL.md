@@ -612,12 +612,81 @@ grep -r "EXTRACT.*days_since" src/core/master/services src/infra/repos --exclude
 
 ---
 
+## Paridad de Inputs CPM v2 entre Superficies
+
+### Regla Constitucional
+
+Para los mismos `(student_uuid + item_ref + view_layer + item_kind)`, todas las superficies (list-projection, flotante, megalist) DEBEN pasar al CPM v2 inputs idénticos.
+
+**OBLIGATORIO:**
+- ✅ Misma `effectiveConfig` (incluye overrides si existen)
+- ✅ Mismo `cleaning_state` (mismos datos brutos)
+- ✅ Mismo `item_kind` y `view_layer`
+
+**PROHIBIDO:**
+- ❌ Flotante sin overrides mientras list-projection/megalist sí los aplican
+- ❌ Diferentes valores de `threshold_days` o `required_count` para el mismo alumno+ítem
+- ❌ `completed` como boolean en una superficie e integer en otra
+
+### Ejemplos
+
+**Flotante debe aplicar overrides igual que list-projection/megalist:**
+
+```javascript
+// ✅ CORRECTO (flotante con overrides)
+const baseConfig = {
+  threshold_days: item.frecuencia_dias || 7,
+  critical_multiplier: 2.0,
+  required_count: item.veces_limpiar || 1
+};
+
+// Aplicar overrides por alumno
+const effectiveConfig = await resolveItemConfigForStudent(
+  baseConfig,
+  student_uuid,
+  item_ref
+);
+
+// Pasar effectiveConfig al CPM
+const projection = computeCleaningProjection({
+  cleaning_state,
+  item_kind,
+  view_layer,
+  config: effectiveConfig // ✅ Incluye overrides
+});
+```
+
+**❌ PROHIBIDO (flotante sin overrides):**
+```javascript
+// ❌ INCORRECTO
+const config = {
+  threshold_days: item.frecuencia_dias || 7,
+  critical_multiplier: 2.0
+};
+// ❌ NO aplica resolveItemConfigForStudent()
+```
+
+### Verificación
+
+**Logs forenses:**
+- `[CPM_V2][INPUT]` debe mostrar `config.threshold_days` idéntico entre superficies para el mismo alumno+ítem
+- Si hay override, `has_override: true` debe aparecer en logs
+
+**Comandos:**
+```bash
+# Buscar logs CPM input para mismo trace_id o student_uuid+item_ref
+grep -r "\[CPM_V2\]\[INPUT\]" logs/ | grep "student_uuid.*item_ref"
+```
+
+---
+
 ## Referencias
 
 - **CPM v2:** `docs/CPM_V2_CANONICAL_MODEL.md`
 - **View Authority:** `docs/CONSTITUTION_VIEW_AUTHORITY_V1.md`
 - **Reset Canónico:** `docs/CLEANING_RESET_CANONICAL_V1.md`
 - **Refresh Engine:** `docs/REFRESH_ENGINE_V1_MASTER.md`
+- **Fix Input Parity:** `docs/FORENSICS_FIX_CPM_INPUT_PARITY_V1.md`
 
 ---
 

@@ -677,19 +677,42 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/ALQUIMIA_CANONICA_V1.md
       - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
 
-  - id: alquimia-canonical-documentation
-    title: Documentación canónica de Alquimia obligatoria
-    content: >
-      ALQUIMIA_CANONICA_V1.md es la referencia definitiva para el sistema de Alquimia.
-      OBLIGATORIO:
-      - Consultar ALQUIMIA_CANONICA_V1.md antes de modificar Alquimia
-      - Actualizar ALQUIMIA_CANONICA_V1.md al cambiar comportamiento canónico
-      - Seguir exactamente las reglas documentadas (no inventar nuevas)
-      PROHIBIDO:
-      - Modificar Alquimia sin actualizar documentación canónica
-      - Contradecir reglas documentadas en ALQUIMIA_CANONICA_V1.md
-      REFERENCIAS:
-      - docs/ALQUIMIA_CANONICA_V1.md (documentación canónica completa)
+ - id: alquimia-canonical-documentation
+ title: Documentación canónica de Alquimia obligatoria
+ content: >
+ ALQUIMIA_CANONICA_V1.md es la referencia definitiva para el sistema de Alquimia.
+ OBLIGATORIO:
+ - Consultar ALQUIMIA_CANONICA_V1.md antes de modificar Alquimia
+ - Actualizar ALQUIMIA_CANONICA_V1.md al cambiar comportamiento canónico
+ - Seguir exactamente las reglas documentadas (no inventar nuevas)
+ PROHIBIDO:
+ - Modificar Alquimia sin actualizar documentación canónica
+ - Contradecir reglas documentadas en ALQUIMIA_CANONICA_V1.md
+ REFERENCIAS:
+ - docs/ALQUIMIA_CANONICA_V1.md (documentación canónica completa)
+
+ - id: cpm-input-parity-mandatory
+ title: Paridad de inputs CPM v2 entre superficies obligatoria
+ content: >
+ Para los mismos (student_uuid + item_ref + view_layer + item_kind), todas las superficies (list-projection, flotante, megalist) DEBEN pasar al CPM v2 inputs idénticos.
+ OBLIGATORIO:
+ - Flotante aplica resolveItemConfigForStudent() igual que list-projection/megalist
+ - completed SIEMPRE es integer (Number(...) || 0), nunca boolean
+ - critical_multiplier canónico único (2.0) en todas las superficies
+ - Cache de overrides por student_uuid dentro del request (evitar lookups duplicados)
+ PROHIBIDO:
+ - Flotante sin overrides mientras list-projection/megalist sí los aplican
+ - completed como boolean (|| false) en cualquier superficie
+ - Leer critical_multiplier desde item.critical_multiplier (campo no canónico)
+ - Diferentes effectiveConfig para el mismo (student_uuid + item_ref + view_layer)
+ VERIFICACIÓN:
+ - Logs [CPM_V2][INPUT] deben mostrar config.idéntico entre superficies para mismo alumno+ítem
+ - Logs incluyen has_override: true/false
+ - Assembly check: npm run check:master-ui verifica paridad de inputs
+ REFERENCIAS:
+ - docs/FORENSICS_FIX_CPM_INPUT_PARITY_V1.md
+ - docs/ALQUIMIA_GENERAL_READ_MODEL.md (sección "Paridad de Inputs CPM v2")
+ - docs/INVARIANTES_CONSTITUCIONALES.md (invariantes 11, 12, 13)
 
   - id: execution-mode-constitutional
     title: Execution Mode como concepto constitucional (APPLY/CERTIFY)

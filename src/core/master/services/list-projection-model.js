@@ -376,18 +376,19 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
     const statesMap = {};
     result.rows.forEach(row => {
       // CPM v2: Pasar datos brutos (CPM calcula days_since internamente)
+      // FIX 2: completed SIEMPRE es integer (0..n), nunca boolean
       statesMap[row.item_ref] = {
         shared: {
           clean_count: row.shared_clean_count || 0,
           remaining: row.shared_remaining,
-          completed: row.shared_completed || false,
+          completed: Number(row.shared_completed || 0), // Integer, no boolean
           last_cleaned_at: row.shared_last_cleaned_at,
           effective_since: row.shared_effective_since || null
         },
         pde: {
           clean_count: row.pde_clean_count || 0,
           remaining: row.pde_remaining,
-          completed: row.pde_completed || false,
+          completed: Number(row.pde_completed || 0), // Integer, no boolean
           last_cleaned_at: row.pde_last_cleaned_at,
           effective_since: row.pde_effective_since || null
         }

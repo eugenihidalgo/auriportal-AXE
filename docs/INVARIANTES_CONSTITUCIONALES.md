@@ -454,4 +454,137 @@ npm run check:view-authority
 
 ---
 
+## Invariante 11: Overrides se Aplican en Toda Lectura por Alumno
+
+### Regla
+
+Overrides de configuración (threshold_days, required_count) DEBEN aplicarse en TODA lectura por alumno, incluyendo flotante.
+
+**PROHIBIDO:**
+- ❌ Flotante sin overrides mientras list-projection/megalist sí los aplican
+- ❌ Diferentes effectiveConfig para el mismo (student_uuid + item_ref + view_layer)
+
+**OBLIGATORIO:**
+- ✅ Flotante aplica `resolveItemConfigForStudent()` antes de llamar al CPM
+- ✅ Cache de overrides por student_uuid dentro del request (evitar lookups duplicados)
+- ✅ Logs forenses incluyen `has_override: true/false`
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que flotante aplica overrides
+grep -r "resolveItemConfigForStudent" src/services/alquimia-general-service.js
+
+# Verificar logs con has_override
+grep -r "has_override" logs/ | grep "AlquimiaGeneralService"
+```
+
+**Anti-patrón:**
+```javascript
+// ❌ PROHIBIDO: Flotante sin overrides
+const config = {
+  threshold_days: item.frecuencia_dias || 7,
+  critical_multiplier: 2.0
+};
+// ❌ NO aplica resolveItemConfigForStudent()
+```
+
+**Patrón correcto:**
+```javascript
+// ✅ CORRECTO: Flotante con overrides
+const baseConfig = {
+  threshold_days: item.frecuencia_dias || 7,
+  critical_multiplier: 2.0,
+  required_count: item.veces_limpiar || 1
+};
+const effectiveConfig = await resolveItemConfigForStudent(
+  baseConfig,
+  student_uuid,
+  item_ref
+);
+```
+
+---
+
+## Invariante 12: completed es Integer Siempre
+
+### Regla
+
+`cleaning_state.*.completed` DEBE ser integer (0..n) en TODAS las superficies. Nunca boolean.
+
+**PROHIBIDO:**
+- ❌ `completed: row.shared_completed || false` (boolean)
+- ❌ `completed: row.shared_completed || null` (null)
+
+**OBLIGATORIO:**
+- ✅ `completed: Number(row.shared_completed || 0)` (integer)
+- ✅ Mismo patrón en todas las superficies (list-projection, flotante, megalist)
+
+### Verificación
+
+**Comandos:**
+```bash
+# Buscar uso de completed con boolean
+grep -r "completed.*||.*false" src/core/master/services src/services
+
+# Verificar que completed es Number()
+grep -r "Number.*completed" src/core/master/services src/services
+```
+
+**Anti-patrón:**
+```javascript
+// ❌ PROHIBIDO: completed como boolean
+completed: row.shared_completed || false
+```
+
+**Patrón correcto:**
+```javascript
+// ✅ CORRECTO: completed como integer
+completed: Number(row.shared_completed || 0)
+```
+
+---
+
+## Invariante 13: critical_multiplier Canónico Único
+
+### Regla
+
+`critical_multiplier` NO se lee de `item.critical_multiplier` (campo no canónico). Valor canónico: `2.0`.
+
+**PROHIBIDO:**
+- ❌ `const criticalMultiplier = item.critical_multiplier || 2.0;`
+- ❌ Leer `critical_multiplier` desde DB sin fuente canónica
+
+**OBLIGATORIO:**
+- ✅ `const criticalMultiplier = 2.0;` (hardcoded canónico)
+- ✅ Mismo valor en todas las superficies
+
+**Nota:** Si en el futuro se quiere configurable, debe venir de una fuente canónica (catálogo o override), pero NO ahora.
+
+### Verificación
+
+**Comandos:**
+```bash
+# Buscar uso de item.critical_multiplier
+grep -r "item\.critical_multiplier" src/
+
+# Verificar que todas usan 2.0 hardcoded
+grep -r "critical_multiplier.*2\.0" src/core/master/services src/services
+```
+
+**Anti-patrón:**
+```javascript
+// ❌ PROHIBIDO: Leer desde item
+const criticalMultiplier = item.critical_multiplier || 2.0;
+```
+
+**Patrón correcto:**
+```javascript
+// ✅ CORRECTO: Canónico único
+const criticalMultiplier = 2.0;
+```
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**

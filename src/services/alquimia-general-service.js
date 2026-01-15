@@ -14,6 +14,7 @@ import { getDefaultPdeTransmutationItemGroupsRepo } from '../infra/repos/pde-tra
 import { getDefaultCleaningItemStateRepo } from '../infra/repos/cleaning/cleaning-item-state-repo-pg.js';
 import { validateViewLayer, ALLOWED_VIEW_LAYERS } from '../core/master/services/cleaning-layer-constants.js';
 import { computeVisualState } from '../core/master/services/cleaning-projection-model.js';
+import { resolveItemConfigForStudent } from '../core/master/services/override-resolution-service.js';
 
 /**
  * Lista listas de transmutaciones según filtros
@@ -676,16 +677,26 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
 
     // Calcular estados y nombres de display
     if (tipo === 'recurrente') {
-      // Obtener threshold_days y critical_multiplier del item
-      const thresholdDays = item.frecuencia_dias || 7; // Default 7 días
-      const criticalMultiplier = item.critical_multiplier || 2.0; // Default 2.0
-      const criticalThreshold = thresholdDays * criticalMultiplier;
+      // FIX 3: critical_multiplier canónico único (2.0)
+      // No leer de item.critical_multiplier (campo no canónico)
+      const criticalMultiplier = 2.0;
+      
+      // Base config canónica (igual a list-projection/megalist)
+      const baseConfig = {
+        threshold_days: item.frecuencia_dias || 7,
+        critical_multiplier: criticalMultiplier,
+        required_count: item.veces_limpiar || 1
+      };
+      
+      // Cache de overrides por student_uuid (evitar lookups duplicados)
+      const overrideCache = new Map();
 
       // Calcular estados y nombres
       const studentsWithState = await calculateStudentDisplayNames(studentsFiltered);
       
       // NOTA: Los datos ya vienen con shared y pde simétricos desde el repositorio
-      const students = studentsWithState.map(student => {
+      // FIX 1: Aplicar overrides por alumno (igual que list-projection/megalist)
+      const students = await Promise.all(studentsWithState.map(async (student) => {
         // CPM v2: Preparar datos brutos (NO days_since, CPM lo calcula)
         const sharedData = student.shared || {
           clean_count: student.clean_count || 0,
@@ -702,10 +713,21 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           effective_since: student.pde_effective_since || null
         };
         
+        // FIX 1: Resolver overrides para este alumno (cache para evitar lookups duplicados)
+        let effectiveConfig = overrideCache.get(student.student_uuid);
+        if (!effectiveConfig) {
+          effectiveConfig = await resolveItemConfigForStudent(
+            baseConfig,
+            student.student_uuid,
+            itemRef
+          );
+          overrideCache.set(student.student_uuid, effectiveConfig);
+        }
+        
         // ============================================================================
         // REGLA CANÓNICA: Estado RECURRENTE se calcula según view_layer (NO clean_layer)
         // ============================================================================
-        // Usar función canónica computeVisualState
+        // Usar función canónica computeVisualState con effectiveConfig (incluye overrides)
         // ============================================================================
         const visualStateResult = computeVisualState({
           shared: sharedData,
@@ -713,13 +735,11 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           combo: null, // RECURRENTE no usa combo
           item_kind: 'recurrente',
           view_layer: view_layer || 'shared',
-          config: {
-            threshold_days: thresholdDays,
-            critical_multiplier: criticalMultiplier
-          }
+          config: effectiveConfig
         });
 
-        // Log forense obligatorio
+        // Log forense obligatorio (incluye effectiveConfig para verificar overrides)
+        const effectiveThreshold = effectiveConfig.threshold_days * effectiveConfig.critical_multiplier;
         logInfo('AlquimiaGeneralService', '[CLEAN][STATE] Estado RECURRENTE calculado', {
           traceId,
           student_uuid: student.student_uuid,
@@ -728,8 +748,9 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           view_layer, // Para cálculo de estado
           metrics: visualStateResult.metrics || visualStateResult.computed_state, // Compatibilidad: computed_state → metrics
           state_calculated: visualStateResult.state,
-          threshold_days: thresholdDays,
-          critical_threshold: criticalThreshold,
+          threshold_days: effectiveConfig.threshold_days, // Usar effectiveConfig (puede tener override)
+          critical_threshold: effectiveThreshold,
+          has_override: effectiveConfig.threshold_days !== baseConfig.threshold_days, // Indicar si hay override
           shared_last_cleaned_at: sharedData.last_cleaned_at,
           shared_effective_since: sharedData.effective_since,
           pde_last_cleaned_at: pdeData.last_cleaned_at,
@@ -737,6 +758,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         });
 
         // Calcular estados para todas las view_layers posibles (proyección completa)
+        // Usar effectiveConfig en todas las llamadas (incluye overrides)
         const stateByViewLayer = {
           shared: computeVisualState({
             shared: sharedData,
@@ -744,7 +766,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
             combo: null,
             item_kind: 'recurrente',
             view_layer: 'shared',
-            config: { threshold_days: thresholdDays, critical_multiplier: criticalMultiplier }
+            config: effectiveConfig
           }),
           pde: computeVisualState({
             shared: sharedData,
@@ -752,7 +774,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
             combo: null,
             item_kind: 'recurrente',
             view_layer: 'pde',
-            config: { threshold_days: thresholdDays, critical_multiplier: criticalMultiplier }
+            config: effectiveConfig
           })
         };
 
@@ -764,14 +786,14 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           // Estado calculado según view_layer (autoridad backend)
           state: visualStateResult.state,
           visual_state: visualStateResult.visual_state,
-          threshold_days: thresholdDays,
-          critical_multiplier: criticalMultiplier,
+          threshold_days: effectiveConfig.threshold_days, // Usar effectiveConfig
+          critical_multiplier: effectiveConfig.critical_multiplier, // Usar effectiveConfig
           // Proyección completa: estados para todas las view_layers
           state_by_view_layer: stateByViewLayer,
           // Forensics: indicar qué capa se usó para calcular estado
           view_layer_used: view_layer
         };
-      });
+      }));
 
       // Contar por estado
       const counts = {
@@ -786,8 +808,8 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         students_no_aplica: studentsNoAplica.length > 0 ? studentsNoAplica : undefined,
         counts,
         total: studentsFiltered.length,
-        threshold_days: thresholdDays,
-        critical_multiplier: criticalMultiplier,
+        threshold_days: baseConfig.threshold_days, // Base config (puede variar por alumno si hay overrides)
+        critical_multiplier: baseConfig.critical_multiplier, // Canónico 2.0
         clean_layer: clean_layer || 'shared', // Default shared si no se especifica
         item_kind: 'recurrente', // OBLIGATORIO según contrato
         item_ref: itemRef
@@ -796,13 +818,21 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       // una_vez - usar nombres de display
       const students = await calculateStudentDisplayNames(studentsFiltered);
       
-      // Obtener veces_limpiar del item para cálculo de estados visuales
-      const vecesLimpiar = item.veces_limpiar || 1;
+      // Base config canónica (igual a list-projection/megalist)
+      const baseConfigUnaVez = {
+        threshold_days: item.frecuencia_dias || 7, // No usado en una_vez pero para consistencia
+        critical_multiplier: 2.0, // Canónico
+        required_count: item.veces_limpiar || 1
+      };
+      
+      // Cache de overrides por student_uuid (evitar lookups duplicados)
+      const overrideCacheUnaVez = new Map();
       
       // Calcular estados visuales dinámicamente según orden canónico:
       // Nunca (gris) → Iniciando → En proceso → Completado (verde) → Muy bien trabajado (dorado)
       // NOTA: Los datos ya vienen con shared y pde simétricos desde el repositorio
-      const studentsWithState = students.map(student => {
+      // FIX 1: Aplicar overrides por alumno (igual que list-projection/megalist)
+      const studentsWithState = await Promise.all(students.map(async (student) => {
         // Compatibilidad: usar datos legacy si no vienen simétricos aún
         const sharedData = student.shared || {
           clean_count: student.clean_count || 0,
@@ -815,6 +845,17 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           completed: 0
         };
         
+        // FIX 1: Resolver overrides para este alumno (cache para evitar lookups duplicados)
+        let effectiveConfigUnaVez = overrideCacheUnaVez.get(student.student_uuid);
+        if (!effectiveConfigUnaVez) {
+          effectiveConfigUnaVez = await resolveItemConfigForStudent(
+            baseConfigUnaVez,
+            student.student_uuid,
+            itemRef
+          );
+          overrideCacheUnaVez.set(student.student_uuid, effectiveConfigUnaVez);
+        }
+        
         // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
         // Pasar datos brutos (shared y pde)
         const effectiveViewLayer = view_layer || 'combo';
@@ -824,12 +865,10 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           combo: null, // CPM v2 lo calcula internamente
           item_kind: 'una_vez',
           view_layer: effectiveViewLayer,
-          config: {
-            required_count: vecesLimpiar
-          }
+          config: effectiveConfigUnaVez // Usar effectiveConfig (incluye overrides)
         });
         
-        // Log forense obligatorio
+        // Log forense obligatorio (incluye effectiveConfig para verificar overrides)
         logInfo('AlquimiaGeneralService', '[CLEAN][STATE] Estado UNA_VEZ calculado', {
           traceId,
           student_uuid: student.student_uuid,
@@ -839,34 +878,36 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           metrics: visualStateResult.metrics || visualStateResult.computed_state, // Compatibilidad: computed_state → metrics
           state_calculated: visualStateResult.state,
           visual_state_calculated: visualStateResult.visual_state,
-          required_count: vecesLimpiar
+          required_count: effectiveConfigUnaVez.required_count, // Usar effectiveConfig (puede tener override)
+          has_override: effectiveConfigUnaVez.required_count !== baseConfigUnaVez.required_count // Indicar si hay override
         });
-        
+
         // Calcular estados para todas las view_layers posibles (proyección completa)
+        // Usar effectiveConfig en todas las llamadas (incluye overrides)
         const stateByViewLayer = {
           shared: computeVisualState({
             shared: sharedData,
             pde: pdeData,
-            combo: comboData,
+            combo: null, // CPM v2 lo calcula internamente
             item_kind: 'una_vez',
             view_layer: 'shared',
-            config: { required_count: vecesLimpiar }
+            config: effectiveConfigUnaVez
           }),
           pde: computeVisualState({
             shared: sharedData,
             pde: pdeData,
-            combo: comboData,
+            combo: null, // CPM v2 lo calcula internamente
             item_kind: 'una_vez',
             view_layer: 'pde',
-            config: { required_count: vecesLimpiar }
+            config: effectiveConfigUnaVez
           }),
           combo: computeVisualState({
             shared: sharedData,
             pde: pdeData,
-            combo: comboData,
+            combo: null, // CPM v2 lo calcula internamente
             item_kind: 'una_vez',
             view_layer: 'combo',
-            config: { required_count: vecesLimpiar }
+            config: effectiveConfigUnaVez
           })
         };
         
@@ -884,11 +925,11 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           clean_count: sharedData.clean_count || 0,
           remaining: sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null,
           completed: sharedData.completed || 0,
-          veces_limpiar: vecesLimpiar,
+          veces_limpiar: effectiveConfigUnaVez.required_count, // Usar effectiveConfig
           // Forensics: indicar qué capa se usó para calcular estado
           view_layer_used: effectiveViewLayer
         };
-      });
+      }));
       
       // Contar por estado visual para ordenación canónica
       const counts = {
