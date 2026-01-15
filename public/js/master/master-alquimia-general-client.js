@@ -479,7 +479,7 @@
         resizer.addEventListener('mousedown', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          startResize(e, th, itemsTable);
+          startResize(e, th, itemsTable, header.key);
         });
         th.style.cssText += 'position: relative;';
         th.appendChild(resizer);
@@ -505,6 +505,10 @@
     });
     
     itemsTable.appendChild(tbody);
+    
+    // Aplicar anchos guardados después de renderizar
+    applyColumnWidths(itemsTable, headers);
+    
     itemsTableContainer.appendChild(itemsTable);
     listaContent.appendChild(itemsTableContainer);
   }
@@ -1278,7 +1282,7 @@
         resizer.addEventListener('mousedown', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          startResize(e, th, itemsTable);
+          startResize(e, th, itemsTable, header.key);
         });
         th.style.cssText += 'position: relative;';
         th.appendChild(resizer);
@@ -1304,6 +1308,10 @@
     });
     
     itemsTable.appendChild(tbody);
+    
+    // Aplicar anchos guardados después de renderizar
+    applyColumnWidths(itemsTable, headers);
+    
     itemsTableContainer.appendChild(itemsTable);
     listaContent.appendChild(itemsTableContainer);
   }
@@ -1590,72 +1598,141 @@
       listaContent.appendChild(metricsContainer);
     }
     
-    // Renderizar items agrupados por estado
+    // Renderizar tabla completa con headers y creación (FASE 5)
     if (state.projection.data && state.projection.data.items) {
+      const itemsTableContainer = document.createElement('div');
+      itemsTableContainer.style.cssText = 'overflow-x: auto; margin-top: 1rem;';
+      
+      const itemsTable = document.createElement('table');
+      itemsTable.style.cssText = 'width: 100%; border-collapse: collapse; background: #0f172a;';
+      
+      // Headers (mismos que operativa)
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      headerRow.style.cssText = 'background: #1e293b; border-bottom: 2px solid #334155;';
+      
+      const headers = [
+        { key: 'nivel', label: 'NIVEL' },
+        { key: 'nombre', label: 'NOMBRE' },
+        { key: 'descripcion', label: 'DESCRIPCIÓN' },
+        { key: 'grupo', label: 'GRUPO' }
+      ];
+      
+      if (state.listaActiva && state.listaActiva.tipo === 'recurrente') {
+        headers.push({ key: 'frecuencia_dias', label: 'DÍAS RECURRENCIA' });
+      } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
+        headers.push({ key: 'veces_limpiar', label: 'VECES LIMPIAR' });
+      }
+      
+      headers.push({ key: 'actions', label: 'ACCIONES' });
+      
+      headers.forEach(header => {
+        const th = document.createElement('th');
+        th.style.cssText = 'padding: 0.75rem; text-align: left; color: #cbd5e1; font-size: 0.875rem; font-weight: 600; user-select: none;';
+        
+        const headerContent = document.createElement('div');
+        headerContent.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+        
+        const headerText = document.createElement('span');
+        headerText.textContent = header.label;
+        headerContent.appendChild(headerText);
+        
+        th.appendChild(headerContent);
+        
+        // Añadir resizer para redimensionar columnas (excepto última columna)
+        if (header.key !== 'actions') {
+          const resizer = document.createElement('div');
+          resizer.className = 'column-resizer';
+          resizer.style.cssText = 'position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; z-index: 10;';
+          resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startResize(e, th, itemsTable, header.key);
+          });
+          th.style.cssText += 'position: relative;';
+          th.appendChild(resizer);
+        }
+        
+        headerRow.appendChild(th);
+      });
+      
+      thead.appendChild(headerRow);
+      itemsTable.appendChild(thead);
+      
+      // Body
+      const tbody = document.createElement('tbody');
+      
+      // Fila sticky de creación (primera fila) - FASE 5: Permitir crear desde proyección
+      const createRow = createItemTableRow(null, true);
+      tbody.appendChild(createRow);
+      
       // PDUI: Extraer view_layer al principio (derivado de proyección)
       const viewLayer = state.projection.view_layer;
       
-      const itemsByState = {
-        never: [],
-        pending: [],
-        important: [],
-        reviewed: []
-      };
-      
-      state.projection.data.items.forEach(item => {
-        const itemState = item.state_by_view_layer?.[viewLayer]?.state || 'never';
-        if (itemState === 'reviewed' || itemState === 'completed') {
-          itemsByState.reviewed.push(item);
-        } else if (itemState === 'pending' || itemState === 'in_progress') {
-          itemsByState.pending.push(item);
-        } else if (itemState === 'important') {
-          itemsByState.important.push(item);
-        } else {
-          itemsByState.never.push(item);
+      // Ordenar items por estado (never, important, pending, reviewed) y luego por nivel
+      const sortedItems = [...state.projection.data.items].sort((a, b) => {
+        const aState = a.state_by_view_layer?.[viewLayer]?.state || 'never';
+        const bState = b.state_by_view_layer?.[viewLayer]?.state || 'never';
+        
+        // Orden canónico: never, important, pending, reviewed
+        const stateOrder = { never: 0, important: 1, pending: 2, reviewed: 3, completed: 3 };
+        const aOrder = stateOrder[aState] ?? 0;
+        const bOrder = stateOrder[bState] ?? 0;
+        
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder;
         }
+        
+        // Desempate: nivel ASC, luego nombre ASC
+        const aNivel = a.nivel || 9;
+        const bNivel = b.nivel || 9;
+        if (aNivel !== bNivel) {
+          return aNivel - bNivel;
+        }
+        
+        return (a.nombre || '').localeCompare(b.nombre || '');
       });
       
-      // Renderizar grupos en orden canónico: never, important, pending, reviewed
-      const groups = [
-        { key: 'never', label: 'Nunca', items: itemsByState.never },
-        { key: 'important', label: 'Importante Revisar', items: itemsByState.important },
-        { key: 'pending', label: 'Pendiente', items: itemsByState.pending },
-        { key: 'reviewed', label: 'Revisado', items: itemsByState.reviewed }
-      ];
-      
-      groups.forEach(group => {
-        if (group.items.length === 0) return;
+      // Renderizar items con agrupación visual
+      let lastState = null;
+      sortedItems.forEach(item => {
+        const itemState = item.state_by_view_layer?.[viewLayer]?.state || 'never';
         
-        const groupContainer = document.createElement('div');
-        groupContainer.style.cssText = 'margin-bottom: 1.5rem;';
+        // Separador visual entre grupos de estado
+        if (lastState !== null && lastState !== itemState) {
+          const separatorRow = document.createElement('tr');
+          separatorRow.style.cssText = 'height: 0.5rem; background: #0f172a;';
+          const separatorCell = document.createElement('td');
+          separatorCell.colSpan = headers.length;
+          separatorCell.style.cssText = 'padding: 0; height: 0.5rem;';
+          separatorRow.appendChild(separatorCell);
+          tbody.appendChild(separatorRow);
+        }
+        lastState = itemState;
         
-        const groupTitle = document.createElement('h3');
-        groupTitle.textContent = `${group.label} (${group.items.length})`;
-        groupTitle.style.cssText = 'color: #f1f5f9; font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;';
-        groupContainer.appendChild(groupTitle);
+        // REGLA DURA: Solo añadir botones si scope === 'student' y hay student_uuid
+        const isProjectionStudent = state.projection.scope === 'student' && !!state.projection.student_uuid;
+        const itemRow = createItemTableRow(item, false, isProjectionStudent);
         
-        // Tabla simple para items del grupo
-        const itemsTable = document.createElement('table');
-        itemsTable.style.cssText = 'width: 100%; border-collapse: collapse; background: #0f172a;';
+        // Estilizar filas según estado
+        if (itemState === 'reviewed' || itemState === 'completed') {
+          itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(34, 197, 94, 0.1);';
+        } else if (itemState === 'important') {
+          itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(239, 68, 68, 0.1);';
+        } else if (itemState === 'pending' || itemState === 'in_progress') {
+          itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(251, 191, 36, 0.1);';
+        }
         
-        const tbody = document.createElement('tbody');
-        
-        group.items.forEach(item => {
-          // REGLA DURA: Solo añadir botones si scope === 'student' y hay student_uuid
-          const isProjectionStudent = state.projection.scope === 'student' && !!state.projection.student_uuid;
-          const itemRow = createItemTableRow(item, false, isProjectionStudent);
-          // Estilizar filas reviewed
-          if (group.key === 'reviewed') {
-            itemRow.classList.add('row-reviewed');
-            itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(34, 197, 94, 0.1);';
-          }
-          tbody.appendChild(itemRow);
-        });
-        
-        itemsTable.appendChild(tbody);
-        groupContainer.appendChild(itemsTable);
-        listaContent.appendChild(groupContainer);
+        tbody.appendChild(itemRow);
       });
+      
+      itemsTable.appendChild(tbody);
+      
+      // Aplicar anchos guardados después de renderizar
+      applyColumnWidths(itemsTable, headers);
+      
+      itemsTableContainer.appendChild(itemsTable);
+      listaContent.appendChild(itemsTableContainer);
     } else if (state.projection.loading) {
       const loadingMsg = document.createElement('div');
       loadingMsg.textContent = 'Cargando proyección...';
@@ -3563,10 +3640,21 @@
   }
 
   function stopResize() {
-    if (resizeState.isResizing) {
+    if (resizeState.isResizing && resizeState.currentTh && resizeState.columnKey) {
+      // Guardar ancho final en localStorage
+      const finalWidth = parseInt(resizeState.currentTh.style.width) || resizeState.currentTh.offsetWidth;
+      const semanticKey = COLUMN_KEY_MAP[resizeState.columnKey];
+      
+      if (semanticKey && finalWidth >= 60) {
+        const savedWidths = loadColumnWidths();
+        savedWidths[semanticKey] = finalWidth;
+        saveColumnWidths(savedWidths);
+      }
+      
       resizeState.isResizing = false;
       resizeState.currentTh = null;
       resizeState.table = null;
+      resizeState.columnKey = null;
       
       document.removeEventListener('mousemove', handleResize);
       document.removeEventListener('mouseup', stopResize);
@@ -5479,17 +5567,19 @@
    * @returns {Promise<boolean>} true si se reseteó
    */
   async function resetStudentItemProgress(student_uuid, item_ref) {
+    const query = {
+      student_uuid,
+      item_ref,
+      scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
+    };
+
     try {
       const response = await fetch('/master/api/alquimia-general/reset-item', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          student_uuid,
-          item_ref,
-          scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
-        })
+        body: JSON.stringify(query)
       });
       
       const result = await response.json();
@@ -5520,17 +5610,19 @@
    * @returns {Promise<number>} Número de estados reseteados
    */
   async function resetStudentListProgress(student_uuid, list_id) {
+    const query = {
+      student_uuid,
+      list_id,
+      scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
+    };
+
     try {
       const response = await fetch('/master/api/alquimia-general/reset-list', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          student_uuid,
-          list_id,
-          scope: 'student' // REGLA CONSTITUCIONAL: scope='student' obligatorio
-        })
+        body: JSON.stringify(query)
       });
       
       const result = await response.json();
