@@ -714,6 +714,27 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
  - docs/ALQUIMIA_GENERAL_READ_MODEL.md (sección "Paridad de Inputs CPM v2")
  - docs/INVARIANTES_CONSTITUCIONALES.md (invariantes 11, 12, 13)
 
+ - id: refresh-flotante-independent-view-mode
+ title: Refresh de flotante independiente del view_mode
+ content: >
+ El flotante puede estar abierto en cualquier modo (proyección u operativa). El refresh del flotante DEBE ser independiente del view_mode.
+ OBLIGATORIO:
+ - shouldRefreshFlotante se evalúa ANTES de los condicionales de view_mode
+ - handleVerItem() se ejecuta si flotante abierto e item_ref coincide, INDEPENDIENTEMENTE del view_mode
+ - Logs [REFRESH][GET] flotante aparecen después de mutaciones desde cualquier modo
+ PROHIBIDO:
+ - Asumir que el flotante solo existe en modo operativa
+ - Refrescar flotante solo si view_mode === 'operativa'
+ - Condicionar refresh de flotante al view_mode
+ VERIFICACIÓN:
+ - Logs [REFRESH][GET] flotante después de mutaciones desde proyección
+ - Flotante muestra estado actualizado sin recargar página
+ - CPM v2 recibe datos frescos (last_cleaned_at nuevo) después del POST
+ REFERENCIAS:
+ - docs/FORENSICS_REFRESH_FIX_V1.md
+ - docs/ALQUIMIA_GENERAL_REFRESH_MODEL.md
+ - docs/INVARIANTES_CONSTITUCIONALES.md (invariante 14)
+
   - id: execution-mode-constitutional
     title: Execution Mode como concepto constitucional (APPLY/CERTIFY)
     content: >
