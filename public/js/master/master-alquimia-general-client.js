@@ -2162,13 +2162,27 @@
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
       // REFRESH ENGINE V1: Usar engine.afterMutation
+      // FIX: Determinar view_layer correcto según modo y superficie activa
+      const activeViewLayer = state.projection.mode === 'proyeccion' 
+        ? (state.projection.view_layer || 'shared')
+        : (state.modal.layerView || 'shared');
+      
+      console.log('[REFRESH_ENGINE][ALQG][MUTATION] clean-all', {
+        mutation_type: 'alquimia.clean.all',
+        view_mode: state.projection.mode,
+        view_layer: activeViewLayer,
+        clean_layer: cleanLayer,
+        item_ref: item.item_ref,
+        modal_open: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+      });
+      
       if (window.MasterRefreshEngineV1) {
         await window.MasterRefreshEngineV1.afterMutation({
           module: 'alquimia_general',
           mutation_type: 'alquimia.clean.all',
           scope: {
             view_mode: state.projection.mode,
-            view_layer: state.projection.view_layer || 'shared'
+            view_layer: activeViewLayer
           },
           context: {
             item_ref: item.item_ref,
@@ -3395,13 +3409,28 @@
       showToastSuccess(`✓ ${displayName} limpiado`);
       
       // REFRESH ENGINE V1: Usar engine.afterMutation en lugar de refreshAfterProjectionMutation
+      // FIX: Determinar view_layer correcto según modo y superficie activa
+      const activeViewLayer = state.projection.mode === 'proyeccion'
+        ? (state.projection.view_layer || 'shared')
+        : (state.modal.layerView || 'shared');
+      
+      console.log('[REFRESH_ENGINE][ALQG][MUTATION] clean-student', {
+        mutation_type: 'alquimia.clean.student',
+        view_mode: state.projection.mode,
+        view_layer: activeViewLayer,
+        clean_layer: cleanLayer,
+        item_ref: item.item_ref,
+        student_uuid: student.student_uuid,
+        modal_open: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+      });
+      
       if (window.MasterRefreshEngineV1) {
         await window.MasterRefreshEngineV1.afterMutation({
           module: 'alquimia_general',
           mutation_type: 'alquimia.clean.student',
           scope: {
             view_mode: state.projection.mode,
-            view_layer: state.modal.layerView || state.projection.view_layer || 'shared'
+            view_layer: activeViewLayer
           },
           context: {
             item_ref: item.item_ref,
@@ -4968,27 +4997,38 @@
       showToastSuccess(`Item incrementado para ${result.data?.updated || result.updated || 0} alumnos`);
       
       // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // REGLA CANÓNICA: Refresh determinista post-acción usando Refresh Engine v1
       // ============================================================================
-      // LPM v1: Si está en modo proyección, refetch de proyección
-      if (state.projection.mode === 'proyeccion') {
-        console.log('[UI][LPM] post-action refetch (increment-all)');
-        await loadListProjection();
-      } else {
-        // Modo operativa: recargar items y flotante si está abierto
-        if (state.listaActiva && state.listaActiva.id) {
-          await loadItems(state.listaActiva.id);
-        }
-        
-        // Refrescar flotante si está abierto para este item con view_layer activo
-        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-          const activeViewLayer = state.modal.layerView || 'combo'; // Default 'combo' para UNA_VEZ
-          console.log('[UI][COLUMN] Refetch post-acción masiva (increment-all)', {
+      // REFRESH ENGINE V1: Usar engine.afterMutation
+      if (window.MasterRefreshEngineV1) {
+        await window.MasterRefreshEngineV1.afterMutation({
+          module: 'alquimia_general',
+          mutation_type: 'alquimia.increment.all',
+          scope: {
+            view_mode: state.projection.mode,
+            view_layer: state.projection.mode === 'proyeccion' 
+              ? (state.projection.view_layer || 'shared')
+              : (state.modal.layerView || 'shared')
+          },
+          context: {
             item_ref: item.item_ref,
-            action_clean_layer: cleanLayer,
-            active_view_layer: activeViewLayer
-          });
-          await handleVerItem(item, 'shared', activeViewLayer); // cleanLayer='shared' (repositorio), viewLayer=activeViewLayer (estado)
+            clean_layer: cleanLayer,
+            item_kind: itemKind
+          }
+        });
+      } else {
+        // Fallback si engine no está disponible
+        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+        if (state.projection.mode === 'proyeccion') {
+          await loadListProjection();
+        } else {
+          if (state.listaActiva && state.listaActiva.id) {
+            await loadItems(state.listaActiva.id);
+          }
+          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+            const activeViewLayer = state.modal.layerView || 'shared';
+            await handleVerItem(item, 'shared', activeViewLayer);
+          }
         }
       }
     } catch (error) {
@@ -5050,25 +5090,41 @@
       showToastSuccess(message);
       
       // ============================================================================
-      // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
+      // REGLA CANÓNICA: Refresh determinista post-acción usando Refresh Engine v1
       // ============================================================================
-      // LPM v1: Si está en modo proyección, refetch de proyección
-      if (state.projection.mode === 'proyeccion') {
-        console.log('[UI][LPM] post-action refetch (PDE increment-all)');
-        await loadListProjection();
-      } else {
-        // Modo operativa: recargar items y flotante si está abierto
-        await loadItems(state.listaActiva.id);
-        // Si hay flotante abierto, recargarlo y cambiar a vista PDE
-        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-          const activeViewLayer = 'pde'; // Cambiar a vista PDE después de acción PDE
-          state.modal.layerView = activeViewLayer;
-          console.log('[UI][COLUMN] Refetch post-acción masiva (PDE increment-all)', {
+      // REFRESH ENGINE V1: Usar engine.afterMutation
+      if (window.MasterRefreshEngineV1) {
+        // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
+        if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+          state.modal.layerView = 'pde';
+        }
+        
+        await window.MasterRefreshEngineV1.afterMutation({
+          module: 'alquimia_general',
+          mutation_type: 'alquimia.increment.all.pde',
+          scope: {
+            view_mode: state.projection.mode,
+            view_layer: state.projection.mode === 'proyeccion' 
+              ? (state.projection.view_layer || 'pde')
+              : (state.modal.layerView || 'pde')
+          },
+          context: {
             item_ref: item.item_ref,
-            action_clean_layer: cleanLayer,
-            active_view_layer: activeViewLayer
-          });
-          await handleVerItem(item, 'pde', activeViewLayer); // cleanLayer='pde' (repositorio), viewLayer=activeViewLayer (estado)
+            clean_layer: cleanLayer,
+            item_kind: itemKind
+          }
+        });
+      } else {
+        // Fallback si engine no está disponible
+        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+        if (state.projection.mode === 'proyeccion') {
+          await loadListProjection();
+        } else {
+          await loadItems(state.listaActiva.id);
+          if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
+            state.modal.layerView = 'pde';
+            await handleVerItem(item, 'pde', 'pde');
+          }
         }
       }
     } catch (error) {
@@ -5800,14 +5856,21 @@
     invalidate(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
       
+      // Log forense estructurado
+      console.log('[REFRESH_ENGINE][ALQG][INVALIDATE]', {
+        mutation_type,
+        view_mode: scope.view_mode || state.projection.mode,
+        view_layer: scope.view_layer || state.projection.view_layer,
+        clean_layer: context.clean_layer,
+        item_ref: context.item_ref,
+        student_uuid: context.student_uuid,
+        list_id: context.list_id || state.listaActiva?.id
+      });
+      
       // Invalidar proyección si la mutación afecta proyección
       if (scope.view_mode === 'proyeccion' || state.projection.mode === 'proyeccion') {
         state.projection.data = null;
         state.projection.loading = true;
-        console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][INVALIDATE] Proyección invalidada', {
-          mutation_type,
-          view_mode: state.projection.mode
-        });
       }
       
       // Invalidar items si la mutación afecta operativa
@@ -5815,35 +5878,73 @@
         // Solo invalidar si la mutación afecta items de la lista activa
         if (context.item_ref || context.list_id === state.listaActiva?.id) {
           state.items = [];
-          console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][INVALIDATE] Items invalidados', {
-            mutation_type,
-            list_id: state.listaActiva?.id
-          });
         }
       }
     },
     
     /**
      * Refetch según el tipo de mutación y vista activa
+     * FIX CANÓNICO: Refresca TODAS las superficies afectadas (proyección, items, flotante)
      */
     async refetch(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
       
+      // Log forense estructurado
+      console.log('[REFRESH_ENGINE][ALQG][REFETCH] Iniciando', {
+        mutation_type,
+        view_mode: state.projection.mode,
+        view_layer: scope.view_layer || state.projection.view_layer,
+        clean_layer: context.clean_layer,
+        item_ref: context.item_ref,
+        student_uuid: context.student_uuid,
+        list_id: context.list_id || state.listaActiva?.id,
+        modal_open: !!(state.modal?.item),
+        modal_item_ref: state.modal?.item?.item_ref
+      });
+      
+      // FIX 3.1: Garantizar coherencia de view_layer
+      // Si la mutación especifica view_layer, usarla; sino mantener la activa
+      const activeViewLayer = scope.view_layer || state.projection.view_layer || 'shared';
+      
       // Determinar qué refetch hacer según vista activa
       if (state.projection.mode === 'proyeccion') {
-        // Refetch proyección
+        // FIX: Asegurar que loadListProjection usa el view_layer correcto
+        // (loadListProjection ya usa state.projection.view_layer, pero lo preservamos)
         await loadListProjection();
+        console.log('[REFRESH_ENGINE][ALQG][REFETCH] Proyección refetcheada', {
+          view_layer: state.projection.view_layer,
+          student_uuid: state.projection.student_uuid,
+          list_id: state.listaActiva?.id
+        });
       } else if (state.projection.mode === 'operativa') {
-        // Refetch items si hay lista activa
+        // FIX 3.2: Refrescar items Y flotante si está abierto
         if (state.listaActiva && state.listaActiva.id) {
           await loadItems(state.listaActiva.id);
+          console.log('[REFRESH_ENGINE][ALQG][REFETCH] Items refetcheados', {
+            list_id: state.listaActiva.id
+          });
+        }
+        
+        // FIX CRÍTICO: Refrescar flotante si está abierto y la mutación afecta ese item
+        if (state.modal?.item && context.item_ref && state.modal.item.item_ref === context.item_ref) {
+          // Usar view_layer del modal (flotante), no de proyección
+          const modalViewLayer = state.modal.layerView || 'shared';
+          console.log('[REFRESH_ENGINE][ALQG][REFETCH] Refrescando flotante', {
+            item_ref: context.item_ref,
+            view_layer: modalViewLayer,
+            clean_layer: context.clean_layer
+          });
+          // FIX: Usar clean_layer de la mutación si está disponible, sino 'shared' como fallback
+          const modalCleanLayer = context.clean_layer || 'shared';
+          await handleVerItem(state.modal.item, modalCleanLayer, modalViewLayer);
         }
       }
       
-      console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][REFETCH] Completado', {
+      console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado', {
         mutation_type,
         view_mode: state.projection.mode,
-        list_id: state.listaActiva?.id
+        surfaces_refreshed: state.projection.mode === 'proyeccion' ? 'projection' : 
+                           (state.modal?.item && context.item_ref ? 'items+flotante' : 'items')
       });
     },
     
@@ -5851,17 +5952,19 @@
      * Render final único
      */
     render(mutation) {
-      const { mutation_type } = mutation;
+      const { mutation_type, scope = {}, context = {} } = mutation;
       
       // Log forense con token de render
       const engine = window.MasterRefreshEngineV1;
       const lastToken = engine ? engine.getLastRenderToken() : null;
       
-      console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][RENDER]', {
+      console.log('[REFRESH_ENGINE][ALQG][RENDER]', {
         mutation_type,
         render_token: lastToken,
         view_mode: state.projection.mode,
-        list_id: state.listaActiva?.id
+        view_layer: scope.view_layer || state.projection.view_layer,
+        list_id: state.listaActiva?.id,
+        student_uuid: state.projection.student_uuid
       });
       
       renderView();
@@ -5869,6 +5972,8 @@
     
     /**
      * Refresh modal si está abierto y corresponde
+     * FIX: Este método se llama ANTES de render, pero el flotante ya se refrescó en refetch()
+     * Mantenemos esto como backup por si el flotante se abre después del refetch
      */
     async refreshModal(mutation) {
       const { context = {} } = mutation;
@@ -5879,13 +5984,16 @@
       }
       
       // Solo refrescar si el modal está abierto y corresponde al item_ref
+      // NOTA: Ya se refrescó en refetch() si estaba abierto, pero esto es backup
       if (state.modal?.item && state.modal.item.item_ref === item_ref) {
         const activeViewLayer = state.modal.layerView || 'shared';
-        console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][REFRESH_MODAL]', {
+        const modalCleanLayer = context.clean_layer || 'shared';
+        console.log('[REFRESH_ENGINE][ALQG][REFRESH_MODAL] Backup refresh', {
           item_ref,
-          view_layer: activeViewLayer
+          view_layer: activeViewLayer,
+          clean_layer: modalCleanLayer
         });
-        await handleVerItem(state.modal.item, 'shared', activeViewLayer);
+        await handleVerItem(state.modal.item, modalCleanLayer, activeViewLayer);
       }
     }
   };

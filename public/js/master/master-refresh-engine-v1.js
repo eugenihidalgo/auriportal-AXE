@@ -104,13 +104,22 @@ if (window.__AP_MASTER_REFRESH_ENGINE_V1_LOADED__) {
       const currentToken = renderTokenCounter;
       lastRenderToken = currentToken;
 
-      // Log forense inicial
+      // Log forense inicial estructurado
       console.log(`${logPrefix}[AFTER_MUTATION]`, {
         module,
         mutation_type,
         token: currentToken,
-        scope,
-        context,
+        scope: {
+          view_mode: scope.view_mode,
+          view_layer: scope.view_layer
+        },
+        context: {
+          item_ref: context.item_ref,
+          student_uuid: context.student_uuid,
+          clean_layer: context.clean_layer,
+          item_kind: context.item_kind,
+          list_id: context.list_id
+        },
         timestamp: new Date().toISOString()
       });
 
@@ -131,15 +140,22 @@ if (window.__AP_MASTER_REFRESH_ENGINE_V1_LOADED__) {
 
         // PASO 4: Render (con guard de token)
         if (lastRenderToken === currentToken) {
-          console.log(`${logPrefix}[RENDER]`, { module, mutation_type, token: currentToken });
+          console.log(`${logPrefix}[RENDER]`, { 
+            module, 
+            mutation_type, 
+            token: currentToken,
+            scope: scope.view_mode,
+            view_layer: scope.view_layer
+          });
           moduleAdapter.render(mutation);
         } else {
           console.warn(`${logPrefix}[RENDER_SKIPPED]`, {
             module,
             mutation_type,
-            token: currentToken,
+            incoming_token: currentToken,
+            current_token: lastRenderToken,
             reason: 'Token desactualizado (otra mutación ya renderizó)',
-            lastRenderToken
+            timestamp: new Date().toISOString()
           });
         }
 
