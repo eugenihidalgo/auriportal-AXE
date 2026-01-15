@@ -338,25 +338,20 @@ export class CleaningItemStateRepoPg {
 
     // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
     const studentUuid = options.student_uuid;
-    const queryFn = client ? client.query.bind(client) : query;
     const productKey = options.product_key || 'pde';
     const domainType = options.domain_type;
 
     // Manejar domain_type null correctamente
-    let query;
-    let params;
-    if (domainType === null || domainType === undefined) {
-      query = `
+    const sqlQuery = (domainType === null || domainType === undefined)
+      ? `
         DELETE FROM cleaning_item_state
         WHERE student_id = $1
           AND product_key = $2
           AND domain_type IS NULL
           AND item_ref = $3
         RETURNING id
-      `;
-      params = [studentUuid, productKey, options.item_ref];
-    } else {
-      query = `
+      `
+      : `
         DELETE FROM cleaning_item_state
         WHERE student_id = $1
           AND product_key = $2
@@ -364,10 +359,13 @@ export class CleaningItemStateRepoPg {
           AND item_ref = $4
         RETURNING id
       `;
-      params = [studentUuid, productKey, domainType, options.item_ref];
-    }
     
-    const result = await queryFn(query, params);
+    const params = (domainType === null || domainType === undefined)
+      ? [studentUuid, productKey, options.item_ref]
+      : [studentUuid, productKey, domainType, options.item_ref];
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(sqlQuery, params);
 
     const deleted = result.rows.length > 0;
 
@@ -402,16 +400,13 @@ export class CleaningItemStateRepoPg {
 
     // UUID-ONLY: student_id en tabla ahora es UUID, usar directamente
     const studentUuid = options.student_uuid;
-    const queryFn = client ? client.query.bind(client) : query;
     const productKey = options.product_key || 'pde';
     const domainType = options.domain_type;
 
     // Eliminar estados de items que pertenecen a la lista
     // Manejar domain_type null correctamente
-    let query;
-    let params;
-    if (domainType === null || domainType === undefined) {
-      query = `
+    const sqlQuery = (domainType === null || domainType === undefined)
+      ? `
         DELETE FROM cleaning_item_state cis
         USING items_transmutaciones it
         WHERE cis.student_id = $1
@@ -421,10 +416,8 @@ export class CleaningItemStateRepoPg {
           AND it.lista_id = $3
           AND it.status = 'active'
         RETURNING cis.id
-      `;
-      params = [studentUuid, productKey, options.list_id];
-    } else {
-      query = `
+      `
+      : `
         DELETE FROM cleaning_item_state cis
         USING items_transmutaciones it
         WHERE cis.student_id = $1
@@ -435,10 +428,13 @@ export class CleaningItemStateRepoPg {
           AND it.status = 'active'
         RETURNING cis.id
       `;
-      params = [studentUuid, productKey, domainType, options.list_id];
-    }
     
-    const result = await queryFn(query, params);
+    const params = (domainType === null || domainType === undefined)
+      ? [studentUuid, productKey, options.list_id]
+      : [studentUuid, productKey, domainType, options.list_id];
+
+    const queryFn = client ? client.query.bind(client) : query;
+    const result = await queryFn(sqlQuery, params);
 
     const deletedCount = result.rows.length;
 
