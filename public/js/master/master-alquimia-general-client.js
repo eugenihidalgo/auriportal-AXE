@@ -1503,8 +1503,8 @@
         }
         
         try {
-          const deletedCount = await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
-          showToastSuccess(`${deletedCount} ítem(s) reseteado(s)`);
+          await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
+          showToastSuccess('Reset completado');
           
           // Refrescar proyección
           await loadListProjection();
@@ -4303,12 +4303,8 @@
             }
             
             try {
-              const result = await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
-              if (result.deleted) {
-                showToastSuccess('Progreso del ítem reseteado');
-              } else {
-                showToastSuccess('No había progreso para resetear');
-              }
+              await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
+              showToastSuccess('Reset completado');
               
               // Refrescar proyección
               await loadListProjection();
