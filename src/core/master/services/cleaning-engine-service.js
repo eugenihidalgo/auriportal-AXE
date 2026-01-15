@@ -1256,6 +1256,19 @@ export async function resetStudentItemProgress(options, client = null) {
     throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
   }
 
+  // REGLA CONSTITUCIONAL CPM v2: Reset PROHIBIDO en UNA_VEZ
+  if (item_kind === 'una_vez') {
+    const error = new Error('Reset está PROHIBIDO para item_kind="una_vez". UNA_VEZ solo tiene contadores + overrides, no reset.');
+    error.code = 'RESET_UNA_VEZ_FORBIDDEN';
+    logError('CleaningEngine', 'Intento de reset en UNA_VEZ (PROHIBIDO)', {
+      traceId,
+      student_uuid,
+      item_ref,
+      item_kind
+    });
+    throw error;
+  }
+
   // Validar formato UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(student_uuid)) {

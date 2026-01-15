@@ -323,8 +323,8 @@ export class CleaningItemStateRepoPg {
    * 
    * REGLA CONSTITUCIONAL: Reset invalida validez operativa, no borra datos históricos.
    * - Establece {layer}_effective_since = NOW()
-   * - Marca {layer}_had_history = true si había last_cleaned_at
    * - NO borra contadores ni fechas históricas
+   * - CPM v2: NO usa had_history (PROHIBIDO)
    * 
    * @param {Object} options - Opciones
    * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
@@ -351,29 +351,18 @@ export class CleaningItemStateRepoPg {
     const effectiveSinceColumn = options.clean_layer === 'shared' 
       ? 'shared_effective_since' 
       : 'pde_effective_since';
-    const hadHistoryColumn = options.clean_layer === 'shared'
-      ? 'shared_had_history'
-      : 'pde_had_history';
-    const lastCleanedColumn = options.clean_layer === 'shared'
-      ? 'shared_last_cleaned_at'
-      : 'pde_last_cleaned_at';
 
-    // REGLA: Si existe last_cleaned_at, marcar had_history = true
-    // Si no existe, had_history = false (nunca hubo historia)
+    // CPM v2: NO usar had_history (PROHIBIDO)
     const result = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id, product_key, domain_type, item_ref,
-        ${effectiveSinceColumn}, ${hadHistoryColumn}
+        ${effectiveSinceColumn}
       ) VALUES (
-        $1, $2, $3, $4, $5, false
+        $1, $2, $3, $4, $5
       )
       ON CONFLICT (student_id, product_key, domain_type, item_ref)
       DO UPDATE SET
         ${effectiveSinceColumn} = $5,
-        ${hadHistoryColumn} = CASE 
-          WHEN ${lastCleanedColumn} IS NOT NULL THEN true 
-          ELSE COALESCE(${hadHistoryColumn}, false)
-        END,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
@@ -384,13 +373,11 @@ export class CleaningItemStateRepoPg {
       now
     ]);
 
-    logInfo('CleaningItemStateRepo', '[RESET][CANONICAL] Reset aplicado (effective_since)', {
+    logInfo('CleaningItemStateRepo', '[RESET][CANONICAL][CPM_V2] Reset aplicado (effective_since)', {
       student_uuid: studentUuid,
       item_ref: options.item_ref,
       clean_layer: options.clean_layer,
       effective_since_column: effectiveSinceColumn,
-      had_history_column: hadHistoryColumn,
-      had_history: result.rows[0]?.[hadHistoryColumn],
       independence_check: `SOLO ${options.clean_layer === 'shared' ? 'SHARED' : 'PDE'} columns`
     });
 

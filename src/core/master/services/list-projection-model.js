@@ -85,7 +85,7 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       per_student_states: layerStates.map((s, idx) => ({
         student_idx: idx,
         clean_count: s.clean_count,
-        days_since_last_clean: s.days_since_last_clean,
+        effective_since: s.effective_since,
         completed: s.completed,
         remaining: s.remaining,
         last_cleaned_at: s.last_cleaned_at
@@ -101,60 +101,67 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
     });
     return {
       clean_count: 0,
-      days_since_last_clean: null,
       remaining: null,
       completed: false,
       last_cleaned_at: null,
-      effective_since: null,
-      had_history: false
+      effective_since: null
     };
   }
   
   if (itemKind === 'recurrente') {
-    // RECURRENTE: NULL tiene prioridad máxima, luego mayor days_since_last_clean
-    // FIX: Si un estudiante no tiene fila, days_since_last_clean es NULL (nunca trabajado)
+    // RECURRENTE: NULL tiene prioridad máxima (nunca trabajado)
+    // CPM v2: Calcular days_since desde last_cleaned_at y effective_since
     let worstDaysSince = null;
     let worstLastCleanedAt = null;
     let hasNull = false;
     
+    // CPM v2: Calcular days_since desde last_cleaned_at y effective_since
     layerStates.forEach(state => {
-      // NULL significa "nunca trabajado" (estudiante sin fila o last_cleaned_at es NULL)
-      if (state.days_since_last_clean === null || state.days_since_last_clean === undefined || 
-          state.last_cleaned_at === null || state.last_cleaned_at === undefined) {
+      const lastCleanedAt = state.last_cleaned_at;
+      const effectiveSince = state.effective_since;
+      
+      // Calcular last_effective_clean (igual que CPM v2)
+      let lastEffectiveCleanAt = null;
+      if (lastCleanedAt && effectiveSince) {
+        lastEffectiveCleanAt = new Date(lastCleanedAt) > new Date(effectiveSince) ? lastCleanedAt : effectiveSince;
+      } else if (effectiveSince) {
+        lastEffectiveCleanAt = effectiveSince;
+      } else if (lastCleanedAt) {
+        lastEffectiveCleanAt = lastCleanedAt;
+      }
+      
+      // NULL significa "nunca trabajado" (sin last_effective_clean)
+      if (lastEffectiveCleanAt === null) {
         hasNull = true;
-        // NULL es peor absoluto, no necesitamos seguir buscando
       } else if (!hasNull) {
-        // Solo actualizar si no hay NULL
-        if (worstDaysSince === null || state.days_since_last_clean > worstDaysSince) {
-          worstDaysSince = state.days_since_last_clean;
-          worstLastCleanedAt = state.last_cleaned_at;
+        // Calcular days_since
+        const now = new Date();
+        const lastEffective = new Date(lastEffectiveCleanAt);
+        const daysSince = Math.floor((now - lastEffective) / (1000 * 60 * 60 * 24));
+        
+        if (worstDaysSince === null || daysSince > worstDaysSince) {
+          worstDaysSince = daysSince;
+          worstLastCleanedAt = lastEffectiveCleanAt;
         }
       }
     });
     
-    // RESET CANÓNICO v1: Incluir effective_since y had_history en peor estado
-    // Si algún estudiante tiene effective_since, el peor estado debe reflejarlo
+    // CPM v2: Incluir effective_since en peor estado (NO had_history, PROHIBIDO)
     let worstEffectiveSince = null;
-    let worstHadHistory = false;
     layerStates.forEach(state => {
       if (state.effective_since) {
-        if (worstEffectiveSince === null || state.effective_since > worstEffectiveSince) {
+        if (worstEffectiveSince === null || new Date(state.effective_since) > new Date(worstEffectiveSince)) {
           worstEffectiveSince = state.effective_since;
         }
-      }
-      if (state.had_history) {
-        worstHadHistory = true;
       }
     });
 
     const worstStateResult = {
       clean_count: 0, // No aplica en agregación para recurrente
-      days_since_last_clean: hasNull ? null : worstDaysSince,
       remaining: null, // No aplica en agregación
       completed: false, // No aplica en agregación
       last_cleaned_at: hasNull ? null : worstLastCleanedAt,
-      effective_since: worstEffectiveSince,
-      had_history: worstHadHistory
+      effective_since: worstEffectiveSince
     };
     
     // DIAGNÓSTICO: Log resultado del cálculo de peor estado para recurrente
@@ -162,8 +169,10 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       item_kind: itemKind,
       students_count: layerStates.length,
       has_null: hasNull,
-      worst_days_since: worstDaysSince,
       worst_last_cleaned_at: worstLastCleanedAt,
+      worst_effective_since: worstEffectiveSince,
+      worst_last_cleaned_at: worstLastCleanedAt,
+      worst_effective_since: worstEffectiveSince,
       result: worstStateResult
     });
     
@@ -243,28 +252,13 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       worstCleanCount = 0;
     }
     
-    // RESET CANÓNICO v1: Incluir effective_since y had_history en peor estado para una_vez
-    let worstEffectiveSince = null;
-    let worstHadHistory = false;
-    layerStates.forEach(state => {
-      if (state.effective_since) {
-        if (worstEffectiveSince === null || state.effective_since > worstEffectiveSince) {
-          worstEffectiveSince = state.effective_since;
-        }
-      }
-      if (state.had_history) {
-        worstHadHistory = true;
-      }
-    });
-
+    // CPM v2: UNA_VEZ NO tiene effective_since (PROHIBIDO)
     const worstStateResult = {
       clean_count: worstCleanCount,
-      days_since_last_clean: null, // No aplica en una_vez
       remaining: worstRemaining,
       completed: worstCompleted,
       last_cleaned_at: null, // No aplica en una_vez
-      effective_since: worstEffectiveSince,
-      had_history: worstHadHistory
+      effective_since: null // UNA_VEZ NO tiene reset
     };
     
     // DIAGNÓSTICO: Log resultado del cálculo de peor estado para una_vez
@@ -357,7 +351,8 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
     }
     
     // Obtener estados para un estudiante específico
-    // RESET CANÓNICO v1: Incluir effective_since y had_history
+    // CPM v2: Incluir effective_since (NO had_history, PROHIBIDO)
+    // CPM v2 calcula days_since_last_effective_clean internamente, NO en SQL
     const result = await query(`
       SELECT 
         item_ref,
@@ -366,32 +361,11 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         shared_remaining,
         shared_completed,
         shared_effective_since,
-        shared_had_history,
         pde_clean_count,
         pde_last_cleaned_at,
         pde_remaining,
         pde_completed,
-        pde_effective_since,
-        pde_had_history,
-        -- Calcular days_since_last_effective_clean (usando effective_since si existe)
-        CASE 
-          WHEN shared_effective_since IS NOT NULL THEN
-            -- Reset aplicado: usar effective_since como base
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(shared_effective_since, COALESCE(shared_last_cleaned_at, shared_effective_since)))) / 86400
-          WHEN shared_last_cleaned_at IS NOT NULL THEN
-            -- Sin reset: usar last_cleaned_at
-            EXTRACT(EPOCH FROM (NOW() - shared_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as shared_days_since_last_clean,
-        CASE 
-          WHEN pde_effective_since IS NOT NULL THEN
-            -- Reset aplicado: usar effective_since como base
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(pde_effective_since, COALESCE(pde_last_cleaned_at, pde_effective_since)))) / 86400
-          WHEN pde_last_cleaned_at IS NOT NULL THEN
-            -- Sin reset: usar last_cleaned_at
-            EXTRACT(EPOCH FROM (NOW() - pde_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as pde_days_since_last_clean
+        pde_effective_since
       FROM cleaning_item_state
       WHERE student_id = $1
         AND product_key = 'pde'
@@ -401,24 +375,21 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
     
     const statesMap = {};
     result.rows.forEach(row => {
+      // CPM v2: Pasar datos brutos (CPM calcula days_since internamente)
       statesMap[row.item_ref] = {
         shared: {
           clean_count: row.shared_clean_count || 0,
-          days_since_last_clean: row.shared_days_since_last_clean,
           remaining: row.shared_remaining,
           completed: row.shared_completed || false,
           last_cleaned_at: row.shared_last_cleaned_at,
-          effective_since: row.shared_effective_since,
-          had_history: row.shared_had_history || false
+          effective_since: row.shared_effective_since || null
         },
         pde: {
           clean_count: row.pde_clean_count || 0,
-          days_since_last_clean: row.pde_days_since_last_clean,
           remaining: row.pde_remaining,
           completed: row.pde_completed || false,
           last_cleaned_at: row.pde_last_cleaned_at,
-          effective_since: row.pde_effective_since,
-          had_history: row.pde_had_history || false
+          effective_since: row.pde_effective_since || null
         }
       };
     });
@@ -449,29 +420,13 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         cis.shared_remaining,
         cis.shared_completed,
         cis.shared_effective_since,
-        cis.shared_had_history,
         cis.pde_clean_count,
         cis.pde_last_cleaned_at,
         cis.pde_remaining,
         cis.pde_completed,
-        cis.pde_effective_since,
-        cis.pde_had_history,
-        -- Calcular days_since_last_effective_clean por alumno (NULL si no hay fila)
-        -- RESET CANÓNICO v1: Usar effective_since si existe
-        CASE 
-          WHEN cis.shared_effective_since IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(cis.shared_effective_since, COALESCE(cis.shared_last_cleaned_at, cis.shared_effective_since)))) / 86400
-          WHEN cis.shared_last_cleaned_at IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - cis.shared_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as shared_days_since_last_clean,
-        CASE 
-          WHEN cis.pde_effective_since IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(cis.pde_effective_since, COALESCE(cis.pde_last_cleaned_at, cis.pde_effective_since)))) / 86400
-          WHEN cis.pde_last_cleaned_at IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (NOW() - cis.pde_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as pde_days_since_last_clean
+        cis.pde_effective_since
+        -- CPM v2: NO calcular days_since en SQL, CPM lo calcula internamente
+        -- CPM v2: NO usar had_history (PROHIBIDO)
       FROM item_refs ir
       CROSS JOIN active_students s
       LEFT JOIN cleaning_item_state cis
@@ -497,24 +452,21 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
       
       // Si no hay fila (LEFT JOIN devolvió NULL), crear estado NULL explícito
       // Esto asegura que estudiantes sin estado se cuenten como "nunca trabajado"
+      // CPM v2: Pasar datos brutos (NO had_history, PROHIBIDO)
       statesByItem[itemRef].shared.push({
         clean_count: row.shared_clean_count || 0,
-        days_since_last_clean: row.shared_days_since_last_clean, // NULL si no hay fila
         remaining: row.shared_remaining || null,
         completed: row.shared_completed || false,
         last_cleaned_at: row.shared_last_cleaned_at || null, // NULL si no hay fila
-        effective_since: row.shared_effective_since || null,
-        had_history: row.shared_had_history || false
+        effective_since: row.shared_effective_since || null
       });
       
       statesByItem[itemRef].pde.push({
         clean_count: row.pde_clean_count || 0,
-        days_since_last_clean: row.pde_days_since_last_clean, // NULL si no hay fila
         remaining: row.pde_remaining || null,
         completed: row.pde_completed || false,
         last_cleaned_at: row.pde_last_cleaned_at || null, // NULL si no hay fila
-        effective_since: row.pde_effective_since || null,
-        had_history: row.pde_had_history || false
+        effective_since: row.pde_effective_since || null
       });
     });
     
@@ -536,8 +488,8 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         item_ref: itemRef,
         shared_count: statesByItem[itemRef].shared.length,
         pde_count: statesByItem[itemRef].pde.length,
-        has_null_states: statesByItem[itemRef].shared.some(s => s.days_since_last_clean === null) ||
-                         statesByItem[itemRef].pde.some(s => s.days_since_last_clean === null)
+        has_null_states: statesByItem[itemRef].shared.some(s => s.last_cleaned_at === null && s.effective_since === null) ||
+                         statesByItem[itemRef].pde.some(s => s.last_cleaned_at === null && s.effective_since === null)
       }))
     });
     
@@ -559,16 +511,16 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         shared: itemStates.shared.map((s, idx) => ({
           student_idx: idx,
           clean_count: s.clean_count,
-          days_since: s.days_since_last_clean,
-          completed: s.completed,
-          last_cleaned_at: s.last_cleaned_at
+          last_cleaned_at: s.last_cleaned_at,
+          effective_since: s.effective_since,
+          completed: s.completed
         })),
         pde: itemStates.pde.map((s, idx) => ({
           student_idx: idx,
           clean_count: s.clean_count,
-          days_since: s.days_since_last_clean,
-          completed: s.completed,
-          last_cleaned_at: s.last_cleaned_at
+          last_cleaned_at: s.last_cleaned_at,
+          effective_since: s.effective_since,
+          completed: s.completed
         }))
       };
       
@@ -577,17 +529,23 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         item_ref: itemRef,
         item_kind: itemKindForItem,
         students_count: itemStates.shared.length,
-        per_student_states: perStudentStates,
+        per_student_states: itemStates.shared.map((s, idx) => ({
+          student_idx: idx,
+          clean_count: s.clean_count,
+          last_cleaned_at: s.last_cleaned_at,
+          effective_since: s.effective_since,
+          completed: s.completed
+        })),
         worst_shared: {
-          days_since: worstShared.days_since_last_clean,
+          last_cleaned_at: worstShared.last_cleaned_at,
+          effective_since: worstShared.effective_since,
           clean_count: worstShared.clean_count,
-          has_null: worstShared.days_since_last_clean === null,
           completed: worstShared.completed
         },
         worst_pde: {
-          days_since: worstPde.days_since_last_clean,
+          last_cleaned_at: worstPde.last_cleaned_at,
+          effective_since: worstPde.effective_since,
           clean_count: worstPde.clean_count,
-          has_null: worstPde.days_since_last_clean === null,
           completed: worstPde.completed
         }
       });
@@ -693,24 +651,26 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         pde: {}
       };
       
-      // DIAGNÓSTICO: Log estado agregado ANTES de CPM
+      // LOG ESTRUCTURADO TEMPORAL (FASE 5): Input CPM
       if (scope === 'all') {
-        console.log('[LPM][DEBUG][ALL][BEFORE_CPM]', {
+        console.log('[LPM][CPM_V2][INPUT]', {
           item_ref: item.item_ref,
           item_kind,
           scope,
           cleaning_state_aggregated: {
             shared: {
               clean_count: cleaningState.shared?.clean_count,
-              days_since: cleaningState.shared?.days_since_last_clean,
-              completed: cleaningState.shared?.completed,
-              last_cleaned_at: cleaningState.shared?.last_cleaned_at
+              last_cleaned_at: cleaningState.shared?.last_cleaned_at,
+              effective_since: cleaningState.shared?.effective_since,
+              remaining: cleaningState.shared?.remaining,
+              completed: cleaningState.shared?.completed
             },
             pde: {
               clean_count: cleaningState.pde?.clean_count,
-              days_since: cleaningState.pde?.days_since_last_clean,
-              completed: cleaningState.pde?.completed,
-              last_cleaned_at: cleaningState.pde?.last_cleaned_at
+              last_cleaned_at: cleaningState.pde?.last_cleaned_at,
+              effective_since: cleaningState.pde?.effective_since,
+              remaining: cleaningState.pde?.remaining,
+              completed: cleaningState.pde?.completed
             }
           },
           item_config: {
@@ -720,14 +680,8 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         });
       }
       
-      // Calcular combo para una_vez
-      if (item_kind === 'una_vez') {
-        cleaningState.combo = {
-          clean_count: (cleaningState.shared?.clean_count || 0) + (cleaningState.pde?.clean_count || 0),
-          remaining: null, // No aplica en agregación
-          completed: false // No aplica en agregación
-        };
-      }
+      // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
+      // Solo pasar datos brutos (shared y pde)
       
       // Aplicar overrides si scope='student'
       // GUARD CONSTITUCIONAL: Overrides SOLO en scope='student', NUNCA en scope='all'
@@ -766,9 +720,9 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       // Determinar active_state y active_visual_state desde view_layer
       const activeState = projection.state_by_view_layer[view_layer];
       
-      // DIAGNÓSTICO: Log estado FINAL que se envía a UI
+      // LOG ESTRUCTURADO TEMPORAL (FASE 5): Output CPM
       if (scope === 'all') {
-        console.log('[LPM][DEBUG][ALL][FINAL_STATE]', {
+        console.log('[LPM][CPM_V2][OUTPUT]', {
           item_ref: item.item_ref,
           item_kind,
           scope,
@@ -777,22 +731,21 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
             shared: {
               state: projection.state_by_view_layer.shared?.state,
               visual_state: projection.state_by_view_layer.shared?.visual_state,
-              computed_state: projection.state_by_view_layer.shared?.computed_state
+              metrics: projection.state_by_view_layer.shared?.metrics
             },
             pde: {
               state: projection.state_by_view_layer.pde?.state,
               visual_state: projection.state_by_view_layer.pde?.visual_state,
-              computed_state: projection.state_by_view_layer.pde?.computed_state
+              metrics: projection.state_by_view_layer.pde?.metrics
             },
             [view_layer]: {
               state: activeState?.state,
               visual_state: activeState?.visual_state,
-              computed_state: activeState?.computed_state
+              metrics: activeState?.metrics
             }
           },
           active_state: activeState?.state || 'never',
-          active_visual_state: activeState?.visual_state || 'never',
-          final_state_sent_to_ui: activeState?.state || 'never'
+          active_visual_state: activeState?.visual_state || 'never'
         });
       }
       

@@ -189,27 +189,8 @@ export async function getMegalistForStudent(options = {}) {
     const statesResult = await query(`
       SELECT 
         s.*,
-        i.nivel as item_nivel,
-        -- Calcular days_since_last_effective_clean para shared (RESET CANÓNICO v1)
-        CASE 
-          WHEN s.shared_effective_since IS NOT NULL THEN
-            -- Reset aplicado: usar effective_since como base
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(s.shared_effective_since, COALESCE(s.shared_last_cleaned_at, s.shared_effective_since)))) / 86400
-          WHEN s.shared_last_cleaned_at IS NOT NULL THEN
-            -- Sin reset: usar last_cleaned_at
-            EXTRACT(EPOCH FROM (NOW() - s.shared_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as shared_days_since_last_clean,
-        -- Calcular days_since_last_effective_clean para pde (RESET CANÓNICO v1)
-        CASE 
-          WHEN s.pde_effective_since IS NOT NULL THEN
-            -- Reset aplicado: usar effective_since como base
-            EXTRACT(EPOCH FROM (NOW() - GREATEST(s.pde_effective_since, COALESCE(s.pde_last_cleaned_at, s.pde_effective_since)))) / 86400
-          WHEN s.pde_last_cleaned_at IS NOT NULL THEN
-            -- Sin reset: usar last_cleaned_at
-            EXTRACT(EPOCH FROM (NOW() - s.pde_last_cleaned_at)) / 86400
-          ELSE NULL
-        END::integer as pde_days_since_last_clean
+        i.nivel as item_nivel
+        -- CPM v2: NO calcular days_since en SQL, CPM lo calcula internamente
       FROM cleaning_item_state s
       LEFT JOIN items_transmutaciones i ON i.item_ref = s.item_ref
       WHERE s.student_id = $1
@@ -443,41 +424,25 @@ export async function getMegalistForStudent(options = {}) {
       const listaTipo = lista.tipo || 'recurrente';
       const itemKind = listaTipo === 'recurrente' ? 'recurrente' : 'una_vez';
       
-      // Preparar datos shared y pde para computeVisualState
+      // CPM v2: Preparar datos brutos (NO calcular combo, CPM lo hace internamente)
       const sharedData = {
         clean_count: state.shared_clean_count || 0,
         last_cleaned_at: state.shared_last_cleaned_at || null,
-        days_since_last_clean: state.shared_days_since_last_clean ?? null,
         remaining: state.shared_remaining ?? null,
-        completed: state.shared_completed || 0
+        completed: state.shared_completed || 0,
+        effective_since: state.shared_effective_since ?? null
       };
       
       const pdeData = {
         clean_count: state.pde_clean_count || 0,
         last_cleaned_at: state.pde_last_cleaned_at || null,
-        days_since_last_clean: state.pde_days_since_last_clean ?? null,
-        effective_since: state.pde_effective_since ?? null,
-        had_history: state.pde_had_history || false,
         remaining: state.pde_remaining ?? null,
-        completed: state.pde_completed || 0
+        completed: state.pde_completed || 0,
+        effective_since: state.pde_effective_since ?? null
       };
       
-      // Para UNA_VEZ: calcular combo (suma shared + pde)
-      let comboData = null;
-      if (itemKind === 'una_vez') {
-        const vecesLimpiar = item.veces_limpiar || 1;
-        const sharedCount = sharedData.clean_count || 0;
-        const pdeCount = pdeData.clean_count || 0;
-        const comboCleanCount = sharedCount + pdeCount;
-        const comboRemaining = Math.max(0, vecesLimpiar - comboCleanCount);
-        const comboCompleted = comboRemaining <= 0 ? 1 : 0;
-        
-        comboData = {
-          clean_count: comboCleanCount,
-          remaining: comboRemaining,
-          completed: comboCompleted
-        };
-      }
+      // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
+      const comboData = null;
       
       // Configuración para computeVisualState
       const config = itemKind === 'recurrente' ? {
@@ -511,7 +476,7 @@ export async function getMegalistForStudent(options = {}) {
         stateByViewLayer.shared = {
           state: 'never',
           visual_state: 'never',
-          computed_state: { view_layer: 'shared', error: error.message }
+          metrics: { view_layer: 'shared', error: error.message }
         };
       }
       
@@ -536,7 +501,7 @@ export async function getMegalistForStudent(options = {}) {
         stateByViewLayer.pde = {
           state: 'never',
           visual_state: 'never',
-          computed_state: { view_layer: 'pde', error: error.message }
+          metrics: { view_layer: 'pde', error: error.message }
         };
       }
       
@@ -562,7 +527,7 @@ export async function getMegalistForStudent(options = {}) {
           stateByViewLayer.effective = {
             state: 'never',
             visual_state: 'never',
-            computed_state: { view_layer: 'effective', error: error.message }
+            metrics: { view_layer: 'effective', error: error.message }
           };
         }
       }
@@ -589,7 +554,7 @@ export async function getMegalistForStudent(options = {}) {
           stateByViewLayer.combo = {
             state: 'never',
             visual_state: 'never',
-            computed_state: { view_layer: 'combo', error: error.message }
+            metrics: { view_layer: 'combo', error: error.message }
           };
         }
       }
@@ -605,9 +570,9 @@ export async function getMegalistForStudent(options = {}) {
           shared_state: stateByViewLayer.shared?.state || 'never',
           pde_state: stateByViewLayer.pde?.state || 'never',
           effective_state: stateByViewLayer.effective?.state || 'never',
-          shared_days_since: stateByViewLayer.effective?.computed_state?.shared_days_since ?? null,
-          pde_days_since: stateByViewLayer.effective?.computed_state?.pde_days_since ?? null,
-          effective_days_since: stateByViewLayer.effective?.computed_state?.days_since_last_clean ?? null
+          shared_days_since: stateByViewLayer.effective?.metrics?.shared_days_since ?? null,
+          pde_days_since: stateByViewLayer.effective?.metrics?.pde_days_since ?? null,
+          effective_days_since: stateByViewLayer.effective?.metrics?.days_since_last_clean ?? null
         });
       }
       

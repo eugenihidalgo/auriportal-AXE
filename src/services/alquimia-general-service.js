@@ -686,16 +686,20 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
       
       // NOTA: Los datos ya vienen con shared y pde simétricos desde el repositorio
       const students = studentsWithState.map(student => {
-        // Compatibilidad: usar datos legacy si no vienen simétricos aún
+        // CPM v2: Preparar datos brutos (NO days_since, CPM lo calcula)
         const sharedData = student.shared || {
           clean_count: student.clean_count || 0,
           last_cleaned_at: student.last_cleaned_at,
-          days_since_last_clean: student.days_since_last_clean
+          remaining: student.remaining,
+          completed: student.completed || 0,
+          effective_since: student.shared_effective_since || null
         };
         const pdeData = student.pde || {
           clean_count: 0,
           last_cleaned_at: null,
-          days_since_last_clean: null
+          remaining: null,
+          completed: 0,
+          effective_since: student.pde_effective_since || null
         };
         
         // ============================================================================
@@ -722,12 +726,14 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           item_ref: itemRef,
           clean_layer, // Para escritura
           view_layer, // Para cálculo de estado
-          computed_state: visualStateResult.computed_state,
+          metrics: visualStateResult.metrics || visualStateResult.computed_state, // Compatibilidad: computed_state → metrics
           state_calculated: visualStateResult.state,
           threshold_days: thresholdDays,
           critical_threshold: criticalThreshold,
-          shared_days: sharedData.days_since_last_clean,
-          pde_days: pdeData.days_since_last_clean
+          shared_last_cleaned_at: sharedData.last_cleaned_at,
+          shared_effective_since: sharedData.effective_since,
+          pde_last_cleaned_at: pdeData.last_cleaned_at,
+          pde_effective_since: pdeData.effective_since
         });
 
         // Calcular estados para todas las view_layers posibles (proyección completa)
@@ -809,29 +815,13 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           completed: 0
         };
         
-        // PROYECCIÓN COMBO: calcular total (shared + pde) como proyección backend
-        const sharedCount = sharedData.clean_count !== null && sharedData.clean_count !== undefined ? parseInt(sharedData.clean_count, 10) : 0;
-        const pdeCount = pdeData.clean_count !== null && pdeData.clean_count !== undefined ? parseInt(pdeData.clean_count, 10) : 0;
-        const comboCleanCount = sharedCount + pdeCount;
-        
-        // COMBO remaining: max(veces_limpiar - combo_clean_count, 0)
-        const comboRemaining = Math.max(0, vecesLimpiar - comboCleanCount);
-        const comboCompleted = comboRemaining <= 0 ? 1 : 0;
-        
-        // Datos combo para computeVisualState
-        const comboData = {
-          clean_count: comboCleanCount,
-          remaining: comboRemaining,
-          completed: comboCompleted
-        };
-        
-        // Calcular estado visual usando función canónica
-        // view_layer puede ser 'shared', 'pde' o 'combo' (default: 'combo' para UNA_VEZ)
+        // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
+        // Pasar datos brutos (shared y pde)
         const effectiveViewLayer = view_layer || 'combo';
         const visualStateResult = computeVisualState({
           shared: sharedData,
           pde: pdeData,
-          combo: comboData,
+          combo: null, // CPM v2 lo calcula internamente
           item_kind: 'una_vez',
           view_layer: effectiveViewLayer,
           config: {
@@ -846,7 +836,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           item_ref: itemRef,
           clean_layer, // Para escritura
           view_layer: effectiveViewLayer, // Para cálculo de estado
-          computed_state: visualStateResult.computed_state,
+          metrics: visualStateResult.metrics || visualStateResult.computed_state, // Compatibilidad: computed_state → metrics
           state_calculated: visualStateResult.state,
           visual_state_calculated: visualStateResult.visual_state,
           required_count: vecesLimpiar
@@ -885,15 +875,13 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           // Asegurar que shared y pde están presentes (simétricos)
           shared: sharedData,
           pde: pdeData,
-          // PROYECCIÓN COMBO (calculada en backend, no persistida)
-          combo: comboData,
           // Estado visual calculado por backend (autoridad única)
           state: visualStateResult.state,
           visual_state: visualStateResult.visual_state,
           // Proyección completa: estados para todas las view_layers
           state_by_view_layer: stateByViewLayer,
           // Compatibilidad legacy (usar SHARED como default para campos legacy)
-          clean_count: sharedCount,
+          clean_count: sharedData.clean_count || 0,
           remaining: sharedData.remaining !== null ? parseInt(sharedData.remaining, 10) : null,
           completed: sharedData.completed || 0,
           veces_limpiar: vecesLimpiar,

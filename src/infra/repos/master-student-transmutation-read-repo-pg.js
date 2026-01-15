@@ -175,11 +175,13 @@ export class MasterStudentTransmutationReadRepoPg {
         COALESCE(c.shared_clean_count, 0) as shared_clean_count,
         c.shared_remaining,
         c.shared_completed,
+        c.shared_effective_since,
         -- PDE layer (siempre presente, simétrico)
         c.pde_last_cleaned_at,
         COALESCE(c.pde_clean_count, 0) as pde_clean_count,
         c.pde_remaining,
         c.pde_completed,
+        c.pde_effective_since,
         -- Compatibilidad: last_cleaned_at según cleanLayer (para lógica legacy)
         c.${cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at'} as last_cleaned_at,
         COALESCE(c.${cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count'}, 0) as clean_count
@@ -221,36 +223,27 @@ export class MasterStudentTransmutationReadRepoPg {
       const pdeCleanCount = row.pde_clean_count !== null ? parseInt(row.pde_clean_count, 10) : 0;
       
       if (tipo === 'recurrente') {
-        const daysSinceLastCleanShared = row.shared_last_cleaned_at 
-          ? Math.floor((new Date().getTime() - new Date(row.shared_last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
-          : null;
-        const daysSinceLastCleanPde = row.pde_last_cleaned_at 
-          ? Math.floor((new Date().getTime() - new Date(row.pde_last_cleaned_at).getTime()) / (1000 * 60 * 60 * 24))
-          : null;
-        
-        // Compatibilidad: usar cleanLayer para last_cleaned_at legacy
-        const daysSinceLastClean = cleanLayer === 'shared' ? daysSinceLastCleanShared : daysSinceLastCleanPde;
-
+        // CPM v2: NO calcular days_since aquí, CPM lo calcula internamente
+        // Pasar datos brutos con effective_since
         students.push({
           student_uuid: row.student_uuid, // UUID canónico
           student_name: studentName || 'Sin nombre',
           student_email: studentEmail,
           apodo: apodo,
           nombre_completo: nombreCompleto,
-          // SHARED layer (simétrico)
+          // SHARED layer (simétrico, datos brutos)
           shared: {
             clean_count: sharedCleanCount,
             last_cleaned_at: row.shared_last_cleaned_at,
-            days_since_last_clean: daysSinceLastCleanShared
+            effective_since: row.shared_effective_since || null
           },
-          // PDE layer (simétrico)
+          // PDE layer (simétrico, datos brutos)
           pde: {
             clean_count: pdeCleanCount,
             last_cleaned_at: row.pde_last_cleaned_at,
-            days_since_last_clean: daysSinceLastCleanPde
+            effective_since: row.pde_effective_since || null
           },
           // Compatibilidad legacy (según cleanLayer)
-          days_since_last_clean: daysSinceLastClean,
           last_cleaned_at: row.last_cleaned_at,
           clean_count: row.clean_count || 0
         });
