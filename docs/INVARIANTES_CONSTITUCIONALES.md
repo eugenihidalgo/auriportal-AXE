@@ -587,4 +587,162 @@ const criticalMultiplier = 2.0;
 
 ---
 
+## Invariante 14: Toda Mutación UI Debe Tener action_id Registrado
+
+### Regla
+
+Toda mutación de estado desde la UI DEBE estar registrada en el UX Action Registry con un `action_id` único y canónico.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ `fetch()` POST directo fuera de `performAction()`
+- ❌ Acciones sin registro en UX Action Registry
+- ❌ `action_id` duplicado o ambiguo
+- ❌ Acciones sin `description` legible
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ Usar `performAction({ action_id, context, uiState })` para todas las mutaciones
+- ✅ Registrar acción en `{domain}-actions-registry.v1.js` antes de usarla
+- ✅ `action_id` sigue formato canónico: `{domain}.{feature}.{action}` (ej: `alquimia.clean.student`)
+- ✅ `description` explica qué hace la acción
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que no hay fetch POST fuera de performAction
+npm run check:ux-refresh
+
+# Buscar fetch POST directo (debe estar marcado como LEGACY)
+grep -r "fetch.*POST" public/js/master --exclude-dir=node_modules | grep -v "performAction\|LEGACY"
+```
+
+**Referencias:**
+- `docs/UX_CONTRACT_V1.md`
+- `public/js/master/ux/perform-action.v1.js`
+- `scripts/check-ux-refresh-wiring.js`
+
+---
+
+## Invariante 15: Toda Mutación UI Debe Declarar refresh_plan
+
+### Regla
+
+Toda acción registrada DEBE declarar un `refresh_plan` que especifique qué superficies se invalidan y refrescan después de la mutación.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ Acciones sin `refresh_plan`
+- ❌ `refresh_plan: null` o `refresh_plan: undefined`
+- ❌ Refresh manual post-mutation fuera del plan
+- ❌ Llamadas a `loadItems/loadListProjection/handleVerItem` en handlers POST
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ `refresh_plan` es función que retorna array de `surface_id`s o array directo
+- ✅ `refresh_plan` evalúa `view_mode`, `view_layer`, y estado de flotante
+- ✅ Flotante se refresca SIEMPRE si está abierto e `item_ref` coincide (independiente de `view_mode`)
+- ✅ Refresh se ejecuta automáticamente vía Refresh Engine
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que todas las acciones tienen refresh_plan
+npm run check:ux-refresh
+
+# Buscar acciones sin refresh_plan
+grep -r "registerUxAction" public/js/master/ux --exclude-dir=node_modules | grep -v "refresh_plan"
+```
+
+**Referencias:**
+- `docs/REFRESH_CONTRACT_V1.md`
+- `public/js/master/ux/alquimia-actions-registry.v1.js`
+
+---
+
+## Invariante 16: Toda Invalidación se Ejecuta por Refresh Engine
+
+### Regla
+
+Toda invalidación y refetch de superficies DEBE ejecutarse a través del Refresh Engine (v1 o v2), nunca manualmente en handlers.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ Llamadas directas a `loadItems()`, `loadListProjection()`, `handleVerItem()` en handlers POST
+- ❌ Refresh condicionado a `view_mode` sin considerar flotante
+- ❌ Invalidación manual de state sin pasar por engine
+- ❌ Múltiples llamadas a funciones de refresh en el mismo handler
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ `performAction()` llama automáticamente a Refresh Engine después del POST
+- ✅ Refresh Engine ejecuta `refresh_plan` declarativo
+- ✅ Surfaces se refrescan vía Refresh Surface Registry
+- ✅ Logs estructurados con `trace_id` para correlación
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que handlers POST no llaman funciones de refresh directamente
+npm run check:ux-refresh
+
+# Buscar llamadas a loadItems/loadListProjection en handlers POST
+grep -A 20 "async function handle.*Item\|handle.*Estudiante" public/js/master/master-alquimia-general-client.js | grep -E "loadItems|loadListProjection|handleVerItem" | grep -v "performAction"
+```
+
+**Referencias:**
+- `docs/REFRESH_CONTRACT_V1.md`
+- `public/js/master/master-refresh-engine-v1.js`
+- `public/js/master/ux/refresh-engine-v2-adapter.js`
+
+---
+
+## Invariante 17: Assembly Check UX/Refresh es Obligatorio
+
+### Regla
+
+El assembly check `check:ux-refresh` es OBLIGATORIO y debe pasar sin errores antes de considerar una feature completada.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ Commits con `npm run check:ux-refresh` fallando (errors > 0)
+- ❌ Ignorar warnings sin marcar como LEGACY
+- ❌ Añadir nuevas acciones sin actualizar el check script si es necesario
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ Ejecutar `npm run check:ux-refresh` antes de commit
+- ✅ 0 errors es requisito obligatorio
+- ✅ Warnings aceptables solo si están marcados como `[LEGACY_REFRESH_CALL]`
+- ✅ Actualizar check script cuando se añaden nuevos patrones de acción/surface
+
+### Verificación
+
+**Comandos:**
+```bash
+# Ejecutar assembly check
+npm run check:ux-refresh
+
+# Verificar que pasa (0 errors)
+# Si hay errors, corregir antes de commit
+```
+
+**Referencias:**
+- `scripts/check-ux-refresh-wiring.js`
+- `docs/UX_CONTRACT_V1.md` (sección "Assembly Check")
+- `docs/REFRESH_CONTRACT_V1.md` (sección "Invariantes")
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**
