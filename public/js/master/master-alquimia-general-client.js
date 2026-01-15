@@ -1506,8 +1506,10 @@
           await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
           showToastSuccess('Reset completado');
           
-          // Refrescar proyección
+          // Refrescar proyección: invalidar estado y forzar recarga completa
+          state.projection.data = null; // Forzar recarga desde servidor
           await loadListProjection();
+          // Asegurar re-render completo después de la carga
           renderView();
         } catch (error) {
           console.error('[RESET][PROGRESS][LIST] Error:', error);
@@ -4306,8 +4308,10 @@
               await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
               showToastSuccess('Reset completado');
               
-              // Refrescar proyección
+              // Refrescar proyección: invalidar estado y forzar recarga completa
+              state.projection.data = null; // Forzar recarga desde servidor
               await loadListProjection();
+              // Asegurar re-render completo después de la carga
               renderView();
             } catch (error) {
               console.error('[RESET][PROGRESS][ITEM] Error:', error);
