@@ -218,6 +218,16 @@
    * Decide si puede renderizar y qué renderizar según viewState
    */
   function renderView() {
+    // Log forense con token de render (si engine está disponible)
+    const engine = window.MasterRefreshEngineV1;
+    const lastToken = engine ? engine.getLastRenderToken() : null;
+    if (lastToken) {
+      console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][RENDER_VIEW]', {
+        render_token: lastToken,
+        view_mode: state.projection.mode,
+        list_id: state.listaActiva?.id
+      });
+    }
     // LOGS FORENSES (FASE 1)
     console.log('[TRACE][renderView] enter', {
       list_id: state.list_id,
@@ -290,12 +300,13 @@
       tabProyeccion.style.color = '#6366f1';
       tabProyeccion.style.borderBottomColor = '#6366f1';
     }
-    tabProyeccion.addEventListener('click', () => {
+    tabProyeccion.addEventListener('click', async () => {
       updateViewState({ viewMode: 'proyeccion' });
       renderView();
       // Cargar proyección si no está cargada
       if (!state.projection.data) {
-        loadListProjection();
+        await loadListProjection();
+        renderView(); // Render explícito después de load
       }
     });
     tabsContainer.appendChild(tabProyeccion);
@@ -1001,6 +1012,7 @@
     // FIX: Si está en modo proyección, recargar proyección antes de renderizar
     if (state.projection.mode === 'proyeccion') {
       await loadListProjection();
+      renderView(); // Render explícito después de load
     } else {
       // Render FINAL cuando datos están listos (modo operativa)
       renderView();
@@ -1183,12 +1195,13 @@
       tabProyeccion.style.color = '#6366f1';
       tabProyeccion.style.borderBottomColor = '#6366f1';
     }
-    tabProyeccion.addEventListener('click', () => {
+    tabProyeccion.addEventListener('click', async () => {
       updateViewState({ viewMode: 'proyeccion' });
       renderView();
       // Cargar proyección si no está cargada
       if (!state.projection.data) {
-        loadListProjection();
+        await loadListProjection();
+        renderView(); // Render explícito después de load
       }
     });
     tabsContainer.appendChild(tabProyeccion);
@@ -1318,7 +1331,8 @@
 
   /**
    * Helper canónico de refresco post-acción en proyección
-   * Unifica el patrón de invalidación + recarga + refresco de modal
+   * DEPRECATED: Usar Refresh Engine v1 (engine.afterMutation) en su lugar
+   * Mantenido solo como fallback si engine no está disponible
    * 
    * @param {Object} options - Opciones
    * @param {string} options.reason - Razón del refresco (para logs forenses)
@@ -1326,6 +1340,8 @@
    * @param {boolean} [options.forceModalRefresh=false] - Si true, refresca modal si está abierto
    */
   async function refreshAfterProjectionMutation({ reason, item_ref = null, forceModalRefresh = false }) {
+    console.warn('[MasterAlquimiaGeneral] refreshAfterProjectionMutation() es DEPRECATED. Usar Refresh Engine v1.');
+    
     // Guard: solo en modo proyección
     if (state.projection?.mode !== 'proyeccion') {
       return;
@@ -1347,8 +1363,9 @@
       }
     }
     
-    // Recargar proyección (ya llama a renderView() internamente)
+    // Recargar proyección (NO llama a renderView() - eso lo hace el engine)
     await loadListProjection();
+    renderView(); // Render explícito después de load
     
     // Log forense
     console.log('[UI][REFRESH_AFTER_MUTATION]', {
@@ -1363,43 +1380,33 @@
   /**
    * LPM v1: Carga proyección de lista desde endpoint
    */
+  /**
+   * LPM v1: Carga proyección de lista desde endpoint
+   * REFACTOR v1: Loader PURO - NO llama a renderView() por efecto colateral
+   * El render final lo hace Refresh Engine después de mutaciones
+   * 
+   * @returns {Promise<Object|null>} Datos de proyección o null si error
+   */
   async function loadListProjection() {
-    if (!state.listaActiva) return;
+    if (!state.listaActiva) {
+      console.warn('[MasterAlquimiaGeneral][LPM] No hay lista activa');
+      return null;
+    }
     
     const itemKind = getItemKindExplicit(null, state.listaActiva) || state.listaActiva.tipo;
     if (!itemKind) {
       console.warn('[MasterAlquimiaGeneral][LPM] No se pudo determinar item_kind');
-      return;
+      return null;
     }
     
     // GATE: Validar que si scope='student', student_uuid esté presente
     // REGLA CANÓNICA C: El gate es protección, no flujo normal
     // La UX debe evitar caer aquí (botones ya manejan esto correctamente)
     if (state.projection.scope === 'student' && !state.projection.student_uuid) {
-      console.log('[LPM][GATE] scope=student sin student_uuid. Mostrando selector de alumno.');
-      
-      // Renderizar estado de espera en UI (selector ya visible, pero mostrar mensaje claro)
-      if (listaContent) {
-        // Limpiar contenido previo de proyección
-        const existingProjection = listaContent.querySelector('[data-projection-content]');
-        if (existingProjection) {
-          existingProjection.remove();
-        }
-        
-        const waitingContainer = document.createElement('div');
-        waitingContainer.setAttribute('data-projection-content', 'true');
-        waitingContainer.style.cssText = 'padding: 2rem; text-align: center; color: #94a3b8; font-style: italic;';
-        
-        const waitingMsg = document.createElement('div');
-        waitingMsg.textContent = 'Selecciona un alumno en el selector de arriba para ver su proyección';
-        waitingMsg.style.cssText = 'font-size: 1rem; margin-bottom: 0.5rem;';
-        waitingContainer.appendChild(waitingMsg);
-        
-        listaContent.appendChild(waitingContainer);
-      }
-      
+      console.log('[LPM][GATE] scope=student sin student_uuid. Retornando null.');
       state.projection.loading = false;
-      return;
+      state.projection.data = null;
+      return null;
     }
     
     state.projection.loading = true;
@@ -1432,23 +1439,26 @@
       }
       
       state.projection.data = result.data;
+      state.projection.loading = false;
       
-      console.log('[UI][LPM] render', {
+      console.log('[UI][LPM] data loaded', {
         counts: result.data.metrics.by_state_counts,
         reviewed_pct: result.data.metrics.reviewed_pct
       });
       
-      renderView(); // Re-renderizar con datos de proyección
+      // REFACTOR v1: NO llamar renderView() aquí
+      // El render lo hace Refresh Engine después de mutaciones
+      // O se llama explícitamente desde init() o cambios de vista
+      
+      return result.data;
     } catch (error) {
       console.error('[MasterAlquimiaGeneral][LPM] Error cargando proyección:', error);
-      
-      // Mostrar error visible
-      const errorBox = document.createElement('div');
-      errorBox.style.cssText = 'background: #fbbf24; color: #000; padding: 0.75rem; margin: 1rem 0; border-radius: 0.5rem; font-family: monospace; font-size: 0.875rem;';
-      errorBox.textContent = `⚠️ Error cargando proyección: ${error.message || 'Error desconocido'}`;
-      listaContent.appendChild(errorBox);
-    } finally {
       state.projection.loading = false;
+      state.projection.data = null;
+      
+      // NO mostrar error en DOM aquí (eso lo hace renderView() si es necesario)
+      // Solo retornar null para indicar error
+      return null;
     }
   }
 
@@ -1478,10 +1488,10 @@
       const btn = document.createElement('button');
       btn.textContent = vl.charAt(0).toUpperCase() + vl.slice(1);
       btn.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.view_layer === vl ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         // REGLA A: Cambio de view_layer mantiene list_id, scope, alumno
         updateViewState({ view_layer: vl });
-        loadListProjection();
+        await loadListProjection();
         renderView();
       });
       viewLayerContainer.appendChild(btn);
@@ -1501,19 +1511,19 @@
     const btnAll = document.createElement('button');
     btnAll.textContent = 'All';
     btnAll.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'all' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-    btnAll.addEventListener('click', () => {
+    btnAll.addEventListener('click', async () => {
       // REGLA CANÓNICA A: scope=all fuerza student_uuid=null y recarga inmediata
       updateViewState({ scope: 'all', student_uuid: null });
       // Cargar proyección inmediatamente (scope=all nunca requiere student_uuid)
-      loadListProjection();
-      // renderView() se llama desde loadListProjection() si hay datos
+      await loadListProjection();
+      renderView(); // Render explícito después de load
     });
     scopeContainer.appendChild(btnAll);
     
     const btnStudent = document.createElement('button');
     btnStudent.textContent = 'Alumno';
     btnStudent.style.cssText = 'padding: 0.375rem 0.75rem; background: ' + (state.projection.scope === 'student' ? '#4f46e5' : '#334155') + '; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;';
-    btnStudent.addEventListener('click', () => {
+    btnStudent.addEventListener('click', async () => {
       // REGLA CANÓNICA B: scope=student requiere student_uuid
       const currentStudentUuid = state.projection.student_uuid;
       
@@ -1522,7 +1532,8 @@
       
       // Si ya existe student_uuid, cargar proyección inmediatamente
       if (currentStudentUuid) {
-        loadListProjection();
+        await loadListProjection();
+        renderView(); // Render explícito después de load
       } else {
         // Si NO hay student_uuid, solo renderizar (mostrar selector)
         // NO llamar a loadListProjection() hasta que haya uuid
@@ -1549,13 +1560,30 @@
         try {
           await resetStudentListProgress(state.projection.student_uuid, state.listaActiva.id);
           showToastSuccess('Reset completado');
-          
-          // Refrescar proyección usando helper canónico
-          await refreshAfterProjectionMutation({ 
-            reason: 'reset-list', 
-            item_ref: null,
-            forceModalRefresh: false 
-          });
+
+          // REFRESH ENGINE V1: Usar engine.afterMutation
+          if (window.MasterRefreshEngineV1) {
+            await window.MasterRefreshEngineV1.afterMutation({
+              module: 'alquimia_general',
+              mutation_type: 'alquimia.reset.list',
+              scope: {
+                view_mode: state.projection.mode,
+                view_layer: state.projection.view_layer || 'shared'
+              },
+              context: {
+                list_id: state.listaActiva.id,
+                student_uuid: state.projection.student_uuid
+              }
+            });
+          } else {
+            // Fallback si engine no está disponible
+            console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+            await refreshAfterProjectionMutation({
+              reason: 'reset-list',
+              item_ref: null,
+              forceModalRefresh: false
+            });
+          }
         } catch (error) {
           console.error('[RESET][PROGRESS][LIST] Error:', error);
           showToastError(`Error: ${error.message}`);
@@ -1598,13 +1626,15 @@
       });
       
       // Event listener para cambio de selección
-      studentSelect.addEventListener('change', (e) => {
+      studentSelect.addEventListener('change', async (e) => {
         const studentUuid = e.target.value;
         if (studentUuid && studentUuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
           // REGLA CANÓNICA B: Al seleccionar alumno, cargar proyección inmediatamente
           updateViewState({ student_uuid: studentUuid });
-          loadListProjection();
-          // renderView() se llama desde loadListProjection() si hay datos
+          const projectionData = await loadListProjection();
+          if (projectionData) {
+            renderView(); // Render explícito después de load
+          }
         } else {
           // Si se selecciona opción vacía, limpiar selección y mostrar estado de espera
           updateViewState({ student_uuid: null });
@@ -2131,28 +2161,35 @@
       // ============================================================================
       // REGLA CANÓNICA: Refresh determinista post-acción usando view_layer ACTIVO
       // ============================================================================
-      // LPM v1: Si está en modo proyección, usar helper canónico
-      if (state.projection.mode === 'proyeccion') {
-        await refreshAfterProjectionMutation({ 
-          reason: 'clean-all', 
-          item_ref: item.item_ref,
-          forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+      // REFRESH ENGINE V1: Usar engine.afterMutation
+      if (window.MasterRefreshEngineV1) {
+        await window.MasterRefreshEngineV1.afterMutation({
+          module: 'alquimia_general',
+          mutation_type: 'alquimia.clean.all',
+          scope: {
+            view_mode: state.projection.mode,
+            view_layer: state.projection.view_layer || 'shared'
+          },
+          context: {
+            item_ref: item.item_ref,
+            clean_layer: cleanLayer,
+            item_kind: itemKind
+          }
         });
       } else {
-        // Modo operativa: recargar items
-        if (state.listaActiva && state.listaActiva.id) {
-          await loadItems(state.listaActiva.id);
-        }
-        
-        // Refrescar modal si está abierto (solo en operativa, fuera del helper)
-        if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-          const activeViewLayer = state.modal.layerView || 'shared';
-          console.log('[UI][COLUMN] Refetch post-acción masiva (mark-clean-all)', {
+        // Fallback si engine no está disponible
+        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+        if (state.projection.mode === 'proyeccion') {
+          await refreshAfterProjectionMutation({ 
+            reason: 'clean-all', 
             item_ref: item.item_ref,
-            action_clean_layer: cleanLayer,
-            active_view_layer: activeViewLayer
+            forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
           });
-          await handleVerItem(state.modal.item, 'shared', activeViewLayer);
+        } else {
+          // Modo operativa: recargar items
+          if (state.listaActiva && state.listaActiva.id) {
+            await loadItems(state.listaActiva.id);
+          }
         }
       }
     } catch (error) {
@@ -3357,12 +3394,31 @@
       const displayName = result.data?.student?.display_name || result.student?.display_name || student.display_name || student.student_name || student.email || 'Alumno';
       showToastSuccess(`✓ ${displayName} limpiado`);
       
-      // Refrescar proyección usando helper canónico (con refresco de modal)
-      await refreshAfterProjectionMutation({ 
-        reason: 'clean-student', 
-        item_ref: item.item_ref,
-        forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
-      });
+      // REFRESH ENGINE V1: Usar engine.afterMutation en lugar de refreshAfterProjectionMutation
+      if (window.MasterRefreshEngineV1) {
+        await window.MasterRefreshEngineV1.afterMutation({
+          module: 'alquimia_general',
+          mutation_type: 'alquimia.clean.student',
+          scope: {
+            view_mode: state.projection.mode,
+            view_layer: state.modal.layerView || state.projection.view_layer || 'shared'
+          },
+          context: {
+            item_ref: item.item_ref,
+            student_uuid: student.student_uuid,
+            clean_layer: cleanLayer,
+            item_kind: itemKind
+          }
+        });
+      } else {
+        // Fallback si engine no está disponible (no debería pasar)
+        console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+        await refreshAfterProjectionMutation({ 
+          reason: 'clean-student', 
+          item_ref: item.item_ref,
+          forceModalRefresh: !!(state.modal?.item && state.modal.item.item_ref === item.item_ref)
+        });
+      }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando estudiante:', error);
       showToastError(`Error: ${error.message}`);
@@ -4311,13 +4367,30 @@
             try {
               await resetStudentItemProgress(state.projection.student_uuid, item.item_ref);
               showToastSuccess('Reset completado');
-              
-              // Refrescar proyección usando helper canónico (con refresco de modal)
-              await refreshAfterProjectionMutation({ 
-                reason: 'reset-item', 
-                item_ref: item.item_ref,
-                forceModalRefresh: true 
-              });
+
+              // REFRESH ENGINE V1: Usar engine.afterMutation
+              if (window.MasterRefreshEngineV1) {
+                await window.MasterRefreshEngineV1.afterMutation({
+                  module: 'alquimia_general',
+                  mutation_type: 'alquimia.reset.item',
+                  scope: {
+                    view_mode: state.projection.mode,
+                    view_layer: state.projection.view_layer || 'shared'
+                  },
+                  context: {
+                    item_ref: item.item_ref,
+                    student_uuid: state.projection.student_uuid
+                  }
+                });
+              } else {
+                // Fallback si engine no está disponible
+                console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
+                await refreshAfterProjectionMutation({
+                  reason: 'reset-item',
+                  item_ref: item.item_ref,
+                  forceModalRefresh: true
+                });
+              }
             } catch (error) {
               console.error('[RESET][PROGRESS][ITEM] Error:', error);
               showToastError(`Error: ${error.message}`);
@@ -5716,9 +5789,118 @@
     return normalizedEffective !== normalizedBase;
   }
 
+  /**
+   * REFRESH ENGINE V1: Adapter para Alquimia General
+   * Conecta el Refresh Engine con el estado y funciones de Alquimia General
+   */
+  const AlquimiaGeneralRefreshAdapter = {
+    /**
+     * Invalida state local según el tipo de mutación
+     */
+    invalidate(mutation) {
+      const { mutation_type, scope = {}, context = {} } = mutation;
+      
+      // Invalidar proyección si la mutación afecta proyección
+      if (scope.view_mode === 'proyeccion' || state.projection.mode === 'proyeccion') {
+        state.projection.data = null;
+        state.projection.loading = true;
+        console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][INVALIDATE] Proyección invalidada', {
+          mutation_type,
+          view_mode: state.projection.mode
+        });
+      }
+      
+      // Invalidar items si la mutación afecta operativa
+      if (scope.view_mode === 'operativa' || state.projection.mode === 'operativa') {
+        // Solo invalidar si la mutación afecta items de la lista activa
+        if (context.item_ref || context.list_id === state.listaActiva?.id) {
+          state.items = [];
+          console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][INVALIDATE] Items invalidados', {
+            mutation_type,
+            list_id: state.listaActiva?.id
+          });
+        }
+      }
+    },
+    
+    /**
+     * Refetch según el tipo de mutación y vista activa
+     */
+    async refetch(mutation) {
+      const { mutation_type, scope = {}, context = {} } = mutation;
+      
+      // Determinar qué refetch hacer según vista activa
+      if (state.projection.mode === 'proyeccion') {
+        // Refetch proyección
+        await loadListProjection();
+      } else if (state.projection.mode === 'operativa') {
+        // Refetch items si hay lista activa
+        if (state.listaActiva && state.listaActiva.id) {
+          await loadItems(state.listaActiva.id);
+        }
+      }
+      
+      console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][REFETCH] Completado', {
+        mutation_type,
+        view_mode: state.projection.mode,
+        list_id: state.listaActiva?.id
+      });
+    },
+    
+    /**
+     * Render final único
+     */
+    render(mutation) {
+      const { mutation_type } = mutation;
+      
+      // Log forense con token de render
+      const engine = window.MasterRefreshEngineV1;
+      const lastToken = engine ? engine.getLastRenderToken() : null;
+      
+      console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][RENDER]', {
+        mutation_type,
+        render_token: lastToken,
+        view_mode: state.projection.mode,
+        list_id: state.listaActiva?.id
+      });
+      
+      renderView();
+    },
+    
+    /**
+     * Refresh modal si está abierto y corresponde
+     */
+    async refreshModal(mutation) {
+      const { context = {} } = mutation;
+      const { item_ref } = context;
+      
+      if (!item_ref) {
+        return;
+      }
+      
+      // Solo refrescar si el modal está abierto y corresponde al item_ref
+      if (state.modal?.item && state.modal.item.item_ref === item_ref) {
+        const activeViewLayer = state.modal.layerView || 'shared';
+        console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL][REFRESH_MODAL]', {
+          item_ref,
+          view_layer: activeViewLayer
+        });
+        await handleVerItem(state.modal.item, 'shared', activeViewLayer);
+      }
+    }
+  };
+
   // Inicializar cuando el DOM esté listo (envuelto en try/catch)
   function boot() {
     try {
+      // Registrar adapter en Refresh Engine si está disponible
+      if (window.MasterRefreshEngineV1) {
+        window.MasterRefreshEngineV1.registerModule('alquimia_general', AlquimiaGeneralRefreshAdapter);
+        console.log('[REFRESH_ENGINE][ALQUIMIA_GENERAL] Adapter registrado');
+      } else {
+        console.warn('[REFRESH_ENGINE][ALQUIMIA_GENERAL] Refresh Engine no disponible, continuando sin engine');
+      }
+      
       init();
     } catch (error) {
       console.error('[MASTER][ALQUIMIA_GENERAL] Error en boot:', error);

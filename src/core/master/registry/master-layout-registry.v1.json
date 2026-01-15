@@ -139,6 +139,16 @@
       "name": "Master UI Toast Helper"
     },
     {
+      "id": "master-refresh-engine-v1",
+      "guard_id": "REFRESH_ENGINE_V1",
+      "path": "/js/master/master-refresh-engine-v1.js",
+      "type": "module",
+      "required": true,
+      "critical": false,
+      "phase": "core",
+      "name": "Master Refresh Engine v1"
+    },
+    {
       "id": "master-alquimia-general-client",
       "guard_id": "ALQUIMIA_GENERAL_CLIENT",
       "path": "/js/master/master-alquimia-general-client.js",
