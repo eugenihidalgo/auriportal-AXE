@@ -6,26 +6,37 @@
  * Este archivo registra TODAS las acciones de Alquimia en el UX Action Registry.
  * Se carga ANTES de master-alquimia-general-client.js para que las acciones
  * estén disponibles cuando se necesiten.
+ * 
+ * RUNTIME CORE v1: Espera a que el runtime esté READY antes de registrar acciones.
  */
 
-(function() {
+// BUG FIX: Esperar a que el runtime esté READY antes de registrar acciones
+(async function() {
   'use strict';
 
-  // Guard: Verificar que UX Action Registry está disponible
-  // El registry se carga desde /js/core/ux/ux-action-registry.v1.js
-  // y expone registerUxAction en window.__AP_UX_ACTION_REGISTRY__
-  if (typeof window === 'undefined' || !window.__AP_UX_ACTION_REGISTRY__) {
-    console.error('[AlquimiaActionsRegistry] UX Action Registry no disponible. Asegúrate de que está cargado antes.');
+  // Verificar que Runtime Ready Gate está disponible
+  if (!window.__AP_RUNTIME_READY__) {
+    console.error('[AlquimiaActionsRegistry] Runtime Ready Gate no disponible. runtime-ready.v1.js debe cargarse antes.');
     return;
   }
 
-  const registry = window.__AP_UX_ACTION_REGISTRY__;
-  
-  // Verificar que registerUxAction está disponible
-  if (typeof registry.registerUxAction !== 'function') {
-    console.error('[AlquimiaActionsRegistry] registerUxAction no disponible en registry. Verificar carga de ux-action-registry.v1.js');
-    return;
-  }
+  try {
+    // Esperar a que el runtime esté READY
+    await window.__AP_RUNTIME_READY__.whenReady();
+    
+    // Verificar que UX Action Registry Core está disponible
+    if (!window.__AP_UX_ACTION_REGISTRY_CORE__) {
+      console.error('[AlquimiaActionsRegistry] UX Action Registry Core no disponible después de runtime ready.');
+      return;
+    }
+
+    const registry = window.__AP_UX_ACTION_REGISTRY_CORE__;
+    
+    // Verificar que register está disponible
+    if (typeof registry.register !== 'function') {
+      console.error('[AlquimiaActionsRegistry] register no disponible en registry core.');
+      return;
+    }
 
   /**
    * Helper para construir refresh plan canónico
@@ -57,10 +68,10 @@
     return surfaces;
   }
 
-  // ============================================================================
-  // ACCIÓN 1: alquimia.clean.student
-  // ============================================================================
-  registry.register({
+    // ============================================================================
+    // ACCIÓN 1: alquimia.clean.student
+    // ============================================================================
+    registry.register({
     action_id: 'alquimia.clean.student',
     domain: 'master',
     description: 'Limpiar item para un estudiante específico (shared o pde)',
@@ -103,10 +114,10 @@
     }
   });
 
-  // ============================================================================
-  // ACCIÓN 2: alquimia.clean.all
-  // ============================================================================
-  registry.registerUxAction({
+    // ============================================================================
+    // ACCIÓN 2: alquimia.clean.all
+    // ============================================================================
+    registry.register({
     action_id: 'alquimia.clean.all',
     domain: 'master',
     description: 'Limpiar item para todos los estudiantes (shared o pde)',
@@ -138,10 +149,10 @@
     }
   });
 
-  // ============================================================================
-  // ACCIÓN 3: alquimia.increment.all
-  // ============================================================================
-  registry.registerUxAction({
+    // ============================================================================
+    // ACCIÓN 3: alquimia.increment.all
+    // ============================================================================
+    registry.register({
     action_id: 'alquimia.increment.all',
     domain: 'master',
     description: 'Incrementar contador de item para todos los estudiantes (una_vez)',
@@ -173,10 +184,10 @@
     }
   });
 
-  // ============================================================================
-  // ACCIÓN 4: alquimia.reset.item
-  // ============================================================================
-  registry.registerUxAction({
+    // ============================================================================
+    // ACCIÓN 4: alquimia.reset.item
+    // ============================================================================
+    registry.register({
     action_id: 'alquimia.reset.item',
     domain: 'master',
     description: 'Resetear progreso de item para un estudiante (recurrente)',
@@ -211,10 +222,10 @@
     }
   });
 
-  // ============================================================================
-  // ACCIÓN 5: alquimia.reset.list
-  // ============================================================================
-  registry.registerUxAction({
+    // ============================================================================
+    // ACCIÓN 5: alquimia.reset.list
+    // ============================================================================
+    registry.register({
     action_id: 'alquimia.reset.list',
     domain: 'master',
     description: 'Resetear progreso de lista completa para un estudiante (recurrente)',
@@ -249,5 +260,14 @@
     }
   });
 
-  console.log('[AlquimiaActionsRegistry] ✅ 5 acciones registradas en UX Action Registry');
+    console.log('[AlquimiaActionsRegistry] ✅ 5 acciones registradas en UX Action Registry');
+  } catch (error) {
+    // Si el runtime está BROKEN, no registrar acciones
+    if (error.message && error.message.includes('BROKEN')) {
+      console.error('[AlquimiaActionsRegistry] Runtime está BROKEN, no se registran acciones:', error.message);
+      return;
+    }
+    // Otros errores: loguear y no registrar
+    console.error('[AlquimiaActionsRegistry] Error registrando acciones:', error);
+  }
 })();
