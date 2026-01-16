@@ -157,13 +157,20 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // Determinar si hay reset aplicado
   const hasReset = effectiveSince !== null;
   
+  // ============================================================================
+  // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500
+  // ============================================================================
   // Log forense para RESET_RECURRENTE_V1
   if (hasReset) {
-    console.log('[CPM][RESET_RECURRENTE_V1] Reset detectado, iniciando nuevo ciclo', {
+    console.log('[FORENSIC][CPM][RESET_RECURRENTE_V1] Reset detectado, iniciando nuevo ciclo', {
       effective_since: effectiveSince,
       last_cleaned_at: lastCleanedAt,
       threshold_days,
-      critical_threshold: criticalThreshold
+      critical_threshold: criticalThreshold,
+      effective_since_type: typeof effectiveSince,
+      last_cleaned_at_type: typeof lastCleanedAt,
+      effective_since_is_null: effectiveSince === null,
+      last_cleaned_at_is_null: lastCleanedAt === null
     });
   }
   
@@ -231,16 +238,47 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
     state = 'never';
   }
   
+  // ============================================================================
+  // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500
+  // ============================================================================
   // Log forense para RESET_RECURRENTE_V1 (solo si hay reset)
   if (hasReset) {
-    console.log('[CPM][RESET_RECURRENTE_V1] Estado calculado tras reset', {
+    console.log('[FORENSIC][CPM][RESET_RECURRENTE_V1] Estado calculado tras reset', {
       state,
       days_since: daysSince,
       has_clean_after_reset: lastEffectiveCleanAt !== null,
       last_effective_clean_at: lastEffectiveCleanAt,
       effective_since: effectiveSince,
-      last_cleaned_at: lastCleanedAt
+      last_cleaned_at: lastCleanedAt,
+      calculated_last_effective_clean: lastEffectiveCleanAt,
+      days_since_type: typeof daysSince,
+      days_since_value: daysSince
     });
+  }
+  
+  // ============================================================================
+  // DIAGNÓSTICO FORENSE: Validar valores imposibles antes de retornar
+  // ============================================================================
+  // Detecta combinaciones imposibles que podrían causar 500
+  if (hasReset && lastCleanedAt && effectiveSince) {
+    try {
+      const lastCleanedDate = new Date(lastCleanedAt);
+      const effectiveSinceDate = new Date(effectiveSince);
+      if (isNaN(lastCleanedDate.getTime()) || isNaN(effectiveSinceDate.getTime())) {
+        console.error('[FORENSIC][CPM][ERROR] Fechas inválidas detectadas', {
+          last_cleaned_at: lastCleanedAt,
+          effective_since: effectiveSince,
+          last_cleaned_date_valid: !isNaN(lastCleanedDate.getTime()),
+          effective_since_date_valid: !isNaN(effectiveSinceDate.getTime())
+        });
+      }
+    } catch (dateError) {
+      console.error('[FORENSIC][CPM][ERROR] Error parseando fechas', {
+        error: dateError.message,
+        last_cleaned_at: lastCleanedAt,
+        effective_since: effectiveSince
+      });
+    }
   }
   
   return {

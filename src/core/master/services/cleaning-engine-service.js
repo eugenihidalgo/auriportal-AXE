@@ -1505,6 +1505,16 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     actor_type,
     surface_key
   });
+  
+  // ============================================================================
+  // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500
+  // ============================================================================
+  console.log('[FORENSIC][RESET_ALL] [ENTRADA] resetAllStudentsItemProgress', {
+    traceId,
+    item_ref,
+    item_kind,
+    clean_layer
+  });
 
   // Validar campos requeridos
   if (!item_ref || !actor_type || !item_kind || !surface_key || !clean_layer) {
@@ -1599,6 +1609,30 @@ export async function resetAllStudentsItemProgress(options, client = null) {
 
     for (const studentUuid of studentUuids) {
       try {
+        // ========================================================================
+        // DIAGNÓSTICO FORENSE: Log estado ANTES del reset
+        // ========================================================================
+        const stateRepo = getDefaultCleaningItemStateRepo();
+        const stateBefore = await stateRepo.getState({
+          student_uuid: studentUuid,
+          item_ref,
+          product_key,
+          domain_type
+        });
+        console.log('[FORENSIC][RESET_ALL] [BEFORE] Estado antes de reset', {
+          traceId,
+          student_uuid: studentUuid,
+          item_ref,
+          state_before: stateBefore ? {
+            shared_last_cleaned_at: stateBefore.shared_last_cleaned_at,
+            shared_effective_since: stateBefore.shared_effective_since,
+            shared_clean_count: stateBefore.shared_clean_count,
+            pde_last_cleaned_at: stateBefore.pde_last_cleaned_at,
+            pde_effective_since: stateBefore.pde_effective_since,
+            pde_clean_count: stateBefore.pde_clean_count
+          } : null
+        });
+        
         // Verificar si está en pausa
         const isPaused = await isStudentPaused(studentUuid);
         if (isPaused) {
@@ -1627,6 +1661,30 @@ export async function resetAllStudentsItemProgress(options, client = null) {
           }
         }, client);
 
+        // ========================================================================
+        // DIAGNÓSTICO FORENSE: Log estado DESPUÉS del reset
+        // ========================================================================
+        const stateAfter = await stateRepo.getState({
+          student_uuid: studentUuid,
+          item_ref,
+          product_key,
+          domain_type
+        });
+        console.log('[FORENSIC][RESET_ALL] [AFTER] Estado después de reset', {
+          traceId,
+          student_uuid: studentUuid,
+          item_ref,
+          reset_result: resetResult,
+          state_after: stateAfter ? {
+            shared_last_cleaned_at: stateAfter.shared_last_cleaned_at,
+            shared_effective_since: stateAfter.shared_effective_since,
+            shared_clean_count: stateAfter.shared_clean_count,
+            pde_last_cleaned_at: stateAfter.pde_last_cleaned_at,
+            pde_effective_since: stateAfter.pde_effective_since,
+            pde_clean_count: stateAfter.pde_clean_count
+          } : null
+        });
+        
         if (resetResult.applied) {
           applied++;
           if (resetResult.layers_affected && resetResult.layers_affected.length > 0) {
@@ -1641,6 +1699,18 @@ export async function resetAllStudentsItemProgress(options, client = null) {
           skippedBreakdown.other++;
         }
       } catch (studentError) {
+        // ========================================================================
+        // DIAGNÓSTICO FORENSE: Log error completo con stacktrace
+        // ========================================================================
+        console.error('[FORENSIC][RESET_ALL] [ERROR] Error reseteando estudiante', {
+          traceId,
+          student_uuid: studentUuid,
+          item_ref,
+          error_message: studentError.message,
+          error_code: studentError.code,
+          error_stack: studentError.stack,
+          error_name: studentError.name
+        });
         logWarn('CleaningEngine', 'Error reseteando estudiante en reset ALL (continuando)', {
           traceId,
           student_uuid: studentUuid,
