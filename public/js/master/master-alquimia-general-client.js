@@ -1589,12 +1589,19 @@
     listaContent.appendChild(scopeContainer);
     
     // Botón Reset Lista (solo visible en scope='student' con student_uuid)
+    // BUG-001 FIX: Validar item_kind ANTES de renderizar (Reset SOLO para recurrente)
     if (state.projection.scope === 'student' && state.projection.student_uuid && state.listaActiva) {
-      const resetListContainer = document.createElement('div');
-      resetListContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
-      
-      const btnResetList = document.createElement('button');
-      btnResetList.textContent = 'Reset lista';
+      // Validar que el tipo activo sea 'recurrente' (Reset NO permitido para una_vez)
+      const itemKind = state.tipoActivo; // 'recurrente' | 'una_vez'
+      if (itemKind !== 'recurrente') {
+        // NO renderizar botón Reset si es una_vez (BUG-001)
+        // Backend ya valida, pero UI NO debe mostrar el botón
+      } else {
+        const resetListContainer = document.createElement('div');
+        resetListContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+        
+        const btnResetList = document.createElement('button');
+        btnResetList.textContent = 'Reset lista';
       btnResetList.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
       btnResetList.addEventListener('click', async () => {
         // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
@@ -1650,8 +1657,9 @@
           showToastError(`Error: ${error.message}`);
         }
       });
-      resetListContainer.appendChild(btnResetList);
-      listaContent.appendChild(resetListContainer);
+        resetListContainer.appendChild(btnResetList);
+        listaContent.appendChild(resetListContainer);
+      }
     }
     
     // Selector de alumno (solo visible cuando scope === 'student')
@@ -2248,6 +2256,15 @@
    * @param {Object} normalized - Payload normalizado con students, counts, warnings, etc.
    */
   function showFlotanteVer(item, normalized) {
+    // BUG-010 FIX: Limpiar estado anterior de estudiantes para forzar re-render completo
+    if (normalized && normalized.students && Array.isArray(normalized.students)) {
+      normalized.students.forEach(student => {
+        // Eliminar referencias de estado anterior para forzar re-render determinista
+        delete student._last_column_state;
+        delete student._action_expected_change;
+      });
+    }
+    
     // Eliminar flotante existente si hay
     const existingFlotante = document.getElementById('flotante-ver-alquimia');
     if (existingFlotante) {
@@ -2593,24 +2610,32 @@
     // PROHIBIDO: usar student.state o student.visual_state (campos legacy ambiguos)
     // OBLIGATORIO: usar student.state_by_view_layer[activeViewLayer]
     // ============================================================================
+    // BUG-011 FIX: ELIMINAR fallback legacy - Si falta state_by_view_layer, BLOQUEAR render
+    // ============================================================================
     studentsAplicables.forEach(student => {
       // Obtener estado desde state_by_view_layer[activeViewLayer]
-      // Si no existe state_by_view_layer, fallback a campos legacy (compatibilidad temporal)
+      // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO, NO hay fallback
       let stateData = null;
       if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
         stateData = student.state_by_view_layer[activeViewLayer];
       } else {
-        // Fallback temporal para compatibilidad (DEPRECATED)
-        console.warn('[MasterAlquimiaGeneral] [UI][COLUMN] state_by_view_layer no disponible, usando fallback legacy', {
+        // BUG-011: NO usar fallback legacy - BLOQUEAR render y mostrar error visible
+        console.error('[MasterAlquimiaGeneral] [UI][COLUMN] [BUG-011] state_by_view_layer no disponible - BLOQUEANDO render', {
           student_uuid: student.student_uuid,
           view_layer: activeViewLayer,
-          has_state_by_view_layer: !!student.state_by_view_layer
+          has_state_by_view_layer: !!student.state_by_view_layer,
+          available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
         });
-        // Usar campos legacy como fallback
-        stateData = {
-          state: student.state || 'never',
-          visual_state: student.visual_state || 'never'
-        };
+        // NO agregar estudiante a ninguna columna (bloquear render)
+        // Mostrar error visible en la columna correspondiente
+        if (!studentsByState._error) {
+          studentsByState._error = [];
+        }
+        studentsByState._error.push({
+          ...student,
+          _error_message: `Estado no disponible — datos inconsistentes (view_layer: ${activeViewLayer})`
+        });
+        return; // Saltar este estudiante
       }
       
       // Determinar estado de columna según item_kind
@@ -2624,11 +2649,11 @@
       }
       
       // ============================================================================
-      // FORÉNSICA UI: Log de movimiento de columna
+      // BUG-010 FIX: Re-render determinista - NO solo loggear, FORZAR movimiento visual
       // ============================================================================
       const stateBefore = student._last_column_state || null;
       if (stateBefore && stateBefore !== columnState) {
-        console.log('[UI][COLUMN] Movimiento de columna detectado', {
+        console.log('[UI][COLUMN] [BUG-010] Movimiento de columna detectado - re-render forzado', {
           student_uuid: student.student_uuid,
           item_ref: item.item_ref,
           view_layer: activeViewLayer,
@@ -2636,6 +2661,8 @@
           state_after: columnState,
           item_kind: itemKind
         });
+        // BUG-010: Forzar re-render eliminando referencia anterior
+        delete student._last_column_state;
       } else if (stateBefore === null) {
         // Primera vez que se renderiza este estudiante
         console.log('[UI][COLUMN] Estudiante renderizado por primera vez', {
@@ -2646,10 +2673,10 @@
           item_kind: itemKind
         });
       } else if (stateBefore === columnState) {
-        // No hay cambio de columna (puede ser esperado o no)
-        // Log solo si se esperaba un cambio (después de una acción)
+        // BUG-010 FIX: Si no hay cambio tras acción esperada, forzar re-render de todas formas
+        // (puede ser que el backend cambió pero el estado visual no se actualizó)
         if (student._action_expected_change) {
-          console.warn('[UI][COLUMN] ⚠️ No hubo cambio de columna tras acción (posible desincronización)', {
+          console.warn('[UI][COLUMN] [BUG-010] ⚠️ No hubo cambio de columna tras acción - FORZANDO re-render', {
             student_uuid: student.student_uuid,
             item_ref: item.item_ref,
             view_layer: activeViewLayer,
@@ -2657,7 +2684,8 @@
             item_kind: itemKind,
             expected_change: student._action_expected_change
           });
-          // Limpiar flag
+          // BUG-010: Forzar re-render eliminando referencia para que se re-agrupe
+          delete student._last_column_state;
           delete student._action_expected_change;
         }
       }
@@ -2683,6 +2711,21 @@
       }
     });
 
+    // BUG-011 FIX: Mostrar columna de error si hay estudiantes con state_by_view_layer faltante
+    if (studentsByState._error && studentsByState._error.length > 0) {
+      const errorColumn = document.createElement('div');
+      errorColumn.style.cssText = 'padding: 1rem; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 0.5rem; margin-bottom: 1rem;';
+      const errorTitle = document.createElement('div');
+      errorTitle.textContent = '❌ ERROR: Estado no disponible';
+      errorTitle.style.cssText = 'color: #fca5a5; font-weight: 600; margin-bottom: 0.5rem;';
+      errorColumn.appendChild(errorTitle);
+      const errorDesc = document.createElement('div');
+      errorDesc.textContent = `${studentsByState._error.length} estudiante(s) con datos inconsistentes. El backend no devolvió state_by_view_layer.`;
+      errorDesc.style.cssText = 'color: #fca5a5; font-size: 0.875rem;';
+      errorColumn.appendChild(errorDesc);
+      content.appendChild(errorColumn);
+    }
+    
     // Renderizar columnas por estado según tipo
     const columnsContainer = document.createElement('div');
     
@@ -4420,9 +4463,16 @@
         })();
         
         // Botón Reset Progreso (solo en scope='student')
+        // BUG-001 FIX: Validar item_kind ANTES de renderizar (Reset SOLO para recurrente)
         if (isProjectionStudent && state.projection.scope === 'student' && state.projection.student_uuid) {
-          const btnResetProgress = document.createElement('button');
-          btnResetProgress.textContent = 'Reset progreso';
+          // Validar item_kind explícitamente ANTES de crear el botón
+          const itemKind = getItemKindExplicit(item, state.listaActiva);
+          if (itemKind !== 'recurrente') {
+            // NO renderizar botón Reset si es una_vez (BUG-001)
+            // Backend ya valida, pero UI NO debe mostrar el botón
+          } else {
+            const btnResetProgress = document.createElement('button');
+            btnResetProgress.textContent = 'Reset progreso';
           btnResetProgress.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
           btnResetProgress.addEventListener('click', async () => {
             // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
@@ -4480,6 +4530,7 @@
             }
           });
           actionsDiv.appendChild(btnResetProgress);
+          }
         }
       }
       
