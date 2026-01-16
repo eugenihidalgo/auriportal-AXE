@@ -24,6 +24,46 @@ import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-cat
 import { resolveItemConfigForStudent } from './override-resolution-service.js';
 
 /**
+ * BUG-018 FIX: Función canónica de agregación de estado ALL para recurrente
+ * Prioridad constitucional (NO cambiar):
+ * 1. never (si ALGÚN estudiante está en never)
+ * 2. important (si ALGÚN estudiante está en important)
+ * 3. pending (si ALGÚN estudiante está en pending)
+ * 4. reviewed (solo si TODOS están en reviewed)
+ * 
+ * @param {Array} students - Array de estados por estudiante
+ * @param {string} viewLayer - Capa de vista ('shared' | 'pde' | 'effective')
+ * @returns {string} Estado agregado canónico
+ */
+function aggregateStateForAll(students, viewLayer) {
+  if (!students || students.length === 0) {
+    return 'never'; // Fallback seguro
+  }
+  
+  // Obtener estados de todos los estudiantes para la view_layer
+  const states = students.map(student => {
+    return student.state_by_view_layer?.[viewLayer]?.state || 'never';
+  });
+  
+  // Prioridad canónica: never > important > pending > reviewed
+  if (states.includes('never')) {
+    return 'never';
+  }
+  if (states.includes('important')) {
+    return 'important';
+  }
+  if (states.includes('pending') || states.includes('in_progress')) {
+    return 'pending';
+  }
+  if (states.every(s => s === 'reviewed' || s === 'completed')) {
+    return 'reviewed';
+  }
+  
+  // Fallback seguro
+  return 'pending';
+}
+
+/**
  * Calcula métricas agregadas por estado
  * 
  * @param {Array} items - Items con state_by_view_layer calculado
@@ -750,6 +790,31 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         });
       }
       
+      // BUG-020 FIX: Asegurar que effective siempre se devuelve para recurrente
+      // Si item_kind es recurrente, effective DEBE estar en state_by_view_layer
+      if (item_kind === 'recurrente' && !projection.state_by_view_layer.effective) {
+        logError('ListProjectionModel', '[BUG-020] effective no calculado para recurrente', {
+          traceId,
+          item_ref: item.item_ref,
+          item_kind,
+          available_layers: Object.keys(projection.state_by_view_layer)
+        });
+        // Calcular effective explícitamente si falta
+        projection.state_by_view_layer.effective = computeCleaningProjection({
+          cleaning_state: cleaningState,
+          item_kind: item_kind,
+          view_layer: 'effective',
+          config: effectiveConfig
+        }).state_by_view_layer.effective;
+      }
+      
+      // BUG-023 FIX: Garantizar que required_count y veces_limpiar siempre están presentes
+      // Backend debe devolver ambos campos explícitamente
+      const requiredCount = effectiveConfig.required_count !== undefined 
+        ? effectiveConfig.required_count 
+        : (item.veces_limpiar || 1);
+      const vecesLimpiar = item.veces_limpiar || 1;
+      
       // Construir item con valores efectivos (incluyendo overrides de nivel, descripcion, threshold_days, required_count)
       // IMPORTANTE: Mantener valores base originales para comparación en UI
       const effectiveItem = {
@@ -762,7 +827,9 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         descripcion: effectiveConfig.descripcion !== undefined ? effectiveConfig.descripcion : item.descripcion,
         // Aplicar overrides de threshold_days y required_count si existen en effectiveConfig
         threshold_days: effectiveConfig.threshold_days !== undefined ? effectiveConfig.threshold_days : (item.frecuencia_dias || 7),
-        required_count: effectiveConfig.required_count !== undefined ? effectiveConfig.required_count : (item.veces_limpiar || 1),
+        // BUG-023 FIX: Garantizar que ambos campos están presentes (snake_case canónico)
+        veces_limpiar: vecesLimpiar, // Campo base (obligatorio)
+        required_count: requiredCount, // Campo efectivo con overrides (obligatorio)
         state_by_view_layer: projection.state_by_view_layer,
         active_state: activeState?.state || 'never',
         active_visual_state: activeState?.visual_state || 'never'
@@ -777,20 +844,75 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     // Calcular list_state
     const listState = calculateListState(metrics);
     
+    // BUG-018 FIX: Añadir aggregated_state_all cuando scope='all' para recurrente
+    // Este campo contiene el estado agregado canónico para ordenamiento
+    let aggregatedStateAll = null;
+    if (scope === 'all' && item_kind === 'recurrente') {
+      // Obtener todos los estudiantes activos para calcular agregación
+      const activeStudentsResult = await query(`
+        SELECT id AS student_uuid
+        FROM students
+        WHERE deleted_at IS NULL
+      `);
+      const activeStudents = activeStudentsResult.rows.map(row => row.student_uuid);
+      
+      // Calcular estado agregado para cada view_layer posible
+      aggregatedStateAll = {
+        shared: aggregateStateForAll(
+          itemsWithProjection.map(item => ({
+            state_by_view_layer: item.state_by_view_layer
+          })),
+          'shared'
+        ),
+        pde: aggregateStateForAll(
+          itemsWithProjection.map(item => ({
+            state_by_view_layer: item.state_by_view_layer
+          })),
+          'pde'
+        )
+      };
+      
+      // Si effective está disponible, calcular también
+      if (itemsWithProjection.some(item => item.state_by_view_layer?.effective)) {
+        aggregatedStateAll.effective = aggregateStateForAll(
+          itemsWithProjection.map(item => ({
+            state_by_view_layer: item.state_by_view_layer
+          })),
+          'effective'
+        );
+      }
+      
+      logInfo('ListProjectionModel', '[BUG-018] Estado agregado ALL calculado', {
+        traceId,
+        list_id,
+        item_kind,
+        aggregated_state_all: aggregatedStateAll,
+        students_count: activeStudents.length
+      });
+    }
+    
     logInfo('ListProjectionModel', '[LPM][LIST_PROJECTION] Proyección calculada', {
       traceId,
       list_id,
       total_items: metrics.total_items,
       reviewed_pct: metrics.reviewed_pct,
       dominant_state: listState.dominant_state,
-      health_bucket: listState.health_bucket
+      health_bucket: listState.health_bucket,
+      has_aggregated_state_all: aggregatedStateAll !== null
     });
     
-    return {
+    const result = {
       items: itemsWithProjection,
       metrics,
       list_state: listState
     };
+    
+    // BUG-018 FIX: Añadir aggregated_state_all solo cuando scope='all' y recurrente
+    if (aggregatedStateAll !== null) {
+      result.aggregated_state_all = aggregatedStateAll;
+    }
+    
+    return result;
   } catch (error) {
     logError('ListProjectionModel', '[LPM][LIST_PROJECTION] Error calculando proyección', {
       traceId,
