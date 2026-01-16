@@ -1392,13 +1392,15 @@ export async function resetStudentItemProgress(options, client = null) {
           continue;
         }
 
-        // Aplicar reset a proyección (establecer effective_since)
+        // Aplicar reset a proyección (establecer effective_since + resetear contadores)
+        // FIX MAJOR: Pasar item_kind para resetear last_cleaned_at y completed correctamente
         await stateRepo.upsertApplyReset({
           student_uuid,
           product_key,
           domain_type,
           item_ref,
-          clean_layer: layer
+          clean_layer: layer,
+          item_kind // FIX: Pasar item_kind para resetear contadores solo en recurrente
         }, client);
 
         applied++;

@@ -18,26 +18,35 @@
  * - Si falla -> failHard(error)
  */
 
+/**
+ * FIX MAJOR: Ejecutar integrity check después de que los scripts estén cargados.
+ * 
+ * ESTRATEGIA:
+ * - Si DOMContentLoaded ya ocurrió, ejecutar inmediatamente
+ * - Si no, esperar a DOMContentLoaded
+ * - Esto garantiza que todos los scripts están cargados antes del check
+ */
 (function() {
   'use strict';
 
-  console.log('[RuntimeIntegrityCheck] start');
+  function runIntegrityCheck() {
+    console.log('[RuntimeIntegrityCheck] start');
 
-  // Verificar que Runtime Ready Gate existe
-  if (!window.__AP_RUNTIME_READY__) {
-    const error = new Error('[RuntimeIntegrityCheck] Runtime Ready Gate no disponible. runtime-ready.v1.js debe cargarse antes.');
-    console.error('[RuntimeIntegrityCheck] ❌', error.message);
-    // No podemos fail-hard si no existe el gate, pero logueamos
-    return;
-  }
+    // Verificar que Runtime Ready Gate existe
+    if (!window.__AP_RUNTIME_READY__) {
+      const error = new Error('[RuntimeIntegrityCheck] Runtime Ready Gate no disponible. runtime-ready.v1.js debe cargarse antes.');
+      console.error('[RuntimeIntegrityCheck] ❌', error.message);
+      // No podemos fail-hard si no existe el gate, pero logueamos
+      return;
+    }
 
-  // Verificar que el estado es 'booting' (no debe estar ready o broken antes del check)
-  const currentState = window.__AP_RUNTIME_READY__.state();
-  if (currentState !== 'booting') {
-    console.warn(`[RuntimeIntegrityCheck] ⚠️ Estado inesperado: ${currentState} (esperado: booting)`);
-    // Si ya está ready o broken, no hacer nada
-    return;
-  }
+    // Verificar que el estado es 'booting' (no debe estar ready o broken antes del check)
+    const currentState = window.__AP_RUNTIME_READY__.state();
+    if (currentState !== 'booting') {
+      console.warn(`[RuntimeIntegrityCheck] ⚠️ Estado inesperado: ${currentState} (esperado: booting)`);
+      // Si ya está ready o broken, no hacer nada
+      return;
+    }
 
   const errors = [];
 
@@ -94,7 +103,17 @@
     return;
   }
 
-  // Si todo está ok, marcar como ready
-  console.log('[RuntimeIntegrityCheck] ✅ Integridad verificada - todos los componentes críticos disponibles');
-  window.__AP_RUNTIME_READY__.resolveReady();
+    // Si todo está ok, marcar como ready
+    console.log('[RuntimeIntegrityCheck] ✅ Integridad verificada - todos los componentes críticos disponibles');
+    window.__AP_RUNTIME_READY__.resolveReady();
+  }
+
+  // FIX MAJOR: Esperar a DOMContentLoaded para garantizar que todos los scripts están cargados
+  if (document.readyState === 'loading') {
+    // DOM aún cargando, esperar al evento
+    document.addEventListener('DOMContentLoaded', runIntegrityCheck);
+  } else {
+    // DOM ya cargado, ejecutar inmediatamente
+    runIntegrityCheck();
+  }
 })();

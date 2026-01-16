@@ -318,18 +318,20 @@ export class CleaningItemStateRepoPg {
   }
 
   /**
-   * Aplica reset canónico: establece effective_since sin borrar historia.
+   * Aplica reset canónico: establece effective_since y resetea contadores (si recurrente).
    * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
    * 
-   * REGLA CONSTITUCIONAL: Reset invalida validez operativa, no borra datos históricos.
+   * REGLA CONSTITUCIONAL: Reset invalida validez operativa y resetea contadores en recurrente.
    * - Establece {layer}_effective_since = NOW()
-   * - NO borra contadores ni fechas históricas
+   * - FIX MAJOR: Si item_kind === 'recurrente', resetea last_cleaned_at = NULL y clean_count = 0
+   * - Esto permite que clean_all funcione correctamente tras reset
    * - CPM v2: NO usa had_history (PROHIBIDO)
    * 
    * @param {Object} options - Opciones
    * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
    * @param {string} options.item_ref - Referencia del item (OBLIGATORIO)
    * @param {string} options.clean_layer - Capa de limpieza ('shared' | 'pde') (OBLIGATORIO)
+   * @param {string} [options.item_kind] - Tipo de item ('recurrente' | 'una_vez') (opcional, para resetear contadores)
    * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
    * @param {string} [options.domain_type] - Tipo de dominio (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
@@ -352,17 +354,31 @@ export class CleaningItemStateRepoPg {
       ? 'shared_effective_since' 
       : 'pde_effective_since';
 
+    // FIX MAJOR: Determinar columnas de last_cleaned_at y clean_count para resetear (solo recurrente)
+    const lastCleanedColumn = options.clean_layer === 'shared'
+      ? 'shared_last_cleaned_at'
+      : 'pde_last_cleaned_at';
+    const countColumn = options.clean_layer === 'shared'
+      ? 'shared_clean_count'
+      : 'pde_clean_count';
+
+    // FIX MAJOR: Construir SET clause para resetear contadores solo si item_kind === 'recurrente'
+    const shouldResetCounters = options.item_kind === 'recurrente';
+    const resetClause = shouldResetCounters
+      ? `${effectiveSinceColumn} = $5, ${lastCleanedColumn} = NULL, ${countColumn} = 0`
+      : `${effectiveSinceColumn} = $5`;
+
     // CPM v2: NO usar had_history (PROHIBIDO)
     const result = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id, product_key, domain_type, item_ref,
-        ${effectiveSinceColumn}
+        ${effectiveSinceColumn}${shouldResetCounters ? `, ${lastCleanedColumn}, ${countColumn}` : ''}
       ) VALUES (
-        $1, $2, $3, $4, $5
+        $1, $2, $3, $4, $5${shouldResetCounters ? ', NULL, 0' : ''}
       )
       ON CONFLICT (student_id, product_key, domain_type, item_ref)
       DO UPDATE SET
-        ${effectiveSinceColumn} = $5,
+        ${resetClause},
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
@@ -373,11 +389,13 @@ export class CleaningItemStateRepoPg {
       now
     ]);
 
-    logInfo('CleaningItemStateRepo', '[RESET][CANONICAL][CPM_V2] Reset aplicado (effective_since)', {
+    logInfo('CleaningItemStateRepo', '[RESET][CANONICAL][CPM_V2] Reset aplicado', {
       student_uuid: studentUuid,
       item_ref: options.item_ref,
       clean_layer: options.clean_layer,
+      item_kind: options.item_kind || 'unknown',
       effective_since_column: effectiveSinceColumn,
+      reset_counters: shouldResetCounters,
       independence_check: `SOLO ${options.clean_layer === 'shared' ? 'SHARED' : 'PDE'} columns`
     });
 

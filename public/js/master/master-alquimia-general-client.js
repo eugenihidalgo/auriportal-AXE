@@ -1683,9 +1683,9 @@
     }
     
     // ============================================================================
-    // FIX MAJOR: Botón Reset Lista ALL (solo para recurrente, scope='all')
+    // FIX MAJOR: Botón Reset Lista ALL (solo para recurrente, scope='all', view_mode='proyeccion')
     // ============================================================================
-    if (state.projection.scope === 'all' && state.listaActiva) {
+    if (state.projection.scope === 'all' && state.projection.mode === 'proyeccion' && state.listaActiva) {
       const itemKind = state.tipoActivo; // 'recurrente' | 'una_vez'
       if (itemKind === 'recurrente') {
         const resetListAllContainer = document.createElement('div');
@@ -4642,9 +4642,9 @@
         actionsDiv.appendChild(btnPde);
         
         // ============================================================================
-        // FIX MAJOR: Botón RESET ALL (solo para recurrente, scope='all')
+        // FIX MAJOR: Botón RESET ALL (solo para recurrente, scope='all', view_mode='proyeccion')
         // ============================================================================
-        if (state.projection.scope === 'all') {
+        if (state.projection.scope === 'all' && state.projection.mode === 'proyeccion') {
           const btnResetAll = document.createElement('button');
           btnResetAll.textContent = 'Reset ALL';
           btnResetAll.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
