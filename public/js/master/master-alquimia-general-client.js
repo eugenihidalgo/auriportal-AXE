@@ -2243,6 +2243,22 @@
       }
       showWarning(message);
       
+      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
+      // Preservar layerView activo (no resetear a 'shared')
+      if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        const preservedLayerView = state.modal.layerView || 'shared';
+        const preservedCleanLayer = cleanLayer; // Usar el clean_layer de la acción
+        
+        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras clean-all', {
+          item_ref: item.item_ref,
+          preserved_layerView: preservedLayerView,
+          preserved_cleanLayer: preservedCleanLayer
+        });
+        
+        // Refrescar flotante preservando vista activa
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
+      }
+      
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error limpiando item:', error);
@@ -2986,30 +3002,38 @@
       infoSpan.style.cssText = 'font-size: 0.75rem; color: #94a3b8;';
       stateDiv.appendChild(infoSpan);
     } else if (layerView === 'combo' && itemKind === 'recurrente') {
-      // COMBO RECURRENTE: mostrar ambos estados desde backend
-      const sharedDays = student.shared?.days_since_last_clean;
-      const pdeDays = student.pde?.days_since_last_clean;
-      const thresholdDays = normalized.threshold_days || 7;
-      const criticalMultiplier = normalized.critical_multiplier || 2.0;
-      const criticalThreshold = thresholdDays * criticalMultiplier;
+      // BUG-013 FIX: NO calcular estado en frontend - consumir desde state_by_view_layer
+      // REGLA CONSTITUCIONAL: Backend es ÚNICA autoridad de estado
+      const sharedStateData = student.state_by_view_layer?.shared;
+      const pdeStateData = student.state_by_view_layer?.pde;
       
-      // Calcular estado SHARED (usar lógica backend, pero solo para display)
-      let sharedStateText = 'Nunca';
-      if (sharedDays !== null && sharedDays !== undefined) {
-        if (sharedDays < thresholdDays) sharedStateText = 'Revisado';
-        else if (sharedDays < criticalThreshold) sharedStateText = 'Pendiente';
-        else sharedStateText = 'Importante';
+      if (!sharedStateData || !pdeStateData) {
+        // Si falta state_by_view_layer, mostrar error (igual que BUG-011)
+        stateDiv.textContent = 'Estado no disponible';
+        stateDiv.style.cssText += 'color: #fca5a5;';
+        console.error('[MasterAlquimiaGeneral] [BUG-013] state_by_view_layer faltante para combo recurrente', {
+          student_uuid: student.student_uuid,
+          has_shared: !!sharedStateData,
+          has_pde: !!pdeStateData
+        });
+      } else {
+        // Consumir estado directamente desde backend (NO calcular)
+        const sharedState = sharedStateData.state || 'never';
+        const pdeState = pdeStateData.state || 'never';
+        
+        // Mapear estados a texto legible (solo display, no cálculo)
+        const stateMap = {
+          'reviewed': 'Revisado',
+          'pending': 'Pendiente',
+          'important': 'Importante',
+          'never': 'Nunca'
+        };
+        
+        const sharedStateText = stateMap[sharedState] || sharedState;
+        const pdeStateText = stateMap[pdeState] || pdeState;
+        
+        stateDiv.textContent = `S: ${sharedStateText} | P: ${pdeStateText}`;
       }
-      
-      // Calcular estado PDE (usar lógica backend, pero solo para display)
-      let pdeStateText = 'Nunca';
-      if (pdeDays !== null && pdeDays !== undefined) {
-        if (pdeDays < thresholdDays) pdeStateText = 'Revisado';
-        else if (pdeDays < criticalThreshold) pdeStateText = 'Pendiente';
-        else pdeStateText = 'Importante';
-      }
-      
-      stateDiv.textContent = `S: ${sharedStateText} | P: ${pdeStateText}`;
     } else {
       // SHARED o PDE: usar estado calculado por backend
       // Obtener view_layer activo para display
@@ -5018,10 +5042,26 @@
       }
       showWarning(message);
       
-      // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
+      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
+      // Preservar layerView activo (no resetear a 'pde' automáticamente)
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        state.modal.layerView = 'pde';
-        state.modal.cleanLayer = 'pde';
+        const preservedLayerView = state.modal.layerView || 'pde'; // Si no hay layerView, usar 'pde' como default para esta acción
+        const preservedCleanLayer = 'pde'; // Esta acción siempre es PDE
+        
+        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras PDE clean-all', {
+          item_ref: item.item_ref,
+          preserved_layerView: preservedLayerView,
+          preserved_cleanLayer: preservedCleanLayer
+        });
+        
+        // Actualizar state pero preservar layerView si ya existe
+        state.modal.cleanLayer = preservedCleanLayer;
+        if (!state.modal.layerView) {
+          state.modal.layerView = preservedLayerView;
+        }
+        
+        // Refrescar flotante preservando vista activa
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
       }
       
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
@@ -5055,6 +5095,16 @@
           contexto: 'handleIncrementAllItem'
         });
         showToastError('ERROR: item_kind no definido. Acción bloqueada.');
+        return;
+      }
+      
+      // BUG-002 FIX: Validación dura - Increment-all SOLO para una_vez
+      if (itemKind !== 'una_vez') {
+        console.error('[MasterAlquimiaGeneral] [BUG-002] Increment-all NO permitido para recurrente', {
+          item_kind: itemKind,
+          item_ref: item.item_ref
+        });
+        showToastError('ERROR: Increment-all solo está permitido para items "una vez". Este item es recurrente.');
         return;
       }
       
@@ -5093,6 +5143,22 @@
       console.log('[MasterAlquimiaGeneral] Item incrementado para todos:', data);
       showToastSuccess(`Item incrementado para ${data.updated || 0} alumnos`);
       
+      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
+      // Preservar layerView activo
+      if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+        const preservedLayerView = state.modal.layerView || 'shared';
+        const preservedCleanLayer = cleanLayer; // 'shared' para este botón
+        
+        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras increment-all', {
+          item_ref: item.item_ref,
+          preserved_layerView: preservedLayerView,
+          preserved_cleanLayer: preservedCleanLayer
+        });
+        
+        // Refrescar flotante preservando vista activa
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
+      }
+      
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error incrementando item:', error);
@@ -5120,6 +5186,16 @@
           contexto: 'handlePdeIncrementAllItem'
         });
         showToastError('ERROR: item_kind no definido. Acción bloqueada.');
+        return;
+      }
+      
+      // BUG-002 FIX: Validación dura - Increment-all SOLO para una_vez
+      if (itemKind !== 'una_vez') {
+        console.error('[MasterAlquimiaGeneral] [BUG-002] Increment-all NO permitido para recurrente', {
+          item_kind: itemKind,
+          item_ref: item.item_ref
+        });
+        showToastError('ERROR: Increment-all solo está permitido para items "una vez". Este item es recurrente.');
         return;
       }
       
@@ -5164,9 +5240,25 @@
       }
       showToastSuccess(message);
       
-      // FIX: En modo operativa, actualizar layerView del modal a 'pde' si el flotante está abierto
+      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
+      // Preservar layerView activo (no resetear a 'pde' automáticamente)
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        state.modal.layerView = 'pde';
+        const preservedLayerView = state.modal.layerView || 'pde'; // Si no hay layerView, usar 'pde' como default para esta acción
+        const preservedCleanLayer = 'pde'; // Esta acción siempre es PDE
+        
+        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras PDE increment-all', {
+          item_ref: item.item_ref,
+          preserved_layerView: preservedLayerView,
+          preserved_cleanLayer: preservedCleanLayer
+        });
+        
+        // Actualizar state pero preservar layerView si ya existe
+        if (!state.modal.layerView) {
+          state.modal.layerView = preservedLayerView;
+        }
+        
+        // Refrescar flotante preservando vista activa
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
       }
       
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine

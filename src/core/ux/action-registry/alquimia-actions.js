@@ -58,19 +58,16 @@ function buildRefreshPlan(context, uiState, responseData = null) {
 
   // Flotante: SIEMPRE refrescar si está abierto e item_ref coincide
   // INDEPENDIENTEMENTE del view_mode (regla constitucional)
-  // FASE 4 FIX: Mejorar detección de flotante abierto (más robusto)
+  // BUG-008 FIX: Detección robusta - Si hay item_ref, refrescar siempre (idempotente)
   if (context.item_ref) {
-    // Intentar obtener state desde window (puede no estar disponible en load time, pero sí en runtime)
-    const alquimiaState = typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__;
-    if (alquimiaState?.modal?.item?.item_ref === context.item_ref) {
-      surfaces.push('alquimia.flotante_students');
-    } else {
-      // FASE 4 FIX: Si no podemos determinar si está abierto, refrescar de todas formas
-      // Es mejor refrescar de más que de menos (idempotente)
-      // Solo si tenemos item_ref, asumimos que el flotante puede estar abierto
-      // El refetch de la superficie verificará si realmente está abierto
-      console.log('[AlquimiaActions][buildRefreshPlan] Flotante no detectado en state, pero item_ref presente. Refresh Engine decidirá si refrescar.');
-    }
+    // BUG-008: Estrategia robusta - Si hay item_ref, refrescar flotante siempre
+    // El refresh es idempotente (refrescar aunque no esté abierto no es error)
+    // NO depender de window.__AP_ALQUIMIA_STATE__ (puede no estar disponible)
+    surfaces.push('alquimia.flotante_students');
+    console.log('[AlquimiaActions][buildRefreshPlan] [BUG-008] Flotante incluido en refresh plan (item_ref presente)', {
+      item_ref: context.item_ref,
+      strategy: 'always_refresh_if_item_ref'
+    });
   }
 
   return surfaces;
