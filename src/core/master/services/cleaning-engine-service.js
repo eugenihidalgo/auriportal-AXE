@@ -562,7 +562,7 @@ export async function markCleanStudent(options, client = null) {
     
     // 8. Emitir señales (fail-open) - UUID-only
     try {
-      const { emitSignal } = await import('../../services/pde-signal-emitter.js');
+      const { dispatchSignal } = await import('../../signals/signal-dispatcher.js');
       
       const signalPayload = {
         signal: 'clean.executed',
@@ -577,10 +577,16 @@ export async function markCleanStudent(options, client = null) {
         executed_at: new Date().toISOString()
       };
       
-      await emitSignal('clean.executed', signalPayload, {}, {}, {
-        trace_id: traceId,
-        source: 'cleaning-engine-service',
-        action: 'markCleanStudent'
+      await dispatchSignal({
+        signal_key: 'clean.executed',
+        payload: signalPayload,
+        runtime: { trace_id: traceId },
+        context: {}
+      }, {
+        source: {
+          type: 'cleaning-engine-service',
+          id: 'markCleanStudent'
+        }
       });
       
       // 8.1. Generar historial desde señal (asíncrono, fail-open)
