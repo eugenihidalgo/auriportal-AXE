@@ -26,7 +26,7 @@
 // Dependencias: UX Action Registry debe estar disponible
 // Se carga desde master-layout-registry.v1.json o inyectado antes
 
-(function() {
+(async function() {
   'use strict';
 
   // Guard idempotente
@@ -35,6 +35,24 @@
     return;
   }
   window.__AP_PERFORM_ACTION_V1_LOADED__ = true;
+
+  // FASE 1 FIX: Esperar a que el Action Registry esté listo antes de exponer performAction
+  try {
+    const registryReady = window.__AP_UX_ACTION_REGISTRY_READY__;
+    if (registryReady && registryReady.promise) {
+      await registryReady.promise;
+      console.log('[PerformActionV1] ✅ Action Registry READY - performAction disponible');
+    } else {
+      // Si no existe la promesa, esperar un momento y verificar
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!window.__AP_UX_ACTION_REGISTRY_CORE__ && !window.__AP_UX_ACTION_REGISTRY__) {
+        console.warn('[PerformActionV1] ⚠️ Action Registry no está listo, pero continuando (modo degradado)');
+      }
+    }
+  } catch (error) {
+    console.error('[PerformActionV1] ⚠️ Error esperando Action Registry:', error);
+    // Continuar en modo degradado
+  }
 
   /**
    * Ejecuta una acción UX con contrato formal
@@ -52,6 +70,15 @@
       throw new Error('[PerformActionV1] action_id es obligatorio y debe ser string');
     }
 
+    // FASE 1 FIX: Verificar que el registry está listo antes de usarlo
+    const registryReady = window.__AP_UX_ACTION_REGISTRY_READY__;
+    if (registryReady && !registryReady.ready) {
+      // Si no está ready, esperar la promesa
+      if (registryReady.promise) {
+        await registryReady.promise;
+      }
+    }
+
     // Obtener actionDef del registry (nuevo core primero, fallback a legacy)
     let actionRegistry = window.__AP_UX_ACTION_REGISTRY_CORE__;
     let actionDef = null;
@@ -64,7 +91,16 @@
     if (!actionDef) {
       const legacyRegistry = window.__AP_UX_ACTION_REGISTRY__;
       if (!legacyRegistry) {
-        throw new Error('[PerformActionV1] UX Action Registry no disponible. Asegúrate de que está cargado antes de performAction.');
+        // FASE 1 FIX: Hard fail con mensaje claro
+        const error = new Error('[PerformActionV1] UX Action Registry no disponible. El loader no ha terminado de cargar o falló. Asegúrate de que ux-action-registry-loader.js se carga antes de perform-action.v1.js.');
+        console.error('[PerformActionV1] ❌ Registry no disponible', {
+          action_id,
+          has_core: !!window.__AP_UX_ACTION_REGISTRY_CORE__,
+          has_legacy: !!window.__AP_UX_ACTION_REGISTRY__,
+          ready_state: registryReady ? registryReady.ready : 'unknown',
+          timestamp: new Date().toISOString()
+        });
+        throw error;
       }
       actionDef = legacyRegistry.get(action_id);
       if (!actionDef) {

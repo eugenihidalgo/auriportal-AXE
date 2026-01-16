@@ -1080,6 +1080,18 @@
 
       // FIX: El endpoint devuelve { ok: true, items: [...] }, no { data: [...] }
       state.items = result.items || result.data || [];
+      
+      // FASE 4 FIX: Asegurar que el state se actualiza y se dispara render
+      // Actualizar window.__AP_ALQUIMIA_STATE__ si está expuesto (puede haber cambiado)
+      if (typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__) {
+        window.__AP_ALQUIMIA_STATE__ = state;
+      }
+      
+      // FASE 4 FIX: Disparar render si estamos en modo operativa
+      // El Refresh Engine puede no disparar render automáticamente
+      if (state.projection.mode === 'operativa') {
+        renderListaContent();
+      }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error cargando items:', error);
       
@@ -1465,14 +1477,22 @@
       state.projection.data = result.data;
       state.projection.loading = false;
       
+      // FASE 4 FIX: Asegurar que el state se actualiza
+      // Actualizar window.__AP_ALQUIMIA_STATE__ si está expuesto (puede haber cambiado)
+      if (typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__) {
+        window.__AP_ALQUIMIA_STATE__ = state;
+      }
+      
       console.log('[UI][LPM] data loaded', {
         counts: result.data.metrics.by_state_counts,
         reviewed_pct: result.data.metrics.reviewed_pct
       });
       
-      // REFACTOR v1: NO llamar renderView() aquí
-      // El render lo hace Refresh Engine después de mutaciones
-      // O se llama explícitamente desde init() o cambios de vista
+      // FASE 4 FIX: Disparar render si estamos en modo proyección
+      // El Refresh Engine puede no disparar render automáticamente
+      if (state.projection.mode === 'proyeccion') {
+        renderView();
+      }
       
       return result.data;
     } catch (error) {
@@ -3278,9 +3298,58 @@
 
   /**
    * Maneja la limpieza individual de un estudiante
-   * Soporta recurrente (mark-clean) y una_vez (increment o mark-clean según clean_layer)
+   * FASE 6 FIX: Función pública que delega a handlers separados según item_kind
+   * Mantiene compatibilidad con código existente
    */
   async function handleLimpiarEstudiante(student, item, cleanLayer, itemKind = null) {
+    // Si itemKind no viene, obtenerlo explícitamente
+    if (!itemKind) {
+      itemKind = getItemKindExplicit(item, state.listaActiva);
+    }
+    
+    // Validar itemKind
+    if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', {
+        item_kind: itemKind,
+        item: item,
+        lista: state.listaActiva,
+        contexto: 'handleLimpiarEstudiante'
+      });
+      showToastError('ERROR: item_kind no definido. Acción bloqueada.');
+      return;
+    }
+    
+    // FASE 6 FIX: Delegar a handler específico según tipo
+    if (itemKind === 'recurrente') {
+      return handleLimpiarEstudianteRecurrente(student, item, cleanLayer);
+    } else {
+      return handleLimpiarEstudianteUnaVez(student, item, cleanLayer);
+    }
+  }
+
+  /**
+   * Maneja la limpieza individual de un estudiante RECURRENTE
+   * FASE 6 FIX: Separado explícitamente de una_vez para claridad
+   * Recurrente usa mark-clean (idempotente, puede limpiarse muchas veces)
+   */
+  async function handleLimpiarEstudianteRecurrente(student, item, cleanLayer) {
+    return handleLimpiarEstudianteInternal(student, item, cleanLayer, 'recurrente');
+  }
+
+  /**
+   * Maneja la limpieza individual de un estudiante UNA_VEZ
+   * FASE 6 FIX: Separado explícitamente de recurrente para claridad
+   * Una_vez usa mark-clean (estado terminal, una vez completado no vuelve atrás)
+   */
+  async function handleLimpiarEstudianteUnaVez(student, item, cleanLayer) {
+    return handleLimpiarEstudianteInternal(student, item, cleanLayer, 'una_vez');
+  }
+
+  /**
+   * Función interna compartida para limpieza de estudiante
+   * FASE 6 FIX: Lógica unificada pero con item_kind explícito
+   */
+  async function handleLimpiarEstudianteInternal(student, item, cleanLayer, itemKind) {
     // REGLA CONSTITUCIONAL: clean_layer y item_kind DEBEN ser explícitos
     // NO se permiten defaults ni inferencias
     
@@ -3305,20 +3374,16 @@
       return;
     }
 
-    // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (obtenido desde item/lista)
-    // Si no viene como parámetro, obtenerlo explícitamente
-    if (!itemKind) {
-      itemKind = getItemKindExplicit(item, state.listaActiva);
-    }
-    
+    // FASE 6 FIX: item_kind ya viene como parámetro explícito (no se infiere)
+    // Validar que es válido
     if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
-      console.error('[MasterAlquimiaGeneral] item_kind inválido o faltante:', {
+      console.error('[MasterAlquimiaGeneral] item_kind inválido:', {
         item_kind: itemKind,
         item: item,
         lista: state.listaActiva,
-        contexto: 'handleLimpiarEstudiante'
+        contexto: 'handleLimpiarEstudianteInternal'
       });
-      showToastError('ERROR: item_kind no definido. Acción bloqueada.');
+      showToastError('ERROR: item_kind inválido. Acción bloqueada.');
       return;
     }
 
@@ -3391,28 +3456,16 @@
         modal_layerView: state.modal.layerView || null
       };
 
-      // Usar acción consolidada 'alquimia.clean' con scope='student'
-      // Compatibilidad: si 'alquimia.clean' no existe, usar 'alquimia.clean.student' (legacy)
-      let actionId = 'alquimia.clean';
-      const registry = window.__AP_UX_ACTION_REGISTRY_CORE__ || window.__AP_UX_ACTION_REGISTRY__;
-      if (registry && !registry.get('alquimia.clean')) {
-        actionId = 'alquimia.clean.student'; // Fallback a legacy
-      }
-      
+      // FASE 2 FIX: Eliminar fallback legacy y payload manual
+      // Usar SOLO 'alquimia.clean' y dejar que performAction use buildPayload del handler
       const result = await window.performAction({
-        action_id: actionId,
-        payload: actionId === 'alquimia.clean' ? {
-          item_ref: item.item_ref,
-          item_kind: itemKind,
-          clean_layer: cleanLayer,
-          scope: 'student',
-          student_uuid: student.student_uuid
-        } : undefined,
+        action_id: 'alquimia.clean',
         context: {
           item_ref: item.item_ref,
           student_uuid: student.student_uuid,
           item_kind: itemKind,
-          clean_layer: cleanLayer
+          clean_layer: cleanLayer,
+          scope: 'student'
         },
         uiState
       });

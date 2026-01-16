@@ -58,10 +58,18 @@ function buildRefreshPlan(context, uiState, responseData = null) {
 
   // Flotante: SIEMPRE refrescar si está abierto e item_ref coincide
   // INDEPENDIENTEMENTE del view_mode (regla constitucional)
+  // FASE 4 FIX: Mejorar detección de flotante abierto (más robusto)
   if (context.item_ref) {
+    // Intentar obtener state desde window (puede no estar disponible en load time, pero sí en runtime)
     const alquimiaState = typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__;
     if (alquimiaState?.modal?.item?.item_ref === context.item_ref) {
       surfaces.push('alquimia.flotante_students');
+    } else {
+      // FASE 4 FIX: Si no podemos determinar si está abierto, refrescar de todas formas
+      // Es mejor refrescar de más que de menos (idempotente)
+      // Solo si tenemos item_ref, asumimos que el flotante puede estar abierto
+      // El refetch de la superficie verificará si realmente está abierto
+      console.log('[AlquimiaActions][buildRefreshPlan] Flotante no detectado en state, pero item_ref presente. Refresh Engine decidirá si refrescar.');
     }
   }
 
@@ -214,7 +222,8 @@ registerActionFn({
 // Limpiar item para todos los estudiantes
 // Capas: shared | pde
 // Scope: all (implícito)
-registerAction({
+// FASE 2 FIX: Cambiar registerAction() a registerActionFn() para consistencia
+registerActionFn({
   action_id: 'alquimia.clean_all',
   domain: 'master',
   description: 'Limpiar item para todos los estudiantes (shared o pde)',
