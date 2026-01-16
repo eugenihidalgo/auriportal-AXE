@@ -303,6 +303,135 @@ last_cleaned_at: '2025-01-10 10:00:00+00'
 ### 4. **Error en comparación de fechas** (MEDIA PROBABILIDAD)
 - `lastCleanedDate > effectiveSinceDate` podría fallar si una fecha es NULL
 - **Ubicación**: `cleaning-projection-model.js` línea 181
+- **PROBLEMA**: Si `lastCleanedAt` es NULL, `new Date(lastCleanedAt)` crea `Invalid Date`, pero el código ya verifica `if (lastCleanedAt)` antes de crear la fecha
+
+### 5. **Error en query SQL de proyección ALL** (MEDIA PROBABILIDAD)
+- `list-projection-model.js` línea 447-479: Query con CROSS JOIN + LEFT JOIN
+- Si `cleaning_item_state` tiene filas con `effective_since` inválido, la query podría fallar
+- **Ubicación**: `list-projection-model.js` línea 463, 468
+
+### 6. **Error en conversión de tipos en proyección** (BAJA PROBABILIDAD)
+- `list-projection-model.js` línea 500: `completed: row.shared_completed || false`
+- Si `shared_completed` es NULL, se convierte a `false` (boolean), pero CPM espera integer
+- **Ubicación**: `list-projection-model.js` línea 500, 508
+- **NOTA**: Este problema está marcado como FIX 2 en el código (línea 419), pero podría no estar aplicado correctamente
+
+---
+
+## ANÁLISIS DE CÓDIGO CRÍTICO
+
+### Punto Crítico 1: Comparación de Fechas en CPM
+
+**Código**: `cleaning-projection-model.js` líneas 174-197
+
+```javascript
+if (hasReset) {
+  const effectiveSinceDate = new Date(effectiveSince);  // ← Línea 176
+  
+  if (lastCleanedAt) {
+    const lastCleanedDate = new Date(lastCleanedAt);    // ← Línea 180
+    if (lastCleanedDate > effectiveSinceDate) {         // ← Línea 181
+      // OK: limpieza posterior
+    } else {
+      // OK: limpieza anterior, ignorar
+    }
+  }
+}
+```
+
+**PROBLEMA POTENCIAL**:
+- Si `effectiveSince` es string inválido → `new Date(effectiveSince)` → `Invalid Date`
+- `Invalid Date` en comparación → siempre `false`
+- Esto podría causar comportamiento inesperado, pero NO debería causar 500
+
+**VERIFICACIÓN**: El código ya valida `if (hasReset && lastCleanedAt && effectiveSince)` antes de crear las fechas
+
+### Punto Crítico 2: Query SQL con NULLs
+
+**Código**: `list-projection-model.js` líneas 447-511
+
+```sql
+SELECT 
+  cis.shared_effective_since,
+  cis.pde_effective_since
+FROM item_refs ir
+CROSS JOIN active_students s
+LEFT JOIN cleaning_item_state cis
+  ON cis.student_id = s.student_uuid
+ AND cis.item_ref = ir.item_ref
+```
+
+**PROBLEMA POTENCIAL**:
+- Si `cis.shared_effective_since` es string inválido (no TIMESTAMPTZ), PostgreSQL devuelve el valor raw
+- JavaScript `new Date('invalid_string')` → `Invalid Date`
+- **Esto SÍ podría causar 500** si el código no valida antes de crear `Date` objects
+
+**VERIFICACIÓN**: El código en `list-projection-model.js` línea 502 pasa `effective_since: row.shared_effective_since || null`, pero NO valida si es una fecha válida
+
+### Punto Crítico 3: Conversión de `completed`
+
+**Código**: `list-projection-model.js` línea 500
+
+```javascript
+completed: row.shared_completed || false  // ← FALSO: debería ser Number(...) || 0
+```
+
+**PROBLEMA POTENCIAL**:
+- El comentario dice "FIX 2: completed SIEMPRE es integer" (línea 419)
+- Pero el código usa `|| false` en lugar de `Number(...) || 0`
+- CPM espera `completed` como integer, pero podría recibir boolean
+- **Esto podría causar 500** si CPM intenta hacer aritmética con boolean
+
+**VERIFICACIÓN**: Este problema está documentado en el código (línea 419), pero NO está corregido en todas las ubicaciones
+
+---
+
+## PUNTO EXACTO DEL 500 (HIPÓTESIS)
+
+### Hipótesis Principal: Fecha Inválida en DB
+
+**Escenario**:
+1. Reset anterior dejó `effective_since` con valor inválido (string no fecha)
+2. `list-projection-model.js` consulta DB y obtiene `effective_since: 'INVALID_STRING'`
+3. Pasa a CPM como `effective_since: 'INVALID_STRING'`
+4. CPM hace `new Date('INVALID_STRING')` → `Invalid Date`
+5. Comparación con `Invalid Date` → comportamiento impredecible
+6. **NO debería causar 500 directamente**, pero podría causar error downstream
+
+### Hipótesis Secundaria: Error en Proyección ALL
+
+**Escenario**:
+1. Reset ALL se ejecuta para múltiples estudiantes
+2. Para un estudiante, `upsertApplyReset()` falla parcialmente
+3. `effective_since` se actualiza, pero `clean_count` NO se resetea
+4. Proyección ALL intenta calcular estado agregado
+5. CPM recibe combinación imposible: `effective_since !== null` pero `clean_count > 0` y `last_cleaned_at < effective_since`
+6. CPM ignora `last_cleaned_at`, calcula estado como `never` con `days_since = 0`
+7. **Pero algo más falla** (¿validación de estado? ¿cálculo de agregado?)
+
+### Hipótesis Terciaria: Error en Conversión de Tipos
+
+**Escenario**:
+1. `list-projection-model.js` convierte `completed: row.shared_completed || false`
+2. Pasa a CPM como `completed: false` (boolean)
+3. CPM espera `completed: 0` (integer)
+4. Si CPM intenta hacer `completed + 1` o similar → `TypeError`
+5. **Esto SÍ podría causar 500**
+
+---
+
+## CONCLUSIÓN (DIAGNÓSTICO)
+
+### Causas Raíz Priorizadas:
+
+1. **ALTA**: Fecha inválida en `effective_since` o `last_cleaned_at` (DB corrupto o migración incompleta)
+2. **MEDIA**: Error en conversión de tipos (`completed` como boolean en lugar de integer)
+3. **MEDIA**: Inconsistencia `clean_count` vs `effective_since` (reset parcial fallido)
+4. **BAJA**: Error en comparación de fechas (código ya valida NULLs)
+
+### Siguiente Paso Obligatorio:
+
+**EJECUTAR reset-item-all y capturar logs completos** para identificar el punto exacto del 500.
 
 ---
 
