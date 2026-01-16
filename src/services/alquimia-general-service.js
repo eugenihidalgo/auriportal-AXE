@@ -959,7 +959,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         clean_layer: clean_layer || 'shared', // Default shared si no se especifica
         item_kind: 'una_vez', // OBLIGATORIO según contrato
         item_ref: itemRef,
-        required_count: vecesLimpiar // OBLIGATORIO para UNA_VEZ según contrato
+        required_count: item.veces_limpiar || 1 // OBLIGATORIO para UNA_VEZ según contrato (valor base del item)
       };
     }
 
