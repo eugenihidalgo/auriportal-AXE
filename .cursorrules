@@ -1303,3 +1303,72 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 - Está prohibido el render optimista basado en inferencias.
 
 Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
+
+# =========================================
+# CONSTITUCIÓN RUNTIME CORE v1
+# =========================================
+
+  - id: runtime-core-deterministic-v1
+    title: Runtime Core v1 como gate determinista único
+    content: >
+      Runtime Core v1 es el ÚNICO gate determinista para el estado de readiness del runtime.
+      PROHIBIDO:
+      - Exponer window.performAction si runtime no está READY
+      - Fallback legacy en core (__AP_UX_ACTION_REGISTRY__ legacy)
+      - console.error y continuar en runtime core (debe fail-hard)
+      - Resolver promesas de ready si hay errores
+      - Continuar en modo degradado si runtime está BROKEN
+      OBLIGATORIO:
+      - runtime-ready.v1.js debe cargarse ANTES de ux-action-registry-loader.js
+      - ux-action-registry-loader.js debe llamar failHard() en catch (no resolve degraded)
+      - perform-action.v1.js debe await whenReady() antes de exponer performAction
+      - runtime-integrity-check.v1.js debe ejecutarse al final del bloque core
+      - Exports críticos deben verificarse (getActionOrFail, validatePayload, etc.)
+      - Si runtime está BROKEN, mostrar banner y bloquear clicks en botones
+      CONTRATO:
+      - window.__AP_RUNTIME_READY__: Estado único (booting | ready | broken)
+      - whenReady(): Promise que resuelve solo si state='ready'
+      - failHard(error): Marca runtime como broken
+      - resolveReady(): Marca runtime como ready (solo si integrity check pasa)
+      VERIFICACIÓN:
+      - Assembly check valida orden de scripts en master-layout-registry.v1.json
+      - Assembly check valida que perform-action no contiene fallback legacy
+      - Assembly check valida que loader llama failHard en catch
+      REFERENCIAS:
+      - docs/FORENSICS_RUNTIME_CORE_BUG_V1.md (causa raíz del bug)
+      - public/js/core/runtime/runtime-ready.v1.js (gate canónico)
+      - public/js/core/runtime/runtime-integrity-check.v1.js (verificación final)
+
+  - id: runtime-core-exports-verified
+    title: Exports críticos deben verificarse antes de usar
+    content: >
+      Los exports críticos del runtime core DEBEN verificarse antes de usarlos.
+      PROHIBIDO:
+      - Importar exports sin verificar que existen
+      - Asumir que un export existe sin verificar
+      - Continuar si un export crítico falta
+      OBLIGATORIO:
+      - Verificar que getActionOrFail existe en ux-action-registry.js antes de usarlo
+      - Verificar que validatePayload, validateActionExists existen en ux-action-schema.js
+      - Integrity check valida todos los exports críticos al final del boot
+      - Si falta un export crítico -> runtime BROKEN
+      CASO DOCUMENTADO:
+      - perform-action.js (core) importaba getActionOrFail desde ux-action-schema.js (incorrecto)
+      - Fix: importar getActionOrFail desde ux-action-registry.js
+      REFERENCIAS:
+      - docs/FORENSICS_RUNTIME_CORE_BUG_V1.md (causa raíz)
+
+  - id: runtime-core-no-fallback-legacy
+    title: Prohibido fallback legacy en runtime core
+    content: >
+      El runtime core NO debe usar fallbacks legacy.
+      PROHIBIDO:
+      - Fallback a __AP_UX_ACTION_REGISTRY__ legacy en perform-action.v1.js
+      - Continuar sin registry core (modo degradado)
+      - Resolver promesas de ready si registry core no está disponible
+      OBLIGATORIO:
+      - perform-action.v1.js usa EXCLUSIVAMENTE __AP_UX_ACTION_REGISTRY_CORE__
+      - Si registry core no está disponible -> error explícito
+      - Runtime debe estar READY antes de exponer performAction
+      REFERENCIAS:
+      - public/js/master/ux/perform-action.v1.js (sin fallback legacy)

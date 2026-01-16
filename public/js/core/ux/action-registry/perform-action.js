@@ -15,8 +15,8 @@
  * - uiState: Estado de UI (opcional)
  */
 
-import { getActionOrFail, validatePayload, logContractViolation } from './ux-action-schema.js';
-import { getAction } from './ux-action-registry.js';
+import { validateActionExists, logContractViolation } from './ux-action-schema.js';
+import { getAction, getActionOrFail } from './ux-action-registry.js';
 
 /**
  * Ejecuta una acción UX con validación dura

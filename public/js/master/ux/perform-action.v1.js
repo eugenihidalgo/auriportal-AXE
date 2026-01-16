@@ -36,22 +36,17 @@
   }
   window.__AP_PERFORM_ACTION_V1_LOADED__ = true;
 
-  // FASE 1 FIX: Esperar a que el Action Registry esté listo antes de exponer performAction
+  // RUNTIME CORE v1: Esperar a que el Runtime esté READY antes de exponer performAction
   try {
-    const registryReady = window.__AP_UX_ACTION_REGISTRY_READY__;
-    if (registryReady && registryReady.promise) {
-      await registryReady.promise;
-      console.log('[PerformActionV1] ✅ Action Registry READY - performAction disponible');
-    } else {
-      // Si no existe la promesa, esperar un momento y verificar
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (!window.__AP_UX_ACTION_REGISTRY_CORE__ && !window.__AP_UX_ACTION_REGISTRY__) {
-        console.warn('[PerformActionV1] ⚠️ Action Registry no está listo, pero continuando (modo degradado)');
-      }
+    if (!window.__AP_RUNTIME_READY__) {
+      throw new Error('[PerformActionV1] Runtime Ready Gate no disponible. runtime-ready.v1.js debe cargarse antes.');
     }
+    await window.__AP_RUNTIME_READY__.whenReady();
+    console.log('[PerformActionV1] ✅ Runtime READY - performAction disponible');
   } catch (error) {
-    console.error('[PerformActionV1] ⚠️ Error esperando Action Registry:', error);
-    // Continuar en modo degradado
+    console.error('[PerformActionV1] ❌ Runtime no está READY:', error);
+    // NO exponer performAction si runtime está broken
+    throw error;
   }
 
   /**
@@ -70,42 +65,33 @@
       throw new Error('[PerformActionV1] action_id es obligatorio y debe ser string');
     }
 
-    // FASE 1 FIX: Verificar que el registry está listo antes de usarlo
-    const registryReady = window.__AP_UX_ACTION_REGISTRY_READY__;
-    if (registryReady && !registryReady.ready) {
-      // Si no está ready, esperar la promesa
-      if (registryReady.promise) {
-        await registryReady.promise;
-      }
+    // RUNTIME CORE v1: Verificar que el runtime está READY
+    if (!window.__AP_RUNTIME_READY__ || window.__AP_RUNTIME_READY__.state() !== 'ready') {
+      const error = new Error('[PerformActionV1] Runtime no está READY. El runtime core no ha terminado de cargar o falló.');
+      console.error('[PerformActionV1] ❌ Runtime no READY', {
+        action_id,
+        runtime_state: window.__AP_RUNTIME_READY__?.state() || 'unknown',
+        runtime_error: window.__AP_RUNTIME_READY__?.error || null,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
     }
 
-    // Obtener actionDef del registry (nuevo core primero, fallback a legacy)
-    let actionRegistry = window.__AP_UX_ACTION_REGISTRY_CORE__;
-    let actionDef = null;
-    
-    if (actionRegistry) {
-      actionDef = actionRegistry.get(action_id);
+    // Obtener actionDef del registry core (PROHIBIDO fallback legacy)
+    const actionRegistry = window.__AP_UX_ACTION_REGISTRY_CORE__;
+    if (!actionRegistry) {
+      const error = new Error('[PerformActionV1] UX Action Registry Core no disponible. El loader no ha terminado de cargar o falló.');
+      console.error('[PerformActionV1] ❌ Registry Core no disponible', {
+        action_id,
+        has_core: !!window.__AP_UX_ACTION_REGISTRY_CORE__,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
     }
-    
-    // Fallback a registry legacy si no existe en core
+
+    const actionDef = actionRegistry.get(action_id);
     if (!actionDef) {
-      const legacyRegistry = window.__AP_UX_ACTION_REGISTRY__;
-      if (!legacyRegistry) {
-        // FASE 1 FIX: Hard fail con mensaje claro
-        const error = new Error('[PerformActionV1] UX Action Registry no disponible. El loader no ha terminado de cargar o falló. Asegúrate de que ux-action-registry-loader.js se carga antes de perform-action.v1.js.');
-        console.error('[PerformActionV1] ❌ Registry no disponible', {
-          action_id,
-          has_core: !!window.__AP_UX_ACTION_REGISTRY_CORE__,
-          has_legacy: !!window.__AP_UX_ACTION_REGISTRY__,
-          ready_state: registryReady ? registryReady.ready : 'unknown',
-          timestamp: new Date().toISOString()
-        });
-        throw error;
-      }
-      actionDef = legacyRegistry.get(action_id);
-      if (!actionDef) {
-        throw new Error(`[PerformActionV1] Acción ${action_id} no registrada en UX Action Registry`);
-      }
+      throw new Error(`[PerformActionV1] action_id not registered: ${action_id}`);
     }
 
     // Generar trace_id único
@@ -374,14 +360,44 @@
     }
   }
 
-  // Exportar a window
+  // Exportar a window (solo si runtime está ready)
   if (typeof window !== 'undefined') {
-    window.performAction = performAction;
-    console.log('[PerformActionV1] ✅ Wrapper canónico disponible en window.performAction');
+    if (window.__AP_RUNTIME_READY__ && window.__AP_RUNTIME_READY__.state() === 'ready') {
+      window.performAction = performAction;
+      console.log('[PerformActionV1] ✅ Wrapper canónico disponible en window.performAction');
+    } else {
+      console.error('[PerformActionV1] ❌ NO se expone performAction: runtime no está READY');
+      // NO exponer performAction si runtime no está ready
+    }
   }
 
   // Exportar para módulos ES6 (si se usa import)
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { performAction };
+  }
+
+  // Helper de debug
+  if (typeof window !== 'undefined') {
+    window.__AP_UX_DEBUG__ = {
+      dumpRuntime: () => {
+        return {
+          runtime_ready: {
+            state: window.__AP_RUNTIME_READY__?.state() || 'not_initialized',
+            error: window.__AP_RUNTIME_READY__?.error || null
+          },
+          registry_core: {
+            exists: !!window.__AP_UX_ACTION_REGISTRY_CORE__,
+            info: window.__AP_UX_ACTION_REGISTRY_CORE__?.info() || null
+          },
+          perform_action: {
+            exists: typeof window.performAction === 'function',
+            core_exists: typeof window.performActionCore === 'function'
+          },
+          refresh_engine: {
+            exists: !!window.MasterRefreshEngineV1
+          }
+        };
+      }
+    };
   }
 })();

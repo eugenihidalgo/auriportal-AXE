@@ -4,38 +4,43 @@
  * Loader que carga el registry core y expone funciones en window.
  * Se carga ANTES de perform-action y registros de acciones.
  * 
- * FASE 1 FIX: Exponer promesa de "ready" para evitar race conditions.
+ * RUNTIME CORE v1: Determinista con fail-hard si hay errores.
  */
 
 (async function() {
   'use strict';
 
+  console.log('[UXActionRegistryLoader] start');
+
   // Guard: Verificar que no está ya cargado
   if (window.__AP_UX_ACTION_REGISTRY_CORE_LOADED__) {
     console.warn('[UXActionRegistryLoader] Ya cargado, ignorando carga duplicada');
-    // Si ya está cargado, resolver la promesa inmediatamente
-    if (window.__AP_UX_ACTION_REGISTRY_READY__) {
-      window.__AP_UX_ACTION_REGISTRY_READY__.resolve();
-    }
     return;
   }
   window.__AP_UX_ACTION_REGISTRY_CORE_LOADED__ = true;
 
-  // FASE 1 FIX: Crear promesa de "ready" antes de empezar
-  let resolveReady;
-  const readyPromise = new Promise((resolve) => {
-    resolveReady = resolve;
-  });
-  window.__AP_UX_ACTION_REGISTRY_READY__ = {
-    promise: readyPromise,
-    resolve: resolveReady,
-    ready: false
-  };
+  // Verificar que Runtime Ready Gate está disponible
+  if (!window.__AP_RUNTIME_READY__) {
+    const error = new Error('[UXActionRegistryLoader] Runtime Ready Gate no disponible. runtime-ready.v1.js debe cargarse antes.');
+    console.error('[UXActionRegistryLoader] ❌', error.message);
+    // Si no hay runtime ready gate, no podemos fail-hard, pero logueamos el error
+    // En este caso, el integrity check debería detectarlo
+    throw error;
+  }
 
   try {
     // Cargar registry core como módulo ES6
+    console.log('[UXActionRegistryLoader] core imported');
     const { registerAction, getAction, getActionOrFail, listActions, hasAction, validatePayload, getRegistryInfo } = await import('/js/core/ux/action-registry/ux-action-registry.js');
     const { validateActionPayload, validateActionExists, logContractViolation } = await import('/js/core/ux/action-registry/ux-action-schema.js');
+
+    // Verificar que los exports críticos existen
+    if (!registerAction || !getAction || !getActionOrFail || !validatePayload) {
+      throw new Error('[UXActionRegistryLoader] Exports críticos faltantes en ux-action-registry.js');
+    }
+    if (!validateActionPayload || !validateActionExists || !logContractViolation) {
+      throw new Error('[UXActionRegistryLoader] Exports críticos faltantes en ux-action-schema.js');
+    }
 
     // Exponer en window
     window.__AP_UX_ACTION_REGISTRY_CORE__ = {
@@ -65,20 +70,18 @@
 
     // Cargar acciones de Alquimia
     await import('/js/core/ux/action-registry/alquimia-actions.js');
-    console.log('[UXActionRegistryLoader] ✅ Acciones de Alquimia registradas');
+    const actionCount = window.__AP_UX_ACTION_REGISTRY_CORE__?.info()?.total_actions || 0;
+    console.log(`[UXActionRegistryLoader] actions registered: ${actionCount}`);
 
-    // FASE 1 FIX: Marcar como ready y resolver promesa
-    window.__AP_UX_ACTION_REGISTRY_READY__.ready = true;
-    window.__AP_UX_ACTION_REGISTRY_READY__.resolve();
-    console.log('[UXActionRegistryLoader] ✅ Registry READY - promesa resuelta');
+    console.log('[UXActionRegistryLoader] done');
 
   } catch (error) {
     console.error('[UXActionRegistryLoader] ❌ Error cargando registry core:', error);
-    // FASE 1 FIX: Resolver promesa incluso en error (para evitar bloqueos)
-    // El código que espera debe verificar que el registry existe
-    window.__AP_UX_ACTION_REGISTRY_READY__.ready = false;
-    window.__AP_UX_ACTION_REGISTRY_READY__.resolve();
-    // Continuar sin registry core (modo degradado)
-    // El registry legacy seguirá funcionando
+    // RUNTIME CORE v1: Fail-hard (no continuar en modo degradado)
+    if (window.__AP_RUNTIME_READY__) {
+      window.__AP_RUNTIME_READY__.failHard(error);
+    }
+    // NO continuar: el runtime está broken
+    throw error;
   }
 })();

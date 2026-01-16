@@ -149,6 +149,16 @@
       "name": "Master Refresh Engine v1"
     },
     {
+      "id": "runtime-ready",
+      "guard_id": "RUNTIME_READY",
+      "path": "/js/core/runtime/runtime-ready.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Runtime Ready Gate v1"
+    },
+    {
       "id": "ux-action-registry-loader",
       "guard_id": "UX_ACTION_REGISTRY_LOADER",
       "path": "/js/core/ux/action-registry/ux-action-registry-loader.js",
@@ -187,6 +197,16 @@
       "critical": true,
       "phase": "core",
       "name": "Perform Action v1 Wrapper"
+    },
+    {
+      "id": "runtime-integrity-check",
+      "guard_id": "RUNTIME_INTEGRITY_CHECK",
+      "path": "/js/core/runtime/runtime-integrity-check.v1.js",
+      "type": "module",
+      "required": true,
+      "critical": true,
+      "phase": "core",
+      "name": "Runtime Integrity Check v1"
     },
     {
       "id": "refresh-engine-v2-adapter",

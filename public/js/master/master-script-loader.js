@@ -363,6 +363,44 @@ if (window.__AP_MASTER_SCRIPT_LOADER_LOADED__) {
     
     console.log(`[ASSETS][MASTER] ✅ Carga de scripts completada (${loadedScriptIds.length} ok, ${failedScriptIds.length} failed)`);
     
+    // RUNTIME CORE v1: Verificar si el runtime está BROKEN después de cargar scripts
+    if (window.__AP_RUNTIME_READY__ && window.__AP_RUNTIME_READY__.state() === 'broken') {
+      console.error('[ASSETS][MASTER] ⛔ RUNTIME BROKEN detectado después de cargar scripts');
+      const runtimeError = window.__AP_RUNTIME_READY__.error;
+      
+      // Mostrar banner fijo en DOM (sin frameworks, DOM API only)
+      const banner = document.createElement('div');
+      banner.id = 'ap-runtime-broken-banner';
+      banner.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #dc3545;
+        color: white;
+        padding: 16px;
+        text-align: center;
+        z-index: 99999;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      `;
+      banner.textContent = `⚠️ RUNTIME BROKEN: ${runtimeError?.message || 'Error desconocido'}`;
+      document.body.appendChild(banner);
+      
+      // Bloquear clicks en botones con data-action-id
+      document.addEventListener('click', function(e) {
+        if (e.target && (e.target.hasAttribute('data-action-id') || e.target.closest('[data-action-id]'))) {
+          e.preventDefault();
+          e.stopPropagation();
+          alert('Runtime está BROKEN. No se pueden ejecutar acciones. Por favor, recarga la página.');
+          return false;
+        }
+      }, true); // Use capture phase
+      
+      console.error('[ASSETS][MASTER] ⛔ Banner de RUNTIME BROKEN mostrado y clicks bloqueados');
+    }
+    
     // Emitir evento global cuando TODOS los scripts requeridos se hayan cargado
     // Este evento es la señal canónica de que el loader terminó
     // El ACS Guard escucha este evento para validar
