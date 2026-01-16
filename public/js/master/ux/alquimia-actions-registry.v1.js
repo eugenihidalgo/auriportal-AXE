@@ -107,12 +107,8 @@
           };
         }
       },
-    refresh_plan: buildRefreshPlan,
-    telemetry: {
-      log_input: true,
-      log_output: true
-    }
-  });
+      refresh: buildRefreshPlan
+    });
 
     // ============================================================================
     // ACCIÓN 2: alquimia.clean.all
@@ -122,32 +118,28 @@
       domain: 'master',
       description: 'Limpiar item para todos los estudiantes (shared o pde)',
       handler: {
-      method: 'POST',
-      endpointBuilder: (context) => {
-        if (!context.item_ref) {
-          throw new Error('item_ref es obligatorio para alquimia.clean.all');
+        method: 'POST',
+        endpointBuilder: (context) => {
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.clean.all');
+          }
+          return `/master/api/alquimia-general/items/${context.item_ref}/master/mark-clean-all`;
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.clean.all');
+          }
+          if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
+            throw new Error('clean_layer debe ser "shared" o "pde"');
+          }
+          return {
+            clean_layer: context.clean_layer,
+            item_kind: context.item_kind
+          };
         }
-        return `/master/api/alquimia-general/items/${context.item_ref}/master/mark-clean-all`;
       },
-      buildPayload: (uiState, context) => {
-        if (!context.item_kind) {
-          throw new Error('item_kind es obligatorio para alquimia.clean.all');
-        }
-        if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
-          throw new Error('clean_layer debe ser "shared" o "pde"');
-        }
-        return {
-          clean_layer: context.clean_layer,
-          item_kind: context.item_kind
-        };
-      }
-    },
-    refresh_plan: buildRefreshPlan,
-    telemetry: {
-      log_input: true,
-      log_output: true
-    }
-  });
+      refresh: buildRefreshPlan
+    });
 
     // ============================================================================
     // ACCIÓN 3: alquimia.increment.all
@@ -157,32 +149,28 @@
       domain: 'master',
       description: 'Incrementar contador de item para todos los estudiantes (una_vez)',
       handler: {
-      method: 'POST',
-      endpointBuilder: (context) => {
-        if (!context.item_ref) {
-          throw new Error('item_ref es obligatorio para alquimia.increment.all');
+        method: 'POST',
+        endpointBuilder: (context) => {
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.increment.all');
+          }
+          return `/master/api/alquimia-general/items/${context.item_ref}/master/increment-all`;
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.increment.all');
+          }
+          if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
+            throw new Error('clean_layer debe ser "shared" o "pde"');
+          }
+          return {
+            clean_layer: context.clean_layer,
+            item_kind: context.item_kind
+          };
         }
-        return `/master/api/alquimia-general/items/${context.item_ref}/master/increment-all`;
       },
-      buildPayload: (uiState, context) => {
-        if (!context.item_kind) {
-          throw new Error('item_kind es obligatorio para alquimia.increment.all');
-        }
-        if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
-          throw new Error('clean_layer debe ser "shared" o "pde"');
-        }
-        return {
-          clean_layer: context.clean_layer,
-          item_kind: context.item_kind
-        };
-      }
-    },
-    refresh_plan: buildRefreshPlan,
-    telemetry: {
-      log_input: true,
-      log_output: true
-    }
-  });
+      refresh: buildRefreshPlan
+    });
 
     // ============================================================================
     // ACCIÓN 4: alquimia.reset.item
@@ -192,35 +180,31 @@
       domain: 'master',
       description: 'Resetear progreso de item para un estudiante (recurrente)',
       handler: {
-      method: 'POST',
-      endpointBuilder: () => {
-        return '/master/api/alquimia-general/reset-item';
+        method: 'POST',
+        endpointBuilder: () => {
+          return '/master/api/alquimia-general/reset-item';
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.student_uuid) {
+            throw new Error('student_uuid es obligatorio para alquimia.reset.item');
+          }
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.reset.item');
+          }
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.reset.item');
+          }
+          return {
+            student_uuid: context.student_uuid,
+            item_ref: context.item_ref,
+            item_kind: context.item_kind,
+            scope: 'student',
+            view_layer: context.view_layer || uiState.view_layer || 'shared'
+          };
+        }
       },
-      buildPayload: (uiState, context) => {
-        if (!context.student_uuid) {
-          throw new Error('student_uuid es obligatorio para alquimia.reset.item');
-        }
-        if (!context.item_ref) {
-          throw new Error('item_ref es obligatorio para alquimia.reset.item');
-        }
-        if (!context.item_kind) {
-          throw new Error('item_kind es obligatorio para alquimia.reset.item');
-        }
-        return {
-          student_uuid: context.student_uuid,
-          item_ref: context.item_ref,
-          item_kind: context.item_kind,
-          scope: 'student',
-          view_layer: context.view_layer || uiState.view_layer || 'shared'
-        };
-      }
-    },
-    refresh_plan: buildRefreshPlan,
-    telemetry: {
-      log_input: true,
-      log_output: true
-    }
-  });
+      refresh: buildRefreshPlan
+    });
 
     // ============================================================================
     // ACCIÓN 5: alquimia.reset.list
@@ -230,35 +214,31 @@
       domain: 'master',
       description: 'Resetear progreso de lista completa para un estudiante (recurrente)',
       handler: {
-      method: 'POST',
-      endpointBuilder: () => {
-        return '/master/api/alquimia-general/reset-list';
+        method: 'POST',
+        endpointBuilder: () => {
+          return '/master/api/alquimia-general/reset-list';
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.student_uuid) {
+            throw new Error('student_uuid es obligatorio para alquimia.reset.list');
+          }
+          if (!context.list_id) {
+            throw new Error('list_id es obligatorio para alquimia.reset.list');
+          }
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.reset.list');
+          }
+          return {
+            student_uuid: context.student_uuid,
+            list_id: context.list_id,
+            item_kind: context.item_kind,
+            scope: 'student',
+            view_layer: context.view_layer || uiState.view_layer || 'shared'
+          };
+        }
       },
-      buildPayload: (uiState, context) => {
-        if (!context.student_uuid) {
-          throw new Error('student_uuid es obligatorio para alquimia.reset.list');
-        }
-        if (!context.list_id) {
-          throw new Error('list_id es obligatorio para alquimia.reset.list');
-        }
-        if (!context.item_kind) {
-          throw new Error('item_kind es obligatorio para alquimia.reset.list');
-        }
-        return {
-          student_uuid: context.student_uuid,
-          list_id: context.list_id,
-          item_kind: context.item_kind,
-          scope: 'student',
-          view_layer: context.view_layer || uiState.view_layer || 'shared'
-        };
-      }
-    },
-    refresh_plan: buildRefreshPlan,
-    telemetry: {
-      log_input: true,
-      log_output: true
-    }
-  });
+      refresh: buildRefreshPlan
+    });
 
     // Log temporal para debug
     const registeredActions = registry.list ? registry.list() : [];
