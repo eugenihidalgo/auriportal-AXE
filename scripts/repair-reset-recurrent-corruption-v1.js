@@ -1,6 +1,23 @@
 // scripts/repair-reset-recurrent-corruption-v1.js
 // Script one-shot para reparar corrupción legacy en reset recurrente
 // REPARA: effective_since IS NOT NULL pero last_cleaned_at < effective_since y clean_count > 0
+//
+// USAGE:
+//   # Dry-run (por defecto, no aplica cambios)
+//   node scripts/repair-reset-recurrent-corruption-v1.js
+//
+//   # Aplicar reparación
+//   node scripts/repair-reset-recurrent-corruption-v1.js --apply
+//
+//   # Filtrar por estudiante
+//   node scripts/repair-reset-recurrent-corruption-v1.js --student-uuid <uuid>
+//
+//   # Filtrar por capa
+//   node scripts/repair-reset-recurrent-corruption-v1.js --layer pde|shared|both
+//
+// REFERENCIAS:
+//   - docs/RESET_RECURRENTE_V1_CLOSURE_REPORT.md
+//   - docs/DIAGNOSTICO_RESET_RECURRENTE_DB_V1.md
 
 import dotenv from 'dotenv';
 dotenv.config();

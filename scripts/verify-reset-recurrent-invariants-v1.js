@@ -1,6 +1,18 @@
 // scripts/verify-reset-recurrent-invariants-v1.js
 // Script de verificación de invariantes para reset recurrente
 // FALLA (exit 1) si existen filas corruptas
+//
+// USAGE:
+//   node scripts/verify-reset-recurrent-invariants-v1.js
+//
+// RESULTADO:
+//   - Exit 0: todas las invariantes cumplidas
+//   - Exit 1: violaciones encontradas (ejecutar repair script)
+//
+// REFERENCIAS:
+//   - docs/RESET_RECURRENTE_V1_CLOSURE_REPORT.md
+//   - docs/DIAGNOSTICO_RESET_RECURRENTE_DB_V1.md
+//   - docs/INVARIANTES_CONSTITUCIONALES.md (Invariante 12)
 
 import dotenv from 'dotenv';
 dotenv.config();

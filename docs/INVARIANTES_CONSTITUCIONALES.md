@@ -139,6 +139,48 @@ grep -r "isNever\|isPending\|isReviewed\|isImportant" src --exclude-dir=node_mod
 
 ---
 
+## Invariante 12: Reset Recurrente - Coherencia de Ciclo Actual
+
+### Regla
+
+Si `<layer>_effective_since != null` y `last_cleaned_at < effective_since`, el ciclo actual trata `last_cleaned_at` como `NULL` y `clean_count` como `0`. El reset debe dejar SIEMPRE `last_cleaned_at = NULL` y `clean_count = 0` en la capa reseteada.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ Reset que deje `last_cleaned_at != NULL` cuando `last_cleaned_at < effective_since`
+- ❌ Reset que deje `clean_count > 0` en la capa reseteada
+- ❌ Proyección ALL que no normalice estados corruptos legacy antes de pasar a CPM
+- ❌ Cálculo de estado que use `last_cleaned_at` anterior a `effective_since`
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ Reset atómico: `effective_since = NOW()`, `last_cleaned_at = NULL`, `clean_count = 0` (en una sola sentencia SQL)
+- ✅ Normalización en read-model: Si `effective_since != null` y `last_cleaned_at < effective_since`, normalizar ciclo actual (`last_cleaned_at = null`, `clean_count = 0`)
+- ✅ Verificación automática: Script de verificación falla (exit 1) si existen violaciones
+- ✅ CPM ignora `last_cleaned_at` anterior a `effective_since` (ya implementado)
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar invariantes de reset recurrente
+node scripts/verify-reset-recurrent-invariants-v1.js
+
+# Buscar resets que no reseteen contadores
+grep -r "effective_since.*=.*NOW\|effective_since.*=.*CURRENT_TIMESTAMP" src/infra/repos --exclude-dir=node_modules | grep -v "last_cleaned_at.*NULL\|clean_count.*0"
+```
+
+**Referencias:**
+- `docs/RESET_RECURRENTE_V1_CLOSURE_REPORT.md`
+- `docs/DIAGNOSTICO_RESET_RECURRENTE_DB_V1.md`
+- `src/core/master/services/list-projection-model.js` (normalización)
+- `src/infra/repos/cleaning/cleaning-item-state-repo-pg.js` (reset atómico)
+- `scripts/verify-reset-recurrent-invariants-v1.js` (verificación)
+
+---
+
 ## Invariante 4: Separación RECURRENTE vs UNA_VEZ
 
 ### Regla
