@@ -28,6 +28,36 @@ import { getAction, getActionOrFail, validatePayload } from './ux-action-registr
  * @returns {Promise<Object>} Response de la acción
  */
 export async function performAction({ action_id, payload = {}, context = {}, uiState = {} }) {
+  // MAJOR-3 FIX: Guard - Runtime BROKEN bloquea ejecución de acciones
+  if (typeof window !== 'undefined' && window.__AP_RUNTIME_READY__) {
+    const runtimeState = window.__AP_RUNTIME_READY__.state();
+    if (runtimeState === 'broken') {
+      const error = new Error(`[MAJOR-3] Runtime está BROKEN. No se pueden ejecutar acciones. Error: ${window.__AP_RUNTIME_READY__.error?.message || 'desconocido'}`);
+      error.code = 'RUNTIME_BROKEN_ACTION_BLOCKED';
+      logContractViolation(action_id || 'unknown', 'runtime_broken', { payload, context, runtime_state: runtimeState });
+      console.error('[PerformAction][MAJOR-3] ❌ Intento de ejecutar acción con runtime BROKEN', {
+        action_id,
+        runtime_state: runtimeState,
+        runtime_error: window.__AP_RUNTIME_READY__.error
+      });
+      throw error; // FAIL-HARD: No permitir ejecución si runtime está BROKEN
+    }
+    
+    // MAJOR-3 FIX: Esperar a que runtime esté READY antes de ejecutar
+    try {
+      await window.__AP_RUNTIME_READY__.whenReady();
+    } catch (readyError) {
+      const error = new Error(`[MAJOR-3] Runtime no está READY. ${readyError.message}`);
+      error.code = 'RUNTIME_NOT_READY';
+      logContractViolation(action_id || 'unknown', 'runtime_not_ready', { payload, context, error: readyError.message });
+      console.error('[PerformAction][MAJOR-3] ❌ Runtime no está READY', {
+        action_id,
+        error: readyError.message
+      });
+      throw error; // FAIL-HARD: No permitir ejecución si runtime no está READY
+    }
+  }
+
   // Validación básica
   if (!action_id || typeof action_id !== 'string') {
     const error = '[PerformAction] action_id es obligatorio y debe ser string';

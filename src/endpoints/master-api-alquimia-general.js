@@ -1543,6 +1543,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
         }
         
+        // MAJOR-2 FIX: Validar coherencia view_layer + clean_layer
+        // REGLA CANÓNICA: view_layer='effective' → clean_layer='pde' (OBLIGATORIO)
+        if (view_layer === 'effective') {
+          if (item_kind !== 'recurrente') {
+            return jsonError('view_layer="effective" solo disponible para item_kind="recurrente"', 'VIEW_LAYER_ITEM_KIND_COHERENCE_ERROR', 400, traceId);
+          }
+          if (clean_layer && clean_layer !== 'pde') {
+            return jsonError('view_layer="effective" requiere clean_layer="pde" (regla canónica)', 'VIEW_LAYER_CLEAN_LAYER_COHERENCE_ERROR', 400, traceId);
+          }
+        }
+        
         logInfo('[RESET][ITEM][CANONICAL]', 'POST /reset-item iniciado', {
           traceId,
           student_uuid,
@@ -1550,15 +1561,20 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           item_kind,
           scope,
           view_layer,
-          clean_layer
+          clean_layer: clean_layer || (view_layer === 'effective' ? 'pde' : null)
         });
+        
+        // MAJOR-2 FIX: Aplicar regla canónica effective → pde
+        const effectiveCleanLayer = (view_layer === 'effective' && item_kind === 'recurrente') 
+          ? 'pde' 
+          : (clean_layer || null);
         
         // RESET CANÓNICO v1: Usar Cleaning Engine (eventos, no delete)
         const result = await cleaningEngineResetItem({
           student_uuid,
           item_ref,
           item_kind,
-          clean_layer: clean_layer || null,
+          clean_layer: effectiveCleanLayer,
           view_layer: view_layer || null,
           product_key: body.product_key || 'pde',
           domain_type: body.domain_type || 'transmutation',
@@ -1640,6 +1656,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
         }
         
+        // MAJOR-2 FIX: Validar coherencia view_layer + clean_layer
+        // REGLA CANÓNICA: view_layer='effective' → clean_layer='pde' (OBLIGATORIO)
+        if (view_layer === 'effective') {
+          if (item_kind && item_kind !== 'recurrente') {
+            return jsonError('view_layer="effective" solo disponible para item_kind="recurrente"', 'VIEW_LAYER_ITEM_KIND_COHERENCE_ERROR', 400, traceId);
+          }
+          if (clean_layer && clean_layer !== 'pde') {
+            return jsonError('view_layer="effective" requiere clean_layer="pde" (regla canónica)', 'VIEW_LAYER_CLEAN_LAYER_COHERENCE_ERROR', 400, traceId);
+          }
+        }
+        
         logInfo('[RESET][LIST][CANONICAL]', 'POST /reset-list iniciado', {
           traceId,
           student_uuid,
@@ -1647,7 +1674,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           item_kind,
           scope,
           view_layer,
-          clean_layer
+          clean_layer: clean_layer || (view_layer === 'effective' ? 'pde' : null)
         });
         
         // RESET CANÓNICO v1: Obtener items de la lista y resetear cada uno
@@ -1675,11 +1702,16 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         for (const item of filteredItems) {
           try {
             const itemKindForReset = item_kind || lista.tipo;
+            // MAJOR-2 FIX: Aplicar regla canónica effective → pde
+            const effectiveCleanLayer = (view_layer === 'effective' && itemKindForReset === 'recurrente') 
+              ? 'pde' 
+              : (clean_layer || null);
+            
             const result = await cleaningEngineResetItem({
               student_uuid,
               item_ref: item.item_ref,
               item_kind: itemKindForReset,
-              clean_layer: clean_layer || null,
+              clean_layer: effectiveCleanLayer,
               view_layer: view_layer || null,
               product_key: body.product_key || 'pde',
               domain_type: body.domain_type || 'transmutation',

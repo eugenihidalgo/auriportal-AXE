@@ -790,22 +790,19 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         });
       }
       
-      // BUG-020 FIX: Asegurar que effective siempre se devuelve para recurrente
-      // Si item_kind es recurrente, effective DEBE estar en state_by_view_layer
+      // MAJOR-1 FIX: Validación fail-fast - effective DEBE existir para recurrente
+      // REGLA CONSTITUCIONAL: computeCleaningProjection ya calcula effective para recurrente
+      // Si falta, es un error del sistema (no un caso edge)
       if (item_kind === 'recurrente' && !projection.state_by_view_layer.effective) {
-        logError('ListProjectionModel', '[BUG-020] effective no calculado para recurrente', {
+        const error = new Error(`[MAJOR-1] state_by_view_layer.effective es OBLIGATORIO para item_kind='recurrente' pero falta en la proyección. Item: ${item.item_ref}`);
+        logError('ListProjectionModel', '[MAJOR-1] effective no calculado para recurrente (ERROR CRÍTICO)', {
           traceId,
           item_ref: item.item_ref,
           item_kind,
-          available_layers: Object.keys(projection.state_by_view_layer)
+          available_layers: Object.keys(projection.state_by_view_layer),
+          error: error.message
         });
-        // Calcular effective explícitamente si falta
-        projection.state_by_view_layer.effective = computeCleaningProjection({
-          cleaning_state: cleaningState,
-          item_kind: item_kind,
-          view_layer: 'effective',
-          config: effectiveConfig
-        }).state_by_view_layer.effective;
+        throw error; // FAIL-FAST: No continuar si falta effective
       }
       
       // BUG-023 FIX: Garantizar que required_count y veces_limpiar siempre están presentes

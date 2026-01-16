@@ -40,6 +40,21 @@ const actions = new Map();
  * @param {Object} [actionDef.legacy_bridge] - Bridge temporal para legacy (opcional)
  */
 export function registerAction(actionDef) {
+  // MAJOR-3 FIX: Guard - Runtime BROKEN bloquea registro de acciones
+  if (typeof window !== 'undefined' && window.__AP_RUNTIME_READY__) {
+    const runtimeState = window.__AP_RUNTIME_READY__.state();
+    if (runtimeState === 'broken') {
+      const error = new Error(`[MAJOR-3] Runtime está BROKEN. No se pueden registrar acciones. Error: ${window.__AP_RUNTIME_READY__.error?.message || 'desconocido'}`);
+      error.code = 'RUNTIME_BROKEN_REGISTRATION_BLOCKED';
+      console.error('[UX_ACTION_REGISTRY][MAJOR-3] ❌ Intento de registrar acción con runtime BROKEN', {
+        action_id: actionDef.action_id,
+        runtime_state: runtimeState,
+        runtime_error: window.__AP_RUNTIME_READY__.error
+      });
+      throw error; // FAIL-HARD: No permitir registro si runtime está BROKEN
+    }
+  }
+
   const {
     action_id,
     domain,

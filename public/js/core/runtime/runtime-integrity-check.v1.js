@@ -108,12 +108,43 @@
     window.__AP_RUNTIME_READY__.resolveReady();
   }
 
+  // MAJOR-3 FIX: Esperar a que el loader termine de cargar antes del integrity check
+  // ESTRATEGIA: Esperar a que __AP_UX_ACTION_SCHEMA__ esté disponible
+  // Si no está disponible después de un timeout, fallar
+  function waitForSchemaAndRun() {
+    const maxWait = 5000; // 5 segundos máximo
+    const startTime = Date.now();
+    const checkInterval = 100; // Verificar cada 100ms
+    
+    const checkSchema = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      
+      // Si __AP_UX_ACTION_SCHEMA__ está disponible, ejecutar integrity check
+      if (window.__AP_UX_ACTION_SCHEMA__) {
+        clearInterval(checkSchema);
+        runIntegrityCheck();
+        return;
+      }
+      
+      // Si excedió el timeout, fallar
+      if (elapsed >= maxWait) {
+        clearInterval(checkSchema);
+        const error = new Error('[MAJOR-3] __AP_UX_ACTION_SCHEMA__ no está disponible después de 5 segundos. ux-action-registry-loader.js debe cargarse antes del integrity check.');
+        console.error('[RuntimeIntegrityCheck][MAJOR-3] ❌', error.message);
+        if (window.__AP_RUNTIME_READY__) {
+          window.__AP_RUNTIME_READY__.failHard(error);
+        }
+        return;
+      }
+    }, checkInterval);
+  }
+
   // FIX MAJOR: Esperar a DOMContentLoaded para garantizar que todos los scripts están cargados
   if (document.readyState === 'loading') {
-    // DOM aún cargando, esperar al evento
-    document.addEventListener('DOMContentLoaded', runIntegrityCheck);
+    // DOM aún cargando, esperar al evento y luego esperar schema
+    document.addEventListener('DOMContentLoaded', waitForSchemaAndRun);
   } else {
-    // DOM ya cargado, ejecutar inmediatamente
-    runIntegrityCheck();
+    // DOM ya cargado, esperar schema y ejecutar
+    waitForSchemaAndRun();
   }
 })();

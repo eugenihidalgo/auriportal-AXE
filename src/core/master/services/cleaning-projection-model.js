@@ -172,11 +172,18 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   
   // REGLA: never = last_cleaned_at === null AND effective_since === null
   // REGLA: pending (post-reset) = effective_since !== null AND last_effective_clean === effective_since
+  // MAJOR-2 FIX: Si effective_since !== null (reset aplicado), NUNCA devolver 'never'
   let state;
-  if (lastEffectiveCleanAt === null) {
-    // Nunca limpiado (sin reset)
-    state = 'never';
-  } else if (effectiveSince !== null) {
+  if (effectiveSince !== null) {
+    // MAJOR-2 FIX: Reset aplicado - garantizar que lastEffectiveCleanAt no sea null
+    // Si effective_since existe pero lastEffectiveCleanAt es null, usar effective_since
+    if (lastEffectiveCleanAt === null) {
+      lastEffectiveCleanAt = effectiveSince;
+      // Recalcular days_since con effective_since
+      const now = new Date();
+      const effectiveSinceDate = new Date(effectiveSince);
+      daysSince = Math.floor((now - effectiveSinceDate) / (1000 * 60 * 60 * 24));
+    }
     // Reset aplicado: verificar si last_effective_clean === effective_since
     const effectiveSinceDate = new Date(effectiveSince);
     if (lastEffectiveCleanAt && lastEffectiveCleanAt.getTime() === effectiveSinceDate.getTime()) {
@@ -195,6 +202,10 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
       // Reset aplicado pero sin days_since calculado → pending (nunca never)
       state = 'pending';
     }
+  } else if (lastEffectiveCleanAt === null) {
+    // MAJOR-2 FIX: Nunca limpiado (sin reset) - solo si effective_since también es null
+    // Si effective_since !== null, ya se procesó arriba
+    state = 'never';
   } else if (daysSince !== null && daysSince < threshold_days) {
     // Sin reset: lógica normal
     state = 'reviewed';
@@ -342,7 +353,8 @@ export function computeCleaningProjection({ cleaning_state, item_kind, view_laye
     });
   }
   
-  // effective solo para recurrente
+  // MAJOR-1 FIX: effective SIEMPRE para recurrente (OBLIGATORIO)
+  // REGLA CONSTITUCIONAL: Backend garantiza state_by_view_layer.effective SIEMPRE que item_kind === 'recurrente'
   if (item_kind === 'recurrente') {
     stateByViewLayer.effective = computeEffectiveState({
       item_kind,
@@ -350,6 +362,11 @@ export function computeCleaningProjection({ cleaning_state, item_kind, view_laye
       item_config: config,
       cleaning_state
     });
+    
+    // VALIDACIÓN FAIL-FAST: Si effective no se calculó, lanzar error explícito
+    if (!stateByViewLayer.effective) {
+      throw new Error(`[MAJOR-1] state_by_view_layer.effective no se calculó para item_kind='recurrente'. Esto viola View Authority v1.`);
+    }
   }
   
   // Estado activo según view_layer solicitada
@@ -357,6 +374,11 @@ export function computeCleaningProjection({ cleaning_state, item_kind, view_laye
   
   if (!stateActive) {
     throw new Error(`view_layer '${view_layer}' no está disponible para item_kind '${item_kind}'`);
+  }
+  
+  // MAJOR-1 FIX: Validación final - effective DEBE existir para recurrente
+  if (item_kind === 'recurrente' && !stateByViewLayer.effective) {
+    throw new Error(`[MAJOR-1] state_by_view_layer.effective es OBLIGATORIO para item_kind='recurrente' pero falta en la respuesta.`);
   }
   
   return {

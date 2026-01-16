@@ -1257,9 +1257,35 @@ export async function resetStudentItemProgress(options, client = null) {
     }
 
     // 4. Determinar capas a resetear
+    // MAJOR-2 FIX: Validar coherencia view_layer + clean_layer
+    // REGLA CANÓNICA: view_layer='effective' → clean_layer='pde' (OBLIGATORIO)
+    if (view_layer === 'effective' && item_kind === 'recurrente') {
+      // REGLA CONSTITUCIONAL: Reset desde effective → SOLO PDE
+      if (clean_layer && clean_layer !== 'pde') {
+        const error = new Error(`[MAJOR-2] Coherencia violada: view_layer='effective' requiere clean_layer='pde', recibido: ${clean_layer}`);
+        error.code = 'VIEW_LAYER_CLEAN_LAYER_COHERENCE_VIOLATION';
+        logError('CleaningEngine', '[MAJOR-2] Coherencia view_layer/clean_layer violada', {
+          traceId,
+          view_layer,
+          clean_layer,
+          item_kind
+        });
+        throw error;
+      }
+      // Forzar clean_layer='pde' si no viene explícito
+      if (!clean_layer) {
+        clean_layer = 'pde';
+        logInfo('CleaningEngine', '[MAJOR-2] view_layer=effective → clean_layer=pde (regla canónica)', {
+          traceId,
+          student_uuid,
+          item_ref
+        });
+      }
+    }
+    
     // REGLA V1: Si clean_layer viene explícito, reset solo esa capa
     // Si no viene, derivar de view_layer:
-    //   - effective (recurrente) => reset BOTH (shared + pde)
+    //   - effective (recurrente) => reset SOLO pde (regla canónica)
     //   - combo (una_vez) => reset BOTH (shared + pde)
     //   - shared/pde => reset solo esa capa
     let layersToReset = [];
@@ -1270,7 +1296,8 @@ export async function resetStudentItemProgress(options, client = null) {
       layersToReset = [clean_layer];
     } else if (view_layer) {
       if (view_layer === 'effective' && item_kind === 'recurrente') {
-        layersToReset = ['shared', 'pde'];
+        // MAJOR-2 FIX: effective → SOLO pde (regla canónica)
+        layersToReset = ['pde'];
       } else if (view_layer === 'combo' && item_kind === 'una_vez') {
         layersToReset = ['shared', 'pde'];
       } else if (view_layer === 'shared' || view_layer === 'pde') {
