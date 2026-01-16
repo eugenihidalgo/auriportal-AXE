@@ -157,22 +157,8 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // Determinar si hay reset aplicado
   const hasReset = effectiveSince !== null;
   
-  // ============================================================================
-  // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500
-  // ============================================================================
-  // Log forense para RESET_RECURRENTE_V1
-  if (hasReset) {
-    console.log('[FORENSIC][CPM][RESET_RECURRENTE_V1] Reset detectado, iniciando nuevo ciclo', {
-      effective_since: effectiveSince,
-      last_cleaned_at: lastCleanedAt,
-      threshold_days,
-      critical_threshold: criticalThreshold,
-      effective_since_type: typeof effectiveSince,
-      last_cleaned_at_type: typeof lastCleanedAt,
-      effective_since_is_null: effectiveSince === null,
-      last_cleaned_at_is_null: lastCleanedAt === null
-    });
-  }
+  // RESET_RECURRENTE_V1: Logs forenses reducidos (solo para debugging si es necesario)
+  // Removido logs verbosos temporales - mantener solo logs de error estructurados
   
   // RESET_RECURRENTE_V1: Si hay reset, solo considerar eventos posteriores al reset
   let lastEffectiveCleanAt = null;
@@ -256,24 +242,20 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
     });
   }
   
-  // ============================================================================
-  // DIAGNÓSTICO FORENSE: Validar valores imposibles antes de retornar
-  // ============================================================================
-  // Detecta combinaciones imposibles que podrían causar 500
+  // RESET_RECURRENTE_V1: Validación de fechas inválidas (mantener para robustez)
   if (hasReset && lastCleanedAt && effectiveSince) {
     try {
       const lastCleanedDate = new Date(lastCleanedAt);
       const effectiveSinceDate = new Date(effectiveSince);
       if (isNaN(lastCleanedDate.getTime()) || isNaN(effectiveSinceDate.getTime())) {
-        console.error('[FORENSIC][CPM][ERROR] Fechas inválidas detectadas', {
+        // Log estructurado solo si hay error real
+        console.error('[CPM][RESET_RECURRENTE_V1][ERROR] Fechas inválidas detectadas', {
           last_cleaned_at: lastCleanedAt,
-          effective_since: effectiveSince,
-          last_cleaned_date_valid: !isNaN(lastCleanedDate.getTime()),
-          effective_since_date_valid: !isNaN(effectiveSinceDate.getTime())
+          effective_since: effectiveSince
         });
       }
     } catch (dateError) {
-      console.error('[FORENSIC][CPM][ERROR] Error parseando fechas', {
+      console.error('[CPM][RESET_RECURRENTE_V1][ERROR] Error parseando fechas', {
         error: dateError.message,
         last_cleaned_at: lastCleanedAt,
         effective_since: effectiveSince

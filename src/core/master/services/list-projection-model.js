@@ -494,20 +494,69 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
       // Si no hay fila (LEFT JOIN devolvió NULL), crear estado NULL explícito
       // Esto asegura que estudiantes sin estado se cuenten como "nunca trabajado"
       // CPM v2: Pasar datos brutos (NO had_history, PROHIBIDO)
+      
+      // ========================================================================
+      // FIX RESET_RECURRENTE_V1: Normalización de estados corruptos legacy
+      // ========================================================================
+      // Regla: Si effective_since != null y last_cleaned_at < effective_since,
+      // normalizar para ciclo actual (no borra historial, solo ciclo actual)
+      const normalizeState = (layer, effectiveSince, lastCleanedAt, cleanCount) => {
+        if (!effectiveSince) {
+          // Sin reset: usar datos tal cual
+          return {
+            last_cleaned_at: lastCleanedAt || null,
+            effective_since: null,
+            clean_count: cleanCount || 0
+          };
+        }
+        
+        // Reset aplicado: verificar coherencia
+        if (lastCleanedAt && new Date(lastCleanedAt) < new Date(effectiveSince)) {
+          // Estado corrupto legacy: last_cleaned_at anterior al reset
+          // Normalizar: ciclo actual empieza en effective_since
+          return {
+            last_cleaned_at: null, // Ignorar limpieza anterior al reset
+            effective_since: effectiveSince,
+            clean_count: 0 // Contador reseteado para ciclo actual
+          };
+        }
+        
+        // Estado coherente: last_cleaned_at posterior al reset o NULL
+        return {
+          last_cleaned_at: lastCleanedAt || null,
+          effective_since: effectiveSince,
+          clean_count: cleanCount || 0
+        };
+      };
+      
+      const sharedNormalized = normalizeState(
+        'shared',
+        row.shared_effective_since,
+        row.shared_last_cleaned_at,
+        row.shared_clean_count || 0
+      );
+      
+      const pdeNormalized = normalizeState(
+        'pde',
+        row.pde_effective_since,
+        row.pde_last_cleaned_at,
+        row.pde_clean_count || 0
+      );
+      
       statesByItem[itemRef].shared.push({
-        clean_count: row.shared_clean_count || 0,
+        clean_count: sharedNormalized.clean_count,
         remaining: row.shared_remaining || null,
         completed: row.shared_completed || false,
-        last_cleaned_at: row.shared_last_cleaned_at || null, // NULL si no hay fila
-        effective_since: row.shared_effective_since || null
+        last_cleaned_at: sharedNormalized.last_cleaned_at,
+        effective_since: sharedNormalized.effective_since
       });
       
       statesByItem[itemRef].pde.push({
-        clean_count: row.pde_clean_count || 0,
+        clean_count: pdeNormalized.clean_count,
         remaining: row.pde_remaining || null,
         completed: row.pde_completed || false,
-        last_cleaned_at: row.pde_last_cleaned_at || null, // NULL si no hay fila
-        effective_since: row.pde_effective_since || null
+        last_cleaned_at: pdeNormalized.last_cleaned_at,
+        effective_since: pdeNormalized.effective_since
       });
     });
     
