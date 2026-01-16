@@ -16,7 +16,7 @@
  */
 
 import { validateActionExists, logContractViolation } from './ux-action-schema.js';
-import { getAction, getActionOrFail } from './ux-action-registry.js';
+import { getAction, getActionOrFail, validatePayload } from './ux-action-registry.js';
 
 /**
  * Ejecuta una acción UX con validación dura
