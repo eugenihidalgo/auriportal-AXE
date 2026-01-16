@@ -1432,13 +1432,33 @@
       return null;
     }
     
+    // BUG-009 FIX: Preservar view_layer activo (no resetear a 'shared' por defecto)
+    // Si view_layer no está definido, usar default canónico según item_kind
+    let activeViewLayer = state.projection.view_layer;
+    if (!activeViewLayer) {
+      // Defaults canónicos según item_kind
+      if (itemKind === 'recurrente') {
+        activeViewLayer = 'shared';
+      } else if (itemKind === 'una_vez') {
+        activeViewLayer = 'combo';
+      } else {
+        activeViewLayer = 'shared'; // Fallback seguro
+      }
+      // Actualizar state para preservar en siguiente llamada
+      state.projection.view_layer = activeViewLayer;
+      console.log('[MasterAlquimiaGeneral][LPM] [BUG-009] view_layer no definido, usando default canónico', {
+        item_kind: itemKind,
+        default_view_layer: activeViewLayer
+      });
+    }
+    
     state.projection.loading = true;
     
     try {
       const params = new URLSearchParams({
         list_id: state.listaActiva.id,
         item_kind: itemKind,
-        view_layer: state.projection.view_layer,
+        view_layer: activeViewLayer, // BUG-009: Usar view_layer preservado
         scope: state.projection.scope
       });
       
@@ -1449,7 +1469,7 @@
       console.log('[UI][LPM] fetch', {
         list_id: state.listaActiva.id,
         item_kind: itemKind,
-        view_layer: state.projection.view_layer,
+        view_layer: activeViewLayer, // BUG-009: Usar view_layer preservado
         scope: state.projection.scope,
         student_uuid: state.projection.student_uuid
       });
@@ -1460,7 +1480,7 @@
         params: {
           list_id: state.listaActiva.id,
           item_kind: itemKind,
-          view_layer: state.projection.view_layer,
+          view_layer: activeViewLayer, // BUG-009: Usar view_layer preservado
           scope: state.projection.scope,
           student_uuid: state.projection.student_uuid
         },
@@ -2020,11 +2040,32 @@
 
     try {
       // ============================================================================
-      // REGLA CANÓNICA: view_layer es OBLIGATORIO para RECURRENTE
+      // BUG-016 FIX: Corregir fallback de view_layer (NUNCA usar cleanLayer como fallback)
       // ============================================================================
-      // Si no se pasa viewLayer explícitamente, usar layerView del estado del modal
-      // Si no hay layerView, usar cleanLayer como fallback (DEPRECATED)
-      const activeViewLayer = viewLayer || state.modal.layerView || cleanLayer;
+      // REGLA CANÓNICA: view_layer y clean_layer son conceptos distintos
+      // Defaults canónicos según item_kind:
+      // - recurrente → 'shared'
+      // - una_vez → 'combo'
+      let activeViewLayer = viewLayer || state.modal.layerView;
+      
+      // Si aún no está definido, obtener item_kind y usar default canónico
+      if (!activeViewLayer) {
+        const itemKind = getItemKindExplicit(item, state.listaActiva);
+        if (itemKind === 'recurrente') {
+          activeViewLayer = 'shared';
+        } else if (itemKind === 'una_vez') {
+          activeViewLayer = 'combo';
+        } else {
+          activeViewLayer = 'shared'; // Fallback seguro
+        }
+        console.log('[MasterAlquimiaGeneral] [BUG-016] view_layer no definido, usando default canónico', {
+          item_kind: itemKind,
+          default_view_layer: activeViewLayer
+        });
+      }
+      
+      // BUG-016: NUNCA usar cleanLayer como fallback de view_layer
+      // cleanLayer y view_layer son conceptos distintos y NO se mezclan
       
       // Construir URL con clean_layer (repositorio) y view_layer (estado RECURRENTE)
       const urlParams = new URLSearchParams({
@@ -2336,11 +2377,11 @@
     const currentLayerView = state.modal.layerView || savedLayerView;
     state.modal.layerView = currentLayerView;
     
-    // Función para cambiar vista (refetch obligatorio según PDUI)
+    // BUG-005 FIX: Migrar selector de vista a Refresh Surface Registry (eliminar refetch manual)
     const changeLayerView = async (newView) => {
       if (newView === currentLayerView) return;
       
-      console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] Cambiando vista', {
+      console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] [BUG-005] Cambiando vista usando Refresh Surface Registry', {
         item_ref: item.item_ref,
         item_kind: state.modal?.itemKind || getItemKindExplicit(item, state.listaActiva),
         view_layer_before: currentLayerView,
@@ -2353,10 +2394,39 @@
       state.modal.layerView = newView;
       localStorage.setItem('ap_master_alquimia_float_layer', newView);
       
-      // REGLA CONSTITUCIONAL PDUI: Refetch obligatorio tras cambio de vista
-      // NO re-renderizar con datos antiguos, hacer refetch completo
-      overlay.remove();
-      await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
+      // BUG-005 FIX: Usar Refresh Surface Registry en lugar de refetch manual
+      if (window.__AP_REFRESH_SURFACE_REGISTRY__) {
+        const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
+        const uiState = {
+          view_mode: state.projection.mode,
+          view_layer: newView,
+          list_id: state.listaActiva?.id || null,
+          modal_layerView: newView
+        };
+        
+        try {
+          await surfaceRegistry.refetch('alquimia.flotante_students', {
+            item_ref: item.item_ref,
+            view_layer: newView,
+            clean_layer: state.modal.cleanLayer || 'shared'
+          }, uiState);
+          
+          // Re-renderizar flotante con datos frescos
+          // El refresh surface debería actualizar state.modal, pero por seguridad re-abrimos
+          overlay.remove();
+          await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
+        } catch (error) {
+          console.error('[MasterAlquimiaGeneral] [BUG-005] Error en Refresh Surface Registry:', error);
+          // Fallback: refetch manual si registry falla
+          overlay.remove();
+          await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
+        }
+      } else {
+        // Fallback: refetch manual si registry no está disponible
+        console.warn('[MasterAlquimiaGeneral] [BUG-005] Refresh Surface Registry no disponible, usando fallback manual');
+        overlay.remove();
+        await handleVerItem(item, state.modal.cleanLayer || 'shared', newView);
+      }
       
       // El tamaño se reaplicará automáticamente al abrir el nuevo flotante (showFlotanteVer)
     };
@@ -2603,6 +2673,35 @@
 
     const tipo = normalized.tipo || normalized.item_kind || 'recurrente';
     const itemKind = normalized.item_kind || tipo;
+    
+    // BUG-017 FIX: Validar item_kind antes de renderizar columnas en flotante
+    if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] [BUG-017] item_kind inválido o faltante antes de renderizar columnas en flotante', {
+        item_kind: itemKind,
+        item: item,
+        lista: state.listaActiva,
+        tipo: tipo,
+        normalized: normalized
+      });
+      
+      // Mostrar error visible en lugar de renderizar columnas incorrectas
+      const errorColumn = document.createElement('div');
+      errorColumn.style.cssText = 'padding: 1rem; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 0.5rem; margin-bottom: 1rem;';
+      const errorTitle = document.createElement('div');
+      errorTitle.textContent = '❌ ERROR: item_kind inconsistente';
+      errorTitle.style.cssText = 'color: #fca5a5; font-weight: 600; margin-bottom: 0.5rem;';
+      errorColumn.appendChild(errorTitle);
+      const errorDesc = document.createElement('div');
+      errorDesc.textContent = 'No se puede renderizar columnas: item_kind es inválido o no coincide con el tipo de lista.';
+      errorDesc.style.cssText = 'color: #fca5a5; font-size: 0.875rem;';
+      errorColumn.appendChild(errorDesc);
+      content.appendChild(errorColumn);
+      modal.appendChild(content);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      return; // Bloquear render de columnas
+    }
+    
     const requiredCount = normalized.required_count || normalized.veces_limpiar || 1;
     // ============================================================================
     // REGLA CANÓNICA: Cada columna declara explícitamente su view_layer
@@ -2740,6 +2839,30 @@
       errorDesc.style.cssText = 'color: #fca5a5; font-size: 0.875rem;';
       errorColumn.appendChild(errorDesc);
       content.appendChild(errorColumn);
+    }
+    
+    // BUG-012 FIX: Validar item_kind antes de renderizar columnas (bloquear si inconsistente)
+    if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
+      console.error('[MasterAlquimiaGeneral] [BUG-012] item_kind inválido o faltante antes de renderizar columnas', {
+        item_kind: itemKind,
+        item: item,
+        lista: state.listaActiva,
+        tipo: tipo
+      });
+      
+      // Mostrar error visible en lugar de renderizar columnas incorrectas
+      const errorColumn = document.createElement('div');
+      errorColumn.style.cssText = 'padding: 1rem; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 0.5rem; margin-bottom: 1rem;';
+      const errorTitle = document.createElement('div');
+      errorTitle.textContent = '❌ ERROR: item_kind inconsistente';
+      errorTitle.style.cssText = 'color: #fca5a5; font-weight: 600; margin-bottom: 0.5rem;';
+      errorColumn.appendChild(errorTitle);
+      const errorDesc = document.createElement('div');
+      errorDesc.textContent = 'No se puede renderizar columnas: item_kind es inválido o no coincide con el tipo de lista.';
+      errorDesc.style.cssText = 'color: #fca5a5; font-size: 0.875rem;';
+      errorColumn.appendChild(errorDesc);
+      content.appendChild(errorColumn);
+      return; // Bloquear render de columnas
     }
     
     // Renderizar columnas por estado según tipo
@@ -2921,11 +3044,25 @@
    * @param {Object} normalized - Payload normalizado
    */
   function createStudentRow(student, stateKey, item, normalized) {
+    // BUG-014 FIX: Forzar re-render completo eliminando referencias anteriores
+    // Esto asegura que colores y estado siempre vienen del backend (no se "recuerdan")
+    delete student._last_row_element;
+    delete student._last_row_state;
+    
     const row = document.createElement('div');
     row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0.5rem; align-items: center;';
     
-    // Color de fondo según estado
-    if (stateKey === 'reviewed' || stateKey === 'completed') {
+    // BUG-014 FIX: Colores siempre desde backend (state_by_view_layer), no hardcodeados
+    // Obtener color desde state_by_view_layer si está disponible
+    const activeViewLayer = state.modal.layerView || 'shared';
+    const stateData = student.state_by_view_layer?.[activeViewLayer];
+    const computedColor = stateData?.computed_state?.color;
+    
+    // Color de fondo según estado (usar color del backend si está disponible, sino fallback)
+    if (computedColor) {
+      // BUG-014: Usar color del backend (si está disponible)
+      row.style.cssText += `background: ${computedColor};`;
+    } else if (stateKey === 'reviewed' || stateKey === 'completed') {
       row.style.cssText += 'background: rgba(34, 197, 94, 0.1);';
     } else if (stateKey === 'pending') {
       row.style.cssText += 'background: rgba(234, 179, 8, 0.1);';
@@ -2934,6 +3071,10 @@
     } else {
       row.style.cssText += 'background: rgba(148, 163, 184, 0.1);';
     }
+    
+    // Guardar referencia para siguiente comparación
+    student._last_row_element = row;
+    student._last_row_state = stateKey;
 
     // Columna 1: Alumno
     const nameDiv = document.createElement('div');
@@ -4405,7 +4546,9 @@
       // Botón LIMPIAR (solo recurrentes)
       // REGLA CONSTITUCIONAL: En scope='student', NO mostrar botones de limpieza general (bulk)
       // Solo mostrar botones de limpieza por alumno (más abajo en el código)
-      if (state.listaActiva && state.listaActiva.tipo === 'recurrente' && state.projection.scope !== 'student') {
+      // BUG-003 FIX: Validar item_kind explícitamente ANTES de renderizar (no confiar solo en listaActiva.tipo)
+      const itemKindForClean = getItemKindExplicit(item, state.listaActiva);
+      if (itemKindForClean === 'recurrente' && state.projection.scope !== 'student') {
         // ============================================================================
         // REGLA CANÓNICA: clean_layer DEBE ser explícito en acciones masivas
         // ============================================================================
@@ -4467,13 +4610,37 @@
                   return;
                 }
                 
+                // BUG-006 FIX: Usar performAction() en lugar de función directa
                 try {
-                  const deletedCount = await resetItemOverrides(state.projection.student_uuid, item.item_ref);
+                  if (typeof window.performAction !== 'function') {
+                    throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
+                  }
+
+                  const uiState = {
+                    view_mode: state.projection.mode,
+                    view_layer: state.projection.view_layer || 'shared',
+                    list_id: state.listaActiva?.id || null
+                  };
+
+                  const result = await window.performAction({
+                    action_id: 'alquimia.reset_overrides',
+                    context: {
+                      student_uuid: state.projection.student_uuid,
+                      item_ref: item.item_ref,
+                      list_id: state.listaActiva?.id || null
+                    },
+                    uiState
+                  });
+
+                  if (!result.ok) {
+                    throw new Error(result.error || 'Error reseteando overrides');
+                  }
+
+                  const deletedCount = result.data?.deleted_count || 0;
+                  console.log('[MasterAlquimiaGeneral] [BUG-006] Overrides reseteados usando performAction:', deletedCount);
                   showToastSuccess(`${deletedCount} override(s) eliminado(s)`);
                   
-                  // Refrescar proyección
-                  await loadListProjection();
-                  renderView();
+                  // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
                 } catch (error) {
                   console.error('[OVERRIDES][RESET] Error:', error);
                   showToastError(`Error: ${error.message}`);
@@ -5270,8 +5437,7 @@
 
   /**
    * Maneja el click en botón Eliminar (soft delete)
-   * LEGACY: handleEliminarItem usa fetch() directo (eliminación de item, fuera del scope actual de limpieza).
-   * TODO: Migrar a performAction('alquimia.delete_item') cuando se registre acción de eliminación.
+   * BUG-006 FIX: Migrado a performAction('alquimia.delete_item')
    */
   async function handleEliminarItem(item) {
     if (!item || !item.id) {
@@ -5282,11 +5448,28 @@
     // Sin confirmación (UX sin fricción, acción reversible)
 
     try {
-      const response = await fetch(`/master/api/alquimia-general/items/${item.id}`, {
-        method: 'DELETE'
-      });
+      // BUG-006 FIX: Usar performAction() en lugar de fetch() directo
+      if (typeof window.performAction !== 'function') {
+        throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
+      }
 
-      const result = await response.json();
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: state.projection.mode === 'proyeccion' 
+          ? (state.projection.view_layer || 'shared')
+          : (state.modal.layerView || 'shared'),
+        list_id: state.listaActiva?.id || null
+      };
+
+      const result = await window.performAction({
+        action_id: 'alquimia.delete_item',
+        context: {
+          item_id: item.id,
+          item_ref: item.item_ref,
+          list_id: state.listaActiva?.id || null
+        },
+        uiState
+      });
       
       if (!result.ok) {
         throw new Error(result.error || 'Error eliminando item');

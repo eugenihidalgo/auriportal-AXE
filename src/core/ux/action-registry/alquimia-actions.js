@@ -380,5 +380,91 @@ registerActionFn({
   }
 });
 
-  console.log('[AlquimiaActions] ✅ 6 acciones consolidadas registradas en UX Action Registry');
+  // ============================================================================
+  // BUG-006 FIX: Acciones UX para delete_item, update_lista, reset_overrides
+  // ============================================================================
+  
+  // alquimia.delete_item: Eliminar item (soft delete)
+  registerActionFn({
+    action_id: 'alquimia.delete_item',
+    domain: 'alquimia',
+    request: {
+      method: 'DELETE',
+      endpointBuilder: (context) => `/master/api/alquimia-general/items/${context.item_id}`,
+      buildPayload: (context) => ({})
+    },
+    refresh: function(context, uiState) {
+      const surfaces = [];
+      const view_mode = uiState.view_mode || 'operativa';
+      const list_id = uiState.list_id || context.list_id;
+      
+      // Refrescar items si estamos en modo operativa
+      if (view_mode === 'operativa' && list_id) {
+        surfaces.push('alquimia.items');
+      }
+      
+      // Refrescar proyección si estamos en modo proyección
+      if (view_mode === 'proyeccion' && list_id) {
+        surfaces.push('alquimia.list_projection');
+      }
+      
+      return surfaces;
+    }
+  });
+  
+  // alquimia.reset_overrides: Resetear overrides de un item para un estudiante
+  registerActionFn({
+    action_id: 'alquimia.reset_overrides',
+    domain: 'alquimia',
+    request: {
+      method: 'POST',
+      endpointBuilder: (context) => `/master/api/alquimia-general/overrides/reset`,
+      buildPayload: (context) => ({
+        student_uuid: context.student_uuid,
+        item_ref: context.item_ref
+      })
+    },
+    refresh: function(context, uiState) {
+      const surfaces = [];
+      const view_mode = uiState.view_mode || 'operativa';
+      const list_id = uiState.list_id || context.list_id;
+      
+      // Refrescar proyección si estamos en modo proyección (overrides afectan proyección)
+      if (view_mode === 'proyeccion' && list_id) {
+        surfaces.push('alquimia.list_projection');
+      }
+      
+      return surfaces;
+    }
+  });
+  
+  // alquimia.update_lista: Actualizar configuración de lista
+  registerActionFn({
+    action_id: 'alquimia.update_lista',
+    domain: 'alquimia',
+    request: {
+      method: 'PUT',
+      endpointBuilder: (context) => `/master/api/alquimia-general/listas/${context.list_id}`,
+      buildPayload: (context) => ({
+        nombre: context.nombre,
+        tipo: context.tipo,
+        descripcion: context.descripcion,
+        // ... otros campos según necesidad
+      })
+    },
+    refresh: function(context, uiState) {
+      const surfaces = [];
+      const list_id = context.list_id;
+      
+      // Refrescar items y proyección si la lista cambió
+      if (list_id) {
+        surfaces.push('alquimia.items');
+        surfaces.push('alquimia.list_projection');
+      }
+      
+      return surfaces;
+    }
+  });
+
+  console.log('[AlquimiaActions] ✅ 9 acciones registradas en UX Action Registry (6 consolidadas + 3 nuevas para BUG-006)');
 })();
