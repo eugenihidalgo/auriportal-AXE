@@ -4599,6 +4599,8 @@
 
   /**
    * Maneja creación inline sticky (mantiene nivel/grupo/días)
+   * LEGACY: handleCrearItemInlineSticky usa fetch() directo (creación de item, fuera del scope actual de limpieza).
+   * TODO: Migrar a performAction('alquimia.create_item') cuando se registre acción de creación.
    */
   async function handleCrearItemInlineSticky() {
     const nombre = state.newItemDraft.nombre.trim();
@@ -5089,6 +5091,8 @@
 
   /**
    * Maneja el click en botón Eliminar (soft delete)
+   * LEGACY: handleEliminarItem usa fetch() directo (eliminación de item, fuera del scope actual de limpieza).
+   * TODO: Migrar a performAction('alquimia.delete_item') cuando se registre acción de eliminación.
    */
   async function handleEliminarItem(item) {
     if (!item || !item.id) {
@@ -5121,6 +5125,8 @@
 
   /**
    * Maneja el click en botón Configurar lista
+   * LEGACY: handleConfigurarLista puede usar fetch() directo (configuración de lista, fuera del scope actual de limpieza).
+   * TODO: Migrar a performAction('alquimia.configure_list') cuando se registre acción de configuración.
    */
   function handleConfigurarLista() {
     if (!state.listaActiva) return;

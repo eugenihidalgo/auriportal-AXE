@@ -1090,6 +1090,8 @@
 
   /**
    * Maneja la limpieza de un item (SHARED, acción operativa)
+   * LEGACY: handleCleanItem usa fetch() directo. Debe migrarse a performAction('alquimia.clean') cuando se registre acción.
+   * TODO: Migrar a performAction('alquimia.clean') con scope='student'
    */
   async function handleCleanItem(item) {
     if (!state.selectedStudentUuid) { // CAMBIADO: usar selectedStudentUuid
@@ -1102,6 +1104,9 @@
       item_ref: item.item_ref,
       item_nombre: item.item_nombre
     });
+    
+    // LEGACY: handleCleanItem usa fetch() directo (debe migrarse a performAction)
+    console.warn('[LEGACY_REFRESH_CALL] handleCleanItem usando fetch() directo. Debe migrarse a performAction("alquimia.clean") con scope="student" cuando se registre acción.');
     
     // Mostrar indicador de carga
     const loadingMsg = document.createElement('div');

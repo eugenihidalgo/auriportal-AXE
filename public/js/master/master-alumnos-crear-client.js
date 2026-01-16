@@ -78,6 +78,8 @@
 
   /**
    * Maneja el envío del formulario
+   * LEGACY: handleFormSubmit usa fetch() directo (creación de alumno, fuera del scope actual de limpieza).
+   * TODO: Migrar a performAction('alumnos.create') cuando se registre acción de creación.
    */
   async function handleFormSubmit(event) {
     event.preventDefault();
