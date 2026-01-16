@@ -89,6 +89,57 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
 ---
 
 # =========================================
+# CONSTITUCIÓN UX ACTION REGISTRY v1
+# =========================================
+
+  - id: ux-action-registry-constitutional
+    title: UX Action Registry v1 como ÚNICA puerta de intención de usuario
+    content: >
+      El UX Action Registry v1 es la ÚNICA puerta de intención de usuario en AuriPortal.
+      REGLA CONSTITUCIONAL ABSOLUTA:
+      - Ninguna UI nueva puede existir sin UX Action Registry
+      - Ninguna mutación puede hacerse fuera de performAction
+      - El Action Registry es la ÚNICA puerta de intención de usuario
+      PROHIBIDO ABSOLUTAMENTE:
+      - fetch() directo desde UI para mutar estado (fetch('/master/api/*'), fetch('/god/api/*'))
+      - llamar endpoints desde handlers de botones directamente
+      - lógica de limpieza / reset / mutación en UI fuera del registry
+      - crear botones sin action_id explícito
+      - introducir nuevos LEGACY_REFRESH_CALL sin aprobación explícita
+      - usar axios / xhr / request manuales desde UI para mutaciones
+      - handlers que llamen mark-clean-*, reset-*, etc. directamente
+      OBLIGATORIO ABSOLUTAMENTE:
+      - toda acción UI → performAction(action_id, payload)
+      - toda acción debe estar registrada en UX Action Registry
+      - action_id debe existir o lanzar error duro
+      - cualquier UI nueva debe diseñarse primero con:
+        * lista de acciones
+        * action_id canónico
+        * schema de validación
+      CONTRATO DE DISEÑO:
+      - NO se acepta implementación sin contrato previo
+      - NO se acepta UI que viole el Action Registry
+      - El Action Registry es la ÚNICA puerta de intención de usuario
+      LEGACY (aceptable temporalmente):
+      - código legacy permitido SOLO si:
+        * marcado con [LEGACY_REFRESH_CALL] o [LEGACY_ACTION_CALL]
+        * justificado en comentario explícito
+        * listado en auditoría (check:ux-action-registry)
+      EXCEPCIONES (PERMITIDAS):
+      - Acciones GET (lectura, no mutación) están PERMITIDAS
+      - Handlers load*/get*/fetch* que solo leen datos (GET)
+      - Acciones de creación/eliminación fuera del scope actual (marcadas como LEGACY)
+      VERIFICACIÓN OBLIGATORIA:
+      - npm run check:ux-action-registry DEBE pasar (0 errors)
+      - assembly check detecta violaciones constitucionales
+      - build falla si hay violaciones (EXIT CODE 1)
+      REFERENCIAS:
+      - docs/UX_ACTION_REGISTRY_CONTRACT_V1.md (contrato canónico)
+      - src/core/ux/action-registry/ux-action-registry.js (registry core)
+      - public/js/core/ux/action-registry/perform-action.js (wrapper canónico)
+      - scripts/check-ux-action-registry.js (assembly check constitucional)
+
+# =========================================
 # CONSTITUCIÓN MASTER SIDEBAR v1
 # =========================================
 
