@@ -1651,12 +1651,6 @@ export async function resetAllStudentsItemProgress(options, client = null) {
           error: studentError.message,
           error_code: studentError.code
         });
-        logWarn('CleaningEngine', 'Error reseteando estudiante en reset ALL (continuando)', {
-          traceId,
-          student_uuid: studentUuid,
-          item_ref,
-          error: studentError.message
-        });
         skipped++;
         skippedBreakdown.error++;
       }
