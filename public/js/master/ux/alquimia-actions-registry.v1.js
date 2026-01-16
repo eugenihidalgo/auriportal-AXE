@@ -38,13 +38,13 @@
       return;
     }
 
-  /**
-   * Helper para construir refresh plan canónico
-   * @param {Object} context - Contexto de la mutación
-   * @param {Object} uiState - Estado de UI
-   * @returns {Array} Lista de surface_ids a refrescar
-   */
-  function buildRefreshPlan(context, uiState) {
+    /**
+     * Helper para construir refresh plan canónico
+     * @param {Object} context - Contexto de la mutación
+     * @param {Object} uiState - Estado de UI
+     * @returns {Array} Lista de surface_ids a refrescar
+     */
+    function buildRefreshPlan(context, uiState) {
     const surfaces = [];
     const view_mode = uiState.view_mode || 'operativa';
     const list_id = uiState.list_id || context.list_id;
@@ -65,48 +65,48 @@
       surfaces.push('alquimia.flotante_students');
     }
 
-    return surfaces;
-  }
+      return surfaces;
+    }
 
     // ============================================================================
     // ACCIÓN 1: alquimia.clean.student
     // ============================================================================
     registry.register({
-    action_id: 'alquimia.clean.student',
-    domain: 'master',
-    description: 'Limpiar item para un estudiante específico (shared o pde)',
-    request: {
-      method: 'POST',
-      endpointBuilder: (context) => {
-        if (!context.item_ref) {
-          throw new Error('item_ref es obligatorio para alquimia.clean.student');
+      action_id: 'alquimia.clean.student',
+      domain: 'master',
+      description: 'Limpiar item para un estudiante específico (shared o pde)',
+      handler: {
+        method: 'POST',
+        endpointBuilder: (context) => {
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.clean.student');
+          }
+          return `/master/api/alquimia-general/items/${context.item_ref}/master/mark-clean-student`;
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.student_uuid) {
+            throw new Error('student_uuid es obligatorio para alquimia.clean.student');
+          }
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.clean.student');
+          }
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.clean.student');
+          }
+          if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
+            throw new Error('clean_layer debe ser "shared" o "pde"');
+          }
+          return {
+            student_uuid: context.student_uuid,
+            item_ref: context.item_ref,
+            item_kind: context.item_kind,
+            domain_type: 'transmutation',
+            clean_layer: context.clean_layer,
+            actor_type: 'master',
+            surface_key: 'master.alquimia_general'
+          };
         }
-        return `/master/api/alquimia-general/items/${context.item_ref}/master/mark-clean-student`;
       },
-      buildPayload: (uiState, context) => {
-        if (!context.student_uuid) {
-          throw new Error('student_uuid es obligatorio para alquimia.clean.student');
-        }
-        if (!context.item_ref) {
-          throw new Error('item_ref es obligatorio para alquimia.clean.student');
-        }
-        if (!context.item_kind) {
-          throw new Error('item_kind es obligatorio para alquimia.clean.student');
-        }
-        if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
-          throw new Error('clean_layer debe ser "shared" o "pde"');
-        }
-        return {
-          student_uuid: context.student_uuid,
-          item_ref: context.item_ref,
-          item_kind: context.item_kind,
-          domain_type: 'transmutation',
-          clean_layer: context.clean_layer,
-          actor_type: 'master',
-          surface_key: 'master.alquimia_general'
-        };
-      }
-    },
     refresh_plan: buildRefreshPlan,
     telemetry: {
       log_input: true,
@@ -118,10 +118,10 @@
     // ACCIÓN 2: alquimia.clean.all
     // ============================================================================
     registry.register({
-    action_id: 'alquimia.clean.all',
-    domain: 'master',
-    description: 'Limpiar item para todos los estudiantes (shared o pde)',
-    request: {
+      action_id: 'alquimia.clean.all',
+      domain: 'master',
+      description: 'Limpiar item para todos los estudiantes (shared o pde)',
+      handler: {
       method: 'POST',
       endpointBuilder: (context) => {
         if (!context.item_ref) {
@@ -153,10 +153,10 @@
     // ACCIÓN 3: alquimia.increment.all
     // ============================================================================
     registry.register({
-    action_id: 'alquimia.increment.all',
-    domain: 'master',
-    description: 'Incrementar contador de item para todos los estudiantes (una_vez)',
-    request: {
+      action_id: 'alquimia.increment.all',
+      domain: 'master',
+      description: 'Incrementar contador de item para todos los estudiantes (una_vez)',
+      handler: {
       method: 'POST',
       endpointBuilder: (context) => {
         if (!context.item_ref) {
@@ -188,10 +188,10 @@
     // ACCIÓN 4: alquimia.reset.item
     // ============================================================================
     registry.register({
-    action_id: 'alquimia.reset.item',
-    domain: 'master',
-    description: 'Resetear progreso de item para un estudiante (recurrente)',
-    request: {
+      action_id: 'alquimia.reset.item',
+      domain: 'master',
+      description: 'Resetear progreso de item para un estudiante (recurrente)',
+      handler: {
       method: 'POST',
       endpointBuilder: () => {
         return '/master/api/alquimia-general/reset-item';
@@ -226,10 +226,10 @@
     // ACCIÓN 5: alquimia.reset.list
     // ============================================================================
     registry.register({
-    action_id: 'alquimia.reset.list',
-    domain: 'master',
-    description: 'Resetear progreso de lista completa para un estudiante (recurrente)',
-    request: {
+      action_id: 'alquimia.reset.list',
+      domain: 'master',
+      description: 'Resetear progreso de lista completa para un estudiante (recurrente)',
+      handler: {
       method: 'POST',
       endpointBuilder: () => {
         return '/master/api/alquimia-general/reset-list';
@@ -260,7 +260,12 @@
     }
   });
 
-    console.log('[AlquimiaActionsRegistry] ✅ 5 acciones registradas en UX Action Registry');
+    // Log temporal para debug
+    const registeredActions = registry.list ? registry.list() : [];
+    console.log('[AlquimiaActionsRegistry] ✅ 5 acciones registradas en UX Action Registry', {
+      total: registeredActions.length,
+      actions: registeredActions.map(a => a.action_id)
+    });
   } catch (error) {
     // Si el runtime está BROKEN, no registrar acciones
     if (error.message && error.message.includes('BROKEN')) {
