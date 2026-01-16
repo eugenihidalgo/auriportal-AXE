@@ -150,73 +150,97 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   const lastCleanedAt = layerData?.last_cleaned_at ?? null;
   const effectiveSince = layerData?.effective_since ?? null;
   
-  // REGLA: last_effective_clean = max(last_cleaned_at, effective_since)
+  // RESET_RECURRENTE_V1: Reset inicia un nuevo ciclo
+  // REGLA: El cálculo del estado IGNORA eventos anteriores al último reset (effective_since)
+  // REGLA: Tras reset, el estado inicial del nuevo ciclo es 'never' con days_since = 0
+  
+  // Determinar si hay reset aplicado
+  const hasReset = effectiveSince !== null;
+  
+  // Log forense para RESET_RECURRENTE_V1
+  if (hasReset) {
+    console.log('[CPM][RESET_RECURRENTE_V1] Reset detectado, iniciando nuevo ciclo', {
+      effective_since: effectiveSince,
+      last_cleaned_at: lastCleanedAt,
+      threshold_days,
+      critical_threshold: criticalThreshold
+    });
+  }
+  
+  // RESET_RECURRENTE_V1: Si hay reset, solo considerar eventos posteriores al reset
   let lastEffectiveCleanAt = null;
-  if (lastCleanedAt && effectiveSince) {
-    const lastCleanedDate = new Date(lastCleanedAt);
-    const effectiveSinceDate = new Date(effectiveSince);
-    lastEffectiveCleanAt = lastCleanedDate > effectiveSinceDate ? lastCleanedAt : effectiveSince;
-  } else if (effectiveSince) {
-    lastEffectiveCleanAt = effectiveSince;
-  } else if (lastCleanedAt) {
-    lastEffectiveCleanAt = lastCleanedAt;
-  }
-  
-  // Calcular days_since_last_effective_clean
   let daysSince = null;
-  if (lastEffectiveCleanAt) {
-    const now = new Date();
-    const lastEffective = new Date(lastEffectiveCleanAt);
-    daysSince = Math.floor((now - lastEffective) / (1000 * 60 * 60 * 24));
+  
+  if (hasReset) {
+    // RESET_RECURRENTE_V1: Reset aplicado - iniciar nuevo ciclo
+    const effectiveSinceDate = new Date(effectiveSince);
+    
+    // Si hay last_cleaned_at, verificar si es posterior al reset
+    if (lastCleanedAt) {
+      const lastCleanedDate = new Date(lastCleanedAt);
+      if (lastCleanedDate > effectiveSinceDate) {
+        // Hay limpieza posterior al reset - usar esa fecha
+        lastEffectiveCleanAt = lastCleanedAt;
+        const now = new Date();
+        daysSince = Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
+      } else {
+        // La limpieza es anterior al reset - IGNORAR (reset inicia nuevo ciclo)
+        // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
+        lastEffectiveCleanAt = null;
+        daysSince = 0;
+      }
+    } else {
+      // No hay limpieza después del reset
+      // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
+      lastEffectiveCleanAt = null;
+      daysSince = 0;
+    }
+  } else {
+    // Sin reset: lógica normal (considerar todas las limpiezas)
+    if (lastCleanedAt) {
+      lastEffectiveCleanAt = lastCleanedAt;
+      const now = new Date();
+      const lastCleanedDate = new Date(lastCleanedAt);
+      daysSince = Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
+    } else {
+      lastEffectiveCleanAt = null;
+      daysSince = null;
+    }
   }
   
-  // REGLA: never = last_cleaned_at === null AND effective_since === null
-  // REGLA: pending (post-reset) = effective_since !== null AND last_effective_clean === effective_since
-  // MAJOR-2 FIX: Si effective_since !== null (reset aplicado), NUNCA devolver 'never'
+  // Calcular estado según RESET_RECURRENTE_V1
   let state;
-  if (effectiveSince !== null) {
-    // MAJOR-2 FIX: Reset aplicado - garantizar que lastEffectiveCleanAt no sea null
-    // Si effective_since existe pero lastEffectiveCleanAt es null, usar effective_since
-    if (lastEffectiveCleanAt === null) {
-      lastEffectiveCleanAt = effectiveSince;
-      // Recalcular days_since con effective_since
-      const now = new Date();
-      const effectiveSinceDate = new Date(effectiveSince);
-      daysSince = Math.floor((now - effectiveSinceDate) / (1000 * 60 * 60 * 24));
-    }
-    // Reset aplicado: verificar si last_effective_clean === effective_since
-    const effectiveSinceDate = new Date(effectiveSince);
-    if (lastEffectiveCleanAt && lastEffectiveCleanAt.getTime() === effectiveSinceDate.getTime()) {
-      // Reset aplicado y nunca limpiado después → pending (nunca never)
-      state = 'pending';
-    } else if (daysSince !== null && daysSince < threshold_days) {
-      // Reset aplicado pero limpiado después y days_since < threshold → reviewed
-      state = 'reviewed';
-    } else if (daysSince !== null && daysSince < criticalThreshold) {
-      // Reset aplicado pero limpiado después y threshold <= days_since < critical → pending
-      state = 'pending';
-    } else if (daysSince !== null) {
-      // Reset aplicado pero limpiado después y days_since >= critical → important
-      state = 'important';
-    } else {
-      // Reset aplicado pero sin days_since calculado → pending (nunca never)
-      state = 'pending';
-    }
+  if (hasReset && lastEffectiveCleanAt === null) {
+    // RESET_RECURRENTE_V1: Reset aplicado y sin limpieza posterior → 'never' con days_since = 0
+    state = 'never';
+    daysSince = 0;
   } else if (lastEffectiveCleanAt === null) {
-    // MAJOR-2 FIX: Nunca limpiado (sin reset) - solo si effective_since también es null
-    // Si effective_since !== null, ya se procesó arriba
+    // Sin reset y sin limpieza → 'never'
     state = 'never';
   } else if (daysSince !== null && daysSince < threshold_days) {
-    // Sin reset: lógica normal
+    // Limpieza reciente → 'reviewed'
     state = 'reviewed';
   } else if (daysSince !== null && daysSince < criticalThreshold) {
+    // Limpieza antigua pero no crítica → 'pending'
     state = 'pending';
   } else if (daysSince !== null) {
+    // Limpieza muy antigua → 'important'
     state = 'important';
   } else {
-    // daysSince es null pero lastEffectiveCleanAt no es null (caso edge)
-    // Sin reset y sin days_since → never
+    // Caso edge: daysSince es null pero lastEffectiveCleanAt no es null
     state = 'never';
+  }
+  
+  // Log forense para RESET_RECURRENTE_V1 (solo si hay reset)
+  if (hasReset) {
+    console.log('[CPM][RESET_RECURRENTE_V1] Estado calculado tras reset', {
+      state,
+      days_since: daysSince,
+      has_clean_after_reset: lastEffectiveCleanAt !== null,
+      last_effective_clean_at: lastEffectiveCleanAt,
+      effective_since: effectiveSince,
+      last_cleaned_at: lastCleanedAt
+    });
   }
   
   return {
