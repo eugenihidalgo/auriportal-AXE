@@ -122,5 +122,44 @@
     forensicsLabel: 'flotante (students)'
   });
 
-  console.log('[AlquimiaSurfacesRegistry] ✅ 3 superficies registradas en Refresh Surface Registry');
+  // ============================================================================
+  // SUPERFICIE 4: alquimia.listas
+  // ============================================================================
+  registry.registerRefreshSurface({
+    surface_id: 'alquimia.listas',
+    buildKey: (context, uiState) => {
+      const tipo = context.tipo || uiState.tipo || 'recurrente';
+      return `listas:${tipo}`;
+    },
+    refetch: async (context, uiState) => {
+      const tipo = context.tipo || uiState.tipo || 'recurrente';
+      const loadListas = getAlquimiaFunction('loadListas');
+      await loadListas(tipo);
+    },
+    forensicsLabel: 'listas'
+  });
+
+  // ============================================================================
+  // SUPERFICIE 5: alquimia.megalist
+  // ============================================================================
+  registry.registerRefreshSurface({
+    surface_id: 'alquimia.megalist',
+    buildKey: (context, uiState) => {
+      const student_uuid = context.student_uuid || uiState.student_uuid || 'unknown';
+      const view_layer = uiState.view_layer || context.view_layer || 'shared';
+      return `megalist:${student_uuid}:${view_layer}`;
+    },
+    refetch: async (context, uiState) => {
+      const student_uuid = context.student_uuid || uiState.student_uuid;
+      if (!student_uuid) {
+        console.warn('[AlquimiaSurfacesRegistry] student_uuid no disponible para alquimia.megalist');
+        return;
+      }
+      const loadMegalist = getAlquimiaFunction('loadMegalist');
+      await loadMegalist(student_uuid);
+    },
+    forensicsLabel: 'megalist'
+  });
+
+  console.log('[AlquimiaSurfacesRegistry] ✅ 5 superficies registradas en Refresh Surface Registry');
 })();

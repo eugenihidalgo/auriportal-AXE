@@ -1105,9 +1105,6 @@
       item_nombre: item.item_nombre
     });
     
-    // LEGACY: handleCleanItem usa fetch() directo (debe migrarse a performAction)
-    console.warn('[LEGACY_REFRESH_CALL] handleCleanItem usando fetch() directo. Debe migrarse a performAction("alquimia.clean") con scope="student" cuando se registre acción.');
-    
     // Mostrar indicador de carga
     const loadingMsg = document.createElement('div');
     loadingMsg.id = 'cleaning-loading';
@@ -1116,32 +1113,27 @@
     document.body.appendChild(loadingMsg);
     
     try {
-      // Payload canónico según CONTRATO_LIMPIEZA_V1 (todos los campos requeridos explícitos)
-      // CAMBIADO: usar student_uuid (UUID canónico) en lugar de student_id
-      const body = {
-        student_uuid: state.selectedStudentUuid, // CAMBIADO: usar student_uuid
-        item_ref: item.item_ref,
-        item_kind: item.lista_tipo || 'recurrente', // REQUERIDO (ya disponible en megalist)
-        actor_type: 'master', // REQUERIDO
-        surface_key: 'master.alquimia_alumno', // REQUERIDO
-        clean_layer: 'shared', // REQUERIDO
-        domain_type: 'transmutation',
-        product_key: 'pde'
-      };
-      
-      if (state.levelCap !== null) {
-        body.level_cap = state.levelCap === 999 ? 'infinity' : state.levelCap;
-      }
-      
-      const response = await fetch('/master/api/alquimia-alumno/clean', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      const result = await performAction({
+        action_id: 'alquimia.clean_student',
+        payload: {
+          item_ref: item.item_ref,
+          item_kind: item.lista_tipo || 'recurrente',
+          clean_layer: 'shared',
+          student_uuid: state.selectedStudentUuid,
+          level_cap: state.levelCap !== null ? (state.levelCap === 999 ? 'infinity' : state.levelCap) : null
         },
-        body: JSON.stringify(body)
+        context: {
+          item_ref: item.item_ref,
+          student_uuid: state.selectedStudentUuid,
+          item_kind: item.lista_tipo || 'recurrente',
+          clean_layer: 'shared',
+          level_cap: state.levelCap !== null ? (state.levelCap === 999 ? 'infinity' : state.levelCap) : null
+        },
+        uiState: {
+          view_layer: 'shared',
+          student_uuid: state.selectedStudentUuid
+        }
       });
-      
-      const result = await response.json();
       
       // Remover indicador de carga
       if (loadingMsg.parentNode) {
@@ -1150,7 +1142,7 @@
       
       if (!result.ok) {
         console.error('[MasterAlquimiaAlumno] Error limpiando item:', result.error);
-        showToastError('Error limpiando item: ' + (result.error?.message || 'Error desconocido'));
+        showToastError('Error limpiando item: ' + (result.error || 'Error desconocido'));
         return;
       }
       
@@ -1160,13 +1152,10 @@
         return;
       }
       
-      // Éxito: mostrar toast y refetch inmediato
+      // Éxito: mostrar toast (refresh automático vía refresh_plan)
       showToastSuccess(`✓ ${item.item_nombre} marcado como revisado`);
       
-      // Refetch megalist inmediato (el item debe moverse a "Revisados")
-      await loadMegalist(state.selectedStudentUuid); // CAMBIADO: pasar UUID
-      
-      console.log('[MasterAlquimiaAlumno] Item limpiado exitosamente, megalist refrescada');
+      console.log('[MasterAlquimiaAlumno] Item limpiado exitosamente, refresh automático vía refresh_plan');
     } catch (error) {
       // Remover indicador de carga
       if (loadingMsg.parentNode) {

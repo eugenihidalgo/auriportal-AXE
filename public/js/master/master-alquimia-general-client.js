@@ -1869,37 +1869,28 @@
     }
 
     try {
-      // LEGACY: handleCrearLista no usa performAction() (acción de creación, no limpieza)
-      // TODO: Migrar a performAction() cuando se registre acción de creación
-      console.warn('[LEGACY_REFRESH_CALL] handleCrearLista usando fetch() directo. Debe migrarse a performAction() cuando se registre acción de creación.');
-      
-      const response = await fetch('/master/api/alquimia-general/listas', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const result = await performAction({
+        action_id: 'alquimia.create_lista',
+        payload: {
           nombre: nombre.trim(),
           tipo: state.tipoActivo,
           descripcion: '',
           orden: 0
-        })
+        },
+        uiState: {
+          tipo: state.tipoActivo
+        }
       });
 
-      const result = await response.json();
-      
       if (!result.ok) {
         throw new Error(result.error || 'Error creando lista');
       }
 
-      console.log('[MasterAlquimiaGeneral] Lista creada:', result.lista);
+      console.log('[MasterAlquimiaGeneral] Lista creada:', result.data?.lista);
       
-      // Recargar listas
-      await loadListas(state.tipoActivo);
-      
-      // Seleccionar la nueva lista
-      if (result.lista && result.lista.id) {
-        await loadLista(result.lista.id);
+      // Seleccionar la nueva lista si existe
+      if (result.data?.lista?.id) {
+        await loadLista(result.data.lista.id);
       }
     } catch (error) {
       console.error('[MasterAlquimiaGeneral] Error creando lista:', error);
@@ -1917,35 +1908,27 @@
     }
 
     try {
-      // LEGACY: handleCrearItem no usa performAction() (acción de creación, no limpieza)
-      // TODO: Migrar a performAction() cuando se registre acción de creación
-      console.warn('[LEGACY_REFRESH_CALL] handleCrearItem usando fetch() directo. Debe migrarse a performAction() cuando se registre acción de creación.');
-      
-      const response = await fetch('/master/api/alquimia-general/items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const result = await performAction({
+        action_id: 'alquimia.create_item',
+        payload: {
           lista_id: listaId,
           nombre: nombre.trim(),
           descripcion: '',
           nivel: 9,
           priority: 10,
           days: 20
-        })
+        },
+        uiState: {
+          list_id: listaId
+        }
       });
 
-      const result = await response.json();
-      
       if (!result.ok) {
         throw new Error(result.error || 'Error creando item');
       }
 
-      console.log('[MasterAlquimiaGeneral] Item creado:', result.item);
+      console.log('[MasterAlquimiaGeneral] Item creado:', result.data?.item);
       
-      // Recargar items
-      await loadItems(listaId);
       // FIX: Render inmediato tras crear ítem
       renderView();
     } catch (error) {

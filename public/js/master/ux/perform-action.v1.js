@@ -75,6 +75,31 @@
     // Generar trace_id único
     const trace_id = `ux_action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // ============================================================================
+    // VALIDACIÓN EXPLÍCITA DE DOMINIO (FASE A - CIERRE TÉCNICO DURO)
+    // ============================================================================
+    const currentContext = typeof window !== 'undefined' ? window.__AP_CONTEXT__ : null;
+    const domainMap = {
+      'MASTER': 'master',
+      'GOD': 'god',
+      'ADMIN_LEGACY': 'admin_legacy',
+      'STUDENT': null // STUDENT no tiene acciones UX (solo lectura)
+    };
+    const currentDomain = currentContext ? domainMap[currentContext] : null;
+    
+    if (actionDef.domain && currentDomain && actionDef.domain !== currentDomain) {
+      const error = new Error(`[PerformActionV1] Violación de dominio: acción "${action_id}" es de dominio "${actionDef.domain}" pero contexto actual es "${currentDomain}"`);
+      console.error('[UX][ACTION][DOMAIN_VIOLATION]', {
+        action_id,
+        trace_id,
+        action_domain: actionDef.domain,
+        current_domain: currentDomain,
+        current_context: currentContext,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
+
     // Construir endpoint y payload
     // Compatibilidad: si viene payload explícito, usarlo; sino, construir desde context (legacy)
     let finalPayload;
@@ -90,6 +115,51 @@
       finalPayload = actionDef.request.buildPayload(uiState, context);
     } else {
       throw new Error(`[PerformActionV1] Acción ${action_id} no tiene handler definido`);
+    }
+
+    // ============================================================================
+    // VALIDACIÓN DE PAYLOAD (FASE A - CIERRE TÉCNICO DURO)
+    // ============================================================================
+    // Validar payload contra schema de acción (allowed_item_kinds, allowed_layers, allowed_scopes)
+    const validationErrors = [];
+    
+    // Validar allowed_item_kinds
+    if (actionDef.allowed_item_kinds && Array.isArray(actionDef.allowed_item_kinds)) {
+      if (finalPayload.item_kind && !actionDef.allowed_item_kinds.includes(finalPayload.item_kind)) {
+        validationErrors.push(`item_kind "${finalPayload.item_kind}" no permitido. Permitidos: ${actionDef.allowed_item_kinds.join(', ')}`);
+      }
+    }
+    
+    // Validar allowed_layers
+    if (actionDef.allowed_layers && Array.isArray(actionDef.allowed_layers)) {
+      if (finalPayload.clean_layer && !actionDef.allowed_layers.includes(finalPayload.clean_layer)) {
+        validationErrors.push(`clean_layer "${finalPayload.clean_layer}" no permitido. Permitidos: ${actionDef.allowed_layers.join(', ')}`);
+      }
+    }
+    
+    // Validar allowed_scopes
+    if (actionDef.allowed_scopes && Array.isArray(actionDef.allowed_scopes)) {
+      const scope = finalPayload.scope || context.scope || 'all';
+      if (!actionDef.allowed_scopes.includes(scope)) {
+        validationErrors.push(`scope "${scope}" no permitido. Permitidos: ${actionDef.allowed_scopes.join(', ')}`);
+      }
+    }
+    
+    // Hard fail si hay errores de validación
+    if (validationErrors.length > 0) {
+      const error = new Error(`[PerformActionV1] Validación de payload falló: ${validationErrors.join('; ')}`);
+      console.error('[UX][ACTION][VALIDATION_FAILED]', {
+        action_id,
+        trace_id,
+        errors: validationErrors,
+        payload: finalPayload,
+        context,
+        allowed_item_kinds: actionDef.allowed_item_kinds,
+        allowed_layers: actionDef.allowed_layers,
+        allowed_scopes: actionDef.allowed_scopes,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
     }
 
     // Log forense inicial

@@ -120,23 +120,30 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
       - NO se acepta implementación sin contrato previo
       - NO se acepta UI que viole el Action Registry
       - El Action Registry es la ÚNICA puerta de intención de usuario
-      LEGACY (aceptable temporalmente):
-      - código legacy permitido SOLO si:
-        * marcado con [LEGACY_REFRESH_CALL] o [LEGACY_ACTION_CALL]
-        * justificado en comentario explícito
-        * listado en auditoría (check:ux-action-registry)
+      LEGACY (PROHIBIDO DESDE CIERRE UX GOVERNANCE v1):
+      - ❌ PROHIBIDO crear nuevo código legacy
+      - ❌ PROHIBIDO usar [LEGACY_REFRESH_CALL] o [LEGACY_ACTION_CALL]
+      - ❌ PROHIBIDO fetch() POST/PUT/DELETE/PATCH fuera de performAction()
+      - ✅ TODO legacy debe migrarse a Action Registry
+      - ✅ Assembly check debe dar 0 errors / 0 warnings
       EXCEPCIONES (PERMITIDAS):
       - Acciones GET (lectura, no mutación) están PERMITIDAS
       - Handlers load*/get*/fetch* que solo leen datos (GET)
-      - Acciones de creación/eliminación fuera del scope actual (marcadas como LEGACY)
+      VALIDACIÓN OBLIGATORIA EN RUNTIME:
+      - performAction() DEBE validar payload contra schema (allowed_item_kinds, allowed_layers, allowed_scopes)
+      - performAction() DEBE validar dominio (actionDef.domain debe coincidir con window.__AP_CONTEXT__)
+      - Hard fail si validación falla (error explícito + log forense)
+      - PROHIBIDO omitir validaciones en performAction()
       VERIFICACIÓN OBLIGATORIA:
-      - npm run check:ux-action-registry DEBE pasar (0 errors)
+      - npm run check:ux-action-registry DEBE pasar (0 errors / 0 warnings)
+      - NO deben existir [LEGACY_REFRESH_CALL] o [LEGACY_ACTION_CALL]
       - assembly check detecta violaciones constitucionales
       - build falla si hay violaciones (EXIT CODE 1)
       REFERENCIAS:
       - docs/UX_ACTION_REGISTRY_CONTRACT_V1.md (contrato canónico)
+      - docs/UX_GOVERNANCE_CLARIFICACION_V1.md (diferencias UX Action Registry vs Student Capability Registry)
       - src/core/ux/action-registry/ux-action-registry.js (registry core)
-      - public/js/core/ux/action-registry/perform-action.js (wrapper canónico)
+      - public/js/master/ux/perform-action.v1.js (wrapper canónico con validaciones)
       - scripts/check-ux-action-registry.js (assembly check constitucional)
 
   - id: ux-actions-only-permanent

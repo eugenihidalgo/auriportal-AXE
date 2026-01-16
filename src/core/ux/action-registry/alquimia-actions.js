@@ -265,5 +265,114 @@ registerActionFn({
   refresh: buildRefreshPlan
 });
 
-  console.log('[AlquimiaActions] ✅ 3 acciones consolidadas registradas en UX Action Registry');
+// ============================================================================
+// ACCIÓN 4: alquimia.create_lista
+// ============================================================================
+// Crear nueva lista de transmutación
+registerActionFn({
+  action_id: 'alquimia.create_lista',
+  domain: 'master',
+  description: 'Crear nueva lista de transmutación',
+  allowed_item_kinds: null, // No aplica (es creación de lista)
+  allowed_layers: null, // No aplica (es creación de lista)
+  allowed_scopes: null, // No aplica (es creación de lista)
+  handler: {
+    method: 'POST',
+    endpointBuilder: () => '/master/api/alquimia-general/listas',
+    buildPayload: (uiState, context) => ({
+      nombre: context.nombre.trim(),
+      tipo: context.tipo || 'transmutacion',
+      descripcion: context.descripcion || '',
+      orden: context.orden || 0
+    })
+  },
+  refresh: function(context, uiState) {
+    // Refrescar listas después de crear
+    return ['alquimia.listas'];
+  }
+});
+
+// ============================================================================
+// ACCIÓN 5: alquimia.create_item
+// ============================================================================
+// Crear nuevo item en una lista
+registerActionFn({
+  action_id: 'alquimia.create_item',
+  domain: 'master',
+  description: 'Crear nuevo item en una lista',
+  allowed_item_kinds: null, // No aplica (es creación de item)
+  allowed_layers: null, // No aplica (es creación de item)
+  allowed_scopes: null, // No aplica (es creación de item)
+  handler: {
+    method: 'POST',
+    endpointBuilder: () => '/master/api/alquimia-general/items',
+    buildPayload: (uiState, context) => ({
+      lista_id: context.lista_id,
+      nombre: context.nombre.trim(),
+      descripcion: context.descripcion || '',
+      nivel: context.nivel || 9,
+      priority: context.priority || 10,
+      days: context.days || 20
+    })
+  },
+  refresh: function(context, uiState) {
+    // Refrescar items después de crear
+    return ['alquimia.items'];
+  }
+});
+
+// ============================================================================
+// ACCIÓN 6: alquimia.clean_student (Alquimia Alumno)
+// ============================================================================
+// Limpiar item para un estudiante específico desde Alquimia Alumno
+// Usa endpoint específico /master/api/alquimia-alumno/clean
+registerActionFn({
+  action_id: 'alquimia.clean_student',
+  domain: 'master',
+  description: 'Limpiar item para estudiante específico desde Alquimia Alumno',
+  allowed_item_kinds: ['recurrente', 'una_vez'],
+  allowed_layers: ['shared', 'pde'],
+  allowed_scopes: ['student'],
+  handler: {
+    method: 'POST',
+    endpointBuilder: () => '/master/api/alquimia-alumno/clean',
+    buildPayload: (uiState, context) => {
+      if (!context.student_uuid) {
+        throw new Error('student_uuid es obligatorio para alquimia.clean_student');
+      }
+      if (!context.item_ref) {
+        throw new Error('item_ref es obligatorio para alquimia.clean_student');
+      }
+      if (!context.item_kind || (context.item_kind !== 'recurrente' && context.item_kind !== 'una_vez')) {
+        throw new Error('item_kind es obligatorio y debe ser "recurrente" o "una_vez"');
+      }
+      if (!context.clean_layer || (context.clean_layer !== 'shared' && context.clean_layer !== 'pde')) {
+        throw new Error('clean_layer es obligatorio y debe ser "shared" o "pde"');
+      }
+      
+      const payload = {
+        student_uuid: context.student_uuid,
+        item_ref: context.item_ref,
+        item_kind: context.item_kind,
+        actor_type: 'master',
+        surface_key: 'master.alquimia_alumno',
+        clean_layer: context.clean_layer,
+        domain_type: 'transmutation',
+        product_key: 'pde'
+      };
+      
+      if (context.level_cap !== undefined && context.level_cap !== null) {
+        payload.level_cap = context.level_cap === 999 ? 'infinity' : context.level_cap;
+      }
+      
+      return payload;
+    }
+  },
+  refresh: function(context, uiState) {
+    // Refrescar megalist después de limpiar
+    return ['alquimia.megalist'];
+  }
+});
+
+  console.log('[AlquimiaActions] ✅ 6 acciones consolidadas registradas en UX Action Registry');
 })();
