@@ -40,30 +40,64 @@
 
     /**
      * Helper para construir refresh plan canónico
+     * FIX MAJOR: Asegurar contexto completo (list_id, item_ref, view_layer, scope)
      * @param {Object} context - Contexto de la mutación
      * @param {Object} uiState - Estado de UI
      * @returns {Array} Lista de surface_ids a refrescar
      */
     function buildRefreshPlan(context, uiState) {
-    const surfaces = [];
-    const view_mode = uiState.view_mode || 'operativa';
-    const list_id = uiState.list_id || context.list_id;
+      const surfaces = [];
+      const view_mode = uiState.view_mode || 'operativa';
+      
+      // FIX MAJOR: Asegurar que list_id siempre esté disponible
+      const list_id = uiState.list_id || context.list_id;
+      if (!list_id) {
+        console.warn('[AlquimiaActionsRegistry][buildRefreshPlan] list_id no disponible', {
+          context,
+          uiState
+        });
+      }
+      
+      // FIX MAJOR: Asegurar que view_layer siempre esté disponible
+      const view_layer = uiState.view_layer || context.view_layer || 'shared';
+      
+      // FIX MAJOR: Asegurar que scope siempre esté disponible
+      const scope = context.scope || uiState.scope || 'all';
 
-    // Proyección: siempre refrescar si hay list_id
-    if (view_mode === 'proyeccion' && list_id) {
-      surfaces.push('alquimia.list_projection');
-    }
+      // Proyección: siempre refrescar si hay list_id
+      if (view_mode === 'proyeccion' && list_id) {
+        surfaces.push('alquimia.list_projection');
+      }
 
-    // Items: siempre refrescar si hay list_id y modo operativa
-    if (view_mode === 'operativa' && list_id) {
-      surfaces.push('alquimia.items');
-    }
+      // Items: siempre refrescar si hay list_id y modo operativa
+      if (view_mode === 'operativa' && list_id) {
+        surfaces.push('alquimia.items');
+      }
 
-    // Flotante: SIEMPRE refrescar si está abierto e item_ref coincide
-    // INDEPENDIENTEMENTE del view_mode (regla constitucional)
-    if (context.item_ref && window.__AP_ALQUIMIA_STATE__?.modal?.item?.item_ref === context.item_ref) {
-      surfaces.push('alquimia.flotante_students');
-    }
+      // Flotante: SIEMPRE refrescar si hay item_ref
+      // INDEPENDIENTEMENTE del view_mode (regla constitucional)
+      // BUG-008 FIX: Detección robusta - Si hay item_ref, refrescar siempre (idempotente)
+      if (context.item_ref) {
+        surfaces.push('alquimia.flotante_students');
+        console.log('[AlquimiaActionsRegistry][buildRefreshPlan] Flotante incluido en refresh plan', {
+          item_ref: context.item_ref,
+          list_id,
+          view_layer,
+          scope
+        });
+      }
+
+      // Log forense: contexto completo
+      console.log('[AlquimiaActionsRegistry][buildRefreshPlan] Refresh plan construido', {
+        surfaces,
+        context: {
+          list_id,
+          item_ref: context.item_ref || null,
+          view_layer,
+          scope,
+          view_mode
+        }
+      });
 
       return surfaces;
     }
@@ -240,9 +274,77 @@
       refresh: buildRefreshPlan
     });
 
+    // ============================================================================
+    // ACCIÓN 6: alquimia.reset.item.all
+    // ============================================================================
+    registry.register({
+      action_id: 'alquimia.reset.item.all',
+      domain: 'master',
+      description: 'Resetear progreso de item para TODOS los estudiantes (recurrente, scope=all, clean_layer=pde)',
+      handler: {
+        method: 'POST',
+        endpointBuilder: () => {
+          return '/master/api/alquimia-general/reset-item-all';
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.item_ref) {
+            throw new Error('item_ref es obligatorio para alquimia.reset.item.all');
+          }
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.reset.item.all');
+          }
+          // REGLA CONSTITUCIONAL: Reset ALL solo para recurrente
+          if (context.item_kind !== 'recurrente') {
+            throw new Error('alquimia.reset.item.all solo disponible para item_kind="recurrente"');
+          }
+          return {
+            item_ref: context.item_ref,
+            item_kind: context.item_kind,
+            scope: 'all',
+            clean_layer: 'pde' // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+          };
+        }
+      },
+      refresh: buildRefreshPlan
+    });
+
+    // ============================================================================
+    // ACCIÓN 7: alquimia.reset.list.all
+    // ============================================================================
+    registry.register({
+      action_id: 'alquimia.reset.list.all',
+      domain: 'master',
+      description: 'Resetear progreso de lista completa para TODOS los estudiantes (recurrente, scope=all, clean_layer=pde)',
+      handler: {
+        method: 'POST',
+        endpointBuilder: () => {
+          return '/master/api/alquimia-general/reset-list-all';
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.list_id) {
+            throw new Error('list_id es obligatorio para alquimia.reset.list.all');
+          }
+          if (!context.item_kind) {
+            throw new Error('item_kind es obligatorio para alquimia.reset.list.all');
+          }
+          // REGLA CONSTITUCIONAL: Reset ALL solo para recurrente
+          if (context.item_kind !== 'recurrente') {
+            throw new Error('alquimia.reset.list.all solo disponible para item_kind="recurrente"');
+          }
+          return {
+            list_id: context.list_id,
+            item_kind: context.item_kind,
+            scope: 'all',
+            clean_layer: 'pde' // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+          };
+        }
+      },
+      refresh: buildRefreshPlan
+    });
+
     // Log temporal para debug
     const registeredActions = registry.list ? registry.list() : [];
-    console.log('[AlquimiaActionsRegistry] ✅ 5 acciones registradas en UX Action Registry', {
+    console.log('[AlquimiaActionsRegistry] ✅ 7 acciones registradas en UX Action Registry', {
       total: registeredActions.length,
       actions: registeredActions.map(a => a.action_id)
     });

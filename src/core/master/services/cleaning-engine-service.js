@@ -1479,3 +1479,226 @@ export async function resetStudentItemProgress(options, client = null) {
     throw error;
   }
 }
+
+/**
+ * Resetea el progreso de TODOS los estudiantes activos para un ítem (RESET ALL)
+ * 
+ * REGLA CONSTITUCIONAL:
+ * - Solo disponible para recurrente (una_vez NO tiene reset)
+ * - Solo afecta PDE (según contrato: reset ALL solo PDE)
+ * - Excluye estudiantes en pausa
+ * 
+ * @param {Object} options - Opciones
+ * @param {string} options.item_ref - Referencia del item
+ * @param {string} options.item_kind - Tipo de item ('recurrente' | 'una_vez') - OBLIGATORIO
+ * @param {string} options.clean_layer - Capa a resetear ('shared' | 'pde') - OBLIGATORIO
+ * @param {string} [options.product_key='pde'] - Clave del producto
+ * @param {string} [options.domain_type='transmutation'] - Tipo de dominio
+ * @param {string} options.actor_type - Tipo de actor ('master')
+ * @param {string} [options.actor_ref=null] - Referencia del actor
+ * @param {string} options.surface_key - Clave de superficie
+ * @param {string} [options.execution_mode='APPLY'] - Modo de ejecución
+ * @param {Object} [options.meta={}] - Metadatos adicionales
+ * @returns {Promise<Object>} Resultado con { applied, skipped, total, layers_affected }
+ */
+export async function resetAllStudentsItemProgress(options, client = null) {
+  const traceId = getRequestId();
+  const {
+    item_ref,
+    item_kind,
+    clean_layer,
+    product_key = 'pde',
+    domain_type = 'transmutation',
+    actor_type,
+    actor_ref = null,
+    surface_key = null,
+    execution_mode = 'APPLY',
+    meta = {}
+  } = options;
+
+  logInfo('CleaningEngine', '[RESET][ALL][CANONICAL] resetAllStudentsItemProgress entrada', {
+    traceId,
+    item_ref,
+    item_kind,
+    clean_layer,
+    product_key,
+    actor_type,
+    surface_key
+  });
+
+  // Validar campos requeridos
+  if (!item_ref || !actor_type || !item_kind || !surface_key || !clean_layer) {
+    const missing = [];
+    if (!item_ref) missing.push('item_ref');
+    if (!actor_type) missing.push('actor_type');
+    if (!item_kind) missing.push('item_kind');
+    if (!surface_key) missing.push('surface_key');
+    if (!clean_layer) missing.push('clean_layer');
+    throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+  }
+
+  // Validar item_kind
+  if (item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+    throw new Error('item_kind es requerido y debe ser "recurrente" o "una_vez"');
+  }
+
+  // REGLA CONSTITUCIONAL: Reset PROHIBIDO en UNA_VEZ
+  if (item_kind === 'una_vez') {
+    const error = new Error('Reset está PROHIBIDO para item_kind="una_vez". UNA_VEZ solo tiene contadores + overrides, no reset.');
+    error.code = 'RESET_UNA_VEZ_FORBIDDEN';
+    logError('CleaningEngine', 'Intento de reset ALL en UNA_VEZ (PROHIBIDO)', {
+      traceId,
+      item_ref,
+      item_kind
+    });
+    throw error;
+  }
+
+  // Validar clean_layer
+  if (clean_layer !== 'shared' && clean_layer !== 'pde') {
+    throw new Error(`clean_layer debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
+  }
+
+  // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+  if (clean_layer !== 'pde') {
+    logWarn('CleaningEngine', 'Reset ALL debe usar clean_layer=pde según contrato', {
+      traceId,
+      clean_layer_provided: clean_layer
+    });
+    // No fallar, pero advertir (puede ser que se quiera resetear shared también en el futuro)
+  }
+
+  try {
+    // 1. Obtener item para validar
+    const catalogRepo = getDefaultAlquimiaCatalogRepo();
+    const item = await catalogRepo.getItemByRef(item_ref);
+    
+    if (!item) {
+      throw new Error(`Item no encontrado: ${item_ref}`);
+    }
+
+    // 2. Validar coherencia con lista
+    const lista = await catalogRepo.getListaById(item.lista_id);
+    if (!lista) {
+      throw new Error(`Lista no encontrada para item: ${item_ref}`);
+    }
+
+    if (item_kind !== lista.tipo) {
+      throw new Error(`item_kind no coincide con lista.tipo: item_kind=${item_kind}, lista.tipo=${lista.tipo}`);
+    }
+
+    // 3. Obtener todos los estudiantes activos (UUID-only)
+    const { query } = await import('../../../database/pg.js');
+    const queryFn = client ? client.query.bind(client) : query;
+    
+    const studentsResult = await queryFn(`
+      SELECT id AS student_uuid
+      FROM students
+      WHERE deleted_at IS NULL
+      ORDER BY id
+    `, []);
+    
+    const studentUuids = studentsResult.rows.map(row => row.student_uuid);
+    const total = studentUuids.length;
+
+    logInfo('CleaningEngine', '[RESET][ALL] Estudiantes activos obtenidos', {
+      traceId,
+      item_ref,
+      total_students: total
+    });
+
+    // 4. Resetear cada estudiante (excluyendo pausados)
+    let applied = 0;
+    let skipped = 0;
+    const skippedBreakdown = {
+      paused: 0,
+      error: 0,
+      other: 0
+    };
+    const layersAffected = [];
+
+    for (const studentUuid of studentUuids) {
+      try {
+        // Verificar si está en pausa
+        const isPaused = await isStudentPaused(studentUuid);
+        if (isPaused) {
+          skipped++;
+          skippedBreakdown.paused++;
+          continue;
+        }
+
+        // Resetear usando función canónica
+        const resetResult = await resetStudentItemProgress({
+          student_uuid: studentUuid,
+          item_ref,
+          item_kind,
+          clean_layer,
+          view_layer: null,
+          product_key,
+          domain_type,
+          actor_type,
+          actor_ref,
+          surface_key,
+          execution_mode,
+          meta: {
+            ...meta,
+            scope: 'all',
+            reset_all: true
+          }
+        }, client);
+
+        if (resetResult.applied) {
+          applied++;
+          if (resetResult.layers_affected && resetResult.layers_affected.length > 0) {
+            resetResult.layers_affected.forEach(layer => {
+              if (!layersAffected.includes(layer)) {
+                layersAffected.push(layer);
+              }
+            });
+          }
+        } else {
+          skipped++;
+          skippedBreakdown.other++;
+        }
+      } catch (studentError) {
+        logWarn('CleaningEngine', 'Error reseteando estudiante en reset ALL (continuando)', {
+          traceId,
+          student_uuid: studentUuid,
+          item_ref,
+          error: studentError.message
+        });
+        skipped++;
+        skippedBreakdown.error++;
+      }
+    }
+
+    logInfo('CleaningEngine', '[RESET][ALL][CANONICAL] Reset ALL completado', {
+      traceId,
+      item_ref,
+      item_kind,
+      clean_layer,
+      applied,
+      skipped,
+      total,
+      skipped_breakdown: skippedBreakdown,
+      layers_affected: layersAffected
+    });
+
+    return {
+      applied,
+      skipped,
+      total,
+      skipped_breakdown: skippedBreakdown,
+      layers_affected: layersAffected
+    };
+  } catch (error) {
+    logError('CleaningEngine', 'Error en resetAllStudentsItemProgress', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      item_ref
+    });
+    throw error;
+  }
+}

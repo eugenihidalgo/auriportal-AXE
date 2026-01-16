@@ -1682,6 +1682,69 @@
       }
     }
     
+    // ============================================================================
+    // FIX MAJOR: Botón Reset Lista ALL (solo para recurrente, scope='all')
+    // ============================================================================
+    if (state.projection.scope === 'all' && state.listaActiva) {
+      const itemKind = state.tipoActivo; // 'recurrente' | 'una_vez'
+      if (itemKind === 'recurrente') {
+        const resetListAllContainer = document.createElement('div');
+        resetListAllContainer.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;';
+        
+        const btnResetListAll = document.createElement('button');
+        btnResetListAll.textContent = 'Reset lista ALL';
+        btnResetListAll.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+        btnResetListAll.addEventListener('click', async () => {
+          // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
+          // Usar toasts no bloqueantes
+          try {
+            if (typeof window.performAction !== 'function') {
+              throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
+            }
+
+            const uiState = {
+              view_mode: state.projection.mode,
+              view_layer: state.projection.view_layer || 'shared',
+              list_id: state.listaActiva?.id || null
+            };
+
+            const result = await window.performAction({
+              action_id: 'alquimia.reset.list.all',
+              context: {
+                list_id: state.listaActiva.id,
+                item_kind: 'recurrente', // OBLIGATORIO: Reset ALL solo para recurrente
+              },
+              uiState
+            });
+
+            if (!result.ok) {
+              throw new Error(result.error || 'Error reseteando lista para todos');
+            }
+
+            const applied = result.data?.applied || 0;
+            const skipped = result.data?.skipped || 0;
+            const totalItems = result.data?.total_items || 0;
+            
+            console.log('[MasterAlquimiaGeneral] [RESET][LIST][ALL] Reset lista ALL completado:', {
+              list_id: state.listaActiva.id,
+              applied,
+              skipped,
+              total_items: totalItems
+            });
+            
+            showToastSuccess(`Reset lista ALL completado (${applied} aplicados, ${skipped} omitidos en ${totalItems} items)`);
+            
+            // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
+          } catch (error) {
+            console.error('[RESET][LIST][ALL] Error:', error);
+            showToastError(`Error: ${error.message}`);
+          }
+        });
+        resetListAllContainer.appendChild(btnResetListAll);
+        listaContent.appendChild(resetListAllContainer);
+      }
+    }
+    
     // Selector de alumno (solo visible cuando scope === 'student')
     if (state.projection.scope === 'student') {
       const studentSelectorContainer = document.createElement('div');
@@ -4577,6 +4640,63 @@
           handlePdeCleanItem(item);
         });
         actionsDiv.appendChild(btnPde);
+        
+        // ============================================================================
+        // FIX MAJOR: Botón RESET ALL (solo para recurrente, scope='all')
+        // ============================================================================
+        if (state.projection.scope === 'all') {
+          const btnResetAll = document.createElement('button');
+          btnResetAll.textContent = 'Reset ALL';
+          btnResetAll.style.cssText = 'padding: 0.375rem 0.75rem; background: #ef4444; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnResetAll.addEventListener('click', async () => {
+            // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
+            // Usar toasts no bloqueantes
+            try {
+              if (typeof window.performAction !== 'function') {
+                throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
+              }
+
+              const uiState = {
+                view_mode: state.projection.mode,
+                view_layer: state.projection.view_layer || 'shared',
+                list_id: state.listaActiva?.id || null
+              };
+
+              const result = await window.performAction({
+                action_id: 'alquimia.reset.item.all',
+                context: {
+                  item_ref: item.item_ref,
+                  item_kind: 'recurrente', // OBLIGATORIO: Reset ALL solo para recurrente
+                  list_id: state.listaActiva?.id || null
+                },
+                uiState
+              });
+
+              if (!result.ok) {
+                throw new Error(result.error || 'Error reseteando item para todos');
+              }
+
+              const applied = result.data?.applied || 0;
+              const skipped = result.data?.skipped || 0;
+              const total = result.data?.total || 0;
+              
+              console.log('[MasterAlquimiaGeneral] [RESET][ALL] Reset ALL completado:', {
+                item_ref: item.item_ref,
+                applied,
+                skipped,
+                total
+              });
+              
+              showToastSuccess(`Reset ALL completado (${applied} aplicados, ${skipped} omitidos de ${total} estudiantes)`);
+              
+              // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
+            } catch (error) {
+              console.error('[RESET][ALL][ITEM] Error:', error);
+              showToastError(`Error: ${error.message}`);
+            }
+          });
+          actionsDiv.appendChild(btnResetAll);
+        }
       } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
         // Botón +1 (increment-all shared para una_vez)
         const btnIncrement = document.createElement('button');

@@ -775,6 +775,15 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
             item_kind: 'recurrente',
             view_layer: 'pde',
             config: effectiveConfig
+          }),
+          // FIX MAJOR: EFFECTIVE es OBLIGATORIO para recurrente (composición determinista de SHARED + PDE)
+          effective: computeVisualState({
+            shared: sharedData,
+            pde: pdeData,
+            combo: null,
+            item_kind: 'recurrente',
+            view_layer: 'effective',
+            config: effectiveConfig
           })
         };
 

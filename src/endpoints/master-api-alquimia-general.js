@@ -17,7 +17,10 @@ import {
 } from '../services/alquimia-general-service.js';
 // DEPRECATED: alquimia-reset-service.js (usa delete, no eventos)
 // Ahora usamos Cleaning Engine resetStudentItemProgress directamente
-import { resetStudentItemProgress as cleaningEngineResetItem } from '../core/master/services/cleaning-engine-service.js';
+import { 
+  resetStudentItemProgress as cleaningEngineResetItem,
+  resetAllStudentsItemProgress as cleaningEngineResetAll
+} from '../core/master/services/cleaning-engine-service.js';
 import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 import { getListWithClassification, updateListClassification, getAllClassifications } from '../services/pde-transmutaciones-classification-service.js';
 import { updateListaTags, getListaTags } from '../services/tags-sot-service.js';
@@ -1743,6 +1746,288 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
         return jsonError(
           error.message || 'Error reseteando progreso de la lista',
+          'INTERNAL_ERROR',
+          500,
+          traceId
+        );
+      }
+    }
+
+    // ============================================================================
+    // ENDPOINTS DE RESET ALL (PROYECCIÓN ALL - RECURRENTE)
+    // ============================================================================
+
+    // POST /master/api/alquimia-general/reset-item-all
+    // Resetea el progreso de TODOS los estudiantes para un ítem específico (RESET ALL)
+    // REGLA CONSTITUCIONAL: Solo disponible para recurrente, scope='all', clean_layer='pde'
+    if (path === '/master/api/alquimia-general/reset-item-all' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { item_ref, item_kind, scope, clean_layer } = body;
+        
+        // Validaciones obligatorias
+        if (!item_ref) {
+          return jsonError('item_ref es requerido', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: scope debe ser 'all'
+        if (scope !== 'all') {
+          return jsonError('Reset ALL solo disponible en scope=all', 'SCOPE_ERROR', 400, traceId);
+        }
+        
+        // Validar item_kind (OBLIGATORIO)
+        if (!item_kind || (item_kind !== 'recurrente' && item_kind !== 'una_vez')) {
+          return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: Reset ALL solo para recurrente
+        if (item_kind !== 'recurrente') {
+          return jsonError('Reset ALL solo disponible para item_kind="recurrente"', 'ITEM_KIND_ERROR', 400, traceId);
+        }
+        
+        // Validar clean_layer (OBLIGATORIO)
+        if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
+          return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+        if (clean_layer !== 'pde') {
+          logWarn('MasterApiAlquimiaGeneral', 'Reset ALL debe usar clean_layer=pde según contrato', {
+            traceId,
+            clean_layer_provided: clean_layer
+          });
+          // No fallar, pero advertir
+        }
+        
+        logInfo('[RESET][ITEM][ALL][CANONICAL]', 'POST /reset-item-all iniciado', {
+          traceId,
+          item_ref,
+          item_kind,
+          scope,
+          clean_layer
+        });
+        
+        // RESET CANÓNICO v1: Usar Cleaning Engine resetAllStudentsItemProgress
+        const result = await cleaningEngineResetAll({
+          item_ref,
+          item_kind,
+          clean_layer,
+          product_key: body.product_key || 'pde',
+          domain_type: body.domain_type || 'transmutation',
+          actor_type: 'master',
+          actor_ref: authCtx?.adminId || null,
+          surface_key: 'master.alquimia_general',
+          execution_mode: 'APPLY',
+          meta: {
+            scope: 'all',
+            endpoint: '/master/api/alquimia-general/reset-item-all'
+          }
+        });
+        
+        logInfo('[RESET][ITEM][ALL][CANONICAL]', 'POST /reset-item-all completado', {
+          traceId,
+          item_ref,
+          item_kind,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total,
+          layers_affected: result.layers_affected
+        });
+        
+        return jsonSuccess({
+          ok: true,
+          reset: true,
+          item_ref,
+          item_kind,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total,
+          skipped_breakdown: result.skipped_breakdown || {},
+          layers_affected: result.layers_affected,
+          mode: 'event', // Indica que es reset canónico (evento, no delete)
+          deleted: false, // Compatibilidad: nunca hay delete en reset canónico
+          trace_id: traceId
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-item-all', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error reseteando progreso del ítem para todos',
+          'INTERNAL_ERROR',
+          500,
+          traceId
+        );
+      }
+    }
+
+    // POST /master/api/alquimia-general/reset-list-all
+    // Resetea el progreso de TODOS los estudiantes para todos los ítems de una lista (RESET ALL)
+    // REGLA CONSTITUCIONAL: Solo disponible para recurrente, scope='all', clean_layer='pde'
+    if (path === '/master/api/alquimia-general/reset-list-all' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { list_id, item_kind, scope, clean_layer } = body;
+        
+        // Validaciones obligatorias
+        if (!list_id) {
+          return jsonError('list_id es requerido', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: scope debe ser 'all'
+        if (scope !== 'all') {
+          return jsonError('Reset ALL solo disponible en scope=all', 'SCOPE_ERROR', 400, traceId);
+        }
+        
+        // Validar item_kind si se proporciona
+        if (item_kind && item_kind !== 'recurrente' && item_kind !== 'una_vez') {
+          return jsonError('item_kind debe ser "recurrente" o "una_vez"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: Reset ALL solo para recurrente
+        if (item_kind && item_kind !== 'recurrente') {
+          return jsonError('Reset ALL solo disponible para item_kind="recurrente"', 'ITEM_KIND_ERROR', 400, traceId);
+        }
+        
+        // Validar clean_layer (OBLIGATORIO)
+        if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
+          return jsonError('clean_layer es requerido y debe ser "shared" o "pde"', 'VALIDATION_ERROR', 400, traceId);
+        }
+        
+        // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+        if (clean_layer !== 'pde') {
+          logWarn('MasterApiAlquimiaGeneral', 'Reset ALL debe usar clean_layer=pde según contrato', {
+            traceId,
+            clean_layer_provided: clean_layer
+          });
+          // No fallar, pero advertir
+        }
+        
+        logInfo('[RESET][LIST][ALL][CANONICAL]', 'POST /reset-list-all iniciado', {
+          traceId,
+          list_id,
+          item_kind,
+          scope,
+          clean_layer
+        });
+        
+        // RESET CANÓNICO v1: Obtener items de la lista y resetear cada uno para todos
+        const catalogRepo = getDefaultAlquimiaCatalogRepo();
+        const lista = await catalogRepo.getListaById(parseInt(list_id, 10));
+        if (!lista) {
+          return jsonError('Lista no encontrada', 'LISTA_NOT_FOUND', 404, traceId);
+        }
+        
+        // Validar que lista es recurrente
+        if (lista.tipo !== 'recurrente') {
+          return jsonError('Reset ALL solo disponible para listas de tipo "recurrente"', 'LISTA_TIPO_ERROR', 400, traceId);
+        }
+        
+        // Obtener items de la lista (filtrar por item_kind si viene)
+        const items = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
+        const filteredItems = item_kind 
+          ? items.filter(item => {
+              // Validar item_kind desde lista.tipo
+              const itemKindFromList = lista.tipo;
+              return itemKindFromList === item_kind;
+            })
+          : items;
+        
+        // Resetear cada item usando Cleaning Engine resetAllStudentsItemProgress
+        let totalApplied = 0;
+        let totalSkipped = 0;
+        const allLayersAffected = [];
+        const perItemResults = [];
+        
+        for (const item of filteredItems) {
+          try {
+            const itemKindForReset = item_kind || lista.tipo;
+            const result = await cleaningEngineResetAll({
+              item_ref: item.item_ref,
+              item_kind: itemKindForReset,
+              clean_layer,
+              product_key: body.product_key || 'pde',
+              domain_type: body.domain_type || 'transmutation',
+              actor_type: 'master',
+              actor_ref: authCtx?.adminId || null,
+              surface_key: 'master.alquimia_general',
+              execution_mode: 'APPLY',
+              meta: {
+                scope: 'all',
+                list_id: parseInt(list_id, 10),
+                endpoint: '/master/api/alquimia-general/reset-list-all'
+              }
+            });
+            
+            totalApplied += result.applied || 0;
+            totalSkipped += result.skipped || 0;
+            
+            // Acumular layers_affected
+            if (result.layers_affected && result.layers_affected.length > 0) {
+              result.layers_affected.forEach(layer => {
+                if (!allLayersAffected.includes(layer)) {
+                  allLayersAffected.push(layer);
+                }
+              });
+            }
+            
+            perItemResults.push({
+              item_ref: item.item_ref,
+              applied: result.applied || 0,
+              skipped: result.skipped || 0
+            });
+          } catch (itemError) {
+            logWarn('MasterApiAlquimiaGeneral', 'Error reseteando item en lista ALL (continuando)', {
+              traceId,
+              item_ref: item.item_ref,
+              error: itemError.message
+            });
+            totalSkipped++;
+            perItemResults.push({
+              item_ref: item.item_ref,
+              applied: 0,
+              skipped: 1,
+              error: itemError.message
+            });
+          }
+        }
+        
+        logInfo('[RESET][LIST][ALL][CANONICAL]', 'POST /reset-list-all completado', {
+          traceId,
+          list_id,
+          item_kind,
+          total_items: filteredItems.length,
+          applied: totalApplied,
+          skipped: totalSkipped,
+          layers_affected: [...new Set(allLayersAffected)] // Únicos
+        });
+        
+        return jsonSuccess({
+          ok: true,
+          reset: true,
+          list_id,
+          item_kind: item_kind || lista.tipo,
+          applied: totalApplied,
+          skipped: totalSkipped,
+          total_items: filteredItems.length,
+          layers_affected: [...new Set(allLayersAffected)],
+          per_item_results: perItemResults,
+          mode: 'event', // Indica que es reset canónico (evento, no delete)
+          deleted_count: 0, // Compatibilidad: nunca hay delete en reset canónico
+          trace_id: traceId
+        }, traceId);
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /reset-list-all', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error reseteando progreso de la lista para todos',
           'INTERNAL_ERROR',
           500,
           traceId
