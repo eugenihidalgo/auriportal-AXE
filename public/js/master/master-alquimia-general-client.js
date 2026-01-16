@@ -4688,19 +4688,26 @@
           actionsDiv.appendChild(btnResetAll);
         }
       } else if (state.listaActiva && state.listaActiva.tipo === 'una_vez') {
-        // Botón +1 (increment-all shared para una_vez)
-        const btnIncrement = document.createElement('button');
-        btnIncrement.textContent = '+1';
-        btnIncrement.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnIncrement.addEventListener('click', () => handleIncrementAllItem(item));
-        actionsDiv.appendChild(btnIncrement);
+        // UI FIX: Eliminar botones globales en UNA_VEZ + proyección por alumno
+        // REGLA: Botones globales (+1, Limpiar PDE) SOLO en scope='all', NO en scope='student'
+        const isUnaVezStudent = state.projection.scope === 'student' && !!state.projection.student_uuid;
         
-        // Botón PDE (para una_vez, registra evento PDE)
-        const btnPde = document.createElement('button');
-        btnPde.textContent = 'Limpiar interno';
-        btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
-        btnPde.addEventListener('click', () => handlePdeIncrementAllItem(item));
-        actionsDiv.appendChild(btnPde);
+        if (!isUnaVezStudent) {
+          // Botón +1 (increment-all shared para una_vez) - SOLO en scope='all'
+          const btnIncrement = document.createElement('button');
+          btnIncrement.textContent = '+1';
+          btnIncrement.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnIncrement.addEventListener('click', () => handleIncrementAllItem(item));
+          actionsDiv.appendChild(btnIncrement);
+          
+          // Botón PDE (para una_vez, registra evento PDE) - SOLO en scope='all'
+          const btnPde = document.createElement('button');
+          btnPde.textContent = 'Limpiar PDE';
+          btnPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
+          btnPde.addEventListener('click', () => handlePdeIncrementAllItem(item));
+          actionsDiv.appendChild(btnPde);
+        }
+        // Si es scope='student', NO mostrar botones globales (solo botones individuales más abajo)
       }
       
       // ============================================================================
@@ -4851,9 +4858,14 @@
             student_uuid: state.projection.student_uuid
           };
           
-          // Botón "Limpiar" (SHARED)
+          // UI FIX: Renombrar botones individuales en UNA_VEZ
+          // REGLA: "Limpiar" → "Trabajado", "Limpiar interno" → "Trabajado PDE" (solo para una_vez)
+          const buttonTextShared = itemKind === 'una_vez' ? 'Trabajado' : 'Limpiar';
+          const buttonTextPde = itemKind === 'una_vez' ? 'Trabajado PDE' : 'Limpiar interno';
+          
+          // Botón "Limpiar" / "Trabajado" (SHARED)
           const btnLimpiarShared = document.createElement('button');
-          btnLimpiarShared.textContent = 'Limpiar';
+          btnLimpiarShared.textContent = buttonTextShared;
           btnLimpiarShared.style.cssText = 'padding: 0.375rem 0.75rem; background: #10b981; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
           btnLimpiarShared.addEventListener('click', async () => {
             console.log('[UI][PROJECTION][STUDENT][CLEAN] Limpiar SHARED', {
@@ -4873,9 +4885,9 @@
           });
           actionsDiv.appendChild(btnLimpiarShared);
           
-          // Botón "Limpiar PDE"
+          // Botón "Limpiar PDE" / "Trabajado PDE"
           const btnLimpiarPde = document.createElement('button');
-          btnLimpiarPde.textContent = 'Limpiar interno';
+          btnLimpiarPde.textContent = buttonTextPde;
           btnLimpiarPde.style.cssText = 'padding: 0.375rem 0.75rem; background: #8b5cf6; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
           btnLimpiarPde.addEventListener('click', async () => {
             console.log('[UI][PROJECTION][STUDENT][CLEAN] Limpiar PDE', {
