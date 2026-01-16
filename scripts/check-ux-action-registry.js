@@ -189,18 +189,31 @@ function checkFile(filePath) {
   const lines = content.split('\n');
 
   // A) Verificar que performAction está disponible (si el archivo lo usa)
-  if (content.includes('performAction') || content.includes('perform-action')) {
+  // Solo verificar si realmente se LLAMA performAction(), no solo se menciona
+  const performActionCalls = content.match(/(?:performAction|perform-action)\s*\(/g);
+  if (performActionCalls && performActionCalls.length > 0) {
     // Verificar que está importado o disponible en window
     const hasImport = content.includes('import') && content.includes('performAction');
     const hasWindow = content.includes('window.performAction');
     const hasPerformActionDef = content.includes('function performAction') || content.includes('const performAction');
     
-    if (!hasImport && !hasWindow && !hasPerformActionDef) {
-      // Buscar línea donde se usa
-      const useLine = lines.findIndex((line, idx) => 
-        (line.includes('performAction(') || line.includes('perform-action(')) && 
-        !lines.slice(0, idx).some(l => l.includes('import') || l.includes('window.performAction') || l.includes('function performAction'))
-      );
+    // Verificar si está en comentarios (no cuenta)
+    const performActionInComments = (content.match(/\/\/.*performAction|\/\*[\s\S]*?performAction[\s\S]*?\*\//gi) || []).length;
+    
+    if (!hasImport && !hasWindow && !hasPerformActionDef && performActionCalls.length > performActionInComments) {
+      // Buscar línea donde se usa realmente (no en comentario)
+      const useLine = lines.findIndex((line, idx) => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*')) {
+          return false; // Está en comentario
+        }
+        return (line.includes('performAction(') || line.includes('perform-action(')) && 
+               !lines.slice(0, idx).some(l => {
+                 const trimmed = l.trim();
+                 return !trimmed.startsWith('//') && 
+                        (l.includes('import') || l.includes('window.performAction') || l.includes('function performAction'));
+               });
+      });
       if (useLine !== -1) {
         error(`performAction usado pero no disponible. Debe importarse o estar en window.performAction.`, relativePath, useLine + 1);
       }
