@@ -139,6 +139,45 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
       - public/js/core/ux/action-registry/perform-action.js (wrapper canónico)
       - scripts/check-ux-action-registry.js (assembly check constitucional)
 
+  - id: ux-actions-only-permanent
+    title: UX-ACTIONS-ONLY - Regla permanente para Cursor
+    content: >
+      REGLA PERMANENTE PARA CURSOR (NO SE PUEDE VIOLAR):
+      Cuando Cursor genera código UI que muta estado:
+      ❌ PROHIBIDO generar:
+      - fetch() POST/PUT/DELETE/PATCH desde UI
+      - lógica de mutación inline en handlers
+      - handlers que llamen endpoints directamente
+      - botones sin action_id explícito
+      ✅ OBLIGATORIO:
+      - registrar acción en UX Action Registry PRIMERO
+      - usar performAction({ action_id, payload }) en handlers
+      - validar allowed_item_kinds / layers / scopes
+      - declarar refresh_plan en la acción
+      REGLA DE CREACIÓN DE BOTONES:
+      - Si Cursor crea un botón que muta estado:
+        (a) debe asociarlo a una acción registrada
+        (b) debe validar allowed_item_kinds / layers / scopes
+        (c) si no existe acción → Cursor debe crearla PRIMERO
+      REGLA DE REFRESH:
+      - Toda acción debe declarar refresh_plan (función o array)
+      - Cursor NO puede omitir el refresh
+      - Cursor NO puede hacer refresh manual en handlers
+      ESTAS REGLAS SON PERMANENTES Y NO SE PUEDEN VIOLAR.
+
+  - id: ux-action-registry-checklist-cursor
+    title: Checklist obligatorio para Cursor al crear UI
+    content: >
+      Cuando Cursor crea o modifica UI con botones:
+      CHECKLIST OBLIGATORIO:
+      - [ ] ¿La acción está registrada en UX Action Registry?
+      - [ ] ¿El botón usa performAction({ action_id, payload })?
+      - [ ] ¿La acción tiene refresh_plan declarado?
+      - [ ] ¿La acción valida allowed_item_kinds / layers / scopes?
+      - [ ] ¿npm run check:ux-action-registry pasa (0 errors)?
+      Si alguna respuesta es NO, Cursor NO debe dar el trabajo por terminado.
+      Cursor debe corregir antes de finalizar.
+
 # =========================================
 # CONSTITUCIÓN MASTER SIDEBAR v1
 # =========================================

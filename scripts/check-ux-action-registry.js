@@ -470,6 +470,41 @@ function checkPerformActionAvailability() {
   }
 }
 
+/**
+ * Verifica que las acciones registradas tienen refresh_plan
+ */
+function checkActionsHaveRefreshPlan() {
+  info('Verificando que acciones registradas tienen refresh_plan...');
+  
+  const registryFiles = [
+    join(projectRoot, 'src/core/ux/action-registry/alquimia-actions.js'),
+    join(projectRoot, 'src/core/ux/ux-action-registry.v1.js')
+  ];
+
+  for (const registryFile of registryFiles) {
+    try {
+      const content = readFileSync(registryFile, 'utf-8');
+      
+      // Buscar registros de acciones
+      const actionIdMatches = [...content.matchAll(/action_id:\s*['"]([^'"]+)['"]/g)];
+      const refreshPlanMatches = [...content.matchAll(/(refresh|refresh_plan):\s*(buildRefreshPlan|function|\[)/g)];
+      
+      if (actionIdMatches.length > 0) {
+        const actionCount = actionIdMatches.length;
+        const refreshCount = refreshPlanMatches.length;
+        
+        if (refreshCount < actionCount) {
+          error(`Acciones sin refresh_plan en ${registryFile.replace(projectRoot + '/', '')}. Encontradas ${actionCount} acciones pero solo ${refreshCount} refresh_plans.`);
+        } else {
+          info(`✓ Todas las acciones tienen refresh_plan en ${registryFile.replace(projectRoot + '/', '')} (${actionCount} acciones)`);
+        }
+      }
+    } catch (err) {
+      // Ignorar si el archivo no existe
+    }
+  }
+}
+
 // ============================================================================
 // EJECUCIÓN
 // ============================================================================
@@ -480,6 +515,9 @@ console.log('╚═════════════════════�
 
 // Verificar disponibilidad de performAction
 checkPerformActionAvailability();
+
+// Verificar que acciones registradas tienen refresh_plan
+checkActionsHaveRefreshPlan();
 
 // Escanear archivos UI
 info('Escaneando archivos UI...');
@@ -520,10 +558,21 @@ if (errors.length > 0) {
   }
   console.log('');
   console.log('❌ FALLÓ: Se encontraron violaciones constitucionales.');
-  console.log('   El Action Registry es la ÚNICA puerta de intención de usuario.');
-  console.log('   Todas las mutaciones DEBEN pasar por performAction().');
-  console.log('   Acciones GET (lectura) están permitidas.');
-  console.log('   Acciones LEGACY marcadas explícitamente son aceptables temporalmente.');
+  console.log('');
+  console.log('   REGLA CONSTITUCIONAL VIOLADA:');
+  console.log('   - El Action Registry es la ÚNICA puerta de intención de usuario.');
+  console.log('   - Todas las mutaciones DEBEN pasar por performAction().');
+  console.log('   - Ninguna UI puede mutar estado fuera de UX Action Registry.');
+  console.log('   - Ningún botón puede existir sin acción registrada.');
+  console.log('');
+  console.log('   EXCEPCIONES PERMITIDAS:');
+  console.log('   - Acciones GET (lectura, no mutación) están permitidas.');
+  console.log('   - Acciones LEGACY marcadas explícitamente son aceptables temporalmente.');
+  console.log('');
+  console.log('   REFERENCIAS:');
+  console.log('   - docs/UX_ACTION_REGISTRY_CONTRACT_V1.md');
+  console.log('   - .cursorrules (sección UX ACTION REGISTRY)');
+  console.log('');
   process.exit(1);
 } else {
   console.log('✅ Sin violaciones constitucionales detectadas.');

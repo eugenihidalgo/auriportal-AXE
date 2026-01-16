@@ -419,14 +419,230 @@ Toda acción ejecutada emite logs estructurados:
 
 ---
 
+## 📐 CAMPOS OBLIGATORIOS DE ACCIÓN
+
+### Schema Canónico Completo
+
+```javascript
+{
+  // OBLIGATORIOS
+  action_id: string,              // Formato: {domain}.{feature}.{action}
+  domain: 'master' | 'god' | 'admin_legacy',
+  description: string,            // Descripción clara de la acción
+  handler: {
+    method: 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+    endpointBuilder: (context) => string,  // Construye endpoint dinámico
+    buildPayload: (uiState, context) => Object,  // Construye payload validado
+    headers?: Object              // Headers adicionales (opcional)
+  },
+  refresh: Function | Array,     // refresh_plan (función o array de surface_ids)
+  
+  // VALIDACIÓN (OBLIGATORIO para acciones que requieren validación)
+  allowed_item_kinds?: Array,     // ['recurrente', 'una_vez'] o null si no aplica
+  allowed_layers?: Array,         // ['shared', 'pde'] o null si no aplica
+  allowed_scopes?: Array,         // ['student', 'all'] o null si no aplica
+  
+  // TELEMETRÍA (OPCIONAL, defaults: true)
+  telemetry?: {
+    log_input?: boolean,          // Loggear input (default: true)
+    log_output?: boolean           // Loggear output (default: true)
+  }
+}
+```
+
+### allowed_item_kinds
+
+**Valores permitidos**: `['recurrente', 'una_vez']` o `null` (si no aplica)
+
+**Ejemplos**:
+- `allowed_item_kinds: ['recurrente']` → Solo items recurrentes
+- `allowed_item_kinds: ['recurrente', 'una_vez']` → Ambos tipos
+- `allowed_item_kinds: null` → No aplica (ej: acciones de configuración)
+
+**Validación**: `performAction()` valida que `payload.item_kind` esté en `allowed_item_kinds` (ERROR HARD si no)
+
+### allowed_layers
+
+**Valores permitidos**: `['shared', 'pde']` o `null` (si no aplica)
+
+**Ejemplos**:
+- `allowed_layers: ['shared']` → Solo capa shared
+- `allowed_layers: ['shared', 'pde']` → Ambas capas
+- `allowed_layers: null` → No aplica (ej: acciones sin capa)
+
+**Validación**: `performAction()` valida que `payload.clean_layer` esté en `allowed_layers` (ERROR HARD si no)
+
+### allowed_scopes
+
+**Valores permitidos**: `['student', 'all']` o `null` (si no aplica)
+
+**Ejemplos**:
+- `allowed_scopes: ['student']` → Solo acciones por estudiante
+- `allowed_scopes: ['all']` → Solo acciones masivas
+- `allowed_scopes: ['student', 'all']` → Ambos scopes
+- `allowed_scopes: null` → No aplica (ej: acciones sin scope)
+
+**Validación**: `performAction()` valida que `payload.scope` esté en `allowed_scopes` (ERROR HARD si no)
+
+---
+
+## 🎨 CONTRATO DE CREACIÓN DE UI
+
+### Checklist Obligatorio para Nueva UI
+
+**ANTES** de implementar cualquier UI con botones:
+
+- [ ] **Lista de Acciones**: Definir todas las acciones que la UI ejecutará
+- [ ] **action_id Canónico**: Cada acción tiene `action_id` único (formato: `{domain}.{feature}.{action}`)
+- [ ] **Schema de Validación**: Definir `allowed_item_kinds`, `allowed_layers`, `allowed_scopes` para cada acción
+- [ ] **Registro en Registry**: Registrar todas las acciones en `src/core/ux/action-registry/{domain}-actions.js`
+- [ ] **Refresh Plan**: Cada acción tiene `refresh_plan` declarativo (función o array)
+- [ ] **Verificación**: `npm run check:ux-action-registry` pasa (0 errors)
+
+**DURANTE** la implementación:
+
+- [ ] **Import de Registry**: Importar o asegurar que `performAction()` está disponible
+- [ ] **Botones con action_id**: Cada botón usa `performAction({ action_id, payload })`
+- [ ] **Sin fetch() directo**: NO hay `fetch()` POST/PUT/DELETE fuera de `performAction()`
+- [ ] **Sin refresh manual**: NO hay llamadas a `loadItems()`, `loadListProjection()`, etc. en handlers
+
+**DESPUÉS** de implementar:
+
+- [ ] **Assembly Check**: `npm run check:ux-action-registry` pasa
+- [ ] **Logs Forenses**: Verificar que aparecen logs `[UX][ACTION][START]` y `[UX][ACTION][END]`
+- [ ] **Refresh Funciona**: Verificar que surfaces se refrescan automáticamente
+
+### Si NO se Cumple el Contrato
+
+**UI inválida por contrato**. Cursor NO debe dar el trabajo por terminado hasta que:
+
+1. Todas las acciones estén registradas
+2. Todos los botones usen `performAction()`
+3. Assembly check pase (0 errors)
+
+---
+
+## 🚫 ANTI-PATRONES PROHIBIDOS (DETALLADO)
+
+### Anti-patrón 1: Fetch Directo con Construcción Manual de URL
+
+```javascript
+// ❌ PROHIBIDO
+async function handleAction(item) {
+  const endpoint = `/master/api/alquimia-general/items/${item.item_ref}/master/mark-clean-all`;
+  const payload = {
+    clean_layer: 'shared',
+    item_kind: item.item_kind
+  };
+  await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+```
+
+**Problema**: Construcción manual de endpoint y payload, sin validación, sin refresh plan.
+
+**Fix**: Usar `performAction()` con acción registrada.
+
+### Anti-patrón 2: Handler que Decide Refresh Basándose en Estado Local
+
+```javascript
+// ❌ PROHIBIDO
+async function handleCleanItem(item) {
+  await performAction({ action_id: 'alquimia.clean_all', payload: { ... } });
+  
+  // Decidir refresh basándose en estado local (PROHIBIDO)
+  if (window.__AP_ALQUIMIA_STATE__?.view_mode === 'operativa') {
+    await loadItems();
+  } else {
+    await loadListProjection();
+  }
+}
+```
+
+**Problema**: UI decide qué refrescar. El `refresh_plan` de la acción debe decidir.
+
+**Fix**: Declarar `refresh_plan` en la acción que evalúe `view_mode` y retorne surfaces correctos.
+
+### Anti-patrón 3: Botón Sin action_id Explícito
+
+```javascript
+// ❌ PROHIBIDO
+const btn = document.createElement('button');
+btn.textContent = 'Limpiar';
+btn.onclick = async () => {
+  // Lógica inline sin action_id
+  const response = await fetch('/master/api/...', { method: 'POST', ... });
+  if (response.ok) {
+    await loadItems(); // Refresh manual
+  }
+};
+```
+
+**Problema**: No hay `action_id`, no hay registro, no hay validación, no hay refresh plan.
+
+**Fix**: Usar `performAction({ action_id: 'alquimia.clean_all', payload: { ... } })`.
+
+### Anti-patrón 4: Acción Registrada Sin Validación
+
+```javascript
+// ❌ PROHIBIDO
+registerAction({
+  action_id: 'alquimia.clean_all',
+  domain: 'master',
+  description: 'Limpiar item',
+  handler: { ... },
+  refresh: buildRefreshPlan
+  // ❌ FALTA: allowed_item_kinds, allowed_layers, allowed_scopes
+});
+```
+
+**Problema**: Acción sin validación. Cualquier `item_kind` o `layer` inválido pasará.
+
+**Fix**: Añadir validación explícita:
+```javascript
+allowed_item_kinds: ['recurrente', 'una_vez'],
+allowed_layers: ['shared', 'pde'],
+allowed_scopes: ['all']
+```
+
+### Anti-patrón 5: Refresh Plan Vacío o Manual
+
+```javascript
+// ❌ PROHIBIDO
+registerAction({
+  action_id: 'alquimia.clean_all',
+  // ...
+  refresh: () => []  // ❌ Plan vacío (no refresca nada)
+});
+
+// ❌ PROHIBIDO
+async function handleCleanItem(item) {
+  await performAction({ action_id: 'alquimia.clean_all', payload: { ... } });
+  // Refresh manual después (PROHIBIDO)
+  await loadItems();
+}
+```
+
+**Problema**: No hay refresh automático o refresh manual fuera del plan.
+
+**Fix**: Declarar `refresh_plan` que retorne surfaces correctos.
+
+---
+
 ## 📚 REFERENCIAS
 
 - **Registry Core**: `src/core/ux/action-registry/ux-action-registry.js`
-- **Perform Action**: `public/js/core/ux/action-registry/perform-action.js`
+- **Registry v1**: `src/core/ux/ux-action-registry.v1.js`
+- **Perform Action**: `public/js/master/ux/perform-action.v1.js`
 - **Acciones Alquimia**: `src/core/ux/action-registry/alquimia-actions.js`
 - **Assembly Check**: `scripts/check-ux-action-registry.js`
+- **Refresh Check**: `scripts/check-ux-refresh-wiring.js`
 - **UX Contract v1**: `docs/UX_CONTRACT_V1.md`
 - **Refresh Contract v1**: `docs/REFRESH_CONTRACT_V1.md`
+- **Plantilla UI**: `templates/ui-with-actions.md`
 
 ---
 
@@ -434,11 +650,16 @@ Toda acción ejecutada emite logs estructurados:
 
 **A partir de este contrato**:
 
-- Ninguna UI nueva puede existir sin UX Action Registry
-- Ninguna mutación puede hacerse fuera de `performAction()`
-- El Action Registry es la **ÚNICA** puerta de intención de usuario
+- 🛑 **Ninguna UI nueva puede existir sin UX Action Registry**
+- 🛑 **Ninguna mutación puede hacerse fuera de `performAction()`**
+- 🛑 **Ningún botón puede existir sin acción registrada**
+- 🛑 **Ningún refresh puede ser manual**
+
+**El Action Registry es la ÚNICA puerta de intención de usuario.**
 
 **Este contrato blinda el sistema. NO se puede violar.**
+
+**Aplicable a**: MASTER, ADMIN, CLIENT, GOD MODE, Automatizaciones, UIs futuras
 
 ---
 
