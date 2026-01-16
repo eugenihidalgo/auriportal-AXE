@@ -95,8 +95,8 @@
     debounceTimers: {}, // Map de item_id -> timer para autosave
     modal: {
       item: null,
-      cleanLayer: 'shared', // 'shared' | 'pde' (legacy, para compatibilidad)
-      layerView: 'shared' // 'shared' | 'pde' | 'combo' (vista actual del flotante)
+      cleanLayer: 'shared' // 'shared' | 'pde' (legacy, para compatibilidad)
+      // CPM v1: layerView eliminado - usar state.projection.view_layer como única autoridad
     },
     // LPM v1: Estado de proyección
     projection: {
@@ -1373,14 +1373,16 @@
     // Invalidar SIEMPRE
     state.projection.data = null;
     
-    // Refrescar modal si aplica
+    // CPM v1: Refrescar modal si aplica usando state.projection.view_layer
     if (forceModalRefresh && state.modal?.item && item_ref) {
       // Verificar que el modal corresponde al item_ref
       if (state.modal.item.item_ref === item_ref) {
-        const activeViewLayer = state.modal.layerView || 'shared';
-        console.log('[UI][REFRESH_AFTER_MUTATION] Refrescando modal', {
+        // CPM v1: Usar SIEMPRE state.projection.view_layer como autoridad única
+        const activeViewLayer = state.projection.view_layer || 'shared';
+        console.log('[UI][REFRESH_AFTER_MUTATION] [CPM_V1] Refrescando modal con view_layer de proyección', {
           item_ref,
-          view_layer: activeViewLayer
+          view_layer: activeViewLayer,
+          source: 'state.projection.view_layer'
         });
         await handleVerItem(state.modal.item, 'shared', activeViewLayer);
       }
@@ -2103,13 +2105,12 @@
 
     try {
       // ============================================================================
-      // BUG-016 FIX: Corregir fallback de view_layer (NUNCA usar cleanLayer como fallback)
+      // CPM v1: Autoridad única de view_layer
       // ============================================================================
-      // REGLA CANÓNICA: view_layer y clean_layer son conceptos distintos
-      // Defaults canónicos según item_kind:
-      // - recurrente → 'shared'
-      // - una_vez → 'combo'
-      let activeViewLayer = viewLayer || state.modal.layerView;
+      // REGLA CANÓNICA: state.projection.view_layer es la ÚNICA fuente de verdad
+      // El flotante usa SIEMPRE el mismo view_layer que la proyección principal
+      // ============================================================================
+      let activeViewLayer = viewLayer || state.projection.view_layer;
       
       // Si aún no está definido, obtener item_kind y usar default canónico
       if (!activeViewLayer) {
@@ -2121,7 +2122,9 @@
         } else {
           activeViewLayer = 'shared'; // Fallback seguro
         }
-        console.log('[MasterAlquimiaGeneral] [BUG-016] view_layer no definido, usando default canónico', {
+        // Actualizar state.projection.view_layer con el default
+        state.projection.view_layer = activeViewLayer;
+        console.log('[MasterAlquimiaGeneral] [CPM_V1] view_layer no definido, usando default canónico y actualizando state.projection.view_layer', {
           item_kind: itemKind,
           default_view_layer: activeViewLayer
         });
@@ -2140,7 +2143,7 @@
         item_ref: item.item_ref,
         clean_layer: cleanLayer,
         view_layer: activeViewLayer,
-        state_modal_layerView: state.modal.layerView
+        state_projection_view_layer: state.projection.view_layer
       });
       
       // Log forense (FASE 4)
@@ -2183,12 +2186,14 @@
       // Guardar estado del modal
       state.modal.item = item;
       state.modal.cleanLayer = cleanLayer;
-      // REGLA CANÓNICA: viewLayer determina qué estado se calcula (RECURRENTE)
-      // Si se pasa viewLayer explícitamente, usarlo; sino mantener layerView existente o default 'shared'
-      if (viewLayer) {
-        state.modal.layerView = viewLayer;
-      } else if (!state.modal.layerView) {
-        state.modal.layerView = 'shared'; // Default
+      // CPM v1: NO guardar layerView en modal - usar state.projection.view_layer como única autoridad
+      // Si se pasa viewLayer explícitamente, actualizar state.projection.view_layer
+      if (viewLayer && viewLayer !== state.projection.view_layer) {
+        state.projection.view_layer = viewLayer;
+        console.log('[MasterAlquimiaGeneral] [CPM_V1] Actualizando state.projection.view_layer desde handleVerItem', {
+          old_view_layer: state.projection.view_layer,
+          new_view_layer: viewLayer
+        });
       }
       // REGLA CONSTITUCIONAL: item_kind DEBE ser explícito (sin inferencias)
       const itemKind = getItemKindExplicit(item, state.listaActiva);
@@ -2287,11 +2292,10 @@
         throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
       }
 
+      // CPM v1: Usar state.projection.view_layer como única autoridad
       const uiState = {
         view_mode: state.projection.mode,
-        view_layer: state.projection.mode === 'proyeccion' 
-          ? (state.projection.view_layer || 'shared')
-          : (state.modal.layerView || 'shared'),
+        view_layer: state.projection.view_layer || 'shared', // CPM v1: autoridad única
         list_id: state.listaActiva?.id || null
       };
 
@@ -2337,20 +2341,20 @@
       }
       showWarning(message);
       
-      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
-      // Preservar layerView activo (no resetear a 'shared')
+      // CPM v1: Refrescar flotante si está abierto usando state.projection.view_layer
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const preservedLayerView = state.modal.layerView || 'shared';
+        const preservedViewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
         const preservedCleanLayer = cleanLayer; // Usar el clean_layer de la acción
         
-        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras clean-all', {
+        console.log('[MasterAlquimiaGeneral] [CPM_V1] Refrescando flotante tras clean-all', {
           item_ref: item.item_ref,
-          preserved_layerView: preservedLayerView,
-          preserved_cleanLayer: preservedCleanLayer
+          view_layer: preservedViewLayer,
+          clean_layer: preservedCleanLayer,
+          source: 'state.projection.view_layer'
         });
         
-        // Refrescar flotante preservando vista activa
-        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
+        // Refrescar flotante usando view_layer de proyección
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedViewLayer);
       }
       
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
@@ -2425,16 +2429,15 @@
     toggleLabel.style.cssText = 'color: #cbd5e1; font-size: 0.875rem;';
     toggleContainer.appendChild(toggleLabel);
     
-    // Obtener layerView desde localStorage o default 'shared'
-    const savedLayerView = localStorage.getItem('ap_master_alquimia_float_layer') || 'shared';
-    const currentLayerView = state.modal.layerView || savedLayerView;
-    state.modal.layerView = currentLayerView;
+    // CPM v1: Usar state.projection.view_layer como única autoridad
+    // El selector de vista actualiza state.projection.view_layer, NO state.modal.layerView
+    const currentLayerView = state.projection.view_layer || 'shared';
     
     // BUG-005 FIX: Migrar selector de vista a Refresh Surface Registry (eliminar refetch manual)
     const changeLayerView = async (newView) => {
       if (newView === currentLayerView) return;
       
-      console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] [BUG-005] Cambiando vista usando Refresh Surface Registry', {
+      console.log('[ALQUIMIA_GENERAL][FLOTANTE][VIEW_LAYER_CHANGE] [CPM_V1] Cambiando vista - actualizando state.projection.view_layer', {
         item_ref: item.item_ref,
         item_kind: state.modal?.itemKind || getItemKindExplicit(item, state.listaActiva),
         view_layer_before: currentLayerView,
@@ -2444,7 +2447,8 @@
       // Preservar tamaño antes de refetch
       const savedSize = localStorage.getItem(SIZE_STORAGE_KEY);
       
-      state.modal.layerView = newView;
+      // CPM v1: Actualizar state.projection.view_layer (autoridad única)
+      state.projection.view_layer = newView;
       localStorage.setItem('ap_master_alquimia_float_layer', newView);
       
       // BUG-005 FIX: Usar Refresh Surface Registry en lugar de refetch manual
@@ -2452,9 +2456,8 @@
         const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
         const uiState = {
           view_mode: state.projection.mode,
-          view_layer: newView,
-          list_id: state.listaActiva?.id || null,
-          modal_layerView: newView
+          view_layer: newView, // CPM v1: state.projection.view_layer ya actualizado arriba
+          list_id: state.listaActiva?.id || null
         };
         
         try {
@@ -2660,7 +2663,7 @@
       // Limpiar estado del modal
       state.modal.item = null;
       state.modal.cleanLayer = 'shared';
-      state.modal.layerView = 'shared';
+      // CPM v1: NO limpiar state.projection.view_layer (es autoridad única, no específica del modal)
     });
     header.appendChild(btnCerrar);
 
@@ -2759,11 +2762,12 @@
     // ============================================================================
     // REGLA CANÓNICA: Cada columna declara explícitamente su view_layer
     // ============================================================================
+    // CPM v1: Usar state.projection.view_layer como única autoridad
     // Columna SHARED → view_layer='shared'
     // Columna PDE → view_layer='pde'
     // Columna COMBO → view_layer='combo' (default para UNA_VEZ)
     // ============================================================================
-    const activeViewLayer = state.modal.layerView || (itemKind === 'una_vez' ? 'combo' : 'shared'); // view_layer activo (decide qué columna se muestra)
+    const activeViewLayer = state.projection.view_layer || (itemKind === 'una_vez' ? 'combo' : 'shared'); // view_layer activo (decide qué columna se muestra)
     
     console.log('[UI][COLUMN] Renderizando columnas con view_layer', {
       item_ref: item.item_ref,
@@ -3106,8 +3110,8 @@
     row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0.5rem; align-items: center;';
     
     // BUG-014 FIX: Colores siempre desde backend (state_by_view_layer), no hardcodeados
-    // Obtener color desde state_by_view_layer si está disponible
-    const activeViewLayer = state.modal.layerView || 'shared';
+    // CPM v1: Usar state.projection.view_layer como única autoridad
+    const activeViewLayer = state.projection.view_layer || 'shared';
     const stateData = student.state_by_view_layer?.[activeViewLayer];
     const computedColor = stateData?.computed_state?.color;
     
@@ -3137,8 +3141,8 @@
     nameText.textContent = student.display_name || student.student_name || student.student_email || 'Sin nombre';
     nameDiv.appendChild(nameText);
     
-    // Obtener layerView actual
-    const layerView = state.modal.layerView || 'shared';
+    // CPM v1: Usar state.projection.view_layer como única autoridad
+    const layerView = state.projection.view_layer || 'shared';
     
     // REGLA: Mostrar indicadores [S] [P] SOLO cuando view_layer === 'effective'
     if (layerView === 'effective') {
@@ -3230,8 +3234,8 @@
       }
     } else {
       // SHARED o PDE: usar estado calculado por backend
-      // Obtener view_layer activo para display
-      const activeViewLayer = state.modal.layerView || 'shared';
+      // CPM v1: Usar state.projection.view_layer como única autoridad
+      const activeViewLayer = state.projection.view_layer || 'shared';
       stateDiv.textContent = getStudentStateDisplay(student, itemKind, activeViewLayer);
     }
     row.appendChild(stateDiv);
@@ -3339,11 +3343,11 @@
             showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
           }
           
-          // Rehidratar siempre (incluso si hay fallos parciales)
+          // CPM v1: Rehidratar siempre usando state.projection.view_layer
           if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-            const currentLayerView = state.modal.layerView || 'combo';
-            await handleVerItem(item, 'shared'); // Fetch con cualquier clean_layer (datos vienen simétricos)
-            state.modal.layerView = currentLayerView; // Restaurar vista COMBO
+            const currentViewLayer = state.projection.view_layer || 'combo'; // CPM v1: autoridad única
+            await handleVerItem(item, 'shared', currentViewLayer); // CPM v1: pasar view_layer explícitamente
+            // CPM v1: NO restaurar state.modal.layerView (no existe, usar state.projection.view_layer)
           }
         });
         actionsDiv.appendChild(btnSP);
@@ -3384,11 +3388,11 @@
             showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
           }
           
-          // Rehidratar siempre (incluso si hay fallos parciales)
+          // CPM v1: Rehidratar siempre usando state.projection.view_layer
           if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-            const currentLayerView = state.modal.layerView || 'combo';
-            await handleVerItem(item, 'shared'); // Fetch con cualquier clean_layer (datos vienen simétricos)
-            state.modal.layerView = currentLayerView; // Restaurar vista COMBO
+            const currentViewLayer = state.projection.view_layer || 'combo'; // CPM v1: autoridad única
+            await handleVerItem(item, 'shared', currentViewLayer); // CPM v1: pasar view_layer explícitamente
+            // CPM v1: NO restaurar state.modal.layerView (no existe, usar state.projection.view_layer)
           }
         });
         actionsDiv.appendChild(btnSP);
@@ -3465,11 +3469,11 @@
             showToastError(`❌ SHARED falló: ${sharedError.message}. PDE no ejecutado.`);
           }
           
-          // Rehidratar siempre (incluso si hay fallos parciales)
+          // CPM v1: Rehidratar siempre usando state.projection.view_layer
           if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
-            const currentLayerView = state.modal.layerView || 'effective';
-            await handleVerItem(item, 'shared', currentLayerView); // Preservar vista effective
-            state.modal.layerView = currentLayerView; // Restaurar vista effective
+            const currentViewLayer = state.projection.view_layer || 'effective'; // CPM v1: autoridad única
+            await handleVerItem(item, 'shared', currentViewLayer); // CPM v1: pasar view_layer explícitamente
+            // CPM v1: NO restaurar state.modal.layerView (no existe, usar state.projection.view_layer)
           }
         });
         actionsDiv.appendChild(btnSP);
@@ -3515,8 +3519,8 @@
    * @returns {string} Texto de display del estado
    */
   function getStudentStateDisplay(student, itemKind, viewLayer = null) {
-    // Obtener view_layer activo (del modal o parámetro)
-    const activeViewLayer = viewLayer || state.modal.layerView || 'shared';
+    // CPM v1: Usar state.projection.view_layer como única autoridad
+    const activeViewLayer = viewLayer || state.projection.view_layer || 'shared';
     
     // Obtener estado desde state_by_view_layer[activeViewLayer]
     let stateData = null;
@@ -3673,8 +3677,8 @@
       // ============================================================================
       // LOG FORENSE OBLIGATORIO: action.clean_layer, view_layer, state calculado
       // ============================================================================
-      // Obtener view_layer activo (default: 'combo' para UNA_VEZ, 'shared' para RECURRENTE)
-      const activeViewLayer = state.modal.layerView || (itemKind === 'una_vez' ? 'combo' : 'shared');
+      // CPM v1: Usar state.projection.view_layer como única autoridad
+      const activeViewLayer = state.projection.view_layer || (itemKind === 'una_vez' ? 'combo' : 'shared');
       
       // Log forense para RECURRENTE: idempotencia por capa
       if (itemKind === 'recurrente') {
@@ -3700,7 +3704,7 @@
         view_layer: activeViewLayer, // Vista activa (decide estado RECURRENTE)
         student_uuid: student.student_uuid,
         item_ref: item.item_ref,
-        layerView: state.modal.layerView,
+        view_layer: state.projection.view_layer, // CPM v1: autoridad única
         viewMode: 'flotante',
         expected_column_change: itemKind === 'recurrente' ? `Estado calculado según ${activeViewLayer}.days_since_last_clean` : 'COMBO (shared+pde)'
       });
@@ -3713,8 +3717,8 @@
       const uiState = {
         view_mode: state.projection.mode,
         view_layer: activeViewLayer, // Ya calculado arriba
-        list_id: state.listaActiva?.id || null,
-        modal_layerView: state.modal.layerView || null
+        list_id: state.listaActiva?.id || null
+        // CPM v1: modal_layerView eliminado - usar view_layer de proyección
       };
 
       // FASE 2 FIX: Eliminar fallback legacy y payload manual
@@ -5266,11 +5270,10 @@
 
       const uiState = {
         view_mode: state.projection.mode,
-        view_layer: state.projection.mode === 'proyeccion' 
-          ? (state.projection.view_layer || 'pde')
-          : (state.modal.layerView || 'pde'),
-        list_id: state.listaActiva?.id || null,
-        modal_layerView: state.modal.layerView || null
+        // CPM v1: Usar state.projection.view_layer como única autoridad
+        view_layer: state.projection.view_layer || 'pde', // CPM v1: autoridad única
+        list_id: state.listaActiva?.id || null
+        // CPM v1: modal_layerView eliminado - usar view_layer de proyección
       };
 
       // Compatibilidad: usar 'alquimia.clean_all' si existe, sino usar 'alquimia.clean.all' (legacy)
@@ -5331,26 +5334,23 @@
       }
       showWarning(message);
       
-      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
-      // Preservar layerView activo (no resetear a 'pde' automáticamente)
+      // CPM v1: Refrescar flotante usando state.projection.view_layer
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const preservedLayerView = state.modal.layerView || 'pde'; // Si no hay layerView, usar 'pde' como default para esta acción
+        const preservedViewLayer = state.projection.view_layer || 'pde'; // CPM v1: autoridad única
         const preservedCleanLayer = 'pde'; // Esta acción siempre es PDE
         
-        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras PDE clean-all', {
+        console.log('[MasterAlquimiaGeneral] [CPM_V1] Refrescando flotante tras PDE clean-all', {
           item_ref: item.item_ref,
-          preserved_layerView: preservedLayerView,
-          preserved_cleanLayer: preservedCleanLayer
+          view_layer: preservedViewLayer,
+          clean_layer: preservedCleanLayer,
+          source: 'state.projection.view_layer'
         });
         
-        // Actualizar state pero preservar layerView si ya existe
+        // CPM v1: Actualizar cleanLayer, NO tocar view_layer (es autoridad única)
         state.modal.cleanLayer = preservedCleanLayer;
-        if (!state.modal.layerView) {
-          state.modal.layerView = preservedLayerView;
-        }
         
-        // Refrescar flotante preservando vista activa
-        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
+        // Refrescar flotante usando view_layer de proyección
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedViewLayer);
       }
       
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
@@ -5406,12 +5406,11 @@
       }
 
       const uiState = {
+        // CPM v1: Usar state.projection.view_layer como única autoridad
         view_mode: state.projection.mode,
-        view_layer: state.projection.mode === 'proyeccion' 
-          ? (state.projection.view_layer || 'shared')
-          : (state.modal.layerView || 'shared'),
-        list_id: state.listaActiva?.id || null,
-        modal_layerView: state.modal.layerView || null
+        view_layer: state.projection.view_layer || 'shared', // CPM v1: autoridad única
+        list_id: state.listaActiva?.id || null
+        // CPM v1: modal_layerView eliminado - usar view_layer de proyección
       };
 
       const result = await window.performAction({
@@ -5433,9 +5432,9 @@
       showToastSuccess(`Item incrementado para ${data.updated || 0} alumnos`);
       
       // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
-      // Preservar layerView activo
+      // CPM v1: Refrescar flotante usando state.projection.view_layer
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const preservedLayerView = state.modal.layerView || 'shared';
+        const preservedViewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
         const preservedCleanLayer = cleanLayer; // 'shared' para este botón
         
         console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras increment-all', {
@@ -5498,11 +5497,10 @@
 
       const uiState = {
         view_mode: state.projection.mode,
-        view_layer: state.projection.mode === 'proyeccion' 
-          ? (state.projection.view_layer || 'pde')
-          : (state.modal.layerView || 'pde'),
-        list_id: state.listaActiva?.id || null,
-        modal_layerView: state.modal.layerView || null
+        // CPM v1: Usar state.projection.view_layer como única autoridad
+        view_layer: state.projection.view_layer || 'pde', // CPM v1: autoridad única
+        list_id: state.listaActiva?.id || null
+        // CPM v1: modal_layerView eliminado - usar view_layer de proyección
       };
 
       const result = await window.performAction({
@@ -5529,25 +5527,23 @@
       }
       showToastSuccess(message);
       
-      // BUG-007 / BUG-015 FIX: Forzar refresh explícito de flotante si está abierto
-      // Preservar layerView activo (no resetear a 'pde' automáticamente)
+      // CPM v1: Refrescar flotante usando state.projection.view_layer
       if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
-        const preservedLayerView = state.modal.layerView || 'pde'; // Si no hay layerView, usar 'pde' como default para esta acción
+        const preservedViewLayer = state.projection.view_layer || 'pde'; // CPM v1: autoridad única
         const preservedCleanLayer = 'pde'; // Esta acción siempre es PDE
         
-        console.log('[MasterAlquimiaGeneral] [BUG-007/BUG-015] Refrescando flotante tras PDE increment-all', {
+        console.log('[MasterAlquimiaGeneral] [CPM_V1] Refrescando flotante tras PDE increment-all', {
           item_ref: item.item_ref,
-          preserved_layerView: preservedLayerView,
-          preserved_cleanLayer: preservedCleanLayer
+          view_layer: preservedViewLayer,
+          clean_layer: preservedCleanLayer,
+          source: 'state.projection.view_layer'
         });
         
-        // Actualizar state pero preservar layerView si ya existe
-        if (!state.modal.layerView) {
-          state.modal.layerView = preservedLayerView;
-        }
+        // CPM v1: Actualizar cleanLayer, NO tocar view_layer (es autoridad única)
+        state.modal.cleanLayer = preservedCleanLayer;
         
-        // Refrescar flotante preservando vista activa
-        await handleVerItem(state.modal.item, preservedCleanLayer, preservedLayerView);
+        // Refrescar flotante usando view_layer de proyección
+        await handleVerItem(state.modal.item, preservedCleanLayer, preservedViewLayer);
       }
       
       // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
@@ -5575,11 +5571,10 @@
         throw new Error('[MasterAlquimiaGeneral] performAction no disponible. Asegúrate de que está cargado antes.');
       }
 
+      // CPM v1: Usar state.projection.view_layer como única autoridad
       const uiState = {
         view_mode: state.projection.mode,
-        view_layer: state.projection.mode === 'proyeccion' 
-          ? (state.projection.view_layer || 'shared')
-          : (state.modal.layerView || 'shared'),
+        view_layer: state.projection.view_layer || 'shared', // CPM v1: autoridad única
         list_id: state.listaActiva?.id || null
       };
 
@@ -6420,8 +6415,8 @@
           view_mode: state.projection.mode,
           view_layer: scope.view_layer || state.projection.view_layer || 'shared',
           list_id: context.list_id || state.listaActiva?.id || null,
-          student_uuid: context.student_uuid || state.projection.student_uuid || null,
-          modal_layerView: state.modal.layerView || null
+          student_uuid: context.student_uuid || state.projection.student_uuid || null
+          // CPM v1: modal_layerView eliminado - usar view_layer de proyección
         };
 
         console.log('[REFRESH_ENGINE][ALQG][SURFACES] Ejecutando surfaces declarativas', {
@@ -6494,20 +6489,21 @@
         }
       }
       
-      // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto (independiente del view_mode)
+      // CPM v1: Refrescar flotante SIEMPRE si está abierto usando state.projection.view_layer
       if (shouldRefreshFlotante) {
-        const modalViewLayer = state.modal.layerView || 'shared';
+        const viewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
         const modalCleanLayer = context.clean_layer || 'shared';
         
-        console.log('[REFRESH][GET] Ejecutando handleVerItem (flotante)', {
+        console.log('[REFRESH][GET] [CPM_V1] Ejecutando handleVerItem (flotante)', {
           item_ref: context.item_ref,
-          view_layer: modalViewLayer,
+          view_layer: viewLayer,
           clean_layer: modalCleanLayer,
           view_mode: state.projection.mode,
+          source: 'state.projection.view_layer',
           timestamp: new Date().toISOString()
         });
         
-        await handleVerItem(state.modal.item, modalCleanLayer, modalViewLayer);
+        await handleVerItem(state.modal.item, modalCleanLayer, viewLayer);
       }
       
       console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado (legacy)', {
@@ -6557,14 +6553,15 @@
       }
       
       // Solo refrescar si el modal está abierto y corresponde al item_ref
-      // NOTA: Ya se refrescó en refetch() si estaba abierto, pero esto es backup
+      // CPM v1: Backup refresh usando state.projection.view_layer
       if (state.modal?.item && state.modal.item.item_ref === item_ref) {
-        const activeViewLayer = state.modal.layerView || 'shared';
+        const activeViewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
         const modalCleanLayer = context.clean_layer || 'shared';
-        console.log('[REFRESH_ENGINE][ALQG][REFRESH_MODAL] Backup refresh (no debería ejecutarse)', {
+        console.log('[REFRESH_ENGINE][ALQG][REFRESH_MODAL] [CPM_V1] Backup refresh (no debería ejecutarse)', {
           item_ref,
           view_layer: activeViewLayer,
           clean_layer: modalCleanLayer,
+          source: 'state.projection.view_layer',
           reason: 'Flotante ya refrescado en refetch(), esto es backup'
         });
         // NO ejecutar aquí para evitar doble refresh
