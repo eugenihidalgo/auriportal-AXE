@@ -2316,16 +2316,12 @@
       const data = result.data || {};
       console.log('[MasterAlquimiaGeneral] Item limpiado para todos:', data);
       
-      // Mostrar mensaje en UI con breakdown
+      // FIX MAJOR: Mostrar mensaje en UI con breakdown (eliminada referencia a skipped_already_clean)
       const updated = data.updated || 0;
       const skipped = data.skipped || 0;
-      const skippedAlreadyClean = data.skipped_already_clean || 0;
       const breakdown = data.skipped_breakdown || {};
       
       let message = `✅ Item limpiado para ${updated} alumnos`;
-      if (skippedAlreadyClean > 0) {
-        message += ` (${skippedAlreadyClean} ya estaban limpios hoy)`;
-      }
       if (updated === 0 && skipped > 0) {
         const reasons = [];
         if (breakdown.paused > 0) reasons.push(`${breakdown.paused} pausados`);
@@ -2333,16 +2329,10 @@
         if (breakdown.error > 0) reasons.push(`${breakdown.error} errores`);
         if (reasons.length > 0) {
           message = `⚠️ 0 actualizados; ${reasons.join(', ')}`;
-          if (skippedAlreadyClean > 0) {
-            message += `; ${skippedAlreadyClean} ya limpios hoy`;
-          }
         } else {
           message = `⚠️ 0 actualizados; ${skipped} omitidos`;
-          if (skippedAlreadyClean > 0) {
-            message += `; ${skippedAlreadyClean} ya limpios hoy`;
-          }
         }
-      } else if (skipped > 0 && skippedAlreadyClean === 0) {
+      } else if (skipped > 0) {
         message += ` (${skipped} omitidos)`;
       }
       showWarning(message);

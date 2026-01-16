@@ -759,19 +759,17 @@ export async function markCleanAllStudents(options, client = null) {
     // 6. Aplicar limpieza a cada estudiante activo con breakdown de razones
     let updated = 0;
     let skipped = 0;
-    let skippedAlreadyClean = 0; // Separado de omitted
     const skippedBreakdown = {
       paused: 0,
       not_applicable_level: 0,
-      already_clean: 0,
       missing_item: 0,
       no_change: 0,
       error: 0,
       other: 0
     };
     
-    // Helper para verificar si ya está limpio (solo para recurrentes)
-    const stateRepo = getDefaultCleaningItemStateRepo();
+    // FIX MAJOR: Eliminada verificación "ya estaba limpio hoy"
+    // La idempotencia se maneja por execution_key en markCleanStudent
     
     for (const { uuid: studentUuid } of activeStudentUuids) {
       try {
@@ -802,55 +800,10 @@ export async function markCleanAllStudents(options, client = null) {
           });
         }
         
-        // Para recurrentes: verificar si ya está limpio (mismo día) antes de llamar a markCleanStudent
-        // REGLA CANÓNICA: Idempotencia por clean_layer (SHARED y PDE son independientes)
-        if (itemKind === 'recurrente') {
-          const currentState = await stateRepo.getState({
-            student_uuid: studentUuid,
-            product_key,
-            domain_type,
-            item_ref
-          }, client);
-          
-          if (currentState) {
-            // Obtener last_cleaned_at de la capa correspondiente
-            const lastCleanedAt = clean_layer === 'shared' 
-              ? currentState.shared_last_cleaned_at 
-              : currentState.pde_last_cleaned_at;
-            
-            // Calcular days_since_last_clean de la capa correspondiente
-            let daysSinceLastClean = null;
-            if (clean_layer === 'shared') {
-              daysSinceLastClean = currentState.shared_days_since_last_clean ?? null;
-            } else if (clean_layer === 'pde') {
-              daysSinceLastClean = currentState.pde_days_since_last_clean ?? null;
-            }
-            
-            if (lastCleanedAt) {
-              const lastCleanedDate = new Date(lastCleanedAt);
-              const today = new Date();
-              const isSameDay = lastCleanedDate.getFullYear() === today.getFullYear() &&
-                               lastCleanedDate.getMonth() === today.getMonth() &&
-                               lastCleanedDate.getDate() === today.getDate();
-              
-              if (isSameDay) {
-                // Ya está limpio hoy (mismo día) en esta capa - NO es "omitido", es "skipped_already_clean"
-                logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] Ya limpio hoy en esta capa (markCleanAllStudents)', {
-                  traceId,
-                  student_uuid: studentUuid,
-                  item_ref,
-                  clean_layer,
-                  days_since_last_clean: daysSinceLastClean,
-                  allowed: false,
-                  idempotency_by_layer: true
-                });
-                skippedAlreadyClean++;
-                skippedBreakdown.already_clean++;
-                continue; // No llamar a markCleanStudent
-              }
-            }
-          }
-        }
+        // FIX MAJOR: Eliminar lógica "ya estaba limpio hoy"
+        // REGLA CONSTITUCIONAL: Limpiar SIEMPRE reinicia ciclo, incluso si ya estaba limpio hoy
+        // La idempotencia se maneja por execution_key en markCleanStudent, NO por esta verificación
+        // Esto permite que el sistema recalcule estado correctamente tras acciones
         
         const result = await markCleanStudent({
           student_uuid: studentUuid,
@@ -895,7 +848,6 @@ export async function markCleanAllStudents(options, client = null) {
       total: activeStudentUuids.length,
       updated,
       skipped,
-      skipped_already_clean: skippedAlreadyClean,
       skipped_breakdown: skippedBreakdown
     });
     
@@ -915,8 +867,7 @@ export async function markCleanAllStudents(options, client = null) {
     
     return { 
       updated, 
-      skipped, 
-      skipped_already_clean: skippedAlreadyClean, // Separado de omitted
+      skipped,
       total: activeStudentUuids.length,
       skipped_breakdown: skippedBreakdown
     };

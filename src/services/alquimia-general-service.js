@@ -1116,11 +1116,10 @@ export async function markCleanAll(itemRef, productKey = 'pde', cleanLayer = 'sh
     // NO se emiten señales duplicadas desde el servicio
     // ============================================================================
     
-    // Normalizar respuesta para compatibilidad (updated vs updated/skipped/total)
+    // FIX MAJOR: Normalizar respuesta (eliminada referencia a skipped_already_clean)
     return {
       updated: result.updated || 0,
       skipped: result.skipped || 0,
-      skipped_already_clean: result.skipped_already_clean || 0, // Separado de omitted
       total: result.total || 0,
       skipped_breakdown: result.skipped_breakdown || {}
     };
