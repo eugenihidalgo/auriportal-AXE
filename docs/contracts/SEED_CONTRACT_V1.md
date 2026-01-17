@@ -501,12 +501,205 @@ async function ensureStructuralCleaningState(options = {}, client = null)
 
 ---
 
+## SEEDREADINESSMETRICS v1 (READ OBSERVABILITY)
+
+### ¿Qué es?
+
+SeedReadinessMetrics v1 es una **capa de observabilidad** que diagnostica el estado de seed SIN ejecutar seed. Proporciona métricas sobre qué items aplicables tienen estado materializado y cuáles faltan.
+
+**Propósito único:** Permitir que endpoints READ (GET) informen sobre el estado de seed sin ejecutarlo, manteniendo GET como READ puro.
+
+**NO es:**
+- ❌ Un mecanismo de seed automático (NO ejecuta seed)
+- ❌ Una forma de crear estados desde GET (GET sigue siendo READ puro)
+- ❌ Una validación que bloquea respuestas (fail-open absoluto)
+
+**SÍ es:**
+- ✅ Observabilidad pura (solo métricas, no acciones)
+- ✅ Diagnóstico de estado (explica por qué faltan cosas)
+- ✅ Guía para operaciones (indica cuándo ejecutar POST initialize)
+
+---
+
+### Dónde aparece
+
+**Endpoints que incluyen seed_metrics:**
+
+1. **GET /master/api/alquimia-alumno/megalist**
+   - Endpoint: `src/endpoints/master-api-alquimia-alumno.js` (línea 112)
+   - Servicio: `src/core/master/services/alquimia-alumno-megalist-service.js`
+   - Métricas calculadas por: `src/core/master/services/seed-readiness-metrics-service.js`
+
+**Respuesta JSON:**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "items": [...],
+    "lists": [...],
+    "metrics": {...},
+    "seed_metrics": {
+      "total_applicable_items": 42,
+      "total_items_with_state": 38,
+      "missing_state_count": 4,
+      "needs_initialize": true,
+      "sample_missing_item_refs": ["item_ref_1", "item_ref_2", "item_ref_3"]
+    },
+    "context": {...}
+  },
+  "trace_id": "..."
+}
+```
+
+---
+
+### Campos exactos
+
+**Estructura de `seed_metrics`:**
+
+| Campo | Tipo | Descripción | Obligatorio |
+|-------|------|-------------|-------------|
+| `total_applicable_items` | `number` | Total de items del catálogo aplicables según filtros (activos, nivel <= level_cap, lista_tipo si aplica) | ✅ Sí |
+| `total_items_with_state` | `number` | Total de items que tienen estado en `cleaning_item_state` dentro del universo aplicable | ✅ Sí |
+| `missing_state_count` | `number` | Diferencia: `total_applicable_items - total_items_with_state` | ✅ Sí |
+| `needs_initialize` | `boolean` | `true` si `missing_state_count > 0`, `false` en caso contrario | ✅ Sí |
+| `sample_missing_item_refs` | `string[]` | Array de hasta 10 `item_ref` faltantes (solo si `missing_state_count <= 50` para no encarecer) | ⚠️ Opcional |
+
+**Validaciones:**
+- `missing_state_count = total_applicable_items - total_items_with_state` (coherencia obligatoria)
+- `needs_initialize = (missing_state_count > 0)` (coherencia obligatoria)
+- `sample_missing_item_refs` solo aparece si hay items faltantes y el cálculo es barato (≤50 items faltantes)
+
+---
+
+### Interpretación canónica
+
+#### Cuando `needs_initialize = true`
+
+**Significado:**
+- Existen items aplicables que NO tienen estado materializado en `cleaning_item_state`
+- La megalist puede estar incompleta (no muestra items sin estado)
+- El sistema está operativo pero requiere inicialización explícita
+
+**Acción recomendada:**
+- Ejecutar `POST /master/api/alquimia-alumno/initialize` con `level_cap` correcto
+- Esto creará estados para todos los items aplicables faltantes
+- Después de inicializar, `needs_initialize` debería ser `false` (requiere nuevo GET)
+
+**Ejemplo:**
+
+```json
+{
+  "seed_metrics": {
+    "total_applicable_items": 42,
+    "total_items_with_state": 38,
+    "missing_state_count": 4,
+    "needs_initialize": true,
+    "sample_missing_item_refs": ["alquimia_meditacion_1", "alquimia_reflexion_2", "alquimia_integracion_3"]
+  }
+}
+```
+
+**Solución operativa:**
+```bash
+POST /master/api/alquimia-alumno/initialize
+{
+  "student_uuid": "...",
+  "level_cap": 10,
+  "lista_tipo": "recurrente"
+}
+```
+
+#### Cuando `needs_initialize = false`
+
+**Significado:**
+- Todos los items aplicables tienen estado materializado
+- La megalist está completa (muestra todos los items aplicables)
+- No se requiere acción inmediata
+
+**Ejemplo:**
+
+```json
+{
+  "seed_metrics": {
+    "total_applicable_items": 42,
+    "total_items_with_state": 42,
+    "missing_state_count": 0,
+    "needs_initialize": false
+  }
+}
+```
+
+---
+
+### Aclaración: NO ejecuta seed
+
+**REGLA CONSTITUCIONAL:**
+- SeedReadinessMetrics **NO ejecuta seed**
+- Solo calcula métricas observables (queries SELECT, no INSERT)
+- GET sigue siendo READ puro (no escribe en `cleaning_item_state`)
+
+**Criterios de aplicabilidad:**
+- Mismos filtros que seed estructural:
+  - Items activos (`status='active'` OR `activo=true`)
+  - Items con `item_ref IS NOT NULL`
+  - Items con `nivel <= level_cap` (usando `COALESCE(i.nivel, 0) <= level_cap`)
+  - Items de `lista_tipo` si se especifica (opcional)
+
+**Eficiencia:**
+- 1-2 queries SQL optimizadas
+- Fail-open: si falla el cálculo, `seed_metrics` puede ser `null` (no bloquea respuesta)
+
+---
+
+### Logs forenses
+
+**Cuándo se emite:**
+- Log INFO forense cuando `missing_state_count > 0`
+- Prefijo: `[SEED_READINESS][FORENSIC]`
+
+**Contenido del log:**
+```
+[AlquimiaAlumnoMegalist] [SEED_READINESS][FORENSIC] Estados faltantes detectados
+{
+  traceId: "...",
+  student_uuid: "...",
+  view_layer: "shared",
+  lista_tipo: "recurrente",
+  level_cap: 10,
+  missing_state_count: 4,
+  total_applicable_items: 42,
+  total_items_with_state: 38,
+  needs_initialize: true,
+  sample_missing_item_refs: [...]
+}
+```
+
+**Cuándo NO se emite:**
+- Si `missing_state_count = 0` (no spam de logs)
+- Si el cálculo de métricas falla (fail-open)
+
+---
+
+### Referencias técnicas
+
+- **Servicio:** `src/core/master/services/seed-readiness-metrics-service.js`
+- **Integración:** `src/core/master/services/alquimia-alumno-megalist-service.js`
+- **Endpoint:** `src/endpoints/master-api-alquimia-alumno.js`
+- **Script de verificación:** `scripts/verify-seed-readiness-metrics.js`
+- **Diagnóstico relacionado:** `docs/DIAGNOSTICO_SEED_MASTER.md`
+
+---
+
 ## REFERENCIAS
 
 - **Diagnóstico FASE 0:** `docs/DIAGNOSTICO_SEED_FASE0_CLEANING_STATE.md`
+- **Diagnóstico canónico:** `docs/DIAGNOSTICO_SEED_MASTER.md`
 - **Servicio actual:** `src/core/master/services/cleaning-state-seed-service.js`
-- **Endpoint GET:** `src/endpoints/master-api-alquimia-alumno.js:178`
-- **Endpoint POST:** `src/endpoints/master-api-alquimia-alumno.js:311`
+- **Servicio métricas:** `src/core/master/services/seed-readiness-metrics-service.js`
+- **Endpoint GET:** `src/endpoints/master-api-alquimia-alumno.js:112`
+- **Endpoint POST:** `src/endpoints/master-api-alquimia-alumno.js:194`
 - **Contrato RESET:** `docs/contracts/RESET_CONTRACT_V1.md`
 - **Contrato OVERRIDES:** `docs/contracts/OVERRIDES_CONTRACT_V1.md`
 - **CPM:** `src/core/master/services/cleaning-projection-model.js`

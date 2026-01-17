@@ -97,8 +97,11 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
 **Handler:** `src/endpoints/master-api-alquimia-alumno.js` → handler principal
 
 **Query Parameters:**
-- `student_id` (requerido) - ID del alumno (legacy alumnos.id)
+- `student_uuid` (requerido) - UUID canónico del alumno (UUID)
+- `view_layer` (requerido) - Capa de vista: 'shared' | 'pde' | 'combo' (una_vez) | 'effective' (recurrente)
+- `lista_tipo` (requerido) - Tipo de lista: 'recurrente' | 'una_vez'
 - `levels_mode` (opcional) - Modo de niveles (por ahora solo aceptado, no usado)
+- `level_cap` (opcional) - Cap de nivel (si null, usa nivel_efectivo)
 
 **Respuesta Exitosa (200):**
 ```json
@@ -175,8 +178,18 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
       }
     ],
     "context": {
+      "view_layer": "shared",
+      "lista_tipo": "recurrente",
       "levels_mode": null,
-      "clean_layer": "shared"
+      "level_cap": 10,
+      "level_cap_provided": true
+    },
+    "seed_metrics": {
+      "total_applicable_items": 42,
+      "total_items_with_state": 38,
+      "missing_state_count": 4,
+      "needs_initialize": true,
+      "sample_missing_item_refs": ["item_ref_1", "item_ref_2", "item_ref_3"]
     }
   },
   "trace_id": "req_..."
@@ -204,7 +217,18 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
 
 **Fuente de datos:**
 - Servicio: `getMegalistForStudent()` → `alquimia-alumno-megalist-service.js`
+- Métricas: `calculateSeedReadinessMetrics()` → `seed-readiness-metrics-service.js`
 - Tablas: `cleaning_item_state`, `cleaning_events`, `items_transmutaciones`, `listas_transmutaciones`
+
+**Campo `seed_metrics`:**
+- **Propósito:** Observabilidad del estado de seed (diagnóstico SIN ejecutar seed)
+- **Cuándo aparece:** Siempre presente en respuesta exitosa
+- **Interpretación:**
+  - `needs_initialize = true` → Faltan items sin estado, ejecutar `POST /master/api/alquimia-alumno/initialize`
+  - `needs_initialize = false` → Todos los items aplicables tienen estado
+- **Nota forense:** Si faltan items en megalist, consultar `seed_metrics.missing_state_count`
+- **Solución operativa:** Ejecutar `POST /master/api/alquimia-alumno/initialize` con `level_cap` correcto
+- **Referencia:** `docs/contracts/SEED_CONTRACT_V1.md` (sección "SeedReadinessMetrics v1")
 
 ---
 
@@ -594,6 +618,14 @@ curl -i "http://localhost:3000/master/api/alquimia-alumno/report?student_id=123&
 - **Handler Map:** `src/core/master/router/master-router-resolver.js`
 - **Handler:** `src/endpoints/master-api-alquimia-alumno.js`
 - **Servicio:** `src/core/master/services/alquimia-alumno-megalist-service.js`
+- **Servicio métricas:** `src/core/master/services/seed-readiness-metrics-service.js`
+- **Script verificación:** `scripts/verify-seed-readiness-metrics.js`
+
+**Nota forense - Si faltan items:**
+- Consultar `data.seed_metrics.missing_state_count` en la respuesta
+- Si `missing_state_count > 0` → Faltan estados materializados
+- Solución: Ejecutar `POST /master/api/alquimia-alumno/initialize` con `level_cap` correcto
+- Referencia: `docs/contracts/SEED_CONTRACT_V1.md` (SeedReadinessMetrics v1)
 
 ---
 

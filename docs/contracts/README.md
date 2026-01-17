@@ -17,6 +17,7 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 2. **SEED_CONTRACT_V1.md**
    - Contrato canónico del Cleaning State Seed
    - Define cómo Seed crea estados iniciales "NUNCA"
+   - Incluye SeedReadinessMetrics v1 (observabilidad READ)
    - Versión: 1.0
    - Estado: Activo
 
@@ -82,6 +83,7 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 ## Diagnósticos Relacionados
 
 **Diagnósticos que documentan el comportamiento real:**
+- `docs/DIAGNOSTICO_SEED_MASTER.md` - Análisis completo del sistema de seed
 - `docs/DIAGNOSTICO_OVERRIDES_MASTER.md` - Análisis completo del sistema de overrides
 - `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` - Verificación de CLEAN después de RESET
 - `docs/DIAGNOSTICO_THRESHOLD_RESET.md` - Análisis de PENDING después de RESET
