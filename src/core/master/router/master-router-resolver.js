@@ -64,6 +64,7 @@ const MASTER_HANDLER_MAP = {
   // Alquimia por Alumno API Handlers (Panel Alquimia del Alumno v1)
   'master-api-alquimia-alumno-megalist': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-alquimia-alumno-clean': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
+  'master-api-alquimia-alumno-initialize': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-alquimia-alumno-item-history': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-alquimia-alumno-report': () => import('../../../endpoints/master-api-alquimia-alumno.js'),
   'master-api-history': () => import('../../../endpoints/master-api-history.js'),

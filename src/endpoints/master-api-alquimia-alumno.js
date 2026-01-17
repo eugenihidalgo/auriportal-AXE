@@ -172,26 +172,9 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
         level_cap_provided: levelCap !== null
       });
       
-      // CRÍTICO: Seed estados "NUNCA" antes de construir megalista
-      // Esto asegura que todos los items aplicables tengan estado materializado
-      // Usar level_cap si viene, si no usar nivel_efectivo (default)
-      const seedResult = await ensureCleaningItemStateSeedForStudent({
-        student_uuid: studentUuid, // UUID-ONLY: usar UUID directamente
-        product_key: 'pde',
-        domain_type: 'transmutation',
-        level_cap: levelCap
-      });
-      
-      logInfo('MasterApiAlquimiaAlumno', 'Seed completado', {
-        traceId,
-        student_uuid: studentUuid,
-        inserted: seedResult.inserted,
-        skipped: seedResult.skipped,
-        total_applicable: seedResult.total_applicable,
-        level_cap: levelCap
-      });
-      
-      // Construir megalista SOLO desde estados (como fix b1cca23)
+      // REGLA CONSTITUCIONAL: GET es READ puro, NO ejecuta Seed automáticamente
+      // Si estados faltan, megalist será incompleta (usuario debe inicializar explícitamente)
+      // Construir megalista SOLO desde estados existentes (como fix b1cca23)
       // Filtrar por level_cap si viene
       // REGLA CONSTITUCIONAL: view_layer y lista_tipo son OBLIGATORIOS
       const result = await getMegalistForStudent({
@@ -205,7 +188,90 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       return jsonSuccess(result, traceId);
     }
     
-    // 2) POST /master/api/alquimia-alumno/clean
+    // 2) POST /master/api/alquimia-alumno/initialize
+    // Endpoint canónico para inicialización explícita de estados (Seed estructural)
+    // REGLA CONSTITUCIONAL: Seed solo se ejecuta explícitamente, no automáticamente en GET
+    if (path.match(/^\/master\/api\/alquimia-alumno\/initialize$/) && method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (parseError) {
+        return jsonError('Body JSON inválido', 'INVALID_JSON', 400, traceId);
+      }
+      
+      const {
+        student_uuid,
+        level_cap,
+        lista_tipo = null,
+        product_key = 'pde',
+        domain_type = 'transmutation'
+      } = body;
+      
+      // Validar student_uuid (UUID canónico)
+      if (!student_uuid) {
+        return jsonError('student_uuid es requerido', 'MISSING_STUDENT_UUID', 400, traceId);
+      }
+      
+      if (typeof student_uuid !== 'string' || !student_uuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        return jsonError('student_uuid debe ser un UUID válido', 'INVALID_STUDENT_UUID', 400, traceId);
+      }
+      
+      // Validar level_cap (OBLIGATORIO)
+      if (level_cap === null || level_cap === undefined) {
+        return jsonError('level_cap es requerido (no puede ser null)', 'MISSING_LEVEL_CAP', 400, traceId);
+      }
+      
+      // Normalizar level_cap (infinity/∞ → 999)
+      let nivelCap;
+      if (level_cap === 'infinity' || level_cap === '∞') {
+        nivelCap = 999;
+      } else {
+        nivelCap = parseInt(level_cap, 10);
+        if (isNaN(nivelCap) || nivelCap < 1) {
+          return jsonError('level_cap debe ser un número >= 1', 'INVALID_LEVEL_CAP', 400, traceId);
+        }
+      }
+      
+      // Validar lista_tipo si viene
+      if (lista_tipo !== null && lista_tipo !== undefined && lista_tipo !== 'recurrente' && lista_tipo !== 'una_vez') {
+        return jsonError('lista_tipo debe ser "recurrente" o "una_vez"', 'INVALID_LISTA_TIPO', 400, traceId);
+      }
+      
+      logInfo('MasterApiAlquimiaAlumno', '[INITIALIZE] POST initialize', {
+        traceId,
+        student_uuid,
+        level_cap: nivelCap,
+        lista_tipo,
+        product_key,
+        domain_type
+      });
+      
+      // Ejecutar Seed con allow_structural_seed: true (flag explícito)
+      const seedResult = await ensureCleaningItemStateSeedForStudent({
+        student_uuid,
+        product_key,
+        domain_type,
+        level_cap: nivelCap,
+        lista_tipo,
+        allow_structural_seed: true // Flag explícito para permitir seed estructural
+      });
+      
+      logInfo('MasterApiAlquimiaAlumno', '[INITIALIZE] Seed completado', {
+        traceId,
+        student_uuid,
+        inserted: seedResult.inserted,
+        skipped: seedResult.skipped,
+        total_applicable: seedResult.total_applicable,
+        level_cap: nivelCap
+      });
+      
+      return jsonSuccess({
+        initialized: true,
+        seed_result: seedResult
+      }, traceId);
+    }
+    
+    // 3) POST /master/api/alquimia-alumno/clean
     if (path.match(/^\/master\/api\/alquimia-alumno\/clean$/) && method === 'POST') {
       let body;
       try {
@@ -307,12 +373,15 @@ export default async function masterApiAlquimiaAlumnoHandler(request, env, ctx) 
       
       if (!stateCheck.rows || stateCheck.rows.length === 0) {
         // Si no existe, intentar seed primero (puede ser item nuevo)
-        // Usar level_cap si viene
+        // Usar level_cap si viene, si no usar 999 (infinito) como fallback seguro
+        // REGLA CONSTITUCIONAL: Seed condicional antes de mutación crítica (permitido según contrato)
+        const seedLevelCap = levelCapOverride !== null ? levelCapOverride : 999;
         await ensureCleaningItemStateSeedForStudent({
           student_uuid: student_uuid, // UUID-ONLY: usar UUID directamente
           product_key,
           domain_type,
-          level_cap: levelCapOverride
+          level_cap: seedLevelCap,
+          allow_structural_seed: true // Flag explícito para permitir seed estructural antes de mutación crítica
         });
         
         // Verificar de nuevo

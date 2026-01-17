@@ -10,7 +10,6 @@
 import { query } from '../../../../database/pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logInfo, logWarn } from '../../observability/logger.js';
-import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 import { dispatchSignal } from '../../signals/signal-dispatcher.js';
 
 /**
@@ -21,9 +20,11 @@ import { dispatchSignal } from '../../signals/signal-dispatcher.js';
  * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
  * @param {string} [options.product_key='pde'] - Product key
  * @param {string} [options.domain_type='transmutation'] - Domain type
- * @param {number|null} [options.level_cap] - Cap de nivel (si null, usa nivel_efectivo)
+ * @param {number} options.level_cap - Cap de nivel OBSERVADO (OBLIGATORIO, no null)
+ * @param {string} [options.lista_tipo] - Filtrar por tipo de lista (opcional: 'recurrente' | 'una_vez')
+ * @param {boolean} [options.allow_structural_seed=false] - Flag para permitir seed estructural
  * @param {Object} [options.client] - Cliente de transacción (opcional)
- * @returns {Promise<Object>} { inserted, skipped, total_applicable }
+ * @returns {Promise<Object>} { inserted, skipped, total_applicable, total_existing }
  */
 export async function ensureCleaningItemStateSeedForStudent(options = {}, client = null) {
   const traceId = getRequestId();
@@ -31,28 +32,63 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
     student_uuid, 
     product_key = 'pde', 
     domain_type = 'transmutation',
-    level_cap = null
+    level_cap,
+    lista_tipo = null,
+    allow_structural_seed = false,
+    client: _client = null // Rename para evitar conflicto
   } = options;
   
+  // ============================================================================
+  // GUARD CONSTITUCIONAL #1: student_uuid es OBLIGATORIO
+  // ============================================================================
   if (!student_uuid) {
     throw new Error('student_uuid es requerido');
   }
   
-  const queryFn = client ? client.query.bind(client) : query;
+  // Validar formato UUID
+  if (typeof student_uuid !== 'string' || !student_uuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    throw new Error('student_uuid debe ser un UUID válido');
+  }
+  
+  // ============================================================================
+  // GUARD CONSTITUCIONAL #2: allow_structural_seed debe ser true
+  // ============================================================================
+  // PROHIBIDO: Ejecutar Seed automáticamente en GET sin flag explícito
+  if (allow_structural_seed !== true) {
+    logWarn('SEED_CLEAN_STATE', '[GUARD] Seed intentado sin flag allow_structural_seed=true, REJECTED', {
+      traceId,
+      student_uuid,
+      allow_structural_seed,
+      level_cap
+    });
+    throw new Error('Seed solo puede ejecutarse con allow_structural_seed=true. Prohibido en GET genérico.');
+  }
+  
+  // ============================================================================
+  // GUARD CONSTITUCIONAL #3: level_cap es OBLIGATORIO (no null)
+  // ============================================================================
+  if (level_cap === null || level_cap === undefined) {
+    logWarn('SEED_CLEAN_STATE', '[GUARD] level_cap es null, REJECTED', {
+      traceId,
+      student_uuid
+    });
+    throw new Error('level_cap es requerido (no puede ser null). Debe ser observado explícito.');
+  }
+  
+  // Validar y normalizar level_cap
+  let nivelCap;
+  if (level_cap === 'infinity' || level_cap === '∞') {
+    nivelCap = 999;
+  } else {
+    nivelCap = parseInt(level_cap, 10);
+    if (isNaN(nivelCap) || nivelCap < 1) {
+      throw new Error(`level_cap debe ser un número >= 1, recibido: ${level_cap}`);
+    }
+  }
+  
+  const queryFn = _client ? _client.query.bind(_client) : query;
   
   try {
-    // 1. Determinar cap de nivel
-    // Si level_cap viene explícito, usarlo; si no, usar nivel_efectivo
-    let nivelCap;
-    if (level_cap !== null && level_cap !== undefined) {
-      nivelCap = parseInt(level_cap, 10);
-      if (isNaN(nivelCap) || nivelCap < 1) {
-        nivelCap = 999; // Fallback a infinito si inválido
-      }
-    } else {
-      // Usar nivel efectivo como default
-      nivelCap = await getStudentEffectiveLevel(student_uuid);
-    }
     
     logInfo('SEED_CLEAN_STATE', 'Iniciando seed de estados', {
       traceId,
@@ -123,7 +159,10 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       WHERE (i.status = 'active' OR i.activo = true)
         AND (l.status = 'active' OR l.activo = true)
         AND i.item_ref IS NOT NULL
-        AND (i.nivel IS NULL OR i.nivel <= $4::integer)
+        -- REGLA: Respetar level_cap incluso si nivel IS NULL (usar COALESCE)
+        AND COALESCE(i.nivel, 0) <= $4::integer
+        -- FILTRO OPCIONAL: lista_tipo si viene
+        AND ($5::text IS NULL OR l.tipo = $5::text)
         AND NOT EXISTS (
           SELECT 1 
           FROM cleaning_item_state s
@@ -133,18 +172,22 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
             AND s.item_ref = i.item_ref
         )
       ON CONFLICT (student_id, product_key, domain_type, item_ref) DO NOTHING
-    `, [student_uuid, product_key, domain_type, nivelCap]);
+    `, [student_uuid, product_key, domain_type, nivelCap, lista_tipo]);
     
     const inserted = insertResult.rowCount || 0;
     
     // 3. Contar total de items aplicables (para métricas)
+    // Incluir filtro por lista_tipo si viene
     const totalResult = await queryFn(`
       SELECT COUNT(*) as total
       FROM items_transmutaciones i
+      JOIN listas_transmutaciones l ON l.id = i.lista_id
       WHERE (i.status = 'active' OR i.activo = true)
+        AND (l.status = 'active' OR l.activo = true)
         AND i.item_ref IS NOT NULL
-        AND (i.nivel IS NULL OR i.nivel <= $1::integer)
-    `, [nivelCap]);
+        AND COALESCE(i.nivel, 0) <= $1::integer
+        AND ($2::text IS NULL OR l.tipo = $2::text)
+    `, [nivelCap, lista_tipo]);
     
     const totalApplicable = parseInt(totalResult.rows[0]?.total || '0', 10);
     
@@ -158,7 +201,8 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
     `, [student_uuid, product_key, domain_type]);
     
     const existing = parseInt(existingResult.rows[0]?.total || '0', 10);
-    const skipped = existing - (totalApplicable - inserted);
+    // REGLA: skipped NUNCA puede ser negativo
+    const skipped = Math.max(0, existing - (totalApplicable - inserted));
     
     logInfo('SEED_CLEAN_STATE', 'Seed completado', {
       traceId,
@@ -166,7 +210,7 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       product_key,
       domain_type,
       level_cap: nivelCap,
-      level_cap_provided: level_cap !== null,
+      lista_tipo,
       inserted,
       skipped,
       total_applicable: totalApplicable,
@@ -192,11 +236,11 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
             trace_id: traceId,
             day_key: new Date().toISOString().substring(0, 10)
           },
-          context: {
+            context: {
             skipped,
             total_applicable: totalApplicable,
             total_existing: existing,
-            level_cap_provided: level_cap !== null
+            lista_tipo
           }
         }, {
           source: {

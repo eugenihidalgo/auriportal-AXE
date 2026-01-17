@@ -210,6 +210,14 @@ export const MASTER_ROUTES = [
     method: 'POST'
   },
   {
+    key: 'master-api-alquimia-alumno-initialize',
+    path: '/master/api/alquimia-alumno/initialize',
+    type: 'api',
+    method: 'POST'
+    // Endpoint canónico para inicialización explícita de estados (Seed estructural)
+    // REGLA CONSTITUCIONAL: Seed solo se ejecuta explícitamente, no automáticamente en GET
+  },
+  {
     key: 'master-api-alquimia-alumno-item-history',
     path: '/master/api/alquimia-alumno/item-history',
     type: 'api',
