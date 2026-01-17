@@ -386,6 +386,94 @@ export async function getStudentByIdHandler(request, env, ctx) {
 }
 
 /**
+ * GET /master/api/students/list
+ * Lista simple de estudiantes (UUID + nombre) para selectores
+ * Formato: { ok: true, data: { students: [{ uuid, name }] }, trace_id }
+ */
+async function listStudentsSimpleHandler(request, env, ctx) {
+  const traceId = getRequestId();
+  
+  // Auth
+  let authCtx;
+  try {
+    authCtx = await requireAdminContext(request, env);
+    if (authCtx instanceof Response) {
+      return jsonError('No autorizado', 'UNAUTHORIZED', 401, traceId);
+    }
+  } catch (authError) {
+    logError('MasterAPIStudents', 'Error en requireAdminContext', {
+      error: authError.message,
+      traceId
+    });
+    return jsonError('Error de autenticación', 'AUTH_ERROR', 401, traceId);
+  }
+  
+  try {
+    logInfo('MasterAPIStudents', 'Listando estudiantes (simple)', {
+      traceId
+    });
+    
+    // Obtener estudiantes activos (no eliminados, no pausados) ordenados por nombre
+    const itemsResult = await query(
+      `SELECT 
+         s.id as uuid,
+         s.email,
+         s.apodo,
+         s.nombre_completo,
+         CASE WHEN p.id IS NOT NULL THEN true ELSE false END as paused
+       FROM students s
+       LEFT JOIN pausas p ON p.student_id = s.id AND p.fin IS NULL
+       WHERE s.deleted_at IS NULL
+       ORDER BY COALESCE(s.nombre_completo, s.apodo, s.email, s.id::text) ASC`
+    );
+    
+    const rawItems = itemsResult.rows || [];
+    
+    // Calcular display_name usando helper canónico
+    const studentsForDisplay = rawItems.map(row => ({
+      id: row.uuid,
+      apodo: row.apodo || null,
+      nombre_completo: row.nombre_completo || null,
+      email: row.email || null
+    }));
+    
+    const studentsWithDisplay = await calculateStudentDisplayNames(studentsForDisplay);
+    
+    // Construir respuesta simple: solo uuid y name (excluir pausados)
+    const students = rawItems
+      .filter(row => !row.paused) // Excluir pausados
+      .map((row, index) => {
+        const originalIndex = rawItems.indexOf(row);
+        const displayData = studentsWithDisplay[originalIndex];
+        return {
+          uuid: row.uuid,
+          name: displayData?.display_name || row.email || 'Sin nombre'
+        };
+      });
+    
+    logInfo('MasterAPIStudents', 'Estudiantes listados (simple)', {
+      traceId,
+      count: students.length
+    });
+    
+    // Formato: { ok: true, data: { students: [{ uuid, name }] }, trace_id }
+    return jsonSuccess({
+      data: {
+        students
+      }
+    }, traceId);
+  } catch (error) {
+    logError('MasterAPIStudents', 'Error en listStudentsSimpleHandler', {
+      error: error.message,
+      traceId,
+      stack: error.stack
+    });
+    
+    return jsonError('Error interno del servidor', 'INTERNAL_ERROR', 500, traceId);
+  }
+}
+
+/**
  * Handler POST /master/api/students (Crear alumno canónico)
  */
 async function createStudentHandler(request, env, ctx) {
