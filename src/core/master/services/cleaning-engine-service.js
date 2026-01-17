@@ -86,7 +86,7 @@ async function isStudentPaused(studentUuid) {
     const pausaActiva = await pausaRepo.getPausaActiva(studentUuid);
     return !!pausaActiva;
   } catch (error) {
-    logWarn('CleaningEngine', 'Error verificando pausa (fail-open: no pausado)', {
+    logWarn('MASTER', 'Error verificando pausa (fail-open: no pausado)', {
       student_uuid: studentUuid,
       error: error.message
     });
@@ -116,7 +116,7 @@ export async function getStudentEffectiveLevel(studentUuid, lineKey = 'pde') {
     
     return state.current_level_number;
   } catch (error) {
-    logWarn('CleaningEngine', 'Error obteniendo nivel efectivo (fail-open: nivel 1)', {
+    logWarn('MASTER', 'Error obteniendo nivel efectivo (fail-open: nivel 1)', {
       student_uuid: studentUuid,
       error: error.message
     });
@@ -166,7 +166,7 @@ export async function markCleanStudent(options, client = null) {
     meta = {}
   } = options;
   
-    logInfo('CleaningEngine', '[CLEAN][WRITE] markCleanStudent entrada', {
+    logInfo('MASTER', '[CLEAN][WRITE] markCleanStudent entrada', {
       traceId,
       student_uuid,
       item_ref,
@@ -184,7 +184,7 @@ export async function markCleanStudent(options, client = null) {
   if (options.legacy_alumno_id || options.student_id) {
     const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
     error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
-    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en runtime UUID-only', {
+    logError('MASTER', 'Intento de usar legacy_alumno_id en runtime UUID-only', {
       traceId,
       student_uuid,
       legacy_alumno_id: options.legacy_alumno_id,
@@ -233,7 +233,7 @@ export async function markCleanStudent(options, client = null) {
     // 1. Verificar si alumno está en pausa (UUID-only)
     const isPaused = await isStudentPaused(student_uuid);
     if (isPaused) {
-      logInfo('CleaningEngine', 'Alumno en pausa, excluido', {
+      logInfo('MASTER', 'Alumno en pausa, excluido', {
         traceId,
         student_uuid,
         item_ref
@@ -271,7 +271,7 @@ export async function markCleanStudent(options, client = null) {
           nivelCapAplicar = 999; // Fallback a infinito
         }
         overrideAplicado = true;
-        logInfo('CleaningEngine', 'Master Override aplicado (level_cap_override)', {
+        logInfo('MASTER', 'Master Override aplicado (level_cap_override)', {
           traceId,
           student_uuid,
           item_ref,
@@ -283,7 +283,7 @@ export async function markCleanStudent(options, client = null) {
       
       // Validar nivel solo si NO es Master desde alquimia_general
       if (item.nivel && item.nivel > nivelCapAplicar) {
-        logInfo('CleaningEngine', 'Item no aplica por nivel', {
+        logInfo('MASTER', 'Item no aplica por nivel', {
           traceId,
           student_uuid,
           item_ref,
@@ -296,7 +296,7 @@ export async function markCleanStudent(options, client = null) {
       }
     } else {
       // Log forense: MASTER bypass de validación de nivel
-      logInfo('CleaningEngine', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
+      logInfo('MASTER', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
         traceId,
         student_uuid,
         item_ref,
@@ -318,7 +318,7 @@ export async function markCleanStudent(options, client = null) {
     if (item_kind !== lista.tipo) {
       const error = new Error(`item_kind no coincide con lista.tipo: item_kind=${item_kind}, lista.tipo=${lista.tipo}`);
       error.code = 'ITEM_KIND_MISMATCH';
-      logError('CleaningEngine', 'item_kind no coincide con lista.tipo (ERROR)', {
+      logError('MASTER', 'item_kind no coincide con lista.tipo (ERROR)', {
         traceId,
         student_uuid,
         item_ref,
@@ -341,7 +341,7 @@ export async function markCleanStudent(options, client = null) {
     
     // LOG TEMPORAL: decisión de execution_mode
     if (isMasterDomain && itemKind === 'una_vez') {
-      logInfo('CleaningEngine', 'MASTER UNA_VEZ: usando CERTIFY para permitir múltiples incrementos', {
+      logInfo('MASTER', 'MASTER UNA_VEZ: usando CERTIFY para permitir múltiples incrementos', {
         traceId,
         student_uuid,
         item_ref,
@@ -356,7 +356,7 @@ export async function markCleanStudent(options, client = null) {
     // REGLA CANÓNICA: RECURRENTE incluye clean_layer para idempotencia por capa
     const executionKey = generateExecutionKey('mark_clean', item_ref, student_uuid, new Date(), effectiveExecutionMode, itemKind, clean_layer);
     
-    logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] execution_key generado', {
+    logInfo('MASTER', '[CLEAN][IDEMPOTENCY] execution_key generado', {
       traceId,
       execution_key: executionKey,
       execution_mode: effectiveExecutionMode,
@@ -422,7 +422,7 @@ export async function markCleanStudent(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
-    logInfo('CleaningEngine', 'evento insertado', {
+    logInfo('MASTER', 'evento insertado', {
       traceId,
       execution_key: executionKey,
       event_result: eventResult,
@@ -452,7 +452,7 @@ export async function markCleanStudent(options, client = null) {
         }
       }
       
-      logInfo('CleaningEngine', '[CLEAN][IDEMPOTENCY] Evento ya aplicado (idempotencia por capa)', {
+      logInfo('MASTER', '[CLEAN][IDEMPOTENCY] Evento ya aplicado (idempotencia por capa)', {
         traceId,
         execution_key: executionKey,
         execution_mode: effectiveExecutionMode,
@@ -473,7 +473,7 @@ export async function markCleanStudent(options, client = null) {
     // stateRepo ya está declarado arriba (línea 395), reutilizar
     let state;
     
-    logInfo('CleaningEngine', 'Aplicando proyección', {
+    logInfo('MASTER', 'Aplicando proyección', {
       traceId,
       student_uuid,
       item_ref,
@@ -486,7 +486,7 @@ export async function markCleanStudent(options, client = null) {
     
     if (itemKind === 'recurrente') {
       // Recurrente: actualizar last_cleaned_at y clean_count (SIMÉTRICO)
-      logInfo('CleaningEngine', 'Recurrente: usando upsertApplyRecurrent', {
+      logInfo('MASTER', 'Recurrente: usando upsertApplyRecurrent', {
         traceId,
         clean_layer,
         capa: clean_layer === 'shared' ? 'SHARED' : 'PDE'
@@ -504,7 +504,7 @@ export async function markCleanStudent(options, client = null) {
       if (clean_layer === 'pde') {
         // PDE: incrementar pde_clean_count y recalcular pde_remaining/pde_completed (simétrico a SHARED)
         const requiredCount = item.veces_limpiar || 1;
-        logInfo('CleaningEngine', 'Una vez PDE: usando upsertApplyOneTimeIncrementPde', {
+        logInfo('MASTER', 'Una vez PDE: usando upsertApplyOneTimeIncrementPde', {
           traceId,
           student_uuid,
           item_ref,
@@ -519,7 +519,7 @@ export async function markCleanStudent(options, client = null) {
         }, client);
       } else {
         // SHARED: incrementar completed y decrementar remaining
-        logInfo('CleaningEngine', 'Una vez SHARED: usando upsertApplyOneTimeIncrementShared', {
+        logInfo('MASTER', 'Una vez SHARED: usando upsertApplyOneTimeIncrementShared', {
           traceId,
           student_uuid,
           item_ref,
@@ -536,7 +536,7 @@ export async function markCleanStudent(options, client = null) {
       }
     }
     
-    logInfo('CleaningEngine', '[CLEAN][WRITE] Proyección aplicada', {
+    logInfo('MASTER', '[CLEAN][WRITE] Proyección aplicada', {
       traceId,
       student_uuid,
       item_ref,
@@ -560,61 +560,24 @@ export async function markCleanStudent(options, client = null) {
     // NO se sincroniza student_item_state (tabla histórica)
     // ============================================================================
     
-    // 8. Emitir señales (fail-open) - UUID-only
-    try {
-      const { dispatchSignal } = await import('../../signals/signal-dispatcher.js');
-      
-      const signalPayload = {
-        signal: 'clean.executed',
-        scope: 'student',
-        student_uuid, // UUID canónico (único identificador)
-        item_id: item.id,
-        item_ref,
-        domain: domain_type,
-        product_key,
-        source: actor_type,
-        clean_layer,
-        executed_at: new Date().toISOString()
-      };
-      
-      await dispatchSignal({
-        signal_key: 'clean.executed',
-        payload: signalPayload,
-        runtime: { trace_id: traceId },
-        context: {}
-      }, {
-        source: {
-          type: 'cleaning-engine-service',
-          id: 'markCleanStudent'
-        }
-      });
-      
-      // 8.1. Generar historial desde señal (asíncrono, fail-open)
-      try {
-        const { handleHistorySignal } = await import('./history-signal-listener.js');
-        await handleHistorySignal({
-          signal_key: 'clean.executed',
-          payload: signalPayload,
-          runtime: { trace_id: traceId },
-          context: {}
-        });
-      } catch (historyError) {
-        logWarn('CleaningEngine', 'Error generando historial (fail-open)', {
-          traceId,
-          error: historyError.message
-        });
-        // Fail-open: no bloquear la limpieza si falla el historial
-      }
-    } catch (signalError) {
-      logWarn('CleaningEngine', 'Error emitiendo señales (fail-open)', {
-        traceId,
-        error: signalError.message,
-        student_uuid,
-        item_ref
-      });
-    }
+    // 8. Señal emission skipped (canonical v1 - AUDIT log only)
+    // execution_key es BACKEND-ONLY: se genera al inicio de cada ejecución de limpieza
+    // Es obligatorio para idempotencia y nunca depende del frontend
+    logWarn('AUDIT', 'Signal emission skipped (canonical v1)', {
+      action: 'clean_item',
+      student_uuid,
+      item_ref,
+      clean_layer,
+      execution_key: executionKey, // FIX: usar executionKey (camelCase) definido en línea 357
+      trace_id: traceId,
+      item_id: item.id,
+      lista_id: item.lista_id,
+      item_kind: itemKind,
+      actor_type,
+      surface_key
+    });
     
-    logInfo('CleaningEngine', '[CLEAN][WRITE] Limpieza aplicada correctamente', {
+    logInfo('MASTER', '[CLEAN][WRITE] Limpieza aplicada correctamente', {
       traceId,
       student_uuid,
       item_ref,
@@ -634,7 +597,7 @@ export async function markCleanStudent(options, client = null) {
     
     return state;
   } catch (error) {
-    logError('CleaningEngine', 'Error en markCleanStudent', {
+    logError('MASTER', 'Error en markCleanStudent', {
       traceId,
       error: error.message,
       code: error.code,
@@ -677,7 +640,7 @@ export async function markCleanAllStudents(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('CleaningEngine', 'markCleanAllStudents entrada', {
+  logInfo('MASTER', 'markCleanAllStudents entrada', {
     traceId,
     item_ref,
     item_kind: options.item_kind,
@@ -728,7 +691,7 @@ export async function markCleanAllStudents(options, client = null) {
     if (itemKind !== lista.tipo) {
       const error = new Error(`item_kind no coincide con lista.tipo: item_kind=${itemKind}, lista.tipo=${lista.tipo}`);
       error.code = 'ITEM_KIND_MISMATCH';
-      logError('CleaningEngine', 'item_kind no coincide con lista.tipo en markCleanAllStudents (ERROR)', {
+      logError('MASTER', 'item_kind no coincide con lista.tipo en markCleanAllStudents (ERROR)', {
         traceId,
         item_ref,
         item_kind_provided: itemKind,
@@ -796,7 +759,7 @@ export async function markCleanAllStudents(options, client = null) {
           }
         } else if (isMasterContext) {
           // Log forense: MASTER bypass de validación de nivel
-          logInfo('CleaningEngine', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
+          logInfo('MASTER', '[MASTER][CLEANING] Nivel ignorado por autoridad MASTER', {
             traceId,
             student_uuid: studentUuid,
             item_ref,
@@ -833,7 +796,7 @@ export async function markCleanAllStudents(options, client = null) {
           skippedBreakdown.no_change++;
         }
       } catch (error) {
-        logWarn('CleaningEngine', 'Error en markCleanStudent individual (continuando)', {
+        logWarn('MASTER', 'Error en markCleanStudent individual (continuando)', {
           traceId,
           student_uuid: studentUuid,
           item_ref,
@@ -844,7 +807,7 @@ export async function markCleanAllStudents(options, client = null) {
       }
     }
     
-    logInfo('CleaningEngine', 'markCleanAllStudents completado', {
+    logInfo('MASTER', 'markCleanAllStudents completado', {
       traceId,
       item_ref,
       item_kind: itemKind,
@@ -857,7 +820,7 @@ export async function markCleanAllStudents(options, client = null) {
       skipped_breakdown: skippedBreakdown
     });
     
-    logInfo('CleaningEngine', 'Limpieza global completada', {
+    logInfo('MASTER', 'Limpieza global completada', {
       traceId,
       item_ref,
       clean_layer,
@@ -878,7 +841,7 @@ export async function markCleanAllStudents(options, client = null) {
       skipped_breakdown: skippedBreakdown
     };
   } catch (error) {
-    logError('CleaningEngine', 'Error en markCleanAllStudents', {
+    logError('MASTER', 'Error en markCleanAllStudents', {
       traceId,
       error: error.message,
       code: error.code,
@@ -908,7 +871,7 @@ export async function incrementAllStudents(options, client = null) {
   // CONTRATO LIMPIEZA v1: item_kind debe venir en options
   const traceId = getRequestId();
   
-  logInfo('CleaningEngine', 'incrementAllStudents entrada', {
+  logInfo('MASTER', 'incrementAllStudents entrada', {
     traceId,
     item_ref: options.item_ref,
     item_kind: options.item_kind,
@@ -921,7 +884,7 @@ export async function incrementAllStudents(options, client = null) {
   if (!options.item_kind) {
     // TODO DEPRECATION: Eliminar este fallback después de v5.66.0
     // WARNING FUERTE: item_kind debe venir explícitamente desde el frontend
-    logWarn('CleaningEngine', 'DEPRECATED: incrementAllStudents llamado sin item_kind. Usando fallback "una_vez". Esto será un error en v5.66.0', {
+    logWarn('MASTER', 'DEPRECATED: incrementAllStudents llamado sin item_kind. Usando fallback "una_vez". Esto será un error en v5.66.0', {
       traceId,
       item_ref: options.item_ref,
       stack: new Error().stack
@@ -937,7 +900,7 @@ export async function incrementAllStudents(options, client = null) {
   
   // LOG TEMPORAL: decisión de execution_mode
   if (isMasterDomain && options.item_kind === 'una_vez') {
-    logInfo('CleaningEngine', 'MASTER UNA_VEZ incrementAll: usando CERTIFY para permitir múltiples incrementos', {
+    logInfo('MASTER', 'MASTER UNA_VEZ incrementAll: usando CERTIFY para permitir múltiples incrementos', {
       traceId,
       item_ref: options.item_ref,
       original_execution_mode: options.execution_mode,
@@ -992,7 +955,7 @@ export async function setRemainingShared(options, client = null) {
   if (options.student_id || options.legacy_alumno_id) {
     const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
     error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
-    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en setRemainingShared', {
+    logError('MASTER', 'Intento de usar legacy_alumno_id en setRemainingShared', {
       traceId,
       student_uuid,
       student_id: options.student_id,
@@ -1016,7 +979,7 @@ export async function setRemainingShared(options, client = null) {
     // 1. Verificar si alumno está en pausa (UUID-only)
     const isPaused = await isStudentPaused(student_uuid);
     if (isPaused) {
-      logInfo('CleaningEngine', 'Alumno en pausa, excluido', {
+      logInfo('MASTER', 'Alumno en pausa, excluido', {
         traceId,
         student_uuid,
         item_ref
@@ -1074,7 +1037,7 @@ export async function setRemainingShared(options, client = null) {
     
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-      logInfo('CleaningEngine', 'Evento ya aplicado (idempotencia)', {
+      logInfo('MASTER', 'Evento ya aplicado (idempotencia)', {
         traceId,
         execution_key: executionKey,
         student_uuid,
@@ -1103,7 +1066,7 @@ export async function setRemainingShared(options, client = null) {
     // NO se sincroniza student_item_state (tabla histórica)
     // ============================================================================
     
-    logInfo('CleaningEngine', 'Remaining establecido correctamente', {
+    logInfo('MASTER', 'Remaining establecido correctamente', {
       traceId,
       student_uuid,
       item_ref,
@@ -1112,7 +1075,7 @@ export async function setRemainingShared(options, client = null) {
     
     return state;
   } catch (error) {
-    logError('CleaningEngine', 'Error en setRemainingShared', {
+    logError('MASTER', 'Error en setRemainingShared', {
       traceId,
       error: error.message,
       code: error.code,
@@ -1170,7 +1133,7 @@ export async function resetStudentItemProgress(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('CleaningEngine', '[RESET][CANONICAL] resetStudentItemProgress entrada', {
+  logInfo('MASTER', '[RESET][CANONICAL] resetStudentItemProgress entrada', {
     traceId,
     student_uuid,
     item_ref,
@@ -1188,7 +1151,7 @@ export async function resetStudentItemProgress(options, client = null) {
   if (options.legacy_alumno_id || options.student_id) {
     const error = new Error('LEGACY alumno_id is forbidden in UUID-only Alquimia runtime');
     error.code = 'LEGACY_ALUMNO_ID_FORBIDDEN';
-    logError('CleaningEngine', 'Intento de usar legacy_alumno_id en reset', {
+    logError('MASTER', 'Intento de usar legacy_alumno_id en reset', {
       traceId,
       student_uuid,
       legacy_alumno_id: options.legacy_alumno_id,
@@ -1217,7 +1180,7 @@ export async function resetStudentItemProgress(options, client = null) {
   if (item_kind === 'una_vez') {
     const error = new Error('Reset está PROHIBIDO para item_kind="una_vez". UNA_VEZ solo tiene contadores + overrides, no reset.');
     error.code = 'RESET_UNA_VEZ_FORBIDDEN';
-    logError('CleaningEngine', 'Intento de reset en UNA_VEZ (PROHIBIDO)', {
+    logError('MASTER', 'Intento de reset en UNA_VEZ (PROHIBIDO)', {
       traceId,
       student_uuid,
       item_ref,
@@ -1236,7 +1199,7 @@ export async function resetStudentItemProgress(options, client = null) {
     // 1. Verificar si alumno está en pausa (UUID-only)
     const isPaused = await isStudentPaused(student_uuid);
     if (isPaused) {
-      logInfo('CleaningEngine', 'Alumno en pausa, reset excluido', {
+      logInfo('MASTER', 'Alumno en pausa, reset excluido', {
         traceId,
         student_uuid,
         item_ref
@@ -1270,7 +1233,7 @@ export async function resetStudentItemProgress(options, client = null) {
       if (clean_layer && clean_layer !== 'pde') {
         const error = new Error(`[MAJOR-2] Coherencia violada: view_layer='effective' requiere clean_layer='pde', recibido: ${clean_layer}`);
         error.code = 'VIEW_LAYER_CLEAN_LAYER_COHERENCE_VIOLATION';
-        logError('CleaningEngine', '[MAJOR-2] Coherencia view_layer/clean_layer violada', {
+        logError('MASTER', '[MAJOR-2] Coherencia view_layer/clean_layer violada', {
           traceId,
           view_layer,
           clean_layer,
@@ -1281,7 +1244,7 @@ export async function resetStudentItemProgress(options, client = null) {
       // Forzar clean_layer='pde' si no viene explícito
       if (!clean_layer) {
         clean_layer = 'pde';
-        logInfo('CleaningEngine', '[MAJOR-2] view_layer=effective → clean_layer=pde (regla canónica)', {
+        logInfo('MASTER', '[MAJOR-2] view_layer=effective → clean_layer=pde (regla canónica)', {
           traceId,
           student_uuid,
           item_ref
@@ -1310,7 +1273,7 @@ export async function resetStudentItemProgress(options, client = null) {
         layersToReset = [view_layer];
       } else {
         // Default: reset shared si no se puede determinar
-        logWarn('CleaningEngine', 'view_layer no permite derivar clean_layer, usando shared', {
+        logWarn('MASTER', 'view_layer no permite derivar clean_layer, usando shared', {
           traceId,
           view_layer,
           item_kind
@@ -1319,7 +1282,7 @@ export async function resetStudentItemProgress(options, client = null) {
       }
     } else {
       // Default: reset shared si no hay información
-      logWarn('CleaningEngine', 'No se proporcionó clean_layer ni view_layer, usando shared', {
+      logWarn('MASTER', 'No se proporcionó clean_layer ni view_layer, usando shared', {
         traceId
       });
       layersToReset = ['shared'];
@@ -1365,7 +1328,7 @@ export async function resetStudentItemProgress(options, client = null) {
 
         // Verificar idempotencia
         if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-          logInfo('CleaningEngine', '[RESET][IDEMPOTENCY] Reset ya aplicado para esta capa', {
+          logInfo('MASTER', '[RESET][IDEMPOTENCY] Reset ya aplicado para esta capa', {
             traceId,
             execution_key: executionKey,
             student_uuid,
@@ -1390,7 +1353,7 @@ export async function resetStudentItemProgress(options, client = null) {
         applied++;
         layersAffected.push(layer);
 
-        logInfo('CleaningEngine', '[RESET][CANONICAL] Reset aplicado a capa', {
+        logInfo('MASTER', '[RESET][CANONICAL] Reset aplicado a capa', {
           traceId,
           student_uuid,
           item_ref,
@@ -1398,7 +1361,7 @@ export async function resetStudentItemProgress(options, client = null) {
           item_kind
         });
       } catch (layerError) {
-        logError('CleaningEngine', 'Error aplicando reset a capa', {
+        logError('MASTER', 'Error aplicando reset a capa', {
           traceId,
           student_uuid,
           item_ref,
@@ -1421,23 +1384,26 @@ export async function resetStudentItemProgress(options, client = null) {
     try {
       // TODO: Registrar señal en registry canónico
       // Por ahora, solo log estructurado
-      logInfo('CleaningEngine', '[RESET][SIGNAL] cleaning.reset.executed', {
-        traceId,
-        student_uuid,
-        item_ref,
-        item_kind,
-        layers_affected: layersAffected,
-        actor_type,
-        surface_key
-      });
+    // Señal emission skipped (canonical v1 - AUDIT log only)
+    logWarn('AUDIT', 'Signal emission skipped (canonical v1)', {
+      action: 'reset_item_recurrente',
+      student_uuid,
+      item_ref,
+      item_kind,
+      layers_affected: layersAffected,
+      execution_key: generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, clean_layer),
+      trace_id: traceId,
+      actor_type,
+      surface_key
+    });
     } catch (signalError) {
-      logWarn('CleaningEngine', 'Error emitiendo señal (fail-open)', {
+      logWarn('MASTER', 'Error emitiendo señal (fail-open)', {
         traceId,
         error: signalError.message
       });
     }
 
-    logInfo('CleaningEngine', '[RESET][CANONICAL] Reset completado', {
+    logInfo('MASTER', '[RESET][CANONICAL] Reset completado', {
       traceId,
       student_uuid,
       item_ref,
@@ -1454,7 +1420,7 @@ export async function resetStudentItemProgress(options, client = null) {
       state: finalState
     };
   } catch (error) {
-    logError('CleaningEngine', 'Error en resetStudentItemProgress', {
+    logError('MASTER', 'Error en resetStudentItemProgress', {
       traceId,
       error: error.message,
       code: error.code,
@@ -1502,7 +1468,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('CleaningEngine', '[RESET][ALL][CANONICAL] resetAllStudentsItemProgress entrada', {
+  logInfo('MASTER', '[RESET][ALL][CANONICAL] resetAllStudentsItemProgress entrada', {
     traceId,
     item_ref,
     item_kind,
@@ -1532,7 +1498,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
   if (item_kind === 'una_vez') {
     const error = new Error('Reset está PROHIBIDO para item_kind="una_vez". UNA_VEZ solo tiene contadores + overrides, no reset.');
     error.code = 'RESET_UNA_VEZ_FORBIDDEN';
-    logError('CleaningEngine', 'Intento de reset ALL en UNA_VEZ (PROHIBIDO)', {
+    logError('MASTER', 'Intento de reset ALL en UNA_VEZ (PROHIBIDO)', {
       traceId,
       item_ref,
       item_kind
@@ -1547,7 +1513,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
 
   // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
   if (clean_layer !== 'pde') {
-    logWarn('CleaningEngine', 'Reset ALL debe usar clean_layer=pde según contrato', {
+    logWarn('MASTER', 'Reset ALL debe usar clean_layer=pde según contrato', {
       traceId,
       clean_layer_provided: clean_layer
     });
@@ -1587,7 +1553,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     const studentUuids = studentsResult.rows.map(row => row.student_uuid);
     const total = studentUuids.length;
 
-    logInfo('CleaningEngine', '[RESET][ALL] Estudiantes activos obtenidos', {
+    logInfo('MASTER', '[RESET][ALL] Estudiantes activos obtenidos', {
       traceId,
       item_ref,
       total_students: total
@@ -1650,7 +1616,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
         }
       } catch (studentError) {
         // Log error estructurado (mantener para debugging)
-        logWarn('CleaningEngine', 'Error reseteando estudiante en reset ALL (continuando)', {
+        logWarn('MASTER', 'Error reseteando estudiante en reset ALL (continuando)', {
           traceId,
           student_uuid: studentUuid,
           item_ref,
@@ -1662,7 +1628,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
       }
     }
 
-    logInfo('CleaningEngine', '[RESET][ALL][CANONICAL] Reset ALL completado', {
+    logInfo('MASTER', '[RESET][ALL][CANONICAL] Reset ALL completado', {
       traceId,
       item_ref,
       item_kind,
@@ -1682,7 +1648,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
       layers_affected: layersAffected
     };
   } catch (error) {
-    logError('CleaningEngine', 'Error en resetAllStudentsItemProgress', {
+    logError('MASTER', 'Error en resetAllStudentsItemProgress', {
       traceId,
       error: error.message,
       code: error.code,
