@@ -2769,7 +2769,8 @@
     // ============================================================================
     studentsAplicables.forEach(student => {
       // Obtener estado desde state_by_view_layer[activeViewLayer]
-      // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO, NO hay fallback
+      // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO
+      // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
       let stateData = null;
       if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
         stateData = student.state_by_view_layer[activeViewLayer];
@@ -2782,16 +2783,34 @@
           available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : [],
           student_keys: Object.keys(student)
         });
-        // NO agregar estudiante a ninguna columna (bloquear render)
-        // Mostrar error visible en la columna correspondiente
-        if (!studentsByState._error) {
-          studentsByState._error = [];
+        
+        // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
+        // student.state es el estado activo calculado por CPM según view_layer (autoridad backend)
+        if (student.state) {
+          console.warn('[MasterAlquimiaGeneral] [UI][COLUMN] Usando fallback a student.state (CPM) por falta de state_by_view_layer', {
+            student_uuid: student.student_uuid,
+            view_layer: activeViewLayer,
+            fallback_state: student.state
+          });
+          // Usar estado CPM como fallback seguro (mejor que bloquear render)
+          // Construir stateData mínimo desde student.state (viene de CPM)
+          stateData = {
+            state: student.state,
+            visual_state: student.visual_state || student.state,
+            metrics: {} // Metrics no disponibles en fallback
+          };
+        } else {
+          // NO agregar estudiante a ninguna columna (bloquear render)
+          // Mostrar error visible en la columna correspondiente
+          if (!studentsByState._error) {
+            studentsByState._error = [];
+          }
+          studentsByState._error.push({
+            ...student,
+            _error_message: `Estado no disponible — datos inconsistentes (view_layer: ${activeViewLayer})`
+          });
+          return; // Saltar este estudiante
         }
-        studentsByState._error.push({
-          ...student,
-          _error_message: `Estado no disponible — datos inconsistentes (view_layer: ${activeViewLayer})`
-        });
-        return; // Saltar este estudiante
       }
       
       // FIX 4: Assert defensivo - verificar que state existe en stateData
@@ -3565,7 +3584,26 @@
         has_state_by_view_layer: !!student.state_by_view_layer,
         available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
       });
-      return null; // Fail-loud: NO fallback silencioso
+      
+      // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
+      // student.state es el estado activo calculado por CPM según view_layer (autoridad backend)
+      if (student.state) {
+        console.warn('[MasterAlquimiaGeneral] [UI][RECURRENTE_STATE] Usando fallback a student.state (CPM)', {
+          student_uuid: student.student_uuid,
+          view_layer: viewLayer,
+          fallback_state: student.state
+        });
+        // Retornar estado CPM como fallback seguro (mejor que bloquear render)
+        return {
+          state: student.state,
+          visual_state: student.visual_state || student.state,
+          days_since: null, // No calcular días en frontend (CPM lo calcula)
+          days_since_last_clean: null, // No calcular días en frontend
+          metrics: {} // Metrics no disponibles en fallback
+        };
+      }
+      
+      return null; // Fail-loud: NO fallback silencioso si tampoco hay student.state
     }
     
     const stateData = student.state_by_view_layer[viewLayer];

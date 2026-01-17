@@ -154,7 +154,49 @@ if (sharedState.state === 'reviewed' || pdeState.state === 'reviewed') {
 - Tras limpiar una capa, `effective` refleja el cambio correctamente (ej: `shared` pasa a `reviewed` → `effective` pasa a `reviewed`)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-6️⃣ FALLBACK DE ESTADOS DESCONOCIDOS
+6️⃣ REGLA UI: CPM COMO FUENTE ÚNICA EN RECURRENTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Archivo:** `public/js/master/master-alquimia-general-client.js`  
+**Funciones:** `getRecurrenteStateFromProjection()` (líneas 3559-3584), `showFlotanteVer()` (líneas 2774-2795)
+
+**Regla canónica UI para recurrentes:**
+- **Fuente única de verdad:** CPM (Cleaning Projection Model) calcula estado en backend
+- **Campo canónico:** `state_by_view_layer[view_layer]` contiene estado proyectado por CPM
+- **Fallback seguro:** Si `state_by_view_layer` no existe, usar `student.state` (viene del backend calculado por CPM)
+- **⚠️ PROHIBIDO:** Inferir estado o calcular días en frontend (CPM lo hace en backend)
+
+**Implementación fallback (líneas 3561-3578):**
+```javascript
+if (!student.state_by_view_layer || !student.state_by_view_layer[viewLayer]) {
+  // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
+  // student.state es el estado activo calculado por CPM según view_layer (autoridad backend)
+  if (student.state) {
+    // Retornar estado CPM como fallback seguro (mejor que bloquear render)
+    return {
+      state: student.state,
+      visual_state: student.visual_state || student.state,
+      days_since: null, // No calcular días en frontend (CPM lo calcula)
+      days_since_last_clean: null,
+      metrics: {}
+    };
+  }
+  return null; // Fail-loud: NO fallback silencioso si tampoco hay student.state
+}
+```
+
+**Significado:**
+- `reseteado` es un estado **transitorio** de ciclo: aparece tras reset, desaparece tras limpiar
+- `reseteado` es **limpiable**: al pulsar Limpiar, CPM recalcula y pasa a `reviewed`/`pending`/`important`
+- UI debe **consumir estado CPM**, NO calcularlo ni inferirlo
+
+**⚠️ IMPORTANTE:**
+- NO recalcular `days_since` en frontend (CPM lo calcula en backend)
+- NO inferir estado desde fechas (CPM es autoridad única)
+- NO bloquear limpieza por falta de datos (usar fallback seguro a `student.state`)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7️⃣ FALLBACK DE ESTADOS DESCONOCIDOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Regla canónica:**
@@ -187,7 +229,7 @@ if (studentsByState[columnState]) {
 - `reviewed` ✅
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-7️⃣ PUNTO DE ROTURA ORIGINAL
+8️⃣ PUNTO DE ROTURA ORIGINAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Bug original:**
@@ -206,7 +248,7 @@ if (studentsByState[columnState]) {
 - **Caso maldito:** `student_uuid: 0d29eedc-6f42-44d1-bb12-53dba2fc9490`, `item_ref: item_17_1768641625523_cr5fpr`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-8️⃣ VERIFICACIÓN OBLIGATORIA
+9️⃣ VERIFICACIÓN OBLIGATORIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Caso de prueba canónico:**
@@ -232,7 +274,7 @@ if (studentsByState[columnState]) {
    - ✅ `days_since >= 2*threshold` → `state = 'important'`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-9️⃣ REFERENCIAS
+🔟 REFERENCIAS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Archivos modificados:**
@@ -248,6 +290,7 @@ if (studentsByState[columnState]) {
 **Versión:**
 - **v1.0** - 2026-01-27 - Introducción de estado `reseteado` para recurrentes
 - **v1.1** - 2026-01-27 - Fix: Inclusión de `reseteado` en prioridad de `effective`
+- **v1.2** - 2026-01-27 - Fix UI: Fallback a CPM (`student.state`) cuando falta `state_by_view_layer`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **FIN DEL DOCUMENTO**
