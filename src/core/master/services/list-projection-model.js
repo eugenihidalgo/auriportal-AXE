@@ -854,6 +854,63 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         throw error; // FAIL-FAST: No continuar si falta effective
       }
       
+      // ============================================================================
+      // BUG-001 FIX: Validación fail-hard - state_by_view_layer es OBLIGATORIO
+      // REGLA CONSTITUCIONAL A1: Si falta state_by_view_layer → FAIL-HARD
+      // ============================================================================
+      if (!projection.state_by_view_layer) {
+        const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer es OBLIGATORIO pero falta en la proyección. Item: ${item.item_ref}`);
+        logError('ListProjectionModel', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+          traceId,
+          item_ref: item.item_ref,
+          item_kind,
+          view_layer,
+          projection_keys: projection ? Object.keys(projection) : [],
+          error: error.message
+        });
+        throw error; // FAIL-HARD: No continuar si falta state_by_view_layer
+      }
+      
+      // Validar que state_by_view_layer tiene al menos shared y pde
+      if (!projection.state_by_view_layer.shared || !projection.state_by_view_layer.pde) {
+        const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer.shared o state_by_view_layer.pde faltan. Item: ${item.item_ref}`);
+        logError('ListProjectionModel', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+          traceId,
+          item_ref: item.item_ref,
+          item_kind,
+          view_layer,
+          available_layers: projection.state_by_view_layer ? Object.keys(projection.state_by_view_layer) : [],
+          error: error.message
+        });
+        throw error;
+      }
+      
+      // Validar que effective existe para recurrente
+      if (item_kind === 'recurrente' && !projection.state_by_view_layer.effective) {
+        const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer.effective es OBLIGATORIO para item_kind='recurrente' pero falta. Item: ${item.item_ref}`);
+        logError('ListProjectionModel', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+          traceId,
+          item_ref: item.item_ref,
+          item_kind,
+          available_layers: Object.keys(projection.state_by_view_layer),
+          error: error.message
+        });
+        throw error;
+      }
+      
+      // Log forense obligatorio: state_by_view_layer OK
+      logInfo('ListProjectionModel', '[CPM_V2][OUTPUT][STATE_BY_VIEW_LAYER_OK]', {
+        traceId,
+        item_ref: item.item_ref,
+        item_kind,
+        view_layer,
+        available_layers: Object.keys(projection.state_by_view_layer),
+        has_shared: !!projection.state_by_view_layer.shared,
+        has_pde: !!projection.state_by_view_layer.pde,
+        has_effective: !!projection.state_by_view_layer.effective,
+        has_combo: !!projection.state_by_view_layer.combo
+      });
+      
       // BUG-023 FIX: Garantizar que required_count y veces_limpiar siempre están presentes
       // Backend debe devolver ambos campos explícitamente
       const requiredCount = effectiveConfig.required_count !== undefined 

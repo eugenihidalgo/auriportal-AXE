@@ -85,6 +85,33 @@
     }, 3000);
   };
 
+  /**
+   * Muestra un toast de advertencia (amarillo, 3s)
+   */
+  window.showToastWarning = function(message) {
+    const container = getToastContainer();
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background: #f59e0b; color: #fff; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-size: 0.875rem; font-weight: 500; pointer-events: auto; opacity: 0; transition: opacity 0.2s ease-in;';
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Fade in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+    }, 10);
+    
+    // Auto-dismiss después de 3s
+    setTimeout(() => {
+      toast.style.transition = 'opacity 0.3s ease-out';
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 3000);
+  };
+
   // Log de inicialización
   if (typeof window !== 'undefined' && window.__AP_CONTEXT__ === 'MASTER') {
     console.log('[MASTER][UI][TOAST] Helper inicializado');

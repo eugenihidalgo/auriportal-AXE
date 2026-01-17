@@ -1639,7 +1639,12 @@
             viewLayer
           );
           
-          showToastSuccess(`Reset completado (${resetResult.applied} items, ${resetResult.skipped} omitidos)`);
+          // BUG-003 FIX: applied = 0 NO es éxito
+          if (resetResult.applied === 0) {
+            showToastWarning('No se aplicaron cambios (acción idempotente o sin efecto)');
+          } else {
+            showToastSuccess(`Reset completado (${resetResult.applied} items, ${resetResult.skipped} omitidos)`);
+          }
 
           // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
         } catch (error) {
@@ -1715,7 +1720,12 @@
               total_items: totalItems
             });
             
-            showToastSuccess(`Reset lista ALL completado (${applied} aplicados, ${skipped} omitidos en ${totalItems} items)`);
+            // BUG-003 FIX: applied = 0 NO es éxito
+            if (applied === 0) {
+              showToastWarning('No se aplicaron cambios (acción idempotente o sin efecto)');
+            } else {
+              showToastSuccess(`Reset lista ALL completado (${applied} aplicados, ${skipped} omitidos en ${totalItems} items)`);
+            }
             
             // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
           } catch (error) {
@@ -2765,70 +2775,40 @@
     // PROHIBIDO: usar student.state o student.visual_state (campos legacy ambiguos)
     // OBLIGATORIO: usar student.state_by_view_layer[activeViewLayer]
     // ============================================================================
-    // BUG-011 FIX: ELIMINAR fallback legacy - Si falta state_by_view_layer, BLOQUEAR render
+    // BUG-004 FIX: Eliminar fallback legacy - Si falta state_by_view_layer → FAIL-HARD
+    // REGLA CONSTITUCIONAL A4: student.state NO SE USA, si falta state_by_view_layer → Error
     // ============================================================================
     studentsAplicables.forEach(student => {
       // Obtener estado desde state_by_view_layer[activeViewLayer]
-      // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO
-      // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
-      let stateData = null;
-      if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
-        stateData = student.state_by_view_layer[activeViewLayer];
-      } else {
-        // FIX 4: Invariante roto - falta state_by_view_layer (acción → proyección → columna)
-        console.error('[INVARIANT_BROKEN] Missing state_by_view_layer - Acción → Proyección → Columna invariante violado', {
+      // REGLA CONSTITUCIONAL A1: state_by_view_layer es OBLIGATORIO
+      if (!student.state_by_view_layer || !student.state_by_view_layer[activeViewLayer]) {
+        // FAIL-HARD: No renderizar, lanzar error visible
+        const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer[${activeViewLayer}] es OBLIGATORIO pero falta. Student: ${student.student_uuid}`);
+        console.error('[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
           student_uuid: student.student_uuid,
           view_layer: activeViewLayer,
           has_state_by_view_layer: !!student.state_by_view_layer,
           available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : [],
-          student_keys: Object.keys(student)
+          student_keys: Object.keys(student),
+          error: error.message
         });
-        
-        // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
-        // student.state es el estado activo calculado por CPM según view_layer (autoridad backend)
-        if (student.state) {
-          console.warn('[MasterAlquimiaGeneral] [UI][COLUMN] Usando fallback a student.state (CPM) por falta de state_by_view_layer', {
-            student_uuid: student.student_uuid,
-            view_layer: activeViewLayer,
-            fallback_state: student.state
-          });
-          // Usar estado CPM como fallback seguro (mejor que bloquear render)
-          // Construir stateData mínimo desde student.state (viene de CPM)
-          stateData = {
-            state: student.state,
-            visual_state: student.visual_state || student.state,
-            metrics: {} // Metrics no disponibles en fallback
-          };
-        } else {
-          // NO agregar estudiante a ninguna columna (bloquear render)
-          // Mostrar error visible en la columna correspondiente
-          if (!studentsByState._error) {
-            studentsByState._error = [];
-          }
-          studentsByState._error.push({
-            ...student,
-            _error_message: `Estado no disponible — datos inconsistentes (view_layer: ${activeViewLayer})`
-          });
-          return; // Saltar este estudiante
-        }
+        throw error; // FAIL-HARD: No renderizar columnas sin state_by_view_layer
       }
       
-      // FIX 4: Assert defensivo - verificar que state existe en stateData
-      if (!stateData.state) {
-        console.error('[INVARIANT_BROKEN] Missing state in state_by_view_layer - Proyección → Columna invariante violado', {
+      // state_by_view_layer[activeViewLayer] está presente → usar siempre
+      const stateData = student.state_by_view_layer[activeViewLayer];
+      
+      // BUG-004 FIX: Validar que stateData tiene state (fail-hard si falta)
+      if (!stateData || !stateData.state) {
+        const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer[${activeViewLayer}].state es OBLIGATORIO pero falta. Student: ${student.student_uuid}`);
+        console.error('[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
           student_uuid: student.student_uuid,
           item_ref: item.item_ref,
           activeViewLayer,
-          stateData_keys: Object.keys(stateData)
+          stateData_keys: stateData ? Object.keys(stateData) : [],
+          error: error.message
         });
-        if (!studentsByState._error) {
-          studentsByState._error = [];
-        }
-        studentsByState._error.push({
-          ...student,
-          _error_message: `Estado sin campo 'state' — datos inconsistentes (view_layer: ${activeViewLayer})`
-        });
-        return; // Saltar este estudiante
+        throw error; // FAIL-HARD: No renderizar sin state
       }
       
       // Determinar estado de columna según item_kind
@@ -2904,21 +2884,6 @@
       }
     });
 
-    // BUG-011 FIX: Mostrar columna de error si hay estudiantes con state_by_view_layer faltante
-    if (studentsByState._error && studentsByState._error.length > 0) {
-      const errorColumn = document.createElement('div');
-      errorColumn.style.cssText = 'padding: 1rem; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 0.5rem; margin-bottom: 1rem;';
-      const errorTitle = document.createElement('div');
-      errorTitle.textContent = '❌ ERROR: Estado no disponible';
-      errorTitle.style.cssText = 'color: #fca5a5; font-weight: 600; margin-bottom: 0.5rem;';
-      errorColumn.appendChild(errorTitle);
-      const errorDesc = document.createElement('div');
-      errorDesc.textContent = `${studentsByState._error.length} estudiante(s) con datos inconsistentes. El backend no devolvió state_by_view_layer.`;
-      errorDesc.style.cssText = 'color: #fca5a5; font-size: 0.875rem;';
-      errorColumn.appendChild(errorDesc);
-      content.appendChild(errorColumn);
-    }
-    
     // BUG-012 FIX: Validar item_kind antes de renderizar columnas (bloquear si inconsistente)
     if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
       console.error('[MasterAlquimiaGeneral] [BUG-012] item_kind inválido o faltante antes de renderizar columnas', {
@@ -4806,7 +4771,12 @@
                 total
               });
               
-              showToastSuccess(`Reset ALL completado (${applied} aplicados, ${skipped} omitidos de ${total} estudiantes)`);
+              // BUG-003 FIX: applied = 0 NO es éxito
+              if (applied === 0) {
+                showToastWarning('No se aplicaron cambios (acción idempotente o sin efecto)');
+              } else {
+                showToastSuccess(`Reset ALL completado (${applied} aplicados, ${skipped} omitidos de ${total} estudiantes)`);
+              }
               
               // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
             } catch (error) {
@@ -4926,7 +4896,12 @@
                 viewLayer
               );
               
-              showToastSuccess(`Reset completado (${resetResult.applied} aplicado, ${resetResult.skipped} omitido)`);
+              // BUG-003 FIX: applied = 0 NO es éxito
+              if (resetResult.applied === 0) {
+                showToastWarning('No se aplicaron cambios (acción idempotente o sin efecto)');
+              } else {
+                showToastSuccess(`Reset completado (${resetResult.applied} aplicado, ${resetResult.skipped} omitido)`);
+              }
 
               // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
             } catch (error) {
@@ -6521,111 +6496,70 @@
         modal_item_ref: state.modal?.item?.item_ref
       });
       
-      // UX CONTRACT v1: Si hay surfaces declarativas, usar Refresh Surface Registry
-      if (surfaces.length > 0 && window.__AP_REFRESH_SURFACE_REGISTRY__) {
-        const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
-        const uiState = {
-          view_mode: state.projection.mode,
-          view_layer: scope.view_layer || state.projection.view_layer || 'shared',
-          list_id: context.list_id || state.listaActiva?.id || null,
-          student_uuid: context.student_uuid || state.projection.student_uuid || null
-          // CPM v1: modal_layerView eliminado - usar view_layer de proyección
-        };
-
-        console.log('[REFRESH_ENGINE][ALQG][SURFACES] Ejecutando surfaces declarativas', {
+      // ============================================================================
+      // BUG-002 FIX: Eliminar fallback legacy - Refresh sin surfaces prohibido
+      // REGLA CONSTITUCIONAL A2: Si surfaces está vacío → Error, no ejecutar refresh
+      // ============================================================================
+      if (surfaces.length === 0) {
+        const error = new Error(`[INVARIANT_BROKEN][REFRESH_SURFACE_EMPTY] buildRefreshPlan() retornó surfaces vacío. Esto viola Refresh Engine v2.`);
+        console.error('[REFRESH_ENGINE][ALQG][ERROR]', {
           mutation_type,
-          surfaces,
-          timestamp: new Date().toISOString()
-        });
-
-        // Ejecutar cada surface
-        for (const surface_id of surfaces) {
-          try {
-            await surfaceRegistry.refetch(surface_id, context, uiState);
-          } catch (error) {
-            console.error(`[REFRESH_ENGINE][ALQG][SURFACE_ERROR] ${surface_id}`, {
-              mutation_type,
-              surface_id,
-              error: error.message,
-              timestamp: new Date().toISOString()
-            });
-            // Continuar con otras surfaces aunque una falle
+          action_id: context.action_id || null,
+          error: error.message,
+          context,
+          uiState: {
+            view_mode: state.projection.mode,
+            view_layer: scope.view_layer || state.projection.view_layer,
+            list_id: context.list_id || state.listaActiva?.id
           }
-        }
-
-        console.log('[REFRESH_ENGINE][ALQG][SURFACES] Completado', {
-          mutation_type,
-          surfaces_executed: surfaces.length,
-          timestamp: new Date().toISOString()
         });
-        return;
+        throw error; // FAIL-HARD: No ejecutar refresh si surfaces está vacío
       }
       
-      // LEGACY: Fallback a lógica manual si no hay surfaces declarativas
-      console.warn('[REFRESH_ENGINE][ALQG][LEGACY_REFRESH] Sin surfaces declarativas, usando lógica manual', {
+      if (!window.__AP_REFRESH_SURFACE_REGISTRY__) {
+        const error = new Error(`[INVARIANT_BROKEN][REFRESH_SURFACE_REGISTRY_MISSING] Refresh Surface Registry no está disponible.`);
+        console.error('[REFRESH_ENGINE][ALQG][ERROR]', {
+          mutation_type,
+          action_id: context.action_id || null,
+          error: error.message
+        });
+        throw error; // FAIL-HARD: No ejecutar refresh sin registry
+      }
+      
+      // UX CONTRACT v1: Usar Refresh Surface Registry (único camino válido)
+      const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: scope.view_layer || state.projection.view_layer || 'shared',
+        list_id: context.list_id || state.listaActiva?.id || null,
+        student_uuid: context.student_uuid || state.projection.student_uuid || null
+      };
+
+      console.log('[REFRESH_ENGINE][ALQG][SURFACES] Ejecutando surfaces declarativas', {
         mutation_type,
-        action_id: context.action_id || null
+        surfaces,
+        timestamp: new Date().toISOString()
       });
-      
-      // FIX 3.1: Garantizar coherencia de view_layer
-      const activeViewLayer = scope.view_layer || state.projection.view_layer || 'shared';
-      
-      // FIX CRÍTICO: Refrescar flotante SIEMPRE si está abierto y la mutación afecta ese item
-      const shouldRefreshFlotante = state.modal?.item && 
-                                     context.item_ref && 
-                                     state.modal.item.item_ref === context.item_ref;
-      
-      // Determinar qué refetch hacer según vista activa
-      if (state.projection.mode === 'proyeccion') {
-        console.log('[REFRESH][GET] Ejecutando loadListProjection', {
-          view_layer: state.projection.view_layer,
-          student_uuid: state.projection.student_uuid,
-          list_id: state.listaActiva?.id,
-          timestamp: new Date().toISOString()
-        });
-        await loadListProjection();
-        console.log('[REFRESH_ENGINE][ALQG][REFETCH] Proyección refetcheada', {
-          view_layer: state.projection.view_layer,
-          student_uuid: state.projection.student_uuid,
-          list_id: state.listaActiva?.id
-        });
-      } else if (state.projection.mode === 'operativa') {
-        if (state.listaActiva && state.listaActiva.id) {
-          console.log('[REFRESH][GET] Ejecutando loadItems', {
-            list_id: state.listaActiva.id,
+
+      // Ejecutar cada surface
+      for (const surface_id of surfaces) {
+        try {
+          await surfaceRegistry.refetch(surface_id, context, uiState);
+        } catch (error) {
+          console.error(`[REFRESH_ENGINE][ALQG][SURFACE_ERROR] ${surface_id}`, {
+            mutation_type,
+            surface_id,
+            error: error.message,
             timestamp: new Date().toISOString()
           });
-          await loadItems(state.listaActiva.id);
-          console.log('[REFRESH_ENGINE][ALQG][REFETCH] Items refetcheados', {
-            list_id: state.listaActiva.id
-          });
+          // Continuar con otras surfaces aunque una falle
         }
       }
-      
-      // CPM v1: Refrescar flotante SIEMPRE si está abierto usando state.projection.view_layer
-      if (shouldRefreshFlotante) {
-        const viewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
-        const modalCleanLayer = context.clean_layer || 'shared';
-        
-        console.log('[REFRESH][GET] [CPM_V1] Ejecutando handleVerItem (flotante)', {
-          item_ref: context.item_ref,
-          view_layer: viewLayer,
-          clean_layer: modalCleanLayer,
-          view_mode: state.projection.mode,
-          source: 'state.projection.view_layer',
-          timestamp: new Date().toISOString()
-        });
-        
-        await handleVerItem(state.modal.item, modalCleanLayer, viewLayer);
-      }
-      
-      console.log('[REFRESH_ENGINE][ALQG][REFETCH] Completado (legacy)', {
+
+      console.log('[REFRESH_ENGINE][ALQG][SURFACES] Completado', {
         mutation_type,
-        view_mode: state.projection.mode,
-        surfaces_refreshed: state.projection.mode === 'proyeccion' 
-          ? (shouldRefreshFlotante ? 'projection+flotante' : 'projection')
-          : (shouldRefreshFlotante ? 'items+flotante' : 'items'),
-        flotante_refreshed: shouldRefreshFlotante
+        surfaces_executed: surfaces.length,
+        timestamp: new Date().toISOString()
       });
     },
     

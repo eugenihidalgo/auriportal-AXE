@@ -70,6 +70,21 @@ function buildRefreshPlan(context, uiState, responseData = null) {
     });
   }
 
+  // ============================================================================
+  // BUG-002 FIX: Blindar buildRefreshPlan() - NUNCA puede retornar []
+  // REGLA CONSTITUCIONAL A2: Refresh Engine → Surface obligatoria
+  // ============================================================================
+  if (surfaces.length === 0) {
+    // Inyectar forzosamente alquimia.list_projection como default
+    surfaces.push('alquimia.list_projection');
+    console.warn('[AlquimiaActions][buildRefreshPlan] [INVARIANT_ENFORCED][REFRESH_SURFACE_DEFAULT] surfaces vacío, inyectando alquimia.list_projection por defecto', {
+      context,
+      uiState,
+      view_mode,
+      list_id
+    });
+  }
+
   return surfaces;
 }
 

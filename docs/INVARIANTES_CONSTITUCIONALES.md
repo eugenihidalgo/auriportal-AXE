@@ -787,4 +787,109 @@ npm run check:ux-refresh
 
 ---
 
+---
+
+## Invariante 13: Fuente Única de Columnas
+
+### Regla
+
+La columna en que aparece un estudiante se decide por un **único campo canónico** proveniente del backend: `state_by_view_layer[view_layer].state`.
+
+**PROHIBIDO:**
+- ❌ UI agrupa por un campo y botones actúan por otro
+- ❌ Fallback a `student.state` legacy
+- ❌ Renderizar columnas sin `state_by_view_layer[view_layer]`
+- ❌ Columna `_error` o render parcial sin estado
+
+**OBLIGATORIO:**
+- ✅ UI consume EXCLUSIVAMENTE `state_by_view_layer[view_layer].state`
+- ✅ Si falta `state_by_view_layer` → ERROR fail-hard, NO render
+- ✅ No hay fallback, no hay columnas especiales, no hay render parcial
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que no hay fallback a student.state
+grep -r "student\.state\s*[!=]|fallback.*student\.state" public/js/master --exclude-dir=node_modules
+
+# Verificar que no hay columna _error
+grep -r "_error.*push|studentsByState\._error" public/js/master --exclude-dir=node_modules
+```
+
+**Referencias:**
+- `docs/ALQUIMIA_GENERAL_READ_MODEL.md`
+- `docs/CONSTITUTION_VIEW_AUTHORITY_V1.md`
+
+---
+
+## Invariante 14: Acción → Proyección → Ubicación
+
+### Regla
+
+Tras cualquier acción (clean/reset/override reset), la **proyección debe reflejar el cambio** y el estudiante debe **reubicarse en la columna correcta**.
+
+**PROHIBIDO:**
+- ❌ Acción ejecutada (200 OK) pero estudiante no se mueve de columna
+- ❌ Backend devuelve estado viejo después de mutación
+- ❌ UI agrupa por campo distinto al que el backend calculó
+- ❌ Refresh no refresca la superficie correcta
+
+**OBLIGATORIO:**
+- ✅ Si acción se ejecuta correctamente → proyección recalcula → UI reubica
+- ✅ Si estudiante no se mueve → ERROR visible (sistema roto)
+- ✅ Backend SIEMPRE devuelve `state_by_view_layer` actualizado
+- ✅ Frontend SIEMPRE consume `state_by_view_layer[view_layer].state`
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que refresh engine ejecuta después de mutaciones
+grep -r "afterMutation|refetchSurface" public/js/master --exclude-dir=node_modules
+```
+
+**Referencias:**
+- `docs/UX_CONTRACT_V1.md`
+- `docs/REFRESH_CONTRACT_V1.md`
+
+---
+
+## Invariante 15: Refresh sin Surfaces Prohibido
+
+### Regla
+
+`buildRefreshPlan()` **NUNCA puede devolver** un array vacío `[]`.
+
+Si ocurre, se inyecta forzosamente `alquimia.list_projection` como default.
+
+El fallback legacy queda **prohibido**.
+
+**PROHIBIDO:**
+- ❌ `buildRefreshPlan()` retornar `[]`
+- ❌ Refresh Engine ejecutar refresh manual sin surfaces declarativas
+- ❌ Fallback a lógica legacy de refresh
+
+**OBLIGATORIO:**
+- ✅ `buildRefreshPlan()` SIEMPRE retorna al menos una surface
+- ✅ Si surfaces está vacío → ERROR fail-hard, no ejecutar refresh
+- ✅ Refresh Engine solo ejecuta surfaces declarativas (Refresh Surface Registry)
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que buildRefreshPlan no puede retornar []
+grep -A 5 "return surfaces" src/core/ux/action-registry/alquimia-actions.js
+
+# Verificar que no hay LEGACY_REFRESH
+grep -r "LEGACY_REFRESH" public/js/master --exclude-dir=node_modules
+```
+
+**Referencias:**
+- `docs/UX_CONTRACT_V1.md`
+- `docs/REFRESH_CONTRACT_V1.md`
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**

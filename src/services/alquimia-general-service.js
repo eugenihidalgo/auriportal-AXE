@@ -846,6 +846,50 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         // ============================================================================
 
         // ============================================================================
+        // BUG-001 FIX: Validación fail-hard - state_by_view_layer es OBLIGATORIO
+        // REGLA CONSTITUCIONAL A1: Si falta state_by_view_layer → FAIL-HARD
+        // ============================================================================
+        if (!stateByViewLayer) {
+          const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer es OBLIGATORIO pero falta. Item: ${itemRef}, Student: ${student.student_uuid}`);
+          logError('AlquimiaGeneralService', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+            traceId,
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            item_kind: 'recurrente',
+            view_layer,
+            error: error.message
+          });
+          throw error; // FAIL-HARD: No continuar si falta state_by_view_layer
+        }
+        
+        // Validar que state_by_view_layer tiene al menos shared, pde y effective
+        if (!stateByViewLayer.shared || !stateByViewLayer.pde || !stateByViewLayer.effective) {
+          const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer.shared, pde o effective faltan. Item: ${itemRef}, Student: ${student.student_uuid}`);
+          logError('AlquimiaGeneralService', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+            traceId,
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            item_kind: 'recurrente',
+            available_layers: stateByViewLayer ? Object.keys(stateByViewLayer) : [],
+            error: error.message
+          });
+          throw error;
+        }
+        
+        // Log forense obligatorio: state_by_view_layer OK
+        logInfo('AlquimiaGeneralService', '[CPM_V2][OUTPUT][STATE_BY_VIEW_LAYER_OK]', {
+          traceId,
+          student_uuid: student.student_uuid,
+          item_ref: itemRef,
+          item_kind: 'recurrente',
+          view_layer: view_layer || 'shared',
+          available_layers: Object.keys(stateByViewLayer),
+          has_shared: !!stateByViewLayer.shared,
+          has_pde: !!stateByViewLayer.pde,
+          has_effective: !!stateByViewLayer.effective
+        });
+        
+        // ============================================================================
         // LOG FORENSE TEMPORAL: Proyección RECURRENTE tras limpieza
         // ============================================================================
         const activeLayerState = stateByViewLayer[view_layer || 'shared'];
@@ -1013,6 +1057,50 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
             config: effectiveConfigUnaVez
           })
         };
+        
+        // ============================================================================
+        // BUG-001 FIX: Validación fail-hard - state_by_view_layer es OBLIGATORIO
+        // REGLA CONSTITUCIONAL A1: Si falta state_by_view_layer → FAIL-HARD
+        // ============================================================================
+        if (!stateByViewLayer) {
+          const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer es OBLIGATORIO pero falta. Item: ${itemRef}, Student: ${student.student_uuid}`);
+          logError('AlquimiaGeneralService', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+            traceId,
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            item_kind: 'una_vez',
+            view_layer: effectiveViewLayer,
+            error: error.message
+          });
+          throw error; // FAIL-HARD: No continuar si falta state_by_view_layer
+        }
+        
+        // Validar que state_by_view_layer tiene al menos shared, pde y combo
+        if (!stateByViewLayer.shared || !stateByViewLayer.pde || !stateByViewLayer.combo) {
+          const error = new Error(`[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING] state_by_view_layer.shared, pde o combo faltan. Item: ${itemRef}, Student: ${student.student_uuid}`);
+          logError('AlquimiaGeneralService', '[INVARIANT_BROKEN][STATE_BY_VIEW_LAYER_MISSING]', {
+            traceId,
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            item_kind: 'una_vez',
+            available_layers: stateByViewLayer ? Object.keys(stateByViewLayer) : [],
+            error: error.message
+          });
+          throw error;
+        }
+        
+        // Log forense obligatorio: state_by_view_layer OK
+        logInfo('AlquimiaGeneralService', '[CPM_V2][OUTPUT][STATE_BY_VIEW_LAYER_OK]', {
+          traceId,
+          student_uuid: student.student_uuid,
+          item_ref: itemRef,
+          item_kind: 'una_vez',
+          view_layer: effectiveViewLayer,
+          available_layers: Object.keys(stateByViewLayer),
+          has_shared: !!stateByViewLayer.shared,
+          has_pde: !!stateByViewLayer.pde,
+          has_combo: !!stateByViewLayer.combo
+        });
         
         return {
           ...student,
