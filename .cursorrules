@@ -86,10 +86,22 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
 
 **Bugbot activado para todo el servidor AuriPortal**
 
+⚠️ **NOTA IMPORTANTE**: Bugbot NO es constitucional. Solo detecta errores reales (imports rotos, variables no definidas, crashes). PROHIBIDO sugerir refactors, optimizaciones o cambios arquitectónicos. Bugbot NO tiene autoridad sobre reglas constitucionales.
+
 ---
 
 # =========================================
+# CLASIFICACIÓN DE RULES
+# =========================================
+# Las reglas están organizadas en 4 categorías explícitas:
+# 1. [CONSTITUTIONAL — DO NOT VIOLATE] - Definen la ontología del sistema
+# 2. [DERIVED FROM: <regla>] - Obligatorias pero derivadas de constitucionales
+# 3. [OPERATIONAL INVARIANT] - Postmortem/bug-fix históricos
+# 4. [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL] - Ya erradicado
+
+# =========================================
 # CONSTITUCIÓN UX ACTION REGISTRY v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: ux-action-registry-constitutional
@@ -120,6 +132,7 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
       - NO se acepta implementación sin contrato previo
       - NO se acepta UI que viole el Action Registry
       - El Action Registry es la ÚNICA puerta de intención de usuario
+      # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       LEGACY (PROHIBIDO DESDE CIERRE UX GOVERNANCE v1):
       - ❌ PROHIBIDO crear nuevo código legacy
       - ❌ PROHIBIDO usar [LEGACY_REFRESH_CALL] o [LEGACY_ACTION_CALL]
@@ -187,6 +200,7 @@ Bugbot debe analizar TODOS los archivos del proyecto, incluyendo:
 
 # =========================================
 # CONSTITUCIÓN MASTER SIDEBAR v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
 ## Sidebar MASTER: Registry-Driven + DOM API (OBLIGATORIO)
@@ -270,6 +284,7 @@ El Sidebar MASTER debe seguir este patrón canónico:
 
 # =========================================
 # CONSTITUCIÓN ASSET VERSIONING v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
 ## Asset Versioning Canónico v1 (OBLIGATORIO)
@@ -302,6 +317,7 @@ El Sidebar MASTER debe seguir este patrón canónico:
 
 # =========================================
 # CONSTITUCIÓN MASTER API v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
 ## MASTER-API-001: Separación absoluta API/Island (OBLIGATORIO)
@@ -366,6 +382,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: ui-refetch-after-mutations
     title: UI refetch obligatorio tras mutaciones
+    # [DERIVED FROM: View Authority v1]
     content: >
       La UI MASTER NO debe confiar en estado local después de mutaciones.
       OBLIGATORIO:
@@ -390,12 +407,13 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - respetar status='active' en términos
       - emitir logs estructurados ([CLASSIFICATION][ATTACH])
       PROHIBIDO:
-      - Confiar solo en columnas legacy (category_key, subtype_key, tags en listas_transmutaciones)
+      - Confiar solo en columnas legacy (category_key, subtype_key, tags en listas_transmutaciones) # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Leer clasificaciones sin JOIN con tabla de relación
       - Persistir sin logs estructurados
 
 # =========================================
 # CONSTITUCIÓN LEVEL ENGINE PDE v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: level-engine-pde-v1-authority
@@ -421,7 +439,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       Las pantallas de dominios (alquimia/lugares/proyectos/apadrinados) NO deben calcular niveles PDE.
       PROHIBIDO:
       - Calcular nivel PDE en handlers de dominios
-      - Leer alumnos.nivel_actual para decidir permisos en dominios
+      - Leer alumnos.nivel_actual para decidir permisos en dominios # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Duplicar lógica de niveles en múltiples lugares
       OBLIGATORIO:
       - Consultar Level Engine vía API o servicio para obtener nivel/fase PDE
@@ -509,7 +527,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Calcular niveles, días o fases en UI
       - Duplicar lógica del Level Engine
       - Usar APIs ADMIN desde MASTER
-      - Ejecutar inject_main.js en MASTER
+      - Ejecutar inject_main.js en MASTER # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Usar innerHTML dinámico
       OBLIGATORIO:
       - Consumir SOLO APIs MASTER
@@ -536,6 +554,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # CONSTITUCIÓN CLEANING ENGINE v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: cleaning-engine-v1-single-decider
@@ -545,7 +564,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       PROHIBIDO:
       - Calcular estados de limpieza (reviewed/pending/important/completed) fuera del Cleaning Engine
       - Escribir directamente en cleaning_item_state sin pasar por Cleaning Engine
-      - Usar student_item_state (tabla histórica, no usada en runtime)
+      - Usar student_item_state (tabla histórica, no usada en runtime) # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Duplicar lógica de limpieza en handlers o servicios
       OBLIGATORIO:
       - Toda mutación de estado de limpieza pasa por CleaningEngineService
@@ -565,7 +584,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       OBLIGATORIO:
       - Toda acción debe declarar explícitamente su clean_layer
       - SHARED y PDE se registran en cleaning_events y cleaning_item_state (UUID-only)
-      - student_item_state es tabla histórica, NO se usa en runtime
+      - student_item_state es tabla histórica, NO se usa en runtime # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
 
   - id: cleaning-engine-paused-exclusion
     title: Exclusión obligatoria de estudiantes pausados
@@ -646,6 +665,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: cleaning-engine-pde-refresh-modal
     title: Refresh obligatorio del modal después de PDE clean-all
+    # [OPERATIONAL INVARIANT] - Postmortem: bug histórico
     content: >
       Después de ejecutar PDE clean-all, el modal "VER" DEBE refrescarse con clean_layer='pde'.
       PROHIBIDO:
@@ -660,6 +680,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: infra-repos-pg-import-canonical
     title: Infra repos PG deben importar desde módulo canónico real
+    # [OPERATIONAL INVARIANT] - Postmortem: error ERR_MODULE_NOT_FOUND
     content: >
       Los repositorios PostgreSQL en src/infra/repos/**/*-repo-pg.js DEBEN importar database/pg.js desde el path correcto.
       PROHIBIDO:
@@ -674,6 +695,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: cleaning-engine-required-count-coherence
     title: Coherencia de remaining cuando cambia required_count (veces_limpiar)
+    # [OPERATIONAL INVARIANT] - Postmortem: bug histórico
     content: >
       Cuando cambia veces_limpiar (required_count) de un item una_vez, DEBE recalcularse remaining para todos los estudiantes activos.
       PROHIBIDO:
@@ -688,6 +710,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: cleaning-engine-reset-clean-invariant
     title: Invariante Reset no puede bloquear Clean (recurrente)
+    # [OPERATIONAL INVARIANT] - Postmortem: fix v5.77.5
     content: >
       Si hay un RESET previo y se ejecuta un CLEAN, el CLEAN DEBE actualizar last_cleaned_at correctamente, independientemente de la proximidad temporal entre RESET y CLEAN.
       PROHIBIDO:
@@ -737,6 +760,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: alquimia-flotante-no-filter-level
     title: Flotante alumnos NO filtra por nivel en MASTER
+    # [OPERATIONAL INVARIANT] - Postmortem: bug histórico
     content: >
       En flotantes de Alquimia General NO se filtra por nivel. Deben salir TODOS los alumnos siempre.
       PROHIBIDO:
@@ -751,9 +775,11 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/MASTER_ALQUIMIA_FLOTANTE_ALUMNOS_CONTRATO.md
       - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
 
-  - id: alquimia-refresh-deterministic
-    title: Refresh determinista post-acción de limpieza
-    content: >
+ - id: alquimia-refresh-deterministic
+ title: Refresh determinista post-acción de limpieza
+ # [DERIVED FROM: View Authority v1]
+ # [CONSOLIDADO: Ver también ui-refetch-after-mutations, cpm-refetch-after-mutations]
+ content: >
       Tras cualquier acción de limpieza exitosa, la UI DEBE refrescarse de forma determinista.
       OBLIGATORIO:
       - Tras limpiar item desde Alquimia Alumno: re-fetch inmediato de megalist
@@ -814,6 +840,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
  - id: cpm-input-parity-mandatory
  title: Paridad de inputs CPM v2 entre superficies obligatoria
+ # [DERIVED FROM: CPM v1]
  content: >
  Para los mismos (student_uuid + item_ref + view_layer + item_kind), todas las superficies (list-projection, flotante, megalist) DEBEN pasar al CPM v2 inputs idénticos.
  OBLIGATORIO:
@@ -837,6 +864,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
  - id: refresh-flotante-independent-view-mode
  title: Refresh de flotante independiente del view_mode
+ # [DERIVED FROM: View Authority v1]
  content: >
  El flotante puede estar abierto en cualquier modo (proyección u operativa). El refresh del flotante DEBE ser independiente del view_mode.
  OBLIGATORIO:
@@ -858,6 +886,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
  - id: ux-contract-v1-mandatory
  title: UX Contract v1 obligatorio para mutaciones UI
+ # [DERIVED FROM: UX Action Registry v1]
  content: >
  Toda mutación UI DEBE pasar por performAction() wrapper canónico.
  OBLIGATORIO:
@@ -869,7 +898,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
  - action_id sigue formato canónico: {domain}.{feature}.{action} (ej: alquimia.clean.student)
  - Añadir/actualizar check script cuando se añaden actions/surfaces nuevas
  PROHIBIDO:
- - fetch() POST fuera de performAction() (salvo marcado LEGACY con [LEGACY_REFRESH_CALL] y warning)
+      - fetch() POST fuera de performAction() (salvo marcado LEGACY con [LEGACY_REFRESH_CALL] y warning) # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
  - Llamadas a loadItems/loadListProjection/handleVerItem dentro de handlers POST (deben estar en refresh_plan)
  - Acciones sin registro en UX Action Registry
  - Acciones sin refresh_plan
@@ -913,6 +942,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # CONSTITUCIÓN BACKUPS POSTGRESQL v1
+# [OPERATIONAL INVARIANT]
 # =========================================
 
   - id: backups-postgresql-gitignore-mandatory
@@ -976,6 +1006,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # CONSTITUCIÓN IDENTIDAD ALUMNOS UUID-ONLY v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: alumnos-uuid-only-constitutional
@@ -1006,6 +1037,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: servicios-no-acceso-db-directo
     title: Servicios NO acceden a DB directamente
+    # [OPERATIONAL INVARIANT] - Postmortem: error ERR_MODULE_NOT_FOUND en student-creation-service.js
     content: >
       Los servicios del dominio MASTER NO deben importar database/pg.js directamente.
       PROHIBIDO:
@@ -1025,6 +1057,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: handlers-master-api-try-catch-required
     title: Handlers MASTER API: try debe tener catch o finally
+    # [OPERATIONAL INVARIANT] - Postmortem: error sintaxis en master-api-alquimia-general.js
     content: >
       Los handlers MASTER API deben ser sintácticamente importables.
       PROHIBIDO:
@@ -1043,6 +1076,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # CONSTITUCIÓN VIEW AUTHORITY v1 (AUTORIDAD DE VISTA)
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: view-authority-backend-only
@@ -1054,7 +1088,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Inferir estados desde datos raw (shared_last_cleaned_at, pde_last_cleaned_at)
       - Combinar estados localmente (shared + pde)
       - Reutilizar estados previos sin refetch
-      - Agrupar items por campos legacy (student.state, visual_state) si existe state_by_view_layer
+      - Agrupar items por campos legacy (student.state, visual_state) si existe state_by_view_layer # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       OBLIGATORIO:
       - Solicitar datos al backend con view_layer explícita
       - Consumir EXCLUSIVAMENTE state_by_view_layer[view_layer]
@@ -1115,13 +1149,15 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: frontend-no-state-calculation
     title: Frontend NO calcula estados ni decide columnas
+    # [DERIVED FROM: View Authority v1]
+    # [CONSOLIDADO: Ver también cpm-no-inference-frontend, view-authority-backend-only]
     content: >
       El frontend NO puede calcular estados ni decidir en qué columna va un item.
       PROHIBIDO:
       - Calcular days_since_last_clean en frontend
       - Comparar con frecuencia_days en frontend para decidir estado
       - Usar shared_last_cleaned_at o pde_last_cleaned_at directamente para agrupar
-      - Fallback a campos legacy (student.state, visual_state) sin warning DEPRECATED
+      - Fallback a campos legacy (student.state, visual_state) sin warning DEPRECATED # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Reutilizar estado previo para decidir columna tras acción
       OBLIGATORIO:
       - Consumir EXCLUSIVAMENTE state_by_view_layer[view_layer]
@@ -1213,6 +1249,7 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # CLEANING PROJECTION MODEL (CPM) v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: cpm-v1-canonical-authority
@@ -1282,6 +1319,8 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: cpm-no-inference-frontend
     title: Frontend NO puede calcular estados ni inferir desde datos raw
+    # [DERIVED FROM: View Authority v1]
+    # [CONSOLIDADO: Ver también frontend-no-state-calculation, view-authority-backend-only]
     content: >
       El frontend NO puede calcular estados de limpieza.
       PROHIBIDO:
@@ -1298,6 +1337,8 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
   - id: cpm-refetch-after-mutations
     title: Refetch obligatorio tras mutaciones (preserva view_layer)
+    # [DERIVED FROM: View Authority v1]
+    # [CONSOLIDADO: Ver también ui-refetch-after-mutations, alquimia-refresh-deterministic]
     content: >
       Tras cualquier mutación de limpieza, hacer refetch completo preservando view_layer activa.
       PROHIBIDO:
@@ -1314,9 +1355,12 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
 
 # =========================================
 # PROJECTION-DRIVEN UI (PDUI) v1
+# [DERIVED FROM: View Authority v1]
 # =========================================
 
 ## PROJECTION-DRIVEN UI (PDUI)
+# Esta sección es una DERIVADA de View Authority v1.
+# No introduce nueva semántica, solo refuerza el principio constitucional.
 
 - El backend es la única autoridad de estado.
 - Todo GET debe aceptar parámetros explícitos.
@@ -1330,6 +1374,7 @@ Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
 
 # =========================================
 # CONSTITUCIÓN RUNTIME CORE v1
+# [CONSTITUTIONAL — DO NOT VIOLATE]
 # =========================================
 
   - id: runtime-core-deterministic-v1
@@ -1338,7 +1383,7 @@ Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
       Runtime Core v1 es el ÚNICO gate determinista para el estado de readiness del runtime.
       PROHIBIDO:
       - Exponer window.performAction si runtime no está READY
-      - Fallback legacy en core (__AP_UX_ACTION_REGISTRY__ legacy)
+      - Fallback legacy en core (__AP_UX_ACTION_REGISTRY__ legacy) # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - console.error y continuar en runtime core (debe fail-hard)
       - Resolver promesas de ready si hay errores
       - Continuar en modo degradado si runtime está BROKEN
@@ -1387,7 +1432,7 @@ Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
     content: >
       El runtime core NO debe usar fallbacks legacy.
       PROHIBIDO:
-      - Fallback a __AP_UX_ACTION_REGISTRY__ legacy en perform-action.v1.js
+      - Fallback a __AP_UX_ACTION_REGISTRY__ legacy en perform-action.v1.js # [LEGACY HISTÓRICO — NO BUSCAR EN CÓDIGO ACTUAL]
       - Continuar sin registry core (modo degradado)
       - Resolver promesas de ready si registry core no está disponible
       OBLIGATORIO:
