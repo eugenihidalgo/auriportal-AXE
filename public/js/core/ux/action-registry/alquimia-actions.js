@@ -25,8 +25,9 @@ import { registerAction } from './ux-action-registry.js';
  */
 function buildRefreshPlan(context, uiState, responseData = null) {
   const surfaces = [];
-  const view_mode = uiState.view_mode || 'operativa';
-  const list_id = uiState.list_id || context.list_id;
+  // HOTFIX: Robustecer obtención de view_mode y list_id (pueden venir de context o uiState)
+  const view_mode = uiState?.view_mode || context?.view_mode || 'operativa';
+  const list_id = uiState?.list_id || context?.list_id;
 
   // Proyección: siempre refrescar si hay list_id
   if (view_mode === 'proyeccion' && list_id) {
@@ -40,11 +41,24 @@ function buildRefreshPlan(context, uiState, responseData = null) {
 
   // Flotante: SIEMPRE refrescar si está abierto e item_ref coincide
   // INDEPENDIENTEMENTE del view_mode (regla constitucional)
+  // BUG-008 FIX: Detección robusta - Si hay item_ref, refrescar siempre (idempotente)
   if (context.item_ref) {
-    const alquimiaState = typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__;
-    if (alquimiaState?.modal?.item?.item_ref === context.item_ref) {
-      surfaces.push('alquimia.flotante_students');
-    }
+    // BUG-008: Estrategia robusta - Si hay item_ref, refrescar flotante siempre
+    // El refresh es idempotente (refrescar aunque no esté abierto no es error)
+    // NO depender de window.__AP_ALQUIMIA_STATE__ (puede no estar disponible)
+    surfaces.push('alquimia.flotante_students');
+  }
+  
+  // HOTFIX: Parche obligatorio - Si view_mode=proyeccion y list_id existe, SIEMPRE incluir list_projection
+  // Esto debe ocurrir aunque no se haya detectado arriba
+  if (view_mode === 'proyeccion' && list_id && !surfaces.includes('alquimia.list_projection')) {
+    surfaces.push('alquimia.list_projection');
+  }
+  
+  // BUG-002 FIX: Blindar buildRefreshPlan() - NUNCA puede retornar []
+  if (surfaces.length === 0) {
+    // Inyectar forzosamente alquimia.list_projection como default
+    surfaces.push('alquimia.list_projection');
   }
 
   return surfaces;
