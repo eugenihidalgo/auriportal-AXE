@@ -104,8 +104,8 @@ export function computeEffectiveState({ item_kind, view_layer, item_config, clea
 function computeRecurrenteState({ view_layer, threshold_days, criticalThreshold, shared, pde }) {
   if (view_layer === 'effective') {
     // EFFECTIVE: mejor estado entre shared y pde
-    const sharedState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: shared });
-    const pdeState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: pde });
+    const sharedState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: shared, layer: 'shared' });
+    const pdeState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: pde, layer: 'pde' });
     
     // Prioridad canónica: reviewed > pending > important > reseteado > never
     // `reseteado` es un estado base de ciclo: mejor que `never`, peor que `important`
@@ -142,14 +142,16 @@ function computeRecurrenteState({ view_layer, threshold_days, criticalThreshold,
   }
   
   // view_layer === 'shared' o 'pde'
-  const layerData = view_layer === 'pde' ? pde : shared;
-  return computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData });
+  // REGLA CANÓNICA: effectiveViewLayer = view_layer || clean_layer
+  const effectiveViewLayer = view_layer || 'shared';
+  const layerData = effectiveViewLayer === 'pde' ? pde : shared;
+  return computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData, layer: effectiveViewLayer });
 }
 
 /**
  * Calcula estado para una capa específica de RECURRENTE
  */
-function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData }) {
+function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData, layer }) {
   const lastCleanedAt = layerData?.last_cleaned_at ?? null;
   const effectiveSince = layerData?.effective_since ?? null;
   

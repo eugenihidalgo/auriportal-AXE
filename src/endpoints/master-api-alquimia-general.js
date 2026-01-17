@@ -617,7 +617,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         const scope = url.searchParams.get('scope');
         const studentUuid = url.searchParams.get('student_uuid');
 
-        logInfo('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] GET iniciado', {
+        logInfo('MasterApiAlquimiaGeneral', '[LPM][INPUT] GET list-projection', {
           traceId,
           list_id: listId,
           item_kind: itemKind,
@@ -652,6 +652,56 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           student_uuid: scope === 'student' ? studentUuid : null
         });
 
+        // ============================================================================
+        // INVARIANTE MODO GOD: Validar que todos los items tienen state_by_view_layer
+        // ============================================================================
+        if (!projection.items || !Array.isArray(projection.items)) {
+          const error = new Error('[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] projection.items no es array');
+          logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
+            traceId,
+            error: error.message,
+            projection_keys: projection ? Object.keys(projection) : []
+          });
+          throw error;
+        }
+
+        // Validar que cada item tiene state_by_view_layer
+        for (const item of projection.items) {
+          if (!item.state_by_view_layer) {
+            const error = new Error(`[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] Item ${item.item_ref || item.id} no tiene state_by_view_layer`);
+            logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
+              traceId,
+              item_ref: item.item_ref || item.id,
+              item_keys: item ? Object.keys(item) : [],
+              error: error.message
+            });
+            throw error;
+          }
+
+          // Validar que state_by_view_layer tiene al menos shared y pde
+          if (!item.state_by_view_layer.shared || !item.state_by_view_layer.pde) {
+            const error = new Error(`[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] Item ${item.item_ref || item.id} state_by_view_layer no tiene shared o pde`);
+            logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
+              traceId,
+              item_ref: item.item_ref || item.id,
+              available_layers: item.state_by_view_layer ? Object.keys(item.state_by_view_layer) : [],
+              error: error.message
+            });
+            throw error;
+          }
+
+          // Log forense: state_by_view_layer calculado correctamente
+          logInfo('MasterApiAlquimiaGeneral', '[LPM][STATE_CALCULATED] Item con state_by_view_layer OK', {
+            traceId,
+            item_ref: item.item_ref || item.id,
+            available_layers: Object.keys(item.state_by_view_layer),
+            has_shared: !!item.state_by_view_layer.shared,
+            has_pde: !!item.state_by_view_layer.pde,
+            has_effective: !!item.state_by_view_layer.effective,
+            has_combo: !!item.state_by_view_layer.combo
+          });
+        }
+
         // Obtener lista con clasificaciones para list_meta
         const lista = await getListaById(parseInt(listId, 10));
         if (!lista) {
@@ -683,13 +733,16 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           }
         };
 
-        logInfo('MasterApiAlquimiaGeneral', '[LPM][LIST_PROJECTION] GET completado', {
+        logInfo('MasterApiAlquimiaGeneral', '[LPM][OUTPUT_OK] GET list-projection completado', {
           traceId,
           list_id: listId,
           total_items: projection.metrics.total_items,
           reviewed_pct: projection.metrics.reviewed_pct,
           dominant_state: projection.list_state.dominant_state,
-          health_bucket: projection.list_state.health_bucket
+          health_bucket: projection.list_state.health_bucket,
+          items_with_state_by_view_layer: projection.items.length,
+          view_layer: viewLayer,
+          item_kind: itemKind
         });
 
         return jsonSuccess({
