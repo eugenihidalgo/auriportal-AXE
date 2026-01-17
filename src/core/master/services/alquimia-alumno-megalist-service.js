@@ -18,6 +18,7 @@ import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
 import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
 import { computeVisualState } from './cleaning-projection-model.js';
 import { validateViewLayer } from './cleaning-layer-constants.js';
+import { calculateSeedReadinessMetrics } from './seed-readiness-metrics-service.js';
 
 /**
  * Calcula days_since_last_clean desde last_cleaned_at
@@ -819,6 +820,48 @@ export async function getMegalistForStudent(options = {}) {
       }
     };
     
+    // ============================================================================
+    // SEED READINESS METRICS v1: Calcular métricas de estado de seed (sin ejecutar seed)
+    // ============================================================================
+    let seedMetrics = null;
+    try {
+      seedMetrics = await calculateSeedReadinessMetrics({
+        student_uuid,
+        product_key: 'pde',
+        domain_type: 'transmutation',
+        level_cap: nivelCap,
+        lista_tipo
+      });
+      
+      // Log forense solo si missing_state_count > 0
+      if (seedMetrics.missing_state_count > 0) {
+        logInfo('AlquimiaAlumnoMegalist', '[SEED_READINESS][FORENSIC] Estados faltantes detectados', {
+          traceId,
+          student_uuid,
+          view_layer,
+          lista_tipo,
+          level_cap: nivelCap,
+          missing_state_count: seedMetrics.missing_state_count,
+          total_applicable_items: seedMetrics.total_applicable_items,
+          total_items_with_state: seedMetrics.total_items_with_state,
+          needs_initialize: seedMetrics.needs_initialize,
+          ...(seedMetrics.sample_missing_item_refs ? { sample_missing_item_refs: seedMetrics.sample_missing_item_refs } : {})
+        });
+      }
+    } catch (metricsError) {
+      // Fail-open: no bloquear respuesta si métricas fallan
+      logWarn('AlquimiaAlumnoMegalist', 'Error calculando seed readiness metrics (fail-open)', {
+        traceId,
+        student_uuid,
+        error: metricsError.message
+      });
+    }
+    
+    // Añadir seed_metrics a la respuesta
+    if (seedMetrics) {
+      result.seed_metrics = seedMetrics;
+    }
+    
     logInfo('AlquimiaAlumnoMegalist', 'Megalista construida desde estado (items planos)', {
       traceId,
       student_uuid,
@@ -829,7 +872,8 @@ export async function getMegalistForStudent(options = {}) {
       pending,
       reviewed,
       lists_count: lists.length,
-      warnings_count: warnings.length
+      warnings_count: warnings.length,
+      ...(seedMetrics ? { seed_metrics: seedMetrics } : {})
     });
     
     return result;
