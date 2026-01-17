@@ -100,4 +100,4 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 
 ---
 
-**Última actualización:** 2026-01-13
+**Última actualización:** 2026-01-17
