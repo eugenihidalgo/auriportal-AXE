@@ -126,18 +126,59 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][START] GET /listas iniciado', { traceId, tipo });
         
         // ============================================================================
-        // NORMALIZACIÓN DEFENSIVA CANÓNICA: listListas debe retornar array válido
+        // PASO 1: Query (no tocamos esto)
         // ============================================================================
-        const listasRaw = await listListas({ onlyActive: true, tipo });
-        const listas = Array.isArray(listasRaw) ? listasRaw : [];
-        
-        if (!Array.isArray(listasRaw)) {
-          logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] listListas no retornó array, normalizando', {
+        let listasRaw = null;
+        try {
+          listasRaw = await listListas({ onlyActive: true, tipo });
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][QUERY_OK] listListas completado', {
             traceId,
             tipo,
-            listasRaw_type: typeof listasRaw,
-            normalized_to_empty: listas.length === 0
+            has_result: listasRaw != null,
+            result_type: typeof listasRaw,
+            is_array: Array.isArray(listasRaw)
           });
+        } catch (queryError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][QUERY] Error en listListas', {
+            traceId,
+            tipo,
+            error: queryError.message,
+            error_code: queryError.code,
+            stack: queryError.stack
+          });
+          throw queryError; // Re-lanzar para que el catch externo lo maneje
+        }
+        
+        // ============================================================================
+        // PASO 2: Normalización inicial (aquí puede fallar)
+        // ============================================================================
+        let listas = null;
+        try {
+          listas = Array.isArray(listasRaw) ? listasRaw : [];
+          
+          if (!Array.isArray(listasRaw)) {
+            logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] listListas no retornó array, normalizando', {
+              traceId,
+              tipo,
+              listasRaw_type: typeof listasRaw,
+              normalized_to_empty: listas.length === 0
+            });
+          }
+          
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZE_OK] Normalización inicial completada', {
+            traceId,
+            listas_count: listas.length
+          });
+        } catch (normalizeError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error en normalización inicial de listas', {
+            traceId,
+            tipo,
+            error: normalizeError.message,
+            error_code: normalizeError.code,
+            stack: normalizeError.stack,
+            listasRaw_type: typeof listasRaw
+          });
+          throw normalizeError; // Re-lanzar para que el catch externo lo maneje
         }
         
         // ============================================================================
@@ -209,14 +250,31 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           }
         }
         
-        logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /listas completado', { 
-          traceId, 
-          tipo, 
-          count: listas.length,
-          listas_con_classification: listas.filter(l => l.classification).length
-        });
-        
-        return jsonSuccess({ listas }, traceId);
+        // ============================================================================
+        // PASO 3: Construcción de respuesta (aquí también puede fallar)
+        // ============================================================================
+        try {
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /listas completado', { 
+            traceId, 
+            tipo, 
+            count: listas.length,
+            listas_con_classification: listas.filter(l => l.classification).length
+          });
+          
+          return jsonSuccess({ listas }, traceId);
+        } catch (responseError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error construyendo respuesta JSON en GET /listas', {
+            traceId,
+            tipo,
+            error: responseError.message,
+            error_code: responseError.code,
+            stack: responseError.stack,
+            listas_type: typeof listas,
+            listas_is_array: Array.isArray(listas),
+            listas_count: listas ? listas.length : null
+          });
+          throw responseError; // Re-lanzar para que el catch externo lo maneje
+        }
       }
       catch (error) {
         // ============================================================================
@@ -607,46 +665,98 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       });
       
       try {
-        const allClassifications = await getAllClassifications();
-        
         // ============================================================================
-        // NORMALIZACIÓN DEFENSIVA CANÓNICA: Arrays inexistentes → []
-        // DATOS INCOMPLETOS ≠ ERROR
+        // PASO 1: Query (no tocamos esto)
         // ============================================================================
-        const normalized = {
-          categories: Array.isArray(allClassifications?.categories) ? allClassifications.categories : [],
-          subtypes: Array.isArray(allClassifications?.subtypes) ? allClassifications.subtypes : [],
-          tags: Array.isArray(allClassifications?.tags) ? allClassifications.tags : []
-        };
-        
-        // Log WARN si la DB está vacía (estado válido, no error)
-        if (normalized.categories.length === 0 && normalized.subtypes.length === 0 && normalized.tags.length === 0) {
-          logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] DB de clasificaciones vacía (estado válido)', {
+        let allClassifications = null;
+        try {
+          allClassifications = await getAllClassifications();
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][QUERY_OK] getAllClassifications completado', {
             traceId,
-            message: 'No hay categorías, subtipos ni tags en la base de datos. Estado válido, no error.'
+            has_result: !!allClassifications,
+            result_type: typeof allClassifications
           });
+        } catch (queryError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][QUERY] Error en getAllClassifications', {
+            traceId,
+            error: queryError.message,
+            error_code: queryError.code,
+            stack: queryError.stack
+          });
+          throw queryError; // Re-lanzar para que el catch externo lo maneje
         }
         
-        logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /classifications completado', {
-          traceId,
-          categories_count: normalized.categories.length,
-          subtypes_count: normalized.subtypes.length,
-          tags_count: normalized.tags.length
-        });
+        // ============================================================================
+        // PASO 2: Transformación / Normalización (aquí puede fallar)
+        // ============================================================================
+        let normalized = null;
+        try {
+          normalized = {
+            categories: Array.isArray(allClassifications?.categories) ? allClassifications.categories : [],
+            subtypes: Array.isArray(allClassifications?.subtypes) ? allClassifications.subtypes : [],
+            tags: Array.isArray(allClassifications?.tags) ? allClassifications.tags : []
+          };
+          
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZE_OK] Normalización completada', {
+            traceId,
+            categories_count: normalized.categories.length,
+            subtypes_count: normalized.subtypes.length,
+            tags_count: normalized.tags.length
+          });
+        } catch (transformError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error en transformación/normalización de classifications', {
+            traceId,
+            error: transformError.message,
+            error_code: transformError.code,
+            stack: transformError.stack,
+            allClassifications_type: typeof allClassifications,
+            allClassifications_keys: allClassifications ? Object.keys(allClassifications) : null
+          });
+          throw transformError; // Re-lanzar para que el catch externo lo maneje
+        }
         
-        // Formato canónico: { ok: true, categories: [], subtypes: [], tags: [] }
-        // (consistente con otros endpoints que devuelven { lista }, { listas }, etc.)
-        return jsonSuccess(normalized, traceId);
+        // ============================================================================
+        // PASO 3: Construcción de respuesta (aquí también puede fallar)
+        // ============================================================================
+        try {
+          // Log WARN si la DB está vacía (estado válido, no error)
+          if (normalized.categories.length === 0 && normalized.subtypes.length === 0 && normalized.tags.length === 0) {
+            logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] DB de clasificaciones vacía (estado válido)', {
+              traceId,
+              message: 'No hay categorías, subtipos ni tags en la base de datos. Estado válido, no error.'
+            });
+          }
+          
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /classifications completado', {
+            traceId,
+            categories_count: normalized.categories.length,
+            subtypes_count: normalized.subtypes.length,
+            tags_count: normalized.tags.length
+          });
+          
+          // Formato canónico: { ok: true, categories: [], subtypes: [], tags: [] }
+          return jsonSuccess(normalized, traceId);
+        } catch (responseError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error construyendo respuesta JSON', {
+            traceId,
+            error: responseError.message,
+            error_code: responseError.code,
+            stack: responseError.stack,
+            normalized_type: typeof normalized
+          });
+          throw responseError; // Re-lanzar para que el catch externo lo maneje
+        }
       }
       catch (error) {
         // ============================================================================
         // FAIL-OPEN: Datos incompletos no rompen el endpoint
         // Relación inconsistente ≠ Error estructural
         // ============================================================================
-        logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][SKIP_RELATION] Error obteniendo clasificaciones (fail-open)', {
+        logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error completo en GET /classifications (fail-open)', {
           traceId,
           error: error.message,
           error_code: error.code,
+          error_name: error.name,
           stack: error.stack
         });
         
@@ -934,42 +1044,94 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       try {
         logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][START] GET /item-groups iniciado', { traceId });
         
-        const groupsRaw = await listItemGroups();
-        
         // ============================================================================
-        // NORMALIZACIÓN DEFENSIVA CANÓNICA: groups debe ser array válido
-        // DATOS INCOMPLETOS ≠ ERROR
+        // PASO 1: Query (no tocamos esto)
         // ============================================================================
-        const groups = Array.isArray(groupsRaw) ? groupsRaw : [];
-        
-        if (!Array.isArray(groupsRaw)) {
-          logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] listItemGroups no retornó array, normalizando', {
+        let groupsRaw = null;
+        try {
+          groupsRaw = await listItemGroups();
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][QUERY_OK] listItemGroups completado', {
             traceId,
-            groupsRaw_type: typeof groupsRaw,
-            normalized_to_empty: groups.length === 0
+            has_result: groupsRaw != null,
+            result_type: typeof groupsRaw,
+            is_array: Array.isArray(groupsRaw)
           });
+        } catch (queryError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][QUERY] Error en listItemGroups', {
+            traceId,
+            error: queryError.message,
+            error_code: queryError.code,
+            stack: queryError.stack
+          });
+          throw queryError; // Re-lanzar para que el catch externo lo maneje
         }
         
-        logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /item-groups completado', {
-          traceId,
-          groups_count: groups.length
-        });
-        
-        return jsonSuccess({
-          data: {
-            items: groups
+        // ============================================================================
+        // PASO 2: Transformación / Normalización (aquí puede fallar)
+        // ============================================================================
+        let groups = null;
+        try {
+          groups = Array.isArray(groupsRaw) ? groupsRaw : [];
+          
+          if (!Array.isArray(groupsRaw)) {
+            logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZED] listItemGroups no retornó array, normalizando', {
+              traceId,
+              groupsRaw_type: typeof groupsRaw,
+              normalized_to_empty: groups.length === 0
+            });
           }
-        }, traceId);
+          
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][NORMALIZE_OK] Normalización completada', {
+            traceId,
+            groups_count: groups.length
+          });
+        } catch (transformError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error en transformación/normalización de item-groups', {
+            traceId,
+            error: transformError.message,
+            error_code: transformError.code,
+            stack: transformError.stack,
+            groupsRaw_type: typeof groupsRaw
+          });
+          throw transformError; // Re-lanzar para que el catch externo lo maneje
+        }
+        
+        // ============================================================================
+        // PASO 3: Construcción de respuesta (aquí también puede fallar)
+        // ============================================================================
+        try {
+          logInfo('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][OK] GET /item-groups completado', {
+            traceId,
+            groups_count: groups.length
+          });
+          
+          return jsonSuccess({
+            data: {
+              items: groups
+            }
+          }, traceId);
+        } catch (responseError) {
+          logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error construyendo respuesta JSON en item-groups', {
+            traceId,
+            error: responseError.message,
+            error_code: responseError.code,
+            stack: responseError.stack,
+            groups_type: typeof groups,
+            groups_is_array: Array.isArray(groups)
+          });
+          throw responseError; // Re-lanzar para que el catch externo lo maneje
+        }
       }
       catch (error) {
         // ============================================================================
         // FAIL-OPEN: Datos incompletos no rompen el endpoint
         // Relación inconsistente ≠ Error estructural
         // ============================================================================
-        logWarn('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][SKIP_RELATION] Error en GET item-groups (fail-open)', {
+        logError('MasterApiAlquimiaGeneral', '[ALQ_TRANSFORM][ERROR][CONTEXT] Error completo en GET /item-groups (fail-open)', {
           traceId,
           error: error.message,
-          code: error.code,
+          error_code: error.code,
+          error_name: error.name,
           stack: error.stack
         });
         // Fail-open: devolver array vacío normalizado (estado válido)
