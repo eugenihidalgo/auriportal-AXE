@@ -1628,6 +1628,113 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     }
 
     // ============================================================================
+    // ENDPOINT RESET OVERRIDES (CANÓNICO v1)
+    // ============================================================================
+
+    // POST /master/api/alquimia-general/overrides/reset
+    // Endpoint canónico para resetear overrides de configuración de items
+    // REGLA CONSTITUCIONAL: Override ≠ cleaning state, Override ≠ reset
+    // Solo afecta a overrides (student_item_overrides), NO modifica cleaning_item_state
+    if (path === '/master/api/alquimia-general/overrides/reset' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { scope, student_uuid, item_ref, list_id, item_kind, view_layer } = body;
+
+        // Validaciones obligatorias
+        if (!scope) {
+          return jsonError('scope es obligatorio. Valores: ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL', 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        const validScopes = ['ITEM_STUDENT', 'ITEM_ALL', 'LIST_STUDENT', 'LIST_ALL'];
+        if (!validScopes.includes(scope)) {
+          return jsonError(`scope inválido: "${scope}". Debe ser uno de: ${validScopes.join(', ')}`, 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        // Validaciones según scope
+        if (scope === 'ITEM_STUDENT' || scope === 'ITEM_ALL') {
+          if (!item_ref) {
+            return jsonError('item_ref es obligatorio para scope que incluye ITEM', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        if (scope === 'LIST_STUDENT' || scope === 'LIST_ALL') {
+          if (!list_id) {
+            return jsonError('list_id es obligatorio para scope que incluye LIST', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        if (scope === 'ITEM_STUDENT' || scope === 'LIST_STUDENT') {
+          if (!student_uuid) {
+            return jsonError('student_uuid es obligatorio para scope que incluye STUDENT', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        // UUID-only: validar formato UUID si viene
+        if (student_uuid) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!uuidRegex.test(student_uuid)) {
+            return jsonError('student_uuid debe ser un UUID válido', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        logInfo('MasterApiAlquimiaGeneral', '[OVERRIDE_RESET][CANONICAL] POST /overrides/reset iniciado', {
+          traceId,
+          scope,
+          item_ref,
+          list_id,
+          student_uuid,
+          item_kind,
+          view_layer
+        });
+
+        // Importar función unificada
+        const { resetOverridesByScope } = await import('../core/master/services/alquimia-override-reset-service.js');
+
+        // Llamar función unificada
+        const result = await resetOverridesByScope({
+          reset_scope: scope,
+          student_uuid,
+          item_ref,
+          list_id,
+          product_key: body.product_key || 'pde',
+          domain_type: body.domain_type || 'transmutation'
+        });
+
+        logInfo('MasterApiAlquimiaGeneral', '[OVERRIDE_RESET][CANONICAL] POST /overrides/reset completado', {
+          traceId,
+          scope,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total
+        });
+
+        return jsonSuccess({
+          ok: true,
+          scope,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total,
+          deleted_count: result.applied, // Alias para compatibilidad con UI
+          trace_id: result.trace_id || traceId
+        }, traceId);
+
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /overrides/reset', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error ejecutando reset de overrides',
+          error.code || 'INTERNAL_ERROR',
+          500,
+          traceId
+        );
+      }
+    }
+
+    // ============================================================================
     // ENDPOINTS DE RESET (LEGACY - DEPRECATED)
     // ============================================================================
     // NOTA: Estos endpoints están deprecated. Usar POST /master/api/alquimia-general/reset

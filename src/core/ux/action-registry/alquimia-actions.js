@@ -490,22 +490,37 @@ registerActionFn({
     request: {
       method: 'POST',
       endpointBuilder: (context) => `/master/api/alquimia-general/overrides/reset`,
-      buildPayload: (context) => ({
-        student_uuid: context.student_uuid,
-        item_ref: context.item_ref
-      })
+      buildPayload: (context, uiState) => {
+        // Determinar scope según contexto
+        // Por defecto: ITEM_STUDENT (resetear overrides de un item para un estudiante)
+        // Si viene list_id sin item_ref: LIST_STUDENT
+        // Si viene item_ref sin student_uuid: ITEM_ALL
+        // Si viene list_id sin student_uuid: LIST_ALL
+        let scope = 'ITEM_STUDENT'; // Default
+        if (context.list_id && !context.item_ref && !context.student_uuid) {
+          scope = 'LIST_ALL';
+        } else if (context.list_id && !context.item_ref && context.student_uuid) {
+          scope = 'LIST_STUDENT';
+        } else if (context.item_ref && !context.student_uuid) {
+          scope = 'ITEM_ALL';
+        } else if (context.item_ref && context.student_uuid) {
+          scope = 'ITEM_STUDENT';
+        }
+        
+        return {
+          scope,
+          student_uuid: context.student_uuid || null,
+          item_ref: context.item_ref || null,
+          list_id: context.list_id || uiState?.list_id || null,
+          item_kind: context.item_kind || null,
+          view_layer: uiState?.view_layer || context.view_layer || null
+        };
+      }
     },
     refresh: function(context, uiState) {
-      const surfaces = [];
-      const view_mode = uiState.view_mode || 'operativa';
-      const list_id = uiState.list_id || context.list_id;
-      
-      // Refrescar proyección si estamos en modo proyección (overrides afectan proyección)
-      if (view_mode === 'proyeccion' && list_id) {
-        surfaces.push('alquimia.list_projection');
-      }
-      
-      return surfaces;
+      // Usar buildRefreshPlan canónico (igual que clean/reset)
+      // Overrides afectan proyección Y flotante (porque cambian el estado calculado)
+      return buildRefreshPlan(context, uiState);
     }
   });
   

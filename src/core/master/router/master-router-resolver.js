@@ -56,6 +56,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-reset-list': () => import('../../../endpoints/master-api-alquimia-general.js'), // DEPRECATED
   'master-api-alquimia-reset-item-all': () => import('../../../endpoints/master-api-alquimia-general.js'), // DEPRECATED
   'master-api-alquimia-reset-list-all': () => import('../../../endpoints/master-api-alquimia-general.js'), // DEPRECATED
+  'master-api-alquimia-overrides-reset': () => import('../../../endpoints/master-api-alquimia-general.js'), // Endpoint canónico para resetear overrides
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-groups': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista-classification': () => import('../../../endpoints/master-api-alquimia-general.js'),

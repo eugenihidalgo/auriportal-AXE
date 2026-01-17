@@ -139,6 +139,15 @@ export const MASTER_ROUTES = [
     // Handler maneja: POST con reset_scope en payload
   },
   {
+    key: 'master-api-alquimia-overrides-reset',
+    path: '/master/api/alquimia-general/overrides/reset',
+    type: 'api',
+    method: 'POST'
+    // Endpoint canónico para resetear overrides de configuración de items
+    // REGLA CONSTITUCIONAL: Override ≠ cleaning state, Override ≠ reset
+    // Handler maneja: POST con scope en payload (ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL)
+  },
+  {
     key: 'master-api-alquimia-reset-item',
     path: '/master/api/alquimia-general/reset-item',
     type: 'api',
