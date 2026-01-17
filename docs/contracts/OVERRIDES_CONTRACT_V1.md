@@ -514,7 +514,9 @@
 - RESET NO modifica overrides
 - Overrides persisten después del reset
 
-**Referencia:** `docs/contracts/RESET_CONTRACT_V1.md`
+**Referencias:**
+- `docs/contracts/RESET_CONTRACT_V1.md` (contrato canónico de reset)
+- `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` (verificación de CLEAN después de RESET)
 
 ---
 
@@ -537,7 +539,9 @@
 - SEED NO modifica overrides
 - Overrides pueden existir antes del seed
 
-**Referencia:** `docs/contracts/SEED_CONTRACT_V1.md`
+**Referencias:**
+- `docs/contracts/SEED_CONTRACT_V1.md` (contrato canónico de seed)
+- `docs/DIAGNOSTICO_OVERRIDES_MASTER.md` (análisis completo de overrides huérfanos)
 
 ---
 

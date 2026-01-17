@@ -1,0 +1,101 @@
+# Contratos Canónicos - AuriPortal MASTER
+
+Este directorio contiene los contratos canónicos que definen el comportamiento esperado de los sistemas principales de AuriPortal.
+
+---
+
+## Contratos Disponibles
+
+### Cleaning Engine
+
+1. **RESET_CONTRACT_V1.md**
+   - Contrato canónico del sistema de Reset
+   - Define cómo Reset marca el inicio de un nuevo ciclo de limpieza
+   - Versión: 1.0
+   - Estado: Activo
+
+2. **SEED_CONTRACT_V1.md**
+   - Contrato canónico del Cleaning State Seed
+   - Define cómo Seed crea estados iniciales "NUNCA"
+   - Versión: 1.0
+   - Estado: Activo
+
+3. **OVERRIDES_CONTRACT_V1.md**
+   - Contrato canónico del sistema de Overrides
+   - Define cómo Overrides permiten sobrescribir valores base a nivel de alumno
+   - Versión: 1.0
+   - Estado: Activo
+
+### Sistema de Señales
+
+4. **SIGNALS_CONTRACT_V1.md**
+   - Contrato canónico del sistema de señales
+   - Define cómo las señales se emiten desde acciones WRITE
+   - Versión: 1.0
+   - Estado: Activo
+
+---
+
+## Relaciones entre Contratos
+
+### RESET ↔ OVERRIDES
+
+**Independencia:**
+- RESET NO lee overrides
+- RESET NO modifica overrides
+- Overrides persisten después del reset
+- Overrides se aplican correctamente después de RESET
+
+**Referencias cruzadas:**
+- `RESET_CONTRACT_V1.md` → `OVERRIDES_CONTRACT_V1.md`
+- `OVERRIDES_CONTRACT_V1.md` → `RESET_CONTRACT_V1.md`
+
+---
+
+### SEED ↔ OVERRIDES
+
+**Independencia:**
+- SEED NO lee overrides
+- SEED NO modifica overrides
+- Overrides pueden existir antes del seed
+- Overrides se aplican después del seed cuando existe estado
+
+**Referencias cruzadas:**
+- `SEED_CONTRACT_V1.md` → `OVERRIDES_CONTRACT_V1.md`
+- `OVERRIDES_CONTRACT_V1.md` → `SEED_CONTRACT_V1.md`
+
+---
+
+### CLEAN ↔ OVERRIDES
+
+**Independencia:**
+- CLEAN NO lee overrides
+- CLEAN NO modifica overrides
+- Overrides persisten después de CLEAN
+- Overrides se aplican correctamente después de CLEAN
+
+**Referencia:**
+- `DIAGNOSTICO_CLEAN_AFTER_RESET.md` → `OVERRIDES_CONTRACT_V1.md`
+
+---
+
+## Diagnósticos Relacionados
+
+**Diagnósticos que documentan el comportamiento real:**
+- `docs/DIAGNOSTICO_OVERRIDES_MASTER.md` - Análisis completo del sistema de overrides
+- `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` - Verificación de CLEAN después de RESET
+- `docs/DIAGNOSTICO_THRESHOLD_RESET.md` - Análisis de PENDING después de RESET
+
+---
+
+## Versionado
+
+**Versión actual:** 1.0  
+**Fecha de activación:** 2026-01-13
+
+**Historial:**
+- v1.0 (2026-01-13): Contratos canónicos iniciales (RESET, SEED, OVERRIDES, SIGNALS)
+
+---
+
+**Última actualización:** 2026-01-13

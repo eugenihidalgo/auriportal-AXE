@@ -227,7 +227,9 @@
 - Reset NO prevalece sobre overrides (son independientes)
 - Overrides NO prevalecen sobre reset (reset establece ciclo, overrides config)
 
-**Referencias:** `src/core/master/services/override-resolution-service.js`
+**Referencias:** 
+- `src/core/master/services/override-resolution-service.js`
+- `docs/contracts/OVERRIDES_CONTRACT_V1.md` (contrato canónico de overrides)
 
 ---
 
