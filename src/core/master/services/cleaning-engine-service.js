@@ -763,9 +763,24 @@ export async function markCleanStudent(options, client = null) {
     // 7. REGLA CONSTITUCIONAL: RESET ES FRONTERA DURA DE ESTADO
     // ANTES de aplicar limpieza, verificar si hay RESET previo y reconstruir estado si es necesario
     // NOTA: RESET solo aplica a recurrente (según contrato canónico)
+    const FORENSICS_TARGET_STUDENT = '0d29eedc-6f42-44d1-bb12-53dba2fc9490';
+    const FORENSICS_TARGET_ITEM = 'item_17_1768641625523_cr5fpr';
+    const isForensicsCase = student_uuid === FORENSICS_TARGET_STUDENT && item_ref === FORENSICS_TARGET_ITEM;
+    
     const lastReset = itemKind === 'recurrente' 
       ? await getLastResetForItem(student_uuid, item_ref, clean_layer, product_key, domain_type, client)
       : null;
+    
+    if (isForensicsCase) {
+      console.log('[FORENSICS][REBASE_CHECK]', {
+        student_uuid,
+        item_ref,
+        item_kind: itemKind,
+        clean_layer,
+        has_lastReset: !!lastReset,
+        lastReset_created_at: lastReset?.created_at ? new Date(lastReset.created_at).toISOString() : null
+      });
+    }
     
     if (lastReset && itemKind === 'recurrente') {
       // Verificar si el estado actual es coherente con el RESET
@@ -792,9 +807,51 @@ export async function markCleanStudent(options, client = null) {
                          (currentCount > 0 && !currentLastCleaned) ||
                          (currentCount === 0 && currentLastCleaned);
       
+      if (isForensicsCase) {
+        console.log('[FORENSICS][REBASE_CALC]', {
+          student_uuid,
+          item_ref,
+          clean_layer,
+          resetAt: resetAt.toISOString(),
+          currentEffective: currentEffective?.toISOString() || null,
+          currentLastCleaned: currentLastCleaned?.toISOString() || null,
+          currentCount,
+          needsRebase_components: {
+            no_effective: !currentEffective,
+            effective_before_reset: currentEffective ? currentEffective < resetAt : false,
+            lastCleaned_before_reset: currentLastCleaned ? currentLastCleaned < resetAt : false,
+            count_without_clean: currentCount > 0 && !currentLastCleaned,
+            zero_count_with_clean: currentCount === 0 && currentLastCleaned
+          },
+          needsRebase
+        });
+      }
+      
       if (needsRebase) {
+        if (isForensicsCase) {
+          console.log('[FORENSICS][REBASE_EXECUTING]', {
+            student_uuid,
+            item_ref,
+            clean_layer,
+            resetAt: resetAt.toISOString(),
+            reason: 'needsRebase=true'
+          });
+        }
+        
         // Reconstruir estado desde RESET
         const rebasedState = await rebaseStateFromReset(student_uuid, item_ref, clean_layer, lastReset, product_key, domain_type, traceId, client);
+        
+        if (isForensicsCase) {
+          console.log('[FORENSICS][REBASE_RESULT]', {
+            student_uuid,
+            item_ref,
+            clean_layer,
+            rebased_successfully: !!rebasedState,
+            rebased_effective: rebasedState?.[effectiveColumn] ? new Date(rebasedState[effectiveColumn]).toISOString() : null,
+            rebased_last_cleaned: rebasedState?.[lastCleanedColumn] ? new Date(rebasedState[lastCleanedColumn]).toISOString() : null,
+            rebased_count: rebasedState?.[countColumn] || 0
+          });
+        }
         
         if (rebasedState) {
           logWarn('MASTER', '[CLEANING_ENGINE][RESET_REBASE] Estado reconstruido desde RESET antes de aplicar limpieza', {

@@ -164,6 +164,31 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   let lastEffectiveCleanAt = null;
   let daysSince = null;
   
+  // ============================================================================
+  // FORENSICS: Log temporal para caso maldito - dentro de CPM
+  // ============================================================================
+  const FORENSICS_TARGET_ITEM_PATTERN = 'item_17_1768641625523_cr5fpr';
+  const isForensicsCase = layerData?.item_ref?.includes(FORENSICS_TARGET_ITEM_PATTERN);
+  
+  if (isForensicsCase) {
+    console.log('[FORENSICS][CPM_INTERNAL]', {
+      item_ref: layerData?.item_ref,
+      layer: layer,
+      hasReset,
+      effectiveSince: effectiveSince ? new Date(effectiveSince).toISOString() : null,
+      lastCleanedAt: lastCleanedAt ? new Date(lastCleanedAt).toISOString() : null,
+      threshold_days,
+      criticalThreshold,
+      comparison: lastCleanedAt && effectiveSince ? {
+        lastCleaned_date: new Date(lastCleanedAt).toISOString(),
+        effectiveSince_date: new Date(effectiveSince).toISOString(),
+        is_lastCleaned_after_reset: new Date(lastCleanedAt) > new Date(effectiveSince),
+        diff_ms: new Date(lastCleanedAt).getTime() - new Date(effectiveSince).getTime()
+      } : null
+    });
+  }
+  // ============================================================================
+  
   if (hasReset) {
     // RESET_RECURRENTE_V1: Reset aplicado - iniciar nuevo ciclo
     const effectiveSinceDate = new Date(effectiveSince);
@@ -176,17 +201,47 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
         lastEffectiveCleanAt = lastCleanedAt;
         const now = new Date();
         daysSince = Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
+        
+        if (isForensicsCase) {
+          console.log('[FORENSICS][CPM_RESET_WITH_CLEAN]', {
+            item_ref: layerData?.item_ref,
+            layer,
+            decision: 'last_cleaned_at > effective_since → usar last_cleaned_at',
+            lastEffectiveCleanAt: lastEffectiveCleanAt ? new Date(lastEffectiveCleanAt).toISOString() : null,
+            daysSince
+          });
+        }
       } else {
         // La limpieza es anterior al reset - IGNORAR (reset inicia nuevo ciclo)
         // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
         lastEffectiveCleanAt = null;
         daysSince = 0;
+        
+        if (isForensicsCase) {
+          console.log('[FORENSICS][CPM_RESET_IGNORE_OLD_CLEAN]', {
+            item_ref: layerData?.item_ref,
+            layer,
+            decision: 'last_cleaned_at <= effective_since → IGNORAR limpieza antigua',
+            lastEffectiveCleanAt,
+            daysSince
+          });
+        }
       }
     } else {
       // No hay limpieza después del reset
       // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
       lastEffectiveCleanAt = null;
       daysSince = 0;
+      
+      if (isForensicsCase) {
+        console.log('[FORENSICS][CPM_RESET_NO_CLEAN]', {
+          item_ref: layerData?.item_ref,
+          layer,
+          decision: 'NO hay last_cleaned_at → nunca limpiado en este ciclo',
+          lastEffectiveCleanAt,
+          daysSince
+        });
+      }
     }
   } else {
     // Sin reset: lógica normal (considerar todas las limpiezas)

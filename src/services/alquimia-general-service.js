@@ -757,6 +757,48 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           pde_effective_since: pdeData.effective_since
         });
 
+        // ============================================================================
+        // FORENSICS: Log temporal para caso maldito
+        // ============================================================================
+        const FORENSICS_TARGET_STUDENT = '0d29eedc-6f42-44d1-bb12-53dba2fc9490';
+        const FORENSICS_TARGET_ITEM = 'item_17_1768641625523_cr5fpr';
+        if (student.student_uuid === FORENSICS_TARGET_STUDENT && itemRef === FORENSICS_TARGET_ITEM) {
+          console.log('[FORENSICS][CPM_CASE]', {
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            view_layer: view_layer || 'shared',
+            raw_shared: {
+              last_cleaned_at: sharedData?.last_cleaned_at ?? null,
+              effective_since: sharedData?.effective_since ?? null,
+              clean_count: sharedData?.clean_count ?? null
+            },
+            raw_pde: {
+              last_cleaned_at: pdeData?.last_cleaned_at ?? null,
+              effective_since: pdeData?.effective_since ?? null,
+              clean_count: pdeData?.clean_count ?? null
+            },
+            parsed_dates: {
+              shared_last_cleaned_date: sharedData?.last_cleaned_at ? new Date(sharedData.last_cleaned_at).toISOString() : null,
+              shared_effective_since_date: sharedData?.effective_since ? new Date(sharedData.effective_since).toISOString() : null,
+              pde_last_cleaned_date: pdeData?.last_cleaned_at ? new Date(pdeData.last_cleaned_at).toISOString() : null,
+              pde_effective_since_date: pdeData?.effective_since ? new Date(pdeData.effective_since).toISOString() : null,
+              now: new Date().toISOString()
+            },
+            types: {
+              shared_last_cleaned_at_type: typeof sharedData?.last_cleaned_at,
+              shared_effective_since_type: typeof sharedData?.effective_since,
+              pde_last_cleaned_at_type: typeof pdeData?.last_cleaned_at,
+              pde_effective_since_type: typeof pdeData?.effective_since
+            },
+            config: {
+              threshold_days: effectiveConfig.threshold_days,
+              critical_multiplier: effectiveConfig.critical_multiplier,
+              critical_threshold: effectiveConfig.threshold_days * effectiveConfig.critical_multiplier
+            }
+          });
+        }
+        // ============================================================================
+        
         // Calcular estados para todas las view_layers posibles (proyección completa)
         // Usar effectiveConfig en todas las llamadas (incluye overrides)
         const stateByViewLayer = {
@@ -786,6 +828,22 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
             config: effectiveConfig
           })
         };
+        
+        // ============================================================================
+        // FORENSICS: Log temporal para caso maldito - resultado CPM
+        // ============================================================================
+        if (student.student_uuid === FORENSICS_TARGET_STUDENT && itemRef === FORENSICS_TARGET_ITEM) {
+          console.log('[FORENSICS][CPM_RESULT]', {
+            student_uuid: student.student_uuid,
+            item_ref: itemRef,
+            view_layer: view_layer || 'shared',
+            cpm_result: stateByViewLayer[view_layer || 'shared'],
+            state: stateByViewLayer[view_layer || 'shared']?.state,
+            days_since: stateByViewLayer[view_layer || 'shared']?.metrics?.days_since_last_clean,
+            last_effective_clean_at: stateByViewLayer[view_layer || 'shared']?.metrics?.last_effective_clean_at
+          });
+        }
+        // ============================================================================
 
         // ============================================================================
         // LOG FORENSE TEMPORAL: Proyección RECURRENTE tras limpieza
