@@ -36,13 +36,27 @@
     // Si hay surfaces declarativas, usar Refresh Surface Registry
     if (surfaces.length > 0 && window.__AP_REFRESH_SURFACE_REGISTRY__) {
       const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
+      // CIERRE-002: Propagación explícita de clean_layer y view_layer en uiState
       const uiState = {
         view_mode: mutation.scope?.view_mode || 'operativa',
-        view_layer: mutation.scope?.view_layer || 'shared',
+        view_layer: context.view_layer || mutation.scope?.view_layer || 'shared',
+        clean_layer: context.clean_layer || null, // CIERRE-002: Propagar clean_layer explícitamente
+        item_kind: context.item_kind || null, // CIERRE-002: Propagar item_kind explícitamente
         list_id: context.list_id || null,
         student_uuid: context.student_uuid || null,
         modal_layerView: window.__AP_ALQUIMIA_STATE__?.modal?.layerView || null
       };
+      
+      // CIERRE-002: Log forense de propagación
+      if (context.clean_layer || context.view_layer) {
+        console.log('[REFRESH_ENGINE_V2][CIERRE-002] Context propagado a uiState', {
+          action_id: action_id || mutation.mutation_type,
+          clean_layer: uiState.clean_layer,
+          view_layer: uiState.view_layer,
+          item_kind: uiState.item_kind,
+          context_keys: Object.keys(context)
+        });
+      }
 
       console.log('[REFRESH_ENGINE_V2][SURFACES] Ejecutando surfaces declarativas', {
         action_id: action_id || mutation.mutation_type,

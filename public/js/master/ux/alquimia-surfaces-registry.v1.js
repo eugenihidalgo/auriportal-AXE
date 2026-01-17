@@ -101,20 +101,46 @@
     refetch: async (context, uiState) => {
       const item_ref = context.item_ref;
       if (!item_ref) {
-        console.warn('[AlquimiaSurfacesRegistry] item_ref no disponible para alquimia.flotante_students');
+        console.warn('[AlquimiaSurfacesRegistry][CIERRE-003] item_ref no disponible para alquimia.flotante_students');
         return;
       }
 
-      // Obtener item desde state.modal
+      // CIERRE CANÓNICO v1: Verificar modal abierto ANTES de ejecutar GET
+      // PROHIBIDO: Ejecutar GET si modal no está visible
       const alquimiaState = window.__AP_ALQUIMIA_STATE__;
       if (!alquimiaState || !alquimiaState.modal || !alquimiaState.modal.item) {
-        console.warn('[AlquimiaSurfacesRegistry] Modal no abierto para alquimia.flotante_students');
+        // CIERRE-003: Early return silencioso (no es error, modal simplemente no está abierto)
+        console.log('[AlquimiaSurfacesRegistry][CIERRE-003] Flotante OMITIDO: modal no abierto', {
+          item_ref,
+          has_state: !!alquimiaState,
+          has_modal: !!alquimiaState?.modal,
+          has_item: !!alquimiaState?.modal?.item
+        });
+        return; // Early return: NO ejecutar GET, NO render
+      }
+
+      // Validar que item_ref coincide (seguridad adicional)
+      const modalItemRef = alquimiaState.modal.item.item_ref;
+      if (modalItemRef !== item_ref) {
+        console.log('[AlquimiaSurfacesRegistry][CIERRE-003] Flotante OMITIDO: item_ref no coincide', {
+          requested_item_ref: item_ref,
+          modal_item_ref: modalItemRef
+        });
         return;
       }
 
       const item = alquimiaState.modal.item;
-      const view_layer = alquimiaState.modal.layerView || 'shared';
+      // CIERRE-002: Propagación explícita de clean_layer y view_layer
+      const view_layer = context.view_layer || alquimiaState.modal.layerView || 'shared';
       const clean_layer = context.clean_layer || alquimiaState.modal.cleanLayer || 'shared';
+
+      console.log('[AlquimiaSurfacesRegistry][CIERRE-002] Refrescar flotante con context propagado', {
+        item_ref,
+        clean_layer,
+        view_layer,
+        context_clean_layer: context.clean_layer,
+        context_view_layer: context.view_layer
+      });
 
       const handleVerItem = getAlquimiaFunction('handleVerItem');
       await handleVerItem(item, clean_layer, view_layer);

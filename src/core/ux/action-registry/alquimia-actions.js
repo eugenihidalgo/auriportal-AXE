@@ -36,13 +36,25 @@ if (typeof window !== 'undefined' && window.__AP_UX_ACTION_REGISTRY_CORE__) {
 
 /**
  * Helper para construir refresh plan canónico
- * @param {Object} context - Contexto de la mutación
+ * @param {Object} context - Contexto de la mutación (DEBE incluir clean_layer, view_layer, item_kind)
  * @param {Object} uiState - Estado de UI
  * @param {Object} responseData - Respuesta del backend (opcional)
  * @returns {Array<string>} Lista de surface_ids a refrescar
  */
 function buildRefreshPlan(context, uiState, responseData = null) {
   const surfaces = [];
+  // CIERRE-002: Validar que clean_layer está presente en contexto
+  const clean_layer = context.clean_layer;
+  const view_layer = context.view_layer || uiState?.view_layer;
+  const item_kind = context.item_kind;
+  
+  if (!clean_layer) {
+    console.warn('[AlquimiaActions][buildRefreshPlan][CIERRE-002] ⚠️ clean_layer no presente en context', {
+      context_keys: Object.keys(context),
+      clean_layer
+    });
+  }
+  
   // HOTFIX: Robustecer obtención de view_mode y list_id (pueden venir de context o uiState)
   const view_mode = uiState?.view_mode || context?.view_mode || 'operativa';
   const list_id = uiState?.list_id || context?.list_id;
@@ -67,18 +79,28 @@ function buildRefreshPlan(context, uiState, responseData = null) {
     surfaces.push('alquimia.items');
   }
 
-  // Flotante: SIEMPRE refrescar si está abierto e item_ref coincide
-  // INDEPENDIENTEMENTE del view_mode (regla constitucional)
-  // BUG-008 FIX: Detección robusta - Si hay item_ref, refrescar siempre (idempotente)
+  // CIERRE CANÓNICO v1: Flotante SOLO si modal está abierto
+  // REGLA: NO refrescar flotante si el modal no está visible
+  // Verificación se hace en el surface registry (early return si no está abierto)
   if (context.item_ref) {
-    // BUG-008: Estrategia robusta - Si hay item_ref, refrescar flotante siempre
-    // El refresh es idempotente (refrescar aunque no esté abierto no es error)
-    // NO depender de window.__AP_ALQUIMIA_STATE__ (puede no estar disponible)
-    surfaces.push('alquimia.flotante_students');
-    console.log('[AlquimiaActions][buildRefreshPlan] [BUG-008] Flotante incluido en refresh plan (item_ref presente)', {
-      item_ref: context.item_ref,
-      strategy: 'always_refresh_if_item_ref'
-    });
+    // Verificar si modal está abierto ANTES de incluir en refresh plan
+    // CIERRE-003: Solo refrescar si modal está abierto
+    const alquimiaState = typeof window !== 'undefined' ? window.__AP_ALQUIMIA_STATE__ : null;
+    const isModalOpen = alquimiaState?.modal?.item?.item_ref === context.item_ref;
+    
+    if (isModalOpen) {
+      surfaces.push('alquimia.flotante_students');
+      console.log('[AlquimiaActions][buildRefreshPlan] [CIERRE-003] Flotante incluido (modal abierto)', {
+        item_ref: context.item_ref,
+        clean_layer: context.clean_layer,
+        view_layer: context.view_layer || uiState?.view_layer
+      });
+    } else {
+      console.log('[AlquimiaActions][buildRefreshPlan] [CIERRE-003] Flotante OMITIDO (modal no abierto)', {
+        item_ref: context.item_ref,
+        modal_item_ref: alquimiaState?.modal?.item?.item_ref || 'none'
+      });
+    }
   }
   
   // HOTFIX: Parche obligatorio - Si view_mode=proyeccion y list_id existe, SIEMPRE incluir list_projection
@@ -590,5 +612,4 @@ registerActionFn({
     }
   });
 
-  console.log('[AlquimiaActions] ✅ 9 acciones registradas en UX Action Registry (6 consolidadas + 3 nuevas para BUG-006)');
-})();
+console.log('[AlquimiaActions] ✅ 9 acciones registradas en UX Action Registry (6 consolidadas + 3 nuevas para BUG-006)');

@@ -1016,8 +1016,12 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       has_aggregated_state_all: aggregatedStateAll !== null
     });
     
+    // CIERRE-001: Garantizar que items es SIEMPRE un array válido (incluso si está vacío)
+    // REGLA: projection.items nunca puede ser undefined o null
+    const items = Array.isArray(itemsWithProjection) ? itemsWithProjection : [];
+    
     const result = {
-      items: itemsWithProjection,
+      items: items,
       metrics,
       list_state: listState
     };

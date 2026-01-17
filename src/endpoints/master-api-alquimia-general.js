@@ -664,20 +664,23 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         });
 
         // ============================================================================
+        // CIERRE-001: Garantizar que items es SIEMPRE un array válido
         // INVARIANTE MODO GOD: Validar que todos los items tienen state_by_view_layer
         // ============================================================================
-        if (!projection.items || !Array.isArray(projection.items)) {
-          const error = new Error('[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] projection.items no es array');
-          logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
+        // CIERRE-001: Normalizar items a array (fallback seguro)
+        const items = Array.isArray(projection.items) ? projection.items : [];
+        
+        if (!Array.isArray(projection.items)) {
+          logWarn('MasterApiAlquimiaGeneral', '[CIERRE-001] projection.items no es array, normalizando', {
             traceId,
-            error: error.message,
-            projection_keys: projection ? Object.keys(projection) : []
+            projection_items_type: typeof projection.items,
+            projection_items_value: projection.items,
+            normalized_to: items.length
           });
-          throw error;
         }
 
-        // Validar que cada item tiene state_by_view_layer
-        for (const item of projection.items) {
+        // CIERRE-001: Validar que cada item tiene state_by_view_layer (usar items normalizado)
+        for (const item of items) {
           if (!item.state_by_view_layer) {
             const error = new Error(`[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] Item ${item.item_ref || item.id} no tiene state_by_view_layer`);
             logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
@@ -744,21 +747,22 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           }
         };
 
-        logInfo('MasterApiAlquimiaGeneral', '[LPM][OUTPUT_OK] GET list-projection completado', {
+        // CIERRE-001: Usar items normalizado en respuesta
+        logInfo('MasterApiAlquimiaGeneral', '[LPM][OUTPUT_OK][CIERRE-001] GET list-projection completado', {
           traceId,
           list_id: listId,
           total_items: projection.metrics.total_items,
           reviewed_pct: projection.metrics.reviewed_pct,
           dominant_state: projection.list_state.dominant_state,
           health_bucket: projection.list_state.health_bucket,
-          items_with_state_by_view_layer: projection.items.length,
+          items_with_state_by_view_layer: items.length,
           view_layer: viewLayer,
           item_kind: itemKind
         });
 
         return jsonSuccess({
           data: {
-            items: projection.items,
+            items: items, // CIERRE-001: Usar items normalizado
             metrics: projection.metrics,
             list_state: projection.list_state,
             view_layer: viewLayer,
