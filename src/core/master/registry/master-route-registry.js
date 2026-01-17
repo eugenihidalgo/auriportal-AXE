@@ -131,28 +131,40 @@ export const MASTER_ROUTES = [
     method: 'POST'
   },
   {
+    key: 'master-api-alquimia-reset',
+    path: '/master/api/alquimia-general/reset',
+    type: 'api',
+    method: 'POST'
+    // Endpoint único canónico para todos los tipos de reset (ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL)
+    // Handler maneja: POST con reset_scope en payload
+  },
+  {
     key: 'master-api-alquimia-reset-item',
     path: '/master/api/alquimia-general/reset-item',
     type: 'api',
     method: 'POST'
+    // DEPRECATED: Usar /master/api/alquimia-general/reset con reset_scope='ITEM_STUDENT'
   },
   {
     key: 'master-api-alquimia-reset-list',
     path: '/master/api/alquimia-general/reset-list',
     type: 'api',
     method: 'POST'
+    // DEPRECATED: Usar /master/api/alquimia-general/reset con reset_scope='LIST_STUDENT'
   },
   {
     key: 'master-api-alquimia-reset-item-all',
     path: '/master/api/alquimia-general/reset-item-all',
     type: 'api',
     method: 'POST'
+    // DEPRECATED: Usar /master/api/alquimia-general/reset con reset_scope='ITEM_ALL'
   },
   {
     key: 'master-api-alquimia-reset-list-all',
     path: '/master/api/alquimia-general/reset-list-all',
     type: 'api',
     method: 'POST'
+    // DEPRECATED: Usar /master/api/alquimia-general/reset con reset_scope='LIST_ALL'
   },
   {
     key: 'master-api-alquimia-classifications',
