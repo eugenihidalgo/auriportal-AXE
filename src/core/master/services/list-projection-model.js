@@ -1018,10 +1018,10 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     
     // CIERRE-001: Garantizar que items es SIEMPRE un array válido (incluso si está vacío)
     // REGLA: projection.items nunca puede ser undefined o null
-    const items = Array.isArray(itemsWithProjection) ? itemsWithProjection : [];
+    const normalizedItems = Array.isArray(itemsWithProjection) ? itemsWithProjection : [];
     
     const result = {
-      items: items,
+      items: normalizedItems,
       metrics,
       list_state: listState
     };
