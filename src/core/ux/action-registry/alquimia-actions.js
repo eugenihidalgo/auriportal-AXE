@@ -43,8 +43,19 @@ if (typeof window !== 'undefined' && window.__AP_UX_ACTION_REGISTRY_CORE__) {
  */
 function buildRefreshPlan(context, uiState, responseData = null) {
   const surfaces = [];
-  const view_mode = uiState.view_mode || 'operativa';
-  const list_id = uiState.list_id || context.list_id;
+  // HOTFIX: Robustecer obtención de view_mode y list_id (pueden venir de context o uiState)
+  const view_mode = uiState?.view_mode || context?.view_mode || 'operativa';
+  const list_id = uiState?.list_id || context?.list_id;
+  
+  // Log forense para diagnóstico
+  if (!list_id || !view_mode) {
+    console.warn('[AlquimiaActions][buildRefreshPlan] ⚠️ view_mode o list_id faltantes', {
+      view_mode,
+      list_id,
+      uiState,
+      context
+    });
+  }
 
   // Proyección: siempre refrescar si hay list_id
   if (view_mode === 'proyeccion' && list_id) {
@@ -67,6 +78,18 @@ function buildRefreshPlan(context, uiState, responseData = null) {
     console.log('[AlquimiaActions][buildRefreshPlan] [BUG-008] Flotante incluido en refresh plan (item_ref presente)', {
       item_ref: context.item_ref,
       strategy: 'always_refresh_if_item_ref'
+    });
+  }
+  
+  // HOTFIX: Parche obligatorio - Si view_mode=proyeccion y list_id existe, SIEMPRE incluir list_projection
+  // Esto debe ocurrir aunque no se haya detectado arriba
+  if (view_mode === 'proyeccion' && list_id && !surfaces.includes('alquimia.list_projection')) {
+    surfaces.push('alquimia.list_projection');
+    console.warn('[AlquimiaActions][buildRefreshPlan] [HOTFIX] Parche aplicado: view_mode=proyeccion + list_id → list_projection', {
+      view_mode,
+      list_id,
+      surfaces_before: [...surfaces],
+      surfaces_after: [...surfaces]
     });
   }
 
