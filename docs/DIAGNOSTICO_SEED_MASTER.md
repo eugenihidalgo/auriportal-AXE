@@ -574,6 +574,41 @@ Este diagnóstico documenta el comportamiento REAL del sistema. Para el contrato
 - `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` - Verificación de CLEAN después de RESET
 - `docs/DIAGNOSTICO_THRESHOLD_RESET.md` - Análisis de PENDING después de RESET
 
+**Observabilidad relacionada:**
+- SeedReadinessMetrics v1 - Capa de observabilidad READ (ver `docs/contracts/SEED_CONTRACT_V1.md`)
+- Script de verificación: `scripts/verify-seed-readiness-metrics.js`
+
+---
+
+## NOTA FORENSE: Si faltan items en megalist
+
+**Síntoma:**
+- GET `/master/api/alquimia-alumno/megalist` devuelve menos items de los esperados
+- Items del catálogo no aparecen en la respuesta
+
+**Diagnóstico:**
+1. Consultar `seed_metrics.missing_state_count` en la respuesta JSON
+2. Si `missing_state_count > 0` → Faltan estados materializados en `cleaning_item_state`
+3. Consultar `seed_metrics.sample_missing_item_refs` para ver ejemplos de items faltantes
+
+**Solución operativa:**
+```bash
+POST /master/api/alquimia-alumno/initialize
+{
+  "student_uuid": "...",
+  "level_cap": 10,  # O el level_cap correcto para este alumno
+  "lista_tipo": "recurrente"  # O "una_vez" según corresponda
+}
+```
+
+**Verificación:**
+- Ejecutar GET `/master/api/alquimia-alumno/megalist` de nuevo
+- Verificar que `seed_metrics.missing_state_count = 0` después de inicializar
+
+**Referencia:**
+- `docs/contracts/SEED_CONTRACT_V1.md` (sección "SeedReadinessMetrics v1")
+- `docs/MASTER_API_ALQUIMIA_ALUMNO_CONTRACTS_V1.md` (campo `seed_metrics`)
+
 ---
 
 **FIN DEL DIAGNÓSTICO**
