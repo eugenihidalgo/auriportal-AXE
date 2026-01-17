@@ -283,6 +283,83 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
 }
 
 /**
+ * Verifica si el estado de limpieza es coherente con el evento existente.
+ * 
+ * FIX 1: Helper para verificación de coherencia evento ↔ estado
+ * Similar a la lógica de reset pero para limpieza.
+ * 
+ * @param {Object} params - Parámetros
+ * @param {Object} params.currentState - Estado actual de cleaning_item_state
+ * @param {Object} params.event - Evento existente de cleaning_events
+ * @param {string} params.itemKind - 'recurrente' | 'una_vez'
+ * @param {string} params.clean_layer - 'shared' | 'pde'
+ * @param {Date} params.cleanedAt - Fecha de la limpieza esperada
+ * @returns {boolean} true si el estado es coherente con el evento
+ */
+function isCleanStateCoherent({ currentState, event, itemKind, clean_layer, cleanedAt }) {
+  if (!event || !currentState) {
+    // Sin evento o estado → no coherente (permitir aplicar)
+    return false;
+  }
+  
+  const eventCreatedAt = event.created_at ? new Date(event.created_at) : new Date();
+  
+  if (itemKind === 'recurrente') {
+    // RECURRENTE: Verificar que last_cleaned_at >= event.created_at
+    const lastCleanedColumn = clean_layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+    const countColumn = clean_layer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+    
+    const currentLastCleaned = currentState[lastCleanedColumn] ? new Date(currentState[lastCleanedColumn]) : null;
+    const currentCount = currentState[countColumn] || 0;
+    
+    // Coherente si:
+    // - last_cleaned_at existe y es >= event.created_at
+    // - O si el estado está reseteado (effective_since presente y last_cleaned_at null después del reset)
+    const effectiveColumn = clean_layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+    const currentEffective = currentState[effectiveColumn] ? new Date(currentState[effectiveColumn]) : null;
+    
+    if (currentEffective && currentEffective >= eventCreatedAt) {
+      // Hay un reset posterior al evento, verificar que last_cleaned_at es posterior al reset o null
+      if (currentLastCleaned && currentLastCleaned >= currentEffective) {
+        // Limpieza posterior al reset → coherente
+        return true;
+      } else if (!currentLastCleaned && currentCount === 0) {
+        // Sin limpieza después del reset y count=0 → coherente (reset aplicado pero sin limpieza aún)
+        return true;
+      } else {
+        // Incoherente: estado mezclado
+        return false;
+      }
+    } else {
+      // No hay reset posterior, verificar que last_cleaned_at >= event.created_at
+      if (currentLastCleaned && currentLastCleaned >= eventCreatedAt) {
+        // Limpieza aplicada correctamente → coherente
+        return true;
+      } else {
+        // Incoherente: evento existe pero estado no refleja la limpieza
+        return false;
+      }
+    }
+  } else {
+    // UNA_VEZ: Verificar que completed/remaining reflejan el evento
+    const deltaCompleted = event.delta_completed || 0;
+    const currentCompleted = currentState.shared_completed || 0;
+    const currentRemaining = currentState.shared_remaining ?? null;
+    
+    // Coherente si el estado refleja que la acción se aplicó
+    // (completed incrementado o remaining reducido)
+    if (deltaCompleted > 0) {
+      // Evento incrementa completed → verificar que completed >= expected
+      const expectedCompleted = (currentCompleted - deltaCompleted >= 0) ? currentCompleted : deltaCompleted;
+      return currentCompleted >= expectedCompleted;
+    } else {
+      // Sin cambio esperado en completed → considerar coherente si el estado es razonable
+      return true;
+    }
+  }
+}
+
+/**
  * Marca limpio un alumno específico (recurrente o una_vez)
  * 
  * @param {Object} options - Opciones
@@ -584,7 +661,7 @@ export async function markCleanStudent(options, client = null) {
     
     // Manejar idempotencia: ya sea 'already_applied' (legacy) o { already_executed: true } (nuevo)
     if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-      // Obtener estado actual para verificar days_since_last_clean de la capa
+      // Obtener estado actual para verificar coherencia
       const currentState = existingState || await stateRepo.getState({
         student_uuid,
         product_key,
@@ -592,31 +669,95 @@ export async function markCleanStudent(options, client = null) {
         item_ref
       }, client);
       
-      // Calcular days_since_last_clean de la capa correspondiente
-      let daysSinceLastClean = null;
-      if (itemKind === 'recurrente') {
-        if (clean_layer === 'shared') {
-          daysSinceLastClean = currentState?.shared_days_since_last_clean ?? null;
-        } else if (clean_layer === 'pde') {
-          daysSinceLastClean = currentState?.pde_days_since_last_clean ?? null;
-        }
-      }
+      // FIX 1: Verificar coherencia evento ↔ estado antes de omitir
+      const eventsRepo = getDefaultCleaningEventsRepo();
+      const existingEvents = await eventsRepo.listEventsForStudentItem({
+        student_uuid,
+        item_ref,
+        product_key,
+        domain_type
+      }, client);
       
-      logInfo('MASTER', '[CLEAN][IDEMPOTENCY] Evento ya aplicado (idempotencia por capa)', {
+      const existingCleanEvent = existingEvents.find(e => 
+        e.execution_key === executionKey && 
+        e.action_type === 'mark_clean' && 
+        (itemKind === 'recurrente' ? e.clean_layer === clean_layer : true)
+      );
+      
+      // Log de verificación de coherencia
+      logInfo('MASTER', '[CLEAN][IDEMPOTENCY_CHECK] Verificando coherencia evento ↔ estado', {
         traceId,
         execution_key: executionKey,
-        execution_mode: effectiveExecutionMode,
         student_uuid,
         item_ref,
         item_kind: itemKind,
         clean_layer,
-        days_since_last_clean: daysSinceLastClean,
-        allowed: false, // No se permite limpiar la misma capa el mismo día
-        idempotency_by_layer: itemKind === 'recurrente' ? true : false
+        event_exists: !!existingCleanEvent,
+        event_created_at: existingCleanEvent?.created_at,
+        current_state: {
+          shared_last_cleaned_at: currentState?.shared_last_cleaned_at,
+          pde_last_cleaned_at: currentState?.pde_last_cleaned_at,
+          shared_clean_count: currentState?.shared_clean_count,
+          pde_clean_count: currentState?.pde_clean_count,
+          shared_effective_since: currentState?.shared_effective_since,
+          pde_effective_since: currentState?.pde_effective_since
+        }
       });
       
-      // Devolver estado actual (repositorio resuelve legacy_id internamente)
-      return currentState;
+      // Verificar coherencia del estado con el evento
+      const isCoherent = isCleanStateCoherent({
+        currentState,
+        event: existingCleanEvent,
+        itemKind,
+        clean_layer,
+        cleanedAt: new Date()
+      });
+      
+      if (!isCoherent) {
+        // Estado incoherente: aplicar limpieza igualmente (idempotencia override)
+        logWarn('MASTER', '[CLEAN][IDEMPOTENCY_OVERRIDE] Evento existe pero estado incoherente, aplicando limpieza', {
+          traceId,
+          execution_key: executionKey,
+          student_uuid,
+          item_ref,
+          item_kind: itemKind,
+          clean_layer,
+          current_state: {
+            shared_last_cleaned_at: currentState?.shared_last_cleaned_at,
+            pde_last_cleaned_at: currentState?.pde_last_cleaned_at,
+            shared_clean_count: currentState?.shared_clean_count,
+            pde_clean_count: currentState?.pde_clean_count
+          },
+          event_created_at: existingCleanEvent?.created_at
+        });
+        // Continuar para aplicar limpieza (no retornar estado antiguo)
+      } else {
+        // Estado coherente: omitir correctamente
+        // Calcular days_since_last_clean de la capa correspondiente
+        let daysSinceLastClean = null;
+        if (itemKind === 'recurrente') {
+          if (clean_layer === 'shared') {
+            daysSinceLastClean = currentState?.shared_days_since_last_clean ?? null;
+          } else if (clean_layer === 'pde') {
+            daysSinceLastClean = currentState?.pde_days_since_last_clean ?? null;
+          }
+        }
+        
+        logInfo('MASTER', '[CLEAN][IDEMPOTENCY_OK] Evento ya aplicado y estado coherente', {
+          traceId,
+          execution_key: executionKey,
+          execution_mode: effectiveExecutionMode,
+          student_uuid,
+          item_ref,
+          item_kind: itemKind,
+          clean_layer,
+          days_since_last_clean: daysSinceLastClean,
+          idempotency_by_layer: itemKind === 'recurrente' ? true : false
+        });
+        
+        // Devolver estado actual (coherente)
+        return currentState;
+      }
     }
     
     // 7. REGLA CONSTITUCIONAL: RESET ES FRONTERA DURA DE ESTADO

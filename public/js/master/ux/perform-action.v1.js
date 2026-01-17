@@ -36,6 +36,64 @@
   }
   window.__AP_PERFORM_ACTION_V1_LOADED__ = true;
 
+  /**
+   * FIX 3: Fuerza refetch manual mínimo si Refresh Engine no está disponible
+   * 
+   * @param {string} action_id - ID de la acción
+   * @param {Object} context - Contexto de la acción
+   * @param {Object} uiState - Estado de la UI
+   * @param {Array} surfacesToRefresh - Superficies a refrescar
+   */
+  async function forceManualRefetch(action_id, context, uiState, surfacesToRefresh) {
+    console.log('[REFRESH][FORCED_REFETCH] Ejecutando refetch manual', {
+      action_id,
+      surfaces: surfacesToRefresh,
+      context,
+      uiState,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Refetch mínimo para acciones de alquimia
+    if (action_id && action_id.startsWith('alquimia.')) {
+      const { item_ref, list_id, student_uuid } = context || {};
+      
+      // Refetch flotante si está abierto (independiente de view_mode)
+      if (item_ref && typeof window !== 'undefined' && window.__AP_ALQUIMIA_STATE__) {
+        const alquimiaState = window.__AP_ALQUIMIA_STATE__;
+        const alquimiaFunctions = window.__AP_ALQUIMIA_FUNCTIONS__;
+        
+        if (alquimiaFunctions && alquimiaFunctions.handleVerItem && alquimiaState?.modal?.item && alquimiaState.modal.item.item_ref === item_ref) {
+          const viewLayer = uiState?.view_layer || alquimiaState?.projection?.view_layer || 'shared';
+          const cleanLayer = context?.clean_layer || alquimiaState?.modal?.cleanLayer || 'shared';
+          
+          console.log('[REFRESH][FORCED_REFETCH] Refrescando flotante manualmente', {
+            item_ref,
+            view_layer: viewLayer,
+            clean_layer: cleanLayer
+          });
+          
+          try {
+            await alquimiaFunctions.handleVerItem(alquimiaState.modal.item, cleanLayer, viewLayer);
+          } catch (error) {
+            console.error('[REFRESH][FORCED_REFETCH] Error refrescando flotante', error);
+          }
+        }
+      }
+      
+      // Refetch list_projection si existe función
+      if (typeof window !== 'undefined' && window.__AP_ALQUIMIA_FUNCTIONS__) {
+        const alquimiaFunctions = window.__AP_ALQUIMIA_FUNCTIONS__;
+        if (alquimiaFunctions && alquimiaFunctions.loadListProjection) {
+          try {
+            await alquimiaFunctions.loadListProjection();
+          } catch (error) {
+            console.error('[REFRESH][FORCED_REFETCH] Error refrescando list projection', error);
+          }
+        }
+      }
+    }
+  }
+
   // RUNTIME CORE v1: Esperar a que el Runtime esté READY antes de exponer performAction
   try {
     if (!window.__AP_RUNTIME_READY__) {
@@ -59,7 +117,9 @@
    * @param {Object} [params.options] - Opciones adicionales
    * @returns {Promise<Object>} Response de la acción
    */
+
   async function performAction({ action_id, payload = {}, context = {}, uiState = {}, options = {} }) {
+    console.log('[FORENSIC][ACTION][PAYLOAD]', { action_id, payload, context });
     // Validaciones básicas
     if (!action_id || typeof action_id !== 'string') {
       throw new Error('[PerformActionV1] action_id es obligatorio y debe ser string');
@@ -273,64 +333,81 @@
         throw new Error(`${errorMsg} (trace_id=${backendTraceId})`);
       }
 
-      // Ejecutar refresh plan vía Refresh Engine
+      // FIX 3: Ejecutar refresh plan SIEMPRE, independiente de Refresh Engine
       const refreshEngine = window.MasterRefreshEngineV1;
-      if (!refreshEngine) {
-        console.warn('[PerformActionV1] Refresh Engine no disponible, saltando refresh');
-      } else {
-        // Resolver refresh_plan (compatibilidad: refresh_plan o refresh)
-        const refreshPlan = actionDef.refresh || actionDef.refresh_plan;
-        let surfacesToRefresh = [];
-        if (typeof refreshPlan === 'function') {
-          surfacesToRefresh = refreshPlan({ ...context, ...payload }, uiState, responseData);
-        } else if (Array.isArray(refreshPlan)) {
-          surfacesToRefresh = refreshPlan;
-        } else {
-          console.warn('[PerformActionV1] refresh/refresh_plan no es función ni array, usando plan vacío');
-        }
+      const refreshPlan = actionDef.refresh || actionDef.refresh_plan;
+      let surfacesToRefresh = [];
+      
+      if (typeof refreshPlan === 'function') {
+        surfacesToRefresh = refreshPlan({ ...context, ...payload }, uiState, responseData);
+      } else if (Array.isArray(refreshPlan)) {
+        surfacesToRefresh = refreshPlan;
+      }
+      
+      // Log del plan
+      console.log('[REFRESH][AFTER_ACTION]', {
+        action_id,
+        trace_id,
+        surfaces: surfacesToRefresh,
+        refresh_engine_available: !!refreshEngine,
+        timestamp: new Date().toISOString()
+      });
 
-        // Log del plan
-        console.log('[REFRESH][PLAN]', {
+      if (refreshEngine) {
+        // Refresh Engine disponible: usar engine canónico
+        try {
+          // Intentar usar Refresh Engine v2 (con surfaces) si está disponible
+          if (typeof refreshEngine.afterMutationV2 === 'function') {
+            await refreshEngine.afterMutationV2({
+              module: 'alquimia_general', // TODO: hacer dinámico según domain
+              mutation_type: action_id, // Compatibilidad v1
+              action_id: action_id, // Nuevo en v2
+              scope: {
+                view_mode: uiState.view_mode || 'operativa',
+                view_layer: uiState.view_layer || 'shared'
+              },
+              context: {
+                ...context,
+                trace_id,
+                action_id,
+                surfaces: surfacesToRefresh // Pasar surfaces al adapter
+              }
+            });
+          } else {
+            // Fallback a v1
+            await refreshEngine.afterMutation({
+              module: 'alquimia_general',
+              mutation_type: action_id,
+              scope: {
+                view_mode: uiState.view_mode || 'operativa',
+                view_layer: uiState.view_layer || 'shared'
+              },
+              context: {
+                ...context,
+                trace_id,
+                action_id,
+                surfaces: surfacesToRefresh // Pasar surfaces al adapter
+              }
+            });
+          }
+        } catch (refreshError) {
+          console.error('[REFRESH][ERROR] Error ejecutando refresh engine, forzando refetch manual', {
+            action_id,
+            trace_id,
+            error: refreshError.message,
+            stack: refreshError.stack
+          });
+          // Fallback a refetch manual si engine falla
+          await forceManualRefetch(action_id, context, uiState, surfacesToRefresh);
+        }
+      } else {
+        // FIX 3: Refresh Engine NO disponible: forzar refetch manual mínimo
+        console.warn('[REFRESH][MISSING_ENGINE] Refresh Engine no disponible, forzando refetch manual', {
           action_id,
           trace_id,
-          surfaces: surfacesToRefresh,
-          timestamp: new Date().toISOString()
+          surfaces: surfacesToRefresh
         });
-
-        // Intentar usar Refresh Engine v2 (con surfaces) si está disponible
-        if (typeof refreshEngine.afterMutationV2 === 'function') {
-          await refreshEngine.afterMutationV2({
-            module: 'alquimia_general', // TODO: hacer dinámico según domain
-            mutation_type: action_id, // Compatibilidad v1
-            action_id: action_id, // Nuevo en v2
-            scope: {
-              view_mode: uiState.view_mode || 'operativa',
-              view_layer: uiState.view_layer || 'shared'
-            },
-            context: {
-              ...context,
-              trace_id,
-              action_id,
-              surfaces: surfacesToRefresh // Pasar surfaces al adapter
-            }
-          });
-        } else {
-          // Fallback a v1
-          await refreshEngine.afterMutation({
-            module: 'alquimia_general',
-            mutation_type: action_id,
-            scope: {
-              view_mode: uiState.view_mode || 'operativa',
-              view_layer: uiState.view_layer || 'shared'
-            },
-            context: {
-              ...context,
-              trace_id,
-              action_id,
-              surfaces: surfacesToRefresh // Pasar surfaces al adapter
-            }
-          });
-        }
+        await forceManualRefetch(action_id, context, uiState, surfacesToRefresh);
       }
 
       return {

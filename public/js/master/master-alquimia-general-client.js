@@ -2322,19 +2322,20 @@
       }
       showWarning(message);
       
-      // CPM v1: Refrescar flotante si está abierto usando state.projection.view_layer
-      if (state.projection.mode === 'operativa' && state.modal.item && state.modal.item.item_ref === item.item_ref) {
+      // FIX 3: Refrescar flotante si está abierto INDEPENDIENTE de view_mode
+      if (state.modal.item && state.modal.item.item_ref === item.item_ref) {
         const preservedViewLayer = state.projection.view_layer || 'shared'; // CPM v1: autoridad única
         const preservedCleanLayer = cleanLayer; // Usar el clean_layer de la acción
         
-        console.log('[MasterAlquimiaGeneral] [CPM_V1] Refrescando flotante tras clean-all', {
+        console.log('[REFRESH][AFTER_ACTION] Refrescando flotante tras clean-all', {
           item_ref: item.item_ref,
           view_layer: preservedViewLayer,
           clean_layer: preservedCleanLayer,
+          view_mode: state.projection.mode, // Log pero no condiciona
           source: 'state.projection.view_layer'
         });
         
-        // Refrescar flotante usando view_layer de proyección
+        // Refrescar flotante usando view_layer de proyección (independiente de view_mode)
         await handleVerItem(state.modal.item, preservedCleanLayer, preservedViewLayer);
       }
       
@@ -2772,12 +2773,13 @@
       if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
         stateData = student.state_by_view_layer[activeViewLayer];
       } else {
-        // BUG-011: NO usar fallback legacy - BLOQUEAR render y mostrar error visible
-        console.error('[MasterAlquimiaGeneral] [UI][COLUMN] [BUG-011] state_by_view_layer no disponible - BLOQUEANDO render', {
+        // FIX 4: Invariante roto - falta state_by_view_layer (acción → proyección → columna)
+        console.error('[INVARIANT_BROKEN] Missing state_by_view_layer - Acción → Proyección → Columna invariante violado', {
           student_uuid: student.student_uuid,
           view_layer: activeViewLayer,
           has_state_by_view_layer: !!student.state_by_view_layer,
-          available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
+          available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : [],
+          student_keys: Object.keys(student)
         });
         // NO agregar estudiante a ninguna columna (bloquear render)
         // Mostrar error visible en la columna correspondiente
@@ -2787,6 +2789,24 @@
         studentsByState._error.push({
           ...student,
           _error_message: `Estado no disponible — datos inconsistentes (view_layer: ${activeViewLayer})`
+        });
+        return; // Saltar este estudiante
+      }
+      
+      // FIX 4: Assert defensivo - verificar que state existe en stateData
+      if (!stateData.state) {
+        console.error('[INVARIANT_BROKEN] Missing state in state_by_view_layer - Proyección → Columna invariante violado', {
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          activeViewLayer,
+          stateData_keys: Object.keys(stateData)
+        });
+        if (!studentsByState._error) {
+          studentsByState._error = [];
+        }
+        studentsByState._error.push({
+          ...student,
+          _error_message: `Estado sin campo 'state' — datos inconsistentes (view_layer: ${activeViewLayer})`
         });
         return; // Saltar este estudiante
       }

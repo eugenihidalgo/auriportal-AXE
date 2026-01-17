@@ -13,7 +13,7 @@
  * - domain: Dominio ('master' | 'god' | 'admin_legacy')
  * - allowed_item_kinds: Array de item_kinds permitidos ('recurrente' | 'una_vez')
  * - allowed_layers: Array de layers permitidos ('shared' | 'pde')
- * - allowed_scopes: Array de scopes permitidos ('item' | 'student' | 'all')
+ * - allowed_scopes: Array de scopes UX permitidos ('item' | 'list' | 'all' | 'student' | 'selection' | 'context')
  * - handler: Función que ejecuta la acción (backend endpoint)
  * - refresh: Plan declarativo de refresh (función o array de surface_ids)
  */
@@ -30,7 +30,7 @@ const actions = new Map();
  * @param {string} actionDef.description - Descripción legible
  * @param {Array<string>} [actionDef.allowed_item_kinds] - Item kinds permitidos ('recurrente' | 'una_vez')
  * @param {Array<string>} [actionDef.allowed_layers] - Layers permitidos ('shared' | 'pde')
- * @param {Array<string>} [actionDef.allowed_scopes] - Scopes permitidos ('item' | 'student' | 'all')
+ * @param {Array<string>} [actionDef.allowed_scopes] - Scopes UX permitidos ('item' | 'list' | 'all' | 'student' | 'selection' | 'context')
  * @param {Object} actionDef.handler - Handler de la acción
  * @param {string} actionDef.handler.method - Método HTTP ('POST' | 'PUT' | 'DELETE' | 'PATCH')
  * @param {Function} actionDef.handler.endpointBuilder - (context) => string
