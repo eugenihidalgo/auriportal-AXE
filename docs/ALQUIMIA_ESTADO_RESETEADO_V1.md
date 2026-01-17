@@ -106,7 +106,55 @@ const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed,
 - `important` siempre es el doble exacto del `threshold_days`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-5️⃣ FALLBACK DE ESTADOS DESCONOCIDOS
+5️⃣ ESTADO EFFECTIVE Y PRIORIDAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Archivo:** `src/core/master/services/cleaning-projection-model.js`  
+**Función:** `computeRecurrenteState()` con `view_layer === 'effective'` (líneas 104-139)
+
+**Estado `effective` combina estados de `shared` y `pde`:**
+- Calcula estado para cada capa (`shared` y `pde`)
+- Selecciona el mejor estado según prioridad canónica
+
+**Orden de prioridad canónica:**
+```
+reviewed > pending > important > reseteado > never
+```
+
+**Significado:**
+- `reseteado` es MEJOR que `never` (hay un ciclo activo, solo falta limpieza)
+- `reseteado` es PEOR que `important` (importante necesita atención inmediata)
+- `reseteado` NO es estado final efectivo (es un estado transitorio de ciclo)
+
+**Lógica canónica (líneas 110-122):**
+```javascript
+// Prioridad canónica: reviewed > pending > important > reseteado > never
+// `reseteado` es un estado base de ciclo: mejor que `never`, peor que `important`
+let effectiveState;
+if (sharedState.state === 'reviewed' || pdeState.state === 'reviewed') {
+  effectiveState = 'reviewed';
+} else if (sharedState.state === 'pending' || pdeState.state === 'pending') {
+  effectiveState = 'pending';
+} else if (sharedState.state === 'important' || pdeState.state === 'important') {
+  effectiveState = 'important';
+} else if (sharedState.state === 'reseteado' || pdeState.state === 'reseteado') {
+  effectiveState = 'reseteado';
+} else {
+  effectiveState = 'never';
+}
+```
+
+**Ejemplos:**
+- `shared.state = 'reseteado'` y `pde.state = 'never'` → `effective.state = 'reseteado'` ✅
+- `shared.state = 'reviewed'` y `pde.state = 'never'` → `effective.state = 'reviewed'` ✅
+- `shared.state = 'reseteado'` y `pde.state = 'reseteado'` → `effective.state = 'reseteado'` ✅
+
+**⚠️ IMPORTANTE:**
+- `reseteado` NO se trata como `never` en `effective` (fix aplicado v5.77.2)
+- Tras limpiar una capa, `effective` refleja el cambio correctamente (ej: `shared` pasa a `reviewed` → `effective` pasa a `reviewed`)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6️⃣ FALLBACK DE ESTADOS DESCONOCIDOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Regla canónica:**
@@ -139,7 +187,7 @@ if (studentsByState[columnState]) {
 - `reviewed` ✅
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-6️⃣ PUNTO DE ROTURA ORIGINAL
+7️⃣ PUNTO DE ROTURA ORIGINAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Bug original:**
@@ -158,7 +206,7 @@ if (studentsByState[columnState]) {
 - **Caso maldito:** `student_uuid: 0d29eedc-6f42-44d1-bb12-53dba2fc9490`, `item_ref: item_17_1768641625523_cr5fpr`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-7️⃣ VERIFICACIÓN OBLIGATORIA
+8️⃣ VERIFICACIÓN OBLIGATORIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Caso de prueba canónico:**
@@ -184,20 +232,22 @@ if (studentsByState[columnState]) {
    - ✅ `days_since >= 2*threshold` → `state = 'important'`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-8️⃣ REFERENCIAS
+9️⃣ REFERENCIAS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **Archivos modificados:**
-- `src/core/master/services/cleaning-projection-model.js` (CPM - introducción de `reseteado`)
+- `src/core/master/services/cleaning-projection-model.js` (CPM - introducción de `reseteado` y prioridad en `effective`)
 - `src/services/alquimia-general-service.js` (Service - counts incluyen `reseteado`)
 - `public/js/master/master-alquimia-general-client.js` (UI - columna RESETEADO y orden canónico)
 
 **Documentos relacionados:**
 - `docs/DIAGNOSTICO_TOTAL_ALQUIMIA_GENERAL_RECURRENTES_V1.md` (diagnóstico base)
+- `docs/DIAGNOSTICO_QUIRURGICO_RESETEADO_NO_LIMPIA_V1.md` (diagnóstico effective)
 - `docs/FORENSICS_RESET_MALDITO_V1.md` (forensics original)
 
 **Versión:**
 - **v1.0** - 2026-01-27 - Introducción de estado `reseteado` para recurrentes
+- **v1.1** - 2026-01-27 - Fix: Inclusión de `reseteado` en prioridad de `effective`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **FIN DEL DOCUMENTO**

@@ -107,7 +107,8 @@ function computeRecurrenteState({ view_layer, threshold_days, criticalThreshold,
     const sharedState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: shared });
     const pdeState = computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerData: pde });
     
-    // Prioridad: reviewed > pending > important > never
+    // Prioridad canónica: reviewed > pending > important > reseteado > never
+    // `reseteado` es un estado base de ciclo: mejor que `never`, peor que `important`
     let effectiveState;
     if (sharedState.state === 'reviewed' || pdeState.state === 'reviewed') {
       effectiveState = 'reviewed';
@@ -115,6 +116,8 @@ function computeRecurrenteState({ view_layer, threshold_days, criticalThreshold,
       effectiveState = 'pending';
     } else if (sharedState.state === 'important' || pdeState.state === 'important') {
       effectiveState = 'important';
+    } else if (sharedState.state === 'reseteado' || pdeState.state === 'reseteado') {
+      effectiveState = 'reseteado';
     } else {
       effectiveState = 'never';
     }
