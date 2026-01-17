@@ -364,9 +364,8 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
     // ========================================================================
     // DIAG FORENSE: REBASE OUTPUT
     // ========================================================================
-    const effectiveColumn = cleanLayer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
-    const lastCleanedColumn = cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
-    const countColumn = cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+    // Reutilizar variables ya declaradas (línea 316-318)
+    // effectiveColumn, lastCleanedColumn, countColumn ya están declaradas
     
     const resultingLastCleanedAt = rebasedState?.[lastCleanedColumn] ? new Date(rebasedState[lastCleanedColumn]).toISOString() : null;
     const resultingEffectiveSince = rebasedState?.[effectiveColumn] ? new Date(rebasedState[effectiveColumn]).toISOString() : null;
@@ -1882,7 +1881,15 @@ export async function setRemainingShared(options, client = null) {
  * - Inserta evento en cleaning_events con action_type='reset'
  * - Actualiza cleaning_item_state estableciendo effective_since (NO borra)
  * - Conserva historia (contadores, fechas históricas)
- * - Reset nunca produce estado 'never' (si hubo reset, siempre es 'pending')
+ * 
+ * SEMÁNTICA CANÓNICA: Reset inicia un nuevo ciclo.
+ * - effective_since se fija al momento del reset (reset.created_at)
+ * - El estado inicial es 'reseteado' con days_since = 0
+ * - Reset nunca produce estado 'never' (siempre hay ciclo abierto si hubo reset)
+ * - La progresión de estados (reseteado → reviewed → pending → important) depende
+ *   exclusivamente del tiempo transcurrido desde effective_since
+ * - Reset NO usa threshold_days para ajustar effective_since
+ * - Reset NO aplica offsets temporales
  * 
  * @param {Object} options - Opciones
  * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
@@ -2541,10 +2548,10 @@ export async function resetAllStudentsItemProgress(options, client = null) {
  * - LIST_ALL → iterar items + resetAllStudentsItemProgress()
  * 
  * REGLA CONSTITUCIONAL:
- * - effective_since = NOW()
- * - last_cleaned_at = NULL
- * - clean_count = 0
- * - days_since resultante = recurrencia + 1 (PENDIENTE, no NUNCA)
+ * - effective_since = reset.created_at (timestamp del evento RESET)
+ * - Reset SOLO modifica effective_since (NO modifica contadores directamente)
+ * - days_since resultante = 0 (estado 'reseteado', no 'pending')
+ * - Para llegar a 'pending': debe pasar tiempo hasta days_since >= threshold_days
  * - execution_key generado internamente (BACKEND-ONLY)
  * 
  * @param {Object} options - Opciones

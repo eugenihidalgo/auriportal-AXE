@@ -18,8 +18,26 @@
 - Reset NO borra historia (eventos previos permanecen en `cleaning_events`)
 - Reset NO modifica contadores directamente (estos se calculan desde eventos post-RESET)
 - Reset es un EVENTO del Cleaning Engine (append-only), no un delete
+- Reset inicia un nuevo ciclo (estado inicial: `'reseteado'` con `days_since = 0`)
+- Reset NO produce `'pending'` inmediato (produce `'reseteado'`)
 
 **Propósito único:** Permitir que MASTER reinicie el ciclo de limpieza de un item RECURRENTE sin perder la historia previa.
+
+**Tabla de estados post-RESET (semántica canónica):**
+
+| days_since | state | Descripción |
+|-----------|-------|-------------|
+| 0 | `'reseteado'` | Estado inicial tras reset sin limpieza post-RESET |
+| `> 0` y `< threshold_days` | `'reviewed'` | Limpieza reciente (dentro del threshold) |
+| `>= threshold_days` y `< criticalThreshold` | `'pending'` | Limpieza antigua pero no crítica (amarillo) |
+| `>= criticalThreshold` | `'important'` | Limpieza muy antigua (rojo) |
+
+**Aclaraciones críticas:**
+- Reset NO produce `'pending'` inmediato (produce `'reseteado'`)
+- Reset NO usa `threshold_days` para ajustar `effective_since`
+- Reset NO aplica offsets temporales
+- `threshold_days` solo se usa en CPM para comparar `days_since`
+- Para llegar a `'pending'`: debe pasar tiempo hasta `days_since >= threshold_days`
 
 **NO es:**
 - ❌ Un delete (no borra eventos ni estados)
@@ -150,12 +168,24 @@
 
 **Contrato:**
 - CPM usa `max(last_cleaned_at, effective_since)` para calcular `last_effective_clean`
-- Si `effective_since != null` y `last_cleaned_at == null` → estado = `'reseteado'`
-- Si `effective_since != null` y `last_cleaned_at != null` → estado se calcula desde `effective_since`
+- Si `effective_since != null` y `last_effective_clean == null` → estado = `'reseteado'` (days=0)
+- Si `effective_since != null` y `last_effective_clean != null` → estado se calcula desde `effective_since` y `threshold_days`
 
-**Estados post-RESET:**
-- `'reseteado'`: `effective_since != null AND last_effective_clean == null` (days=0)
-- `'reviewed'`, `'pending'`, `'important'`: se calculan desde `effective_since` si hay limpiezas post-RESET
+**Estados post-RESET (semántica canónica):**
+
+| days_since | state | Descripción |
+|-----------|-------|-------------|
+| 0 | `'reseteado'` | Estado inicial tras reset sin limpieza post-RESET |
+| `> 0` y `< threshold_days` | `'reviewed'` | Limpieza reciente (dentro del threshold) |
+| `>= threshold_days` y `< criticalThreshold` | `'pending'` | Limpieza antigua pero no crítica (amarillo) |
+| `>= criticalThreshold` | `'important'` | Limpieza muy antigua (rojo) |
+
+**Aclaraciones críticas:**
+- Reset NO produce `'pending'` inmediato (produce `'reseteado'`)
+- Reset NO usa `threshold_days` para ajustar `effective_since`
+- Reset NO aplica offsets temporales
+- `threshold_days` solo se usa en CPM para comparar `days_since`
+- Para llegar a `'pending'`: debe pasar tiempo hasta `days_since >= threshold_days`
 
 **Referencias:** `src/core/master/services/cleaning-projection-model.js:104-621`
 
@@ -443,6 +473,35 @@ WHERE ...
 ```
 
 **Referencia:** `src/infra/repos/cleaning/cleaning-item-state-repo-pg.js:340-403`
+
+---
+
+### 2. Expectativa histórica: "Reset produce pending"
+
+**DEPRECATED (Expectativa incorrecta):**
+- Históricamente existieron comentarios o expectativas que sugerían que "reset siempre produce pending"
+- Comentarios desactualizados mencionaban "days_since = recurrencia + 1 (PENDIENTE, no NUNCA)"
+
+**Canónico (Comportamiento actual y definitivo):**
+- Reset inicia un nuevo ciclo
+- Estado inicial tras reset = `'reseteado'` con `days_since = 0`
+- Reset NO produce `'pending'` inmediato
+- Para llegar a `'pending'`: debe pasar tiempo hasta `days_since >= threshold_days`
+- Reset NO usa `threshold_days` para ajustar `effective_since`
+- Reset NO aplica offsets temporales
+
+**Tabla de estados post-RESET (canónica y definitiva):**
+
+| days_since | state | Descripción |
+|-----------|-------|-------------|
+| 0 | `'reseteado'` | Estado inicial tras reset sin limpieza post-RESET |
+| `> 0` y `< threshold_days` | `'reviewed'` | Limpieza reciente (dentro del threshold) |
+| `>= threshold_days` y `< criticalThreshold` | `'pending'` | Limpieza antigua pero no crítica (amarillo) |
+| `>= criticalThreshold` | `'important'` | Limpieza muy antigua (rojo) |
+
+**Referencias:**
+- `src/core/master/services/cleaning-engine-service.js:1878-1886` (comentario canónico)
+- `src/core/master/services/cleaning-projection-model.js:160-426` (implementación CPM)
 
 ---
 

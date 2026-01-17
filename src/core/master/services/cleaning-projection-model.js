@@ -102,10 +102,15 @@ export function computeEffectiveState({ item_kind, view_layer, item_config, clea
  * REGLAS:
  * - last_effective_clean = max(last_cleaned_at, effective_since)
  * - never: last_cleaned_at === null AND effective_since === null
- * - pending (post-reset): effective_since !== null AND last_effective_clean === effective_since
- * - reviewed: days_since < threshold_days
- * - pending: threshold_days <= days_since < criticalThreshold
- * - important: days_since >= criticalThreshold
+ * - reseteado: effective_since !== null AND last_effective_clean === null (days_since = 0)
+ * - reviewed: days_since !== null AND days_since < threshold_days
+ * - pending: days_since !== null AND threshold_days <= days_since < criticalThreshold
+ * - important: days_since !== null AND days_since >= criticalThreshold
+ * 
+ * SEMÁNTICA POST-RESET:
+ * - Tras reset sin limpieza post-RESET: state = 'reseteado', days_since = 0
+ * - Para llegar a 'pending': debe pasar tiempo hasta days_since >= threshold_days
+ * - Reset NO produce 'pending' inmediato (produce 'reseteado')
  */
 function computeRecurrenteState({ view_layer, threshold_days, criticalThreshold, shared, pde }) {
   if (view_layer === 'effective') {
