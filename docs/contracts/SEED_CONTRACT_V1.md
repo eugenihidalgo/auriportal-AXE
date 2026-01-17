@@ -190,6 +190,26 @@ El Cleaning State Seed es un mecanismo **estructural** que materializa estados i
 - Reset establece `effective_since` después
 - Seed NO interactúa con reset (son independientes)
 
+**Referencias:** `docs/contracts/RESET_CONTRACT_V1.md`
+
+---
+
+### Overrides
+
+**Relación:**
+- Seed NO lee overrides
+- Seed NO modifica overrides
+- Overrides pueden existir antes del seed
+
+**Contrato:**
+- Override antes del seed NO tiene efecto hasta que exista estado
+- Cuando seed crea estado, override se aplica inmediatamente después
+- Seed y overrides son independientes
+
+**Referencias:**
+- `docs/contracts/OVERRIDES_CONTRACT_V1.md` (contrato canónico de overrides)
+- `docs/DIAGNOSTICO_OVERRIDES_MASTER.md` (análisis completo de overrides huérfanos)
+
 ---
 
 ### CPM (Cleaning Projection Model)
@@ -487,6 +507,8 @@ async function ensureStructuralCleaningState(options = {}, client = null)
 - **Servicio actual:** `src/core/master/services/cleaning-state-seed-service.js`
 - **Endpoint GET:** `src/endpoints/master-api-alquimia-alumno.js:178`
 - **Endpoint POST:** `src/endpoints/master-api-alquimia-alumno.js:311`
+- **Contrato RESET:** `docs/contracts/RESET_CONTRACT_V1.md`
+- **Contrato OVERRIDES:** `docs/contracts/OVERRIDES_CONTRACT_V1.md`
 - **CPM:** `src/core/master/services/cleaning-projection-model.js`
 - **LPM:** `src/core/master/services/list-projection-model.js`
 
