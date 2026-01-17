@@ -3509,19 +3509,44 @@
       // SHARED o PDE: un solo botón
       const cleanLayer = layerView === 'pde' ? 'pde' : 'shared';
       // REGLA CANÓNICA: RECURRENTE bloquea si está "reviewed", UNA_VEZ NUNCA bloquea (infinito)
+      // REGLA CANÓNICA: reseteado DEBE permitir limpieza (nuevo ciclo abierto)
       if (itemKind === 'recurrente' && stateKey === 'reviewed') {
         // RECURRENTE: no mostrar botón si ya está revisado (idempotencia diaria)
         // (botón no se muestra, pero no es un error)
       } else {
         // UNA_VEZ: SIEMPRE permitir +1 (infinito), incluso si está completed/empowered
-        // RECURRENTE: mostrar botón si NO está reviewed
-        const btnClean = document.createElement('button');
-        btnClean.textContent = itemKind === 'una_vez' ? '+1' : '✓';
-        btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
-        btnClean.addEventListener('click', async () => {
-          await handleLimpiarEstudiante(student, item, cleanLayer, itemKind);
-        });
-        actionsDiv.appendChild(btnClean);
+        // RECURRENTE: mostrar botón si NO está reviewed (incluye never, reseteado, pending, important)
+        // Validar elegibilidad usando función canónica
+        const canClean = itemKind === 'una_vez' ? true : isCleanAllowed(stateKey);
+        
+        if (!canClean) {
+          // No mostrar botón si no se puede limpiar
+          console.warn('[CLEAN_BLOCKED]', {
+            state: stateKey,
+            reason: 'state_not_cleanable',
+            item_ref: item.item_ref,
+            student_uuid: student.student_uuid,
+            item_kind: itemKind,
+            allowed_states: ['never', 'reseteado', 'pending', 'important']
+          });
+        } else {
+          const btnClean = document.createElement('button');
+          btnClean.textContent = itemKind === 'una_vez' ? '+1' : '✓';
+          btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
+          btnClean.addEventListener('click', async () => {
+            // Log forense antes de ejecutar
+            console.log('[CLEAN_ALLOWED]', {
+              state: stateKey,
+              action: 'alquimia.clean',
+              item_ref: item.item_ref,
+              student_uuid: student.student_uuid,
+              clean_layer: cleanLayer,
+              item_kind: itemKind
+            });
+            await handleLimpiarEstudiante(student, item, cleanLayer, itemKind);
+          });
+          actionsDiv.appendChild(btnClean);
+        }
       }
     }
     
@@ -3637,6 +3662,18 @@
       };
       return visualStateMap[visualState] || 'N/A';
     }
+  }
+
+  /**
+   * Función canónica: Determina si un estado permite acción de limpieza
+   * REGLA CONSTITUCIONAL: reseteado DEBE permitir limpieza (nuevo ciclo abierto)
+   * 
+   * @param {string} state - Estado del item ('never' | 'reseteado' | 'pending' | 'important' | 'reviewed')
+   * @returns {boolean} true si se permite limpiar, false si no
+   */
+  function isCleanAllowed(state) {
+    const allowedStates = ['never', 'reseteado', 'pending', 'important'];
+    return allowedStates.includes(state);
   }
 
   /**
@@ -3767,8 +3804,27 @@
         // REGLA CONSTITUCIONAL: Usar función canónica para leer estado
         const stateData = getRecurrenteStateFromProjection(student, cleanLayer);
         const daysSinceLastClean = stateData?.days_since_last_clean ?? null;
+        const currentState = stateData?.state || 'never';
         
-        console.log('[UI][RECURRENTE][BUTTON] Intento de limpieza', {
+        // Validar elegibilidad usando función canónica
+        const canClean = isCleanAllowed(currentState);
+        
+        if (!canClean) {
+          console.warn('[CLEAN_BLOCKED]', {
+            state: currentState,
+            reason: 'state_not_cleanable',
+            student_uuid: student.student_uuid,
+            item_ref: item.item_ref,
+            clean_layer: cleanLayer,
+            allowed_states: ['never', 'reseteado', 'pending', 'important']
+          });
+          showToastError(`No se puede limpiar desde estado "${currentState}". Estados permitidos: never, reseteado, pending, important.`);
+          return;
+        }
+        
+        console.log('[CLEAN_ALLOWED]', {
+          state: currentState,
+          action: 'alquimia.clean',
           student_uuid: student.student_uuid,
           item_ref: item.item_ref,
           action_clean_layer: cleanLayer,
@@ -3776,6 +3832,16 @@
           days_since_last_clean: daysSinceLastClean,
           enabled: true, // UI siempre permite intentar (idempotencia en backend)
           idempotency_by_layer: true
+        });
+      } else {
+        // UNA_VEZ: siempre permitir (infinito)
+        console.log('[CLEAN_ALLOWED]', {
+          state: 'una_vez',
+          action: 'alquimia.clean',
+          student_uuid: student.student_uuid,
+          item_ref: item.item_ref,
+          clean_layer: cleanLayer,
+          reason: 'una_vez_always_allowed'
         });
       }
       
