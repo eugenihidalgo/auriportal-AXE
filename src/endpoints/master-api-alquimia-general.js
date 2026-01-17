@@ -633,8 +633,19 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         if (!itemKind || (itemKind !== 'recurrente' && itemKind !== 'una_vez')) {
           return jsonError('item_kind es requerido y debe ser "recurrente" o "una_vez"', 'INVALID_ITEM_KIND', 400, traceId);
         }
-        if (!viewLayer) {
-          return jsonError('view_layer es requerido', 'MISSING_VIEW_LAYER', 400, traceId);
+        // ============================================================================
+        // FAIL-HARD OBLIGATORIO: view_layer es OBLIGATORIO (sin fallbacks)
+        // ============================================================================
+        if (!viewLayer || viewLayer.trim() === '') {
+          const error = new Error('[INVARIANT_BROKEN][VIEW_LAYER_MISSING] view_layer es OBLIGATORIO pero falta o está vacío');
+          logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][VIEW_LAYER_MISSING]', {
+            traceId,
+            list_id: listId,
+            item_kind: itemKind,
+            view_layer: viewLayer,
+            query_params: Object.fromEntries(url.searchParams)
+          });
+          return jsonError(error.message, 'VIEW_LAYER_MISSING', 400, traceId);
         }
         if (!scope || (scope !== 'all' && scope !== 'student')) {
           return jsonError('scope es requerido y debe ser "all" o "student"', 'INVALID_SCOPE', 400, traceId);

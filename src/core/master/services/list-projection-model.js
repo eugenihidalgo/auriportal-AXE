@@ -500,7 +500,8 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
       // ========================================================================
       // Regla: Si effective_since != null y last_cleaned_at < effective_since,
       // normalizar para ciclo actual (no borra historial, solo ciclo actual)
-      const normalizeState = (layer, effectiveSince, lastCleanedAt, cleanCount) => {
+      // NOTA: El parámetro layer no se usa, pero se mantiene para compatibilidad
+      const normalizeState = (_layer, effectiveSince, lastCleanedAt, cleanCount) => {
         if (!effectiveSince) {
           // Sin reset: usar datos tal cual
           return {
@@ -689,8 +690,19 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
     if (!item_kind || (item_kind !== 'recurrente' && item_kind !== 'una_vez')) {
       throw new Error('item_kind debe ser "recurrente" o "una_vez"');
     }
-    if (!view_layer) {
-      throw new Error('view_layer es requerido');
+    // ============================================================================
+    // FAIL-HARD OBLIGATORIO: view_layer es OBLIGATORIO (sin fallbacks)
+    // ============================================================================
+    if (!view_layer || (typeof view_layer === 'string' && view_layer.trim() === '')) {
+      const error = new Error('[INVARIANT_BROKEN][VIEW_LAYER_MISSING] view_layer es OBLIGATORIO pero falta o está vacío');
+      logError('ListProjectionModel', '[INVARIANT_BROKEN][VIEW_LAYER_MISSING]', {
+        traceId,
+        list_id,
+        item_kind,
+        view_layer: view_layer,
+        view_layer_type: typeof view_layer
+      });
+      throw error;
     }
     if (!scope || (scope !== 'all' && scope !== 'student')) {
       throw new Error('scope debe ser "all" o "student"');
