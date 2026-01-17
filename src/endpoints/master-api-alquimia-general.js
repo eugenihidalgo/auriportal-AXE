@@ -1836,6 +1836,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // POST /master/api/alquimia-general/reset
     // Endpoint único canónico para todos los tipos de reset
     // Usa reset_scope: ITEM_STUDENT | ITEM_ALL | LIST_STUDENT | LIST_ALL
+    // ============================================================================
+    // GUARD CONSTITUCIONAL: Reset solo disponible en POST
+    // ============================================================================
+    if (path === '/master/api/alquimia-general/reset' && method !== 'POST') {
+      return jsonError('Reset solo disponible en POST. Método recibido: ' + method, 'RESET_IN_GET_FORBIDDEN', 405, traceId);
+    }
+    
     if (path === '/master/api/alquimia-general/reset' && method === 'POST') {
       try {
         const body = await request.json();
@@ -2339,6 +2346,13 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // POST /master/api/alquimia-general/reset-item-all
     // Resetea el progreso de TODOS los estudiantes para un ítem específico (RESET ALL)
     // REGLA CONSTITUCIONAL: Solo disponible para recurrente, scope='all', clean_layer='pde'
+    // ============================================================================
+    // GUARD CONSTITUCIONAL: Reset solo disponible en POST
+    // ============================================================================
+    if (path === '/master/api/alquimia-general/reset-item-all' && method !== 'POST') {
+      return jsonError('Reset solo disponible en POST. Método recibido: ' + method, 'RESET_IN_GET_FORBIDDEN', 405, traceId);
+    }
+    
     if (path === '/master/api/alquimia-general/reset-item-all' && method === 'POST') {
       try {
         const body = await request.json();

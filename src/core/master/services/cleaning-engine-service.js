@@ -317,19 +317,19 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
     const lastCleanedColumn = cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
     const countColumn = cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
     
-    // 1. Aplicar reset canónico (establece effective_since y resetea contadores)
-    // NOTA: upsertApplyReset establece effective_since = NOW(), pero necesitamos reset.created_at
-    // Por lo tanto, actualizamos manualmente después
+    // 1. Aplicar reset canónico (SOLO effective_since según RESET CANÓNICO v1)
+    // REGLA CONSTITUCIONAL: Reset SOLO modifica effective_since
+    // Los contadores se calcularán desde eventos post-RESET a continuación
     await stateRepo.upsertApplyReset({
       student_uuid: studentUuid,
       item_ref: itemRef,
       clean_layer: cleanLayer,
-      item_kind: 'recurrente', // Solo recurrente puede tener reset
+      reset_at: resetAt, // Usar reset.created_at (no NOW())
       product_key: productKey,
       domain_type: domainType
     }, client);
-    
-    // 2. Actualizar effective_since al reset.created_at y ajustar contadores desde eventos
+
+    // 2. Ajustar contadores desde eventos post-RESET (rebase canónico)
     const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
@@ -2114,7 +2114,8 @@ export async function resetStudentItemProgress(options, client = null) {
 
         const eventResult = await eventsRepo.insertEvent(eventData, client);
 
-        // Verificar idempotencia con coherencia (BLINDAJE v1)
+        // Obtener timestamp del evento RESET (creado o existente)
+        let resetTimestamp;
         if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
           // BLINDAJE: Verificar coherencia antes de omitir
           const currentState = await stateRepo.getState({
@@ -2139,17 +2140,14 @@ export async function resetStudentItemProgress(options, client = null) {
           );
 
           const effectiveColumn = layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
-          const lastCleanedColumn = layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
-          const countColumn = layer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
-
           const currentEffective = currentState?.[effectiveColumn] ? new Date(currentState[effectiveColumn]) : null;
-          const eventCreatedAt = existingResetEvent?.created_at ? new Date(existingResetEvent.created_at) : new Date();
+          resetTimestamp = existingResetEvent?.created_at ? new Date(existingResetEvent.created_at) : new Date();
           
           // Verificar si el estado está coherente con el reset esperado
+          // REGLA CONSTITUCIONAL: Reset SOLO modifica effective_since
+          // No verificamos contadores (pueden tener valores previos a reset o post-reset)
           const isCoherent = currentEffective && 
-            currentEffective >= eventCreatedAt &&
-            currentState[lastCleanedColumn] === null &&
-            currentState[countColumn] === 0;
+            currentEffective >= resetTimestamp;
 
           if (!isCoherent) {
             // Estado incoherente: aplicar reset igualmente (idempotencia override)
@@ -2160,9 +2158,7 @@ export async function resetStudentItemProgress(options, client = null) {
               item_ref,
               clean_layer: layer,
               current_effective: currentEffective,
-              current_last_cleaned: currentState[lastCleanedColumn],
-              current_count: currentState[countColumn],
-              event_created_at: eventCreatedAt
+              event_created_at: resetTimestamp
             });
             // Continuar para aplicar reset (no hacer skipped++)
           } else {
@@ -2177,17 +2173,21 @@ export async function resetStudentItemProgress(options, client = null) {
             skipped++;
             continue;
           }
+        } else {
+          // Evento insertado exitosamente
+          resetTimestamp = eventResult.created_at ? new Date(eventResult.created_at) : new Date();
         }
 
-        // Aplicar reset a proyección (establecer effective_since + resetear contadores)
-        // FIX MAJOR: Pasar item_kind para resetear last_cleaned_at y completed correctamente
+        // Aplicar reset a proyección (SOLO effective_since según RESET CANÓNICO v1)
+        // REGLA CONSTITUCIONAL: Reset SOLO modifica effective_since
+        // Los contadores se calcularán desde eventos post-RESET cuando se ejecute rebaseStateFromReset()
         await stateRepo.upsertApplyReset({
           student_uuid,
           product_key,
           domain_type,
           item_ref,
           clean_layer: layer,
-          item_kind // FIX: Pasar item_kind para resetear contadores solo en recurrente
+          reset_at: resetTimestamp // Usar timestamp del evento RESET (no NOW())
         }, client);
 
         applied++;
