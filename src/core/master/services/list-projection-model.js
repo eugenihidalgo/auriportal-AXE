@@ -1,6 +1,15 @@
 // src/core/master/services/list-projection-model.js
 // List Projection Model (LPM) v1
 //
+// GUARD CONSTITUCIONAL: LPM NO emite señales
+// - LPM es función pura (read-only)
+// - LPM solo calcula proyecciones agregadas, no modifica estado
+// - Señales solo se emiten desde acciones WRITE (cleaning-engine, seed)
+//
+// Referencias:
+// - docs/LIST_PROJECTION_MODEL_V1.md (documentación canónica)
+// - docs/contracts/SIGNALS_CONTRACT_V1.md (sistema de señales canónico)
+//
 // CONSTITUCIONAL: Única capa autorizada para calcular proyecciones de LISTAS
 // agrupadas por estados, métricas agregadas y estado de salud.
 //

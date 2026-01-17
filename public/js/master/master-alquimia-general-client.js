@@ -3534,6 +3534,27 @@
           btnClean.textContent = itemKind === 'una_vez' ? '+1' : '✓';
           btnClean.style.cssText = 'padding: 0.25rem 0.5rem; background: #10b981; color: #fff; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; font-weight: 600;';
           btnClean.addEventListener('click', async () => {
+            // ========================================================================
+            // FASE A - DIAG FORENSE: UI / EVENTO
+            // ========================================================================
+            const stateData = getRecurrenteStateFromProjection(student, cleanLayer);
+            const currentState = stateData?.state || 'never';
+            const daysSinceLastClean = stateData?.days_since_last_clean ?? null;
+            
+            console.log('[DIAG][UI][PRE_ACTION]', {
+              phase: 'FASE_A_UI_EVENT',
+              click_executed: true,
+              state_visible: currentState,
+              item_ref: item.item_ref,
+              student_uuid: student.student_uuid,
+              view_layer: state.projection.view_layer || cleanLayer,
+              item_kind: itemKind,
+              clean_layer: cleanLayer,
+              days_since_last_clean: daysSinceLastClean,
+              state_data: stateData,
+              timestamp: new Date().toISOString()
+            });
+            
             // Log forense antes de ejecutar
             console.log('[CLEAN_ALLOWED]', {
               state: stateKey,
@@ -3543,6 +3564,7 @@
               clean_layer: cleanLayer,
               item_kind: itemKind
             });
+            
             await handleLimpiarEstudiante(student, item, cleanLayer, itemKind);
           });
           actionsDiv.appendChild(btnClean);
@@ -3871,6 +3893,29 @@
 
       // FASE 2 FIX: Eliminar fallback legacy y payload manual
       // Usar SOLO 'alquimia.clean' y dejar que performAction use buildPayload del handler
+      
+      // ========================================================================
+      // FASE A - DIAG FORENSE: Confirmación antes de performAction
+      // ========================================================================
+      console.log('[DIAG][UI][PRE_PERFORM_ACTION]', {
+        phase: 'FASE_A_UI_CONFIRM',
+        performAction_called: true,
+        action_id: 'alquimia.clean',
+        context: {
+          item_ref: item.item_ref,
+          student_uuid: student.student_uuid,
+          item_kind: itemKind,
+          clean_layer: cleanLayer,
+          scope: 'student'
+        },
+        uiState: {
+          view_mode: uiState.view_mode,
+          view_layer: uiState.view_layer,
+          list_id: uiState.list_id
+        },
+        timestamp: new Date().toISOString()
+      });
+      
       // #region agent log
       fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3804',message:'BEFORE performAction call',data:{action_id:'alquimia.clean',context:{item_ref:item.item_ref,student_uuid:student.student_uuid,item_kind:itemKind,clean_layer:cleanLayer,scope:'student'},uiState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion

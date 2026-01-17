@@ -26,6 +26,7 @@ import { getRequestId } from '../../observability/request-context.js';
 import { logError, logInfo, logWarn } from '../../observability/logger.js';
 import { randomUUID } from 'crypto';
 import { validateCleanLayer, validateCleanLayerNotCombo } from './cleaning-layer-constants.js';
+import { dispatchSignal } from '../../signals/signal-dispatcher.js';
 
 /**
  * Genera execution_key para idempotencia (APPLY) o certificación (CERTIFY)
@@ -193,6 +194,19 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
     const stateRepo = getDefaultCleaningItemStateRepo();
     const resetAt = new Date(lastReset.created_at);
     
+    // ========================================================================
+    // DIAG FORENSE: REBASE INPUT
+    // ========================================================================
+    const resetEffectiveSince = resetAt.toISOString();
+    const currentCleanEventTimestamp = currentCleanEvent ? (currentCleanEvent.created_at ? new Date(currentCleanEvent.created_at).toISOString() : null) : null;
+    const cleanEventDate = currentCleanEvent ? new Date(currentCleanEvent.created_at || new Date()) : null;
+    const comparison = currentCleanEvent && cleanEventDate ? {
+      currentCleanEvent_timestamp: currentCleanEventTimestamp,
+      reset_effective_since: resetEffectiveSince,
+      comparison_result: cleanEventDate >= resetAt,
+      diff_ms: cleanEventDate.getTime() - resetAt.getTime()
+    } : null;
+    
     // Obtener todos los eventos posteriores al RESET
     const allEvents = await eventsRepo.listEventsForStudentItem({
       student_uuid: studentUuid,
@@ -201,13 +215,48 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
       domain_type: domainType
     }, client);
     
+    // Resumir eventos antes del merge para logs
+    const eventsBeforeRebase = allEvents
+      .filter(e => e.action_type === 'mark_clean' && e.clean_layer === cleanLayer)
+      .map(e => ({
+        id: e.id || e.execution_key,
+        action_type: e.action_type,
+        clean_layer: e.clean_layer,
+        created_at: e.created_at ? new Date(e.created_at).toISOString() : null,
+        execution_key: e.execution_key
+      }))
+      .slice(0, 10); // Primeros 10 para no saturar logs
+    
+    console.log('[DIAG][REBASE][INPUT]', {
+      phase: 'REBASE_INPUT',
+      trace_id: traceId,
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      reset_effective_since: resetEffectiveSince,
+      currentCleanEvent_provided: !!currentCleanEvent,
+      currentCleanEvent_timestamp: currentCleanEventTimestamp,
+      comparison: comparison,
+      events_before_rebase: {
+        total_events: allEvents.length,
+        clean_events_count: allEvents.filter(e => e.action_type === 'mark_clean' && e.clean_layer === cleanLayer).length,
+        events_summary: eventsBeforeRebase
+      },
+      timestamp: new Date().toISOString()
+    });
+    
     // FIX: Incluir evento de limpieza actual si se está ejecutando un CLEAN post-RESET
     // Esto asegura que el evento recién insertado se considere aunque tenga created_at igual o muy cercano al resetAt
+    let wasCurrentCleanEventIncluded = false;
+    let reasonIfExcluded = null;
+    
     if (currentCleanEvent) {
-      const cleanEventDate = new Date(currentCleanEvent.created_at || new Date());
       // Solo incluir si es posterior o igual al reset (>= para incluir eventos en el mismo momento)
       if (cleanEventDate >= resetAt) {
         allEvents.push(currentCleanEvent);
+        wasCurrentCleanEventIncluded = true;
+      } else {
+        reasonIfExcluded = `currentCleanEvent.timestamp (${currentCleanEventTimestamp}) < reset_effective_since (${resetEffectiveSince})`;
       }
     }
     
@@ -220,6 +269,40 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
         new Date(e.created_at) >= resetAt
       )
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    // ========================================================================
+    // DIAG FORENSE: REBASE MERGE
+    // ========================================================================
+    const eventsConsidered = cleansAfterReset.map(e => ({
+      id: e.id || e.execution_key,
+      execution_key: e.execution_key,
+      created_at: e.created_at ? new Date(e.created_at).toISOString() : null,
+      is_current_clean_event: currentCleanEvent && e.execution_key === currentCleanEvent.execution_key
+    }));
+    
+    const wasCurrentCleanEventIncludedInFilter = currentCleanEvent ? 
+      cleansAfterReset.some(e => e.execution_key === currentCleanEvent.execution_key) : 
+      false;
+    
+    console.log('[DIAG][REBASE][MERGE]', {
+      phase: 'REBASE_MERGE',
+      trace_id: traceId,
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      reset_effective_since: resetEffectiveSince,
+      currentCleanEvent_provided: !!currentCleanEvent,
+      currentCleanEvent_timestamp: currentCleanEventTimestamp,
+      was_current_clean_event_included: wasCurrentCleanEventIncluded,
+      was_current_clean_event_included_in_filter: wasCurrentCleanEventIncludedInFilter,
+      reason_if_excluded: reasonIfExcluded,
+      events_considered: {
+        count: eventsConsidered.length,
+        events: eventsConsidered
+      },
+      filter_applied: 'action_type === "mark_clean" && clean_layer === cleanLayer && created_at >= resetAt',
+      timestamp: new Date().toISOString()
+    });
     
     // Reconstruir estado desde RESET
     const effectiveSince = resetAt;
@@ -277,6 +360,40 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
       product_key: productKey,
       domain_type: domainType
     }, client);
+    
+    // ========================================================================
+    // DIAG FORENSE: REBASE OUTPUT
+    // ========================================================================
+    const effectiveColumn = cleanLayer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+    const lastCleanedColumn = cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+    const countColumn = cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+    
+    const resultingLastCleanedAt = rebasedState?.[lastCleanedColumn] ? new Date(rebasedState[lastCleanedColumn]).toISOString() : null;
+    const resultingEffectiveSince = rebasedState?.[effectiveColumn] ? new Date(rebasedState[effectiveColumn]).toISOString() : null;
+    const resultingCleanCount = rebasedState?.[countColumn] || 0;
+    
+    console.log('[DIAG][REBASE][OUTPUT]', {
+      phase: 'REBASE_OUTPUT',
+      trace_id: traceId,
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      reset_effective_since: resetEffectiveSince,
+      currentCleanEvent_timestamp: currentCleanEventTimestamp,
+      resulting_last_cleaned_at: resultingLastCleanedAt,
+      resulting_effective_since: resultingEffectiveSince,
+      resulting_clean_count: resultingCleanCount,
+      resulting_state_basis: {
+        has_last_cleaned_at: !!resultingLastCleanedAt,
+        has_effective_since: !!resultingEffectiveSince,
+        last_cleaned_at_after_reset: resultingLastCleanedAt && resultingEffectiveSince ? 
+          new Date(resultingLastCleanedAt) >= new Date(resultingEffectiveSince) : null,
+        clean_count: resultingCleanCount
+      },
+      events_used_count: cleansAfterReset.length,
+      was_current_clean_event_used: wasCurrentCleanEventIncludedInFilter,
+      timestamp: new Date().toISOString()
+    });
     
     return rebasedState;
   } catch (error) {
@@ -393,6 +510,20 @@ export async function markCleanStudent(options, client = null) {
   // #region agent log
   const logEntry = {location:'cleaning-engine-service.js:391',message:'markCleanStudent ENTRY',data:{student_uuid:options?.student_uuid,item_ref:options?.item_ref,item_kind:options?.item_kind,clean_layer:options?.clean_layer},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}; console.log('[DEBUG]',JSON.stringify(logEntry));
   // #endregion
+  
+  // ========================================================================
+  // FASE C - DIAG FORENSE: Cleaning Engine ENTRY
+  // ========================================================================
+  console.log('[DIAG][ENGINE][ENTRY]', {
+    phase: 'FASE_C_ENGINE_ENTRY',
+    trace_id: traceId,
+    student_uuid: options?.student_uuid,
+    item_ref: options?.item_ref,
+    item_kind: options?.item_kind,
+    clean_layer: options?.clean_layer,
+    execution_mode: options?.execution_mode || 'APPLY',
+    timestamp: new Date().toISOString()
+  });
   
   const {
     student_uuid, // CAMBIADO: ahora acepta UUID canónico
@@ -665,6 +796,32 @@ export async function markCleanStudent(options, client = null) {
     
     const eventResult = await eventsRepo.insertEvent(eventData, client);
     
+    // ========================================================================
+    // FASE C - DIAG FORENSE: WRITE_EVENT
+    // ========================================================================
+    console.log('[DIAG][ENGINE][WRITE_EVENT]', {
+      phase: 'FASE_C_ENGINE_WRITE_EVENT',
+      trace_id: traceId,
+      student_uuid,
+      item_ref,
+      item_kind: itemKind,
+      clean_layer,
+      execution_key: executionKey,
+      execution_mode: effectiveExecutionMode,
+      event_inserted: eventResult !== 'already_applied' && !(eventResult && eventResult.already_executed),
+      event_result: typeof eventResult === 'object' ? {
+        already_executed: eventResult.already_executed,
+        created_at: eventResult.created_at
+      } : eventResult,
+      existing_state_before: existingState ? {
+        shared_last_cleaned_at: existingState.shared_last_cleaned_at,
+        pde_last_cleaned_at: existingState.pde_last_cleaned_at,
+        shared_effective_since: existingState.shared_effective_since,
+        pde_effective_since: existingState.pde_effective_since
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+    
     logInfo('MASTER', 'evento insertado', {
       traceId,
       execution_key: executionKey,
@@ -848,6 +1005,33 @@ export async function markCleanStudent(options, client = null) {
         });
       }
       
+      // ========================================================================
+      // FASE C - DIAG FORENSE: NEEDS_REBASE
+      // ========================================================================
+      console.log('[DIAG][ENGINE][NEEDS_REBASE]', {
+        phase: 'FASE_C_ENGINE_NEEDS_REBASE',
+        trace_id: traceId,
+        student_uuid,
+        item_ref,
+        item_kind: itemKind,
+        clean_layer,
+        needsRebase,
+        hasReset: !!lastReset,
+        resetAt: lastReset ? new Date(lastReset.created_at).toISOString() : null,
+        currentEffective: currentEffective?.toISOString() || null,
+        currentLastCleaned: currentLastCleaned?.toISOString() || null,
+        currentCount,
+        needsRebase_reasons: {
+          hasReset,
+          no_effective: !currentEffective,
+          effective_before_reset: currentEffective ? currentEffective < resetAt : false,
+          lastCleaned_before_reset: currentLastCleaned ? currentLastCleaned < resetAt : false,
+          count_without_clean: currentCount > 0 && !currentLastCleaned,
+          zero_count_with_clean: currentCount === 0 && currentLastCleaned
+        },
+        timestamp: new Date().toISOString()
+      });
+      
       if (needsRebase) {
         if (isForensicsCase) {
           console.log('[FORENSICS][REBASE_EXECUTING]', {
@@ -909,6 +1093,25 @@ export async function markCleanStudent(options, client = null) {
             });
           }
         }
+        
+        // ========================================================================
+        // DIAG FORENSE: REBASE CALL (markCleanStudent → rebaseStateFromReset)
+        // ========================================================================
+        console.log('[DIAG][REBASE][CALL]', {
+          phase: 'REBASE_CALL_FROM_MARKCLEAN',
+          trace_id: traceId,
+          student_uuid,
+          item_ref,
+          clean_layer,
+          reset_at: resetAt.toISOString(),
+          currentCleanEvent_provided: !!currentCleanEvent,
+          currentCleanEvent_timestamp: currentCleanEvent?.created_at ? new Date(currentCleanEvent.created_at).toISOString() : null,
+          execution_key: executionKey,
+          event_result_type: eventResult && typeof eventResult === 'object' ? 
+            (eventResult.already_executed ? 'already_executed' : 'newly_inserted') : 
+            (typeof eventResult === 'string' ? eventResult : 'unknown'),
+          timestamp: new Date().toISOString()
+        });
         
         // Reconstruir estado desde RESET (incluyendo el evento de limpieza actual si existe)
         const rebasedState = await rebaseStateFromReset(student_uuid, item_ref, clean_layer, lastReset, product_key, domain_type, traceId, client, currentCleanEvent);
@@ -1082,22 +1285,57 @@ export async function markCleanStudent(options, client = null) {
     // NO se sincroniza student_item_state (tabla histórica)
     // ============================================================================
     
-    // 8. Señal emission skipped (canonical v1 - AUDIT log only)
-    // execution_key es BACKEND-ONLY: se genera al inicio de cada ejecución de limpieza
-    // Es obligatorio para idempotencia y nunca depende del frontend
-    logWarn('AUDIT', 'Signal emission skipped (canonical v1)', {
-      action: 'clean_item',
-      student_uuid,
-      item_ref,
-      clean_layer,
-      execution_key: executionKey, // FIX: usar executionKey (camelCase) definido en línea 357
-      trace_id: traceId,
-      item_id: item.id,
-      lista_id: item.lista_id,
-      item_kind: itemKind,
-      actor_type,
-      surface_key
-    });
+    // 8. Emitir señal clean.executed (fail-open absoluto)
+    // REGLA CONSTITUCIONAL: Señal SOLO tras persistencia correcta
+    // REGLA CONSTITUCIONAL: Fail-open absoluto (señal no bloquea acción)
+    try {
+      await dispatchSignal({
+        signal_key: 'clean.executed',
+        payload: {
+          student_uuid,
+          item_ref,
+          target_ref: student_uuid, // Obligatorio: identifica entidad afectada
+          clean_layer,
+          item_kind: itemKind,
+          actor_type,
+          execution_key: executionKey
+        },
+        runtime: {
+          trace_id: traceId,
+          day_key: new Date().toISOString().substring(0, 10)
+        },
+        context: {
+          product_key,
+          domain_type,
+          item_id: item.id,
+          lista_id: item.lista_id,
+          surface_key
+        }
+      }, {
+        source: {
+          type: 'cleaning_engine',
+          id: `clean:${student_uuid}:${item_ref}:${executionKey}`
+        }
+      });
+      
+      logInfo('MASTER', '[CLEAN][SIGNAL] Señal clean.executed emitida', {
+        traceId,
+        student_uuid,
+        item_ref,
+        clean_layer,
+        execution_key: executionKey
+      });
+    } catch (signalError) {
+      // Fail-open absoluto: señal no bloquea acción
+      logWarn('MASTER', '[CLEAN][SIGNAL] Error emitiendo señal (fail-open)', {
+        traceId,
+        student_uuid,
+        item_ref,
+        clean_layer,
+        execution_key: executionKey,
+        error: signalError.message
+      });
+    }
     
     logInfo('MASTER', '[CLEAN][WRITE] Limpieza aplicada correctamente', {
       traceId,
@@ -1120,6 +1358,30 @@ export async function markCleanStudent(options, client = null) {
     // #region agent log
     const logEntry2 = {location:'cleaning-engine-service.js:1116',message:'markCleanStudent RETURN state',data:{student_uuid,item_ref,clean_layer,state_shared_last_cleaned_at:state?.shared_last_cleaned_at,state_pde_last_cleaned_at:state?.pde_last_cleaned_at,state_shared_effective_since:state?.shared_effective_since,state_pde_effective_since:state?.pde_effective_since},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}; console.log('[DEBUG]',JSON.stringify(logEntry2));
     // #endregion
+    
+    // ========================================================================
+    // FASE C - DIAG FORENSE: EXIT_STATE
+    // ========================================================================
+    const effectiveColumn = clean_layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+    const lastCleanedColumn = clean_layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+    const countColumn = clean_layer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+    
+    console.log('[DIAG][ENGINE][EXIT_STATE]', {
+      phase: 'FASE_C_ENGINE_EXIT_STATE',
+      trace_id: traceId,
+      student_uuid,
+      item_ref,
+      item_kind: itemKind,
+      clean_layer,
+      exit_state: state ? {
+        effective_since: state[effectiveColumn] ? new Date(state[effectiveColumn]).toISOString() : null,
+        last_cleaned_at: state[lastCleanedColumn] ? new Date(state[lastCleanedColumn]).toISOString() : null,
+        clean_count: state[countColumn] || 0,
+        remaining: itemKind === 'una_vez' ? (clean_layer === 'shared' ? state.shared_remaining : state.pde_remaining) : null,
+        completed: itemKind === 'una_vez' ? (clean_layer === 'shared' ? state.shared_completed : state.pde_completed) : null
+      } : null,
+      timestamp: new Date().toISOString()
+    });
     
     return state;
   } catch (error) {
@@ -1958,25 +2220,57 @@ export async function resetStudentItemProgress(options, client = null) {
       item_ref
     }, client);
 
-    // 7. Emitir señal (fail-open)
+    // 7. Emitir señal reset.executed (fail-open absoluto)
+    // REGLA CONSTITUCIONAL: Señal SOLO tras persistencia correcta
+    // REGLA CONSTITUCIONAL: Fail-open absoluto (señal no bloquea acción)
     try {
-      // TODO: Registrar señal en registry canónico
-      // Por ahora, solo log estructurado
-    // Señal emission skipped (canonical v1 - AUDIT log only)
-    logWarn('AUDIT', 'Signal emission skipped (canonical v1)', {
-      action: 'reset_item_recurrente',
-      student_uuid,
-      item_ref,
-      item_kind,
-      layers_affected: layersAffected,
-      execution_key: generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, clean_layer),
-      trace_id: traceId,
-      actor_type,
-      surface_key
-    });
-    } catch (signalError) {
-      logWarn('MASTER', 'Error emitiendo señal (fail-open)', {
+      // Obtener reset_at (effective_since) del estado final
+      const resetAt = finalState?.shared_effective_since || finalState?.pde_effective_since || new Date();
+      const resetExecutionKey = generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, clean_layer);
+      
+      await dispatchSignal({
+        signal_key: 'reset.executed',
+        payload: {
+          student_uuid,
+          item_ref,
+          target_ref: student_uuid, // Obligatorio: identifica entidad afectada
+          clean_layer,
+          item_kind,
+          actor_type,
+          execution_key: resetExecutionKey,
+          reset_at: resetAt instanceof Date ? resetAt.toISOString() : resetAt
+        },
+        runtime: {
+          trace_id: traceId,
+          day_key: new Date().toISOString().substring(0, 10)
+        },
+        context: {
+          product_key,
+          domain_type,
+          layers_affected: layersAffected,
+          surface_key
+        }
+      }, {
+        source: {
+          type: 'cleaning_engine',
+          id: `reset:${student_uuid}:${item_ref}:${resetExecutionKey}`
+        }
+      });
+      
+      logInfo('MASTER', '[RESET][SIGNAL] Señal reset.executed emitida', {
         traceId,
+        student_uuid,
+        item_ref,
+        clean_layer,
+        execution_key: resetExecutionKey
+      });
+    } catch (signalError) {
+      // Fail-open absoluto: señal no bloquea acción
+      logWarn('MASTER', '[RESET][SIGNAL] Error emitiendo señal (fail-open)', {
+        traceId,
+        student_uuid,
+        item_ref,
+        clean_layer,
         error: signalError.message
       });
     }

@@ -10,6 +10,12 @@
 // 3. CPM NO infiere desde contexto
 // 4. CPM SOLO proyecta estado
 // 5. CPM es la ÚNICA autoridad que devuelve: reviewed / pending / important / never
+// 6. PROHIBIDO emitir señales (CPM es función pura, read-only)
+//
+// GUARD CONSTITUCIONAL: CPM NO emite señales
+// - CPM es función pura (read-only)
+// - CPM solo calcula proyecciones, no modifica estado
+// - Señales solo se emiten desde acciones WRITE (cleaning-engine, seed)
 //
 // CPM v2 CAMBIOS:
 // - Eliminado had_history (PROHIBIDO)
@@ -163,6 +169,27 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // Determinar si hay reset aplicado
   const hasReset = effectiveSince !== null;
   
+  // ========================================================================
+  // FASE D - DIAG FORENSE: CPM Input (computeRecurrenteLayerState)
+  // ========================================================================
+  console.log('[DIAG][CPM][INPUT]', {
+    phase: 'FASE_D_CPM_INPUT',
+    item_ref: layerData?.item_ref,
+    layer,
+    effective_since: effectiveSince ? new Date(effectiveSince).toISOString() : null,
+    last_cleaned_at: lastCleanedAt ? new Date(lastCleanedAt).toISOString() : null,
+    hasReset,
+    threshold_days,
+    criticalThreshold,
+    comparison: lastCleanedAt && effectiveSince ? {
+      lastCleaned_date: new Date(lastCleanedAt).toISOString(),
+      effectiveSince_date: new Date(effectiveSince).toISOString(),
+      is_lastCleaned_after_reset: new Date(lastCleanedAt) >= new Date(effectiveSince),
+      diff_ms: new Date(lastCleanedAt).getTime() - new Date(effectiveSince).getTime()
+    } : null,
+    timestamp: new Date().toISOString()
+  });
+  
   // RESET_RECURRENTE_V1: Logs forenses reducidos (solo para debugging si es necesario)
   // Removido logs verbosos temporales - mantener solo logs de error estructurados
   
@@ -283,6 +310,19 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // #region agent log
   const logEntryCPM = {location:'cleaning-projection-model.js:282',message:'CPM BEFORE state calculation',data:{item_ref:layerData?.item_ref,hasReset,lastEffectiveCleanAt,effectiveSince,lastCleanedAt,daysSince},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'}; console.log('[DEBUG]',JSON.stringify(logEntryCPM));
   // #endregion
+  
+  // ========================================================================
+  // FASE D - DIAG FORENSE: CPM State Calculation (computeRecurrenteLayerState)
+  // ========================================================================
+  const stateCalculationInput = {
+    hasReset,
+    lastEffectiveCleanAt: lastEffectiveCleanAt ? new Date(lastEffectiveCleanAt).toISOString() : null,
+    daysSince,
+    effectiveSince: effectiveSince ? new Date(effectiveSince).toISOString() : null,
+    threshold_days,
+    criticalThreshold
+  };
+  
   if (hasReset && lastEffectiveCleanAt === null) {
     // RESET_RECURRENTE_V1: Reset aplicado y sin limpieza posterior → 'reseteado' con days_since = 0
     // effective_since != null && last_cleaned_at == null => reseteado (nuevo ciclo abierto)
@@ -308,6 +348,28 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // #region agent log
   const logEntryCPM2 = {location:'cleaning-projection-model.js:307',message:'CPM AFTER state calculation',data:{item_ref:layerData?.item_ref,state,hasReset,lastEffectiveCleanAt,effectiveSince,lastCleanedAt,daysSince},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'}; console.log('[DEBUG]',JSON.stringify(logEntryCPM2));
   // #endregion
+  
+  // ========================================================================
+  // FASE D - DIAG FORENSE: CPM Output (computeRecurrenteLayerState)
+  // ========================================================================
+  console.log('[DIAG][CPM][OUTPUT]', {
+    phase: 'FASE_D_CPM_OUTPUT',
+    item_ref: layerData?.item_ref,
+    layer,
+    state_final: state,
+    visual_state: state, // Para recurrentes, visual_state = state
+    days_since: daysSince,
+    state_calculation_input: stateCalculationInput,
+    state_calculation_logic: {
+      condition_1: hasReset && lastEffectiveCleanAt === null,
+      condition_2: lastEffectiveCleanAt === null && !hasReset,
+      condition_3: daysSince !== null && daysSince < threshold_days,
+      condition_4: daysSince !== null && daysSince >= threshold_days && daysSince < criticalThreshold,
+      condition_5: daysSince !== null && daysSince >= criticalThreshold,
+      result_state: state
+    },
+    timestamp: new Date().toISOString()
+  });
   
   // ============================================================================
   // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500

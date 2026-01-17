@@ -119,6 +119,10 @@
    */
 
   async function performAction({ action_id, payload = {}, context = {}, uiState = {}, options = {} }) {
+    // CONSTITUTIONAL RULE:
+    // trace_id MUST be initialized before any log, catch or side-effect
+    const trace_id = `ux_action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     console.log('[FORENSIC][ACTION][PAYLOAD]', { action_id, payload, context });
     // Validaciones básicas
     if (!action_id || typeof action_id !== 'string') {
@@ -150,6 +154,28 @@
     }
 
     const actionDef = actionRegistry.get(action_id);
+    
+    // ========================================================================
+    // FASE B - DIAG FORENSE: Action Registry Resolution
+    // ========================================================================
+    console.log('[DIAG][ACTION][RESOLVED]', {
+      phase: 'FASE_B_ACTION_REGISTRY',
+      action_id,
+      trace_id,
+      action_found: !!actionDef,
+      action_key: action_id,
+      action_def: actionDef ? {
+        domain: actionDef.domain,
+        allowed_item_kinds: actionDef.allowed_item_kinds,
+        allowed_layers: actionDef.allowed_layers,
+        allowed_scopes: actionDef.allowed_scopes,
+        has_handler: !!actionDef.handler,
+        has_request: !!actionDef.request,
+        has_refresh: !!actionDef.refresh || !!actionDef.refresh_plan
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+    
     if (!actionDef) {
       // BUG-B HOTFIX: Log forense cuando action_id no está registrado
       const registryKeys = actionRegistry.actions ? Object.keys(actionRegistry.actions) : 
@@ -166,9 +192,6 @@
       });
       throw new Error(`[PerformActionV1] action_id not registered: ${action_id}`);
     }
-
-    // Generar trace_id único
-    const trace_id = `ux_action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // ============================================================================
     // VALIDACIÓN EXPLÍCITA DE DOMINIO (FASE A - CIERRE TÉCNICO DURO)
@@ -211,6 +234,28 @@
     } else {
       throw new Error(`[PerformActionV1] Acción ${action_id} no tiene handler definido`);
     }
+    
+    // ========================================================================
+    // FASE B - DIAG FORENSE: Payload Final y Refresh Plan
+    // ========================================================================
+    const refreshPlan = actionDef.refresh || actionDef.refresh_plan;
+    let refreshPlanResolved = null;
+    if (typeof refreshPlan === 'function') {
+      refreshPlanResolved = refreshPlan({ ...context, ...payload }, uiState, null);
+    } else if (Array.isArray(refreshPlan)) {
+      refreshPlanResolved = refreshPlan;
+    }
+    
+    console.log('[DIAG][ACTION][PAYLOAD_FINAL]', {
+      phase: 'FASE_B_PAYLOAD',
+      action_id,
+      trace_id,
+      endpoint,
+      payload_final: finalPayload,
+      refresh_plan_generated: refreshPlanResolved,
+      refresh_plan_type: typeof refreshPlan,
+      timestamp: new Date().toISOString()
+    });
 
     // ============================================================================
     // VALIDACIÓN DE PAYLOAD (FASE A - CIERRE TÉCNICO DURO)
@@ -365,6 +410,28 @@
       } else if (Array.isArray(refreshPlan)) {
         surfacesToRefresh = refreshPlan;
       }
+      
+      // ========================================================================
+      // FASE E - DIAG FORENSE: Refresh Plan Generated
+      // ========================================================================
+      console.log('[DIAG][REFRESH][PLAN]', {
+        phase: 'FASE_E_REFRESH_PLAN',
+        action_id,
+        trace_id,
+        refresh_plan_type: typeof refreshPlan,
+        surfaces_to_refresh: surfacesToRefresh,
+        refresh_engine_available: !!refreshEngine,
+        context: {
+          item_ref: context?.item_ref,
+          student_uuid: context?.student_uuid,
+          clean_layer: context?.clean_layer
+        },
+        uiState: {
+          view_mode: uiState.view_mode,
+          view_layer: uiState.view_layer
+        },
+        timestamp: new Date().toISOString()
+      });
       
       // Log del plan
       console.log('[REFRESH][AFTER_ACTION]', {

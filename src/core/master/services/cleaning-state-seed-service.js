@@ -11,6 +11,7 @@ import { query } from '../../../../database/pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logInfo, logWarn } from '../../observability/logger.js';
 import { getStudentEffectiveLevel } from './cleaning-engine-service.js';
+import { dispatchSignal } from '../../signals/signal-dispatcher.js';
 
 /**
  * Asegura que todos los items aplicables del catálogo tengan estado en cleaning_item_state
@@ -171,6 +172,59 @@ export async function ensureCleaningItemStateSeedForStudent(options = {}, client
       total_applicable: totalApplicable,
       total_existing: existing
     });
+    
+    // 5. Emitir señal state.seeded SOLO si inserted > 0 (fail-open absoluto)
+    // REGLA CONSTITUCIONAL: Señal SOLO si hubo inserciones
+    // REGLA CONSTITUCIONAL: Fail-open absoluto (señal no bloquea acción)
+    if (inserted > 0) {
+      try {
+        await dispatchSignal({
+          signal_key: 'state.seeded',
+          payload: {
+            student_uuid,
+            target_ref: student_uuid, // Obligatorio: identifica entidad afectada
+            inserted_count: inserted,
+            level_cap: nivelCap,
+            product_key,
+            domain_type
+          },
+          runtime: {
+            trace_id: traceId,
+            day_key: new Date().toISOString().substring(0, 10)
+          },
+          context: {
+            skipped,
+            total_applicable: totalApplicable,
+            total_existing: existing,
+            level_cap_provided: level_cap !== null
+          }
+        }, {
+          source: {
+            type: 'cleaning_state_seed',
+            id: `seed:${student_uuid}:${traceId}`
+          }
+        });
+        
+        logInfo('SEED_CLEAN_STATE', '[SIGNAL] Señal state.seeded emitida', {
+          traceId,
+          student_uuid,
+          inserted_count: inserted
+        });
+      } catch (signalError) {
+        // Fail-open absoluto: señal no bloquea acción
+        logWarn('SEED_CLEAN_STATE', '[SIGNAL] Error emitiendo señal (fail-open)', {
+          traceId,
+          student_uuid,
+          inserted_count: inserted,
+          error: signalError.message
+        });
+      }
+    } else {
+      logInfo('SEED_CLEAN_STATE', '[SIGNAL] Señal state.seeded omitida (inserted = 0)', {
+        traceId,
+        student_uuid
+      });
+    }
     
     return {
       inserted,

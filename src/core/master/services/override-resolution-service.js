@@ -9,9 +9,16 @@
 // 2. Override ≠ Mutación (nunca modifica valor base)
 // 3. UUID-only (student_uuid)
 // 4. Auditable y reversible
+// 5. PROHIBIDO emitir señales (overrides solo afectan lectura, no escriben)
+//
+// GUARD CONSTITUCIONAL: Overrides NO emiten señales
+// - Overrides son capa de lectura efectiva
+// - Overrides NO modifican estado persistido
+// - Señales solo se emiten desde acciones WRITE (cleaning-engine, seed)
 //
 // Referencias:
 // - docs/OVERRIDES_SYSTEM_V1.md (documentación canónica)
+// - docs/contracts/SIGNALS_CONTRACT_V1.md (sistema de señales canónico)
 
 import { getDefaultStudentOverridesRepoPg } from '../../../infra/repos/student-overrides-repo-pg.js';
 import { getDefaultStudentItemOverridesRepoPg } from '../../../infra/repos/student-item-overrides-repo-pg.js';

@@ -126,12 +126,46 @@ export const STUDENT_SIGNAL_REGISTRY = {
     deprecated: null,
     payload: {
       student_uuid: 'UUID canónico del estudiante (students.id)',
-      student_id: 'ID legacy del alumno (legacy_alumno_id, en meta si necesario)',
       item_ref: 'Referencia del ítem',
-      domain: 'Tipo de dominio (transmutation, etc.)',
-      product_key: 'Clave del producto (pde, etc.)',
+      target_ref: 'Referencia de la entidad afectada (student_uuid)',
       clean_layer: 'Capa de limpieza (shared, pde)',
+      item_kind: 'Tipo de item (recurrente, una_vez)',
       actor_type: 'Tipo de actor (master, student, automation)',
+      execution_key: 'Clave de ejecución (idempotencia)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'reset.executed': {
+    key: 'reset.executed',
+    description: 'Se emite cuando se ejecuta un reset (resetStudentItemProgress) desde Cleaning Engine',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_uuid: 'UUID canónico del estudiante (students.id)',
+      item_ref: 'Referencia del ítem',
+      target_ref: 'Referencia de la entidad afectada (student_uuid)',
+      clean_layer: 'Capa de limpieza (shared, pde)',
+      item_kind: 'Tipo de item (solo recurrente)',
+      actor_type: 'Tipo de actor (master, student, automation)',
+      execution_key: 'Clave de ejecución (idempotencia)',
+      reset_at: 'Timestamp del reset (effective_since)',
+      trace_id: 'ID de traza'
+    }
+  },
+  'state.seeded': {
+    key: 'state.seeded',
+    description: 'Se emite cuando se seedean estados iniciales (ensureStructuralCleaningState) desde Seed Service',
+    category: 'domain',
+    version: 'v1',
+    deprecated: null,
+    payload: {
+      student_uuid: 'UUID canónico del estudiante (students.id)',
+      target_ref: 'Referencia de la entidad afectada (student_uuid)',
+      inserted_count: 'Número de estados insertados',
+      level_cap: 'Cap de nivel usado',
+      product_key: 'Clave del producto (pde, etc.)',
+      domain_type: 'Tipo de dominio (transmutation, etc.)',
       trace_id: 'ID de traza'
     }
   },
