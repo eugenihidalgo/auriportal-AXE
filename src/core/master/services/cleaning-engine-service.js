@@ -390,6 +390,10 @@ function isCleanStateCoherent({ currentState, event, itemKind, clean_layer, clea
  */
 export async function markCleanStudent(options, client = null) {
   const traceId = getRequestId();
+  // #region agent log
+  const logEntry = {location:'cleaning-engine-service.js:391',message:'markCleanStudent ENTRY',data:{student_uuid:options?.student_uuid,item_ref:options?.item_ref,item_kind:options?.item_kind,clean_layer:options?.clean_layer},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}; console.log('[DEBUG]',JSON.stringify(logEntry));
+  // #endregion
+  
   const {
     student_uuid, // CAMBIADO: ahora acepta UUID canónico
     item_ref,
@@ -1112,6 +1116,10 @@ export async function markCleanStudent(options, client = null) {
         pde_completed: state?.pde_completed
       }
     });
+    
+    // #region agent log
+    const logEntry2 = {location:'cleaning-engine-service.js:1116',message:'markCleanStudent RETURN state',data:{student_uuid,item_ref,clean_layer,state_shared_last_cleaned_at:state?.shared_last_cleaned_at,state_pde_last_cleaned_at:state?.pde_last_cleaned_at,state_shared_effective_since:state?.shared_effective_since,state_pde_effective_since:state?.pde_effective_since},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}; console.log('[DEBUG]',JSON.stringify(logEntry2));
+    // #endregion
     
     return state;
   } catch (error) {

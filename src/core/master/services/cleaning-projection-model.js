@@ -278,6 +278,9 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   
   // Calcular estado según RESET_RECURRENTE_V1
   let state;
+  // #region agent log
+  const logEntryCPM = {location:'cleaning-projection-model.js:264',message:'CPM BEFORE state calculation',data:{layer,hasReset,lastEffectiveCleanAt,effectiveSince,lastCleanedAt,daysSince},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'}; console.log('[DEBUG]',JSON.stringify(logEntryCPM));
+  // #endregion
   if (hasReset && lastEffectiveCleanAt === null) {
     // RESET_RECURRENTE_V1: Reset aplicado y sin limpieza posterior → 'reseteado' con days_since = 0
     // effective_since != null && last_cleaned_at == null => reseteado (nuevo ciclo abierto)
@@ -299,6 +302,10 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
     // Caso edge: daysSince es null pero lastEffectiveCleanAt no es null
     state = 'never';
   }
+  
+  // #region agent log
+  const logEntryCPM2 = {location:'cleaning-projection-model.js:285',message:'CPM AFTER state calculation',data:{layer,state,hasReset,lastEffectiveCleanAt,effectiveSince,lastCleanedAt,daysSince},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'}; console.log('[DEBUG]',JSON.stringify(logEntryCPM2));
+  // #endregion
   
   // ============================================================================
   // DIAGNÓSTICO FORENSE: Logs temporales para identificar punto exacto del 500
