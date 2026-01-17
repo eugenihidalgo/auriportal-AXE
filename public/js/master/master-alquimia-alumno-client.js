@@ -1390,7 +1390,9 @@
       const headerRow = document.createElement('tr');
       headerRow.style.cssText = 'background: #0f172a; border-bottom: 1px solid #334155;';
       
-      ['Fecha', 'Tipo', 'Layer', 'Actor', 'Execution Key', 'Meta'].forEach(h => {
+      // execution_key es un concepto BACKEND-ONLY del Cleaning Engine.
+      // El frontend y el runtime UX NO deben usarlo (ni siquiera para display).
+      ['Fecha', 'Tipo', 'Layer', 'Actor', 'Meta'].forEach(h => {
         const th = document.createElement('th');
         th.style.cssText = 'padding: 0.5rem; text-align: left; color: #cbd5e1; font-weight: 600;';
         th.textContent = h;
@@ -1412,7 +1414,6 @@
           event.action_type || '-',
           event.clean_layer || '-',
           event.actor_type || '-',
-          event.execution_key ? event.execution_key.substring(0, 20) + '...' : '-',
           JSON.stringify(event.meta || {}).substring(0, 50)
         ];
         
