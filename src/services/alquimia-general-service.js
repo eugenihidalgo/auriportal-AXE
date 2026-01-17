@@ -709,7 +709,25 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         required_count: item.veces_limpiar || 1
       };
       
-      // Cache de overrides por student_uuid (evitar lookups duplicados)
+      // ============================================================================
+      // CACHE REQUEST-SCOPED DE OVERRIDES
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: Cache es request-scoped y temporal
+      // - Cache se crea en cada llamada a getStudentsForItem()
+      // - Cache persiste durante la ejecución de la función
+      // - Cache se elimina automáticamente al terminar la función
+      // - Cache NO persiste entre requests
+      // 
+      // NOTA: Cache NO se invalida explícitamente al modificar override
+      // - Si se modifica override DURANTE una request que ya cacheó, cache NO se actualiza
+      // - Esto es raro porque modificar override requiere otra request (POST)
+      // - Cache se recrea en cada nueva request
+      //
+      // OVERRIDES HUÉRFANOS:
+      // - Cache NO valida existencia de item_ref en catálogo
+      // - Si override es huérfano (item_ref inexistente), cache NO tiene efecto
+      // - Override huérfano NO rompe el sistema (simplemente no se aplica)
+      // ============================================================================
       const overrideCache = new Map();
 
       // Calcular estados y nombres
@@ -734,7 +752,24 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           effective_since: student.pde_effective_since || null
         };
         
-        // FIX 1: Resolver overrides para este alumno (cache para evitar lookups duplicados)
+        // ============================================================================
+        // APLICACIÓN DE OVERRIDES (ANTES DE CPM)
+        // ============================================================================
+        // REGLA CONSTITUCIONAL: Overrides se aplican ANTES de CPM, NUNCA después
+        // - Overrides solo afectan lectura (cálculo de estado)
+        // - Overrides NO modifican estado persistido (cleaning_item_state)
+        // - Overrides NO modifican effective_since ni contadores
+        //
+        // MOMENTO DE APLICACIÓN:
+        // - Overrides se resuelven ANTES de llamar a CPM (computeVisualState)
+        // - CPM recibe effectiveConfig con overrides YA aplicados
+        // - CPM es "ciego" a overrides (solo ve valores efectivos)
+        //
+        // CACHE:
+        // - Cache por student_uuid (NO por item_ref)
+        // - Cache evita lookups duplicados en la misma request
+        // - Cache NO se comparte entre requests
+        // ============================================================================
         let effectiveConfig = overrideCache.get(student.student_uuid);
         if (!effectiveConfig) {
           effectiveConfig = await resolveItemConfigForStudent(
@@ -993,7 +1028,14 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         required_count: item.veces_limpiar || 1
       };
       
-      // Cache de overrides por student_uuid (evitar lookups duplicados)
+      // ============================================================================
+      // CACHE REQUEST-SCOPED DE OVERRIDES (UNA_VEZ)
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: Cache es request-scoped y temporal (igual que recurrente)
+      // - Cache se crea en cada llamada a getStudentsForItem()
+      // - Cache persiste durante la ejecución de la función
+      // - Cache NO persiste entre requests
+      // ============================================================================
       const overrideCacheUnaVez = new Map();
       
       // Calcular estados visuales dinámicamente según orden canónico:
@@ -1013,7 +1055,17 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           completed: 0
         };
         
-        // FIX 1: Resolver overrides para este alumno (cache para evitar lookups duplicados)
+        // ============================================================================
+        // APLICACIÓN DE OVERRIDES (ANTES DE CPM) - UNA_VEZ
+        // ============================================================================
+        // REGLA CONSTITUCIONAL: Overrides se aplican ANTES de CPM (igual que recurrente)
+        // - Overrides solo afectan lectura (cálculo de estado)
+        // - Overrides NO modifican estado persistido
+        //
+        // OVERRIDES EN UNA_VEZ:
+        // - override_key='required_count' afecta cálculo de estado (completed, remaining)
+        // - Overrides de otras claves (threshold_days, nivel, descripcion) se ignoran en una_vez
+        // ============================================================================
         let effectiveConfigUnaVez = overrideCacheUnaVez.get(student.student_uuid);
         if (!effectiveConfigUnaVez) {
           effectiveConfigUnaVez = await resolveItemConfigForStudent(

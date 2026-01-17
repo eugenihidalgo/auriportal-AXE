@@ -794,11 +794,26 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
       // Solo pasar datos brutos (shared y pde)
       
-      // Aplicar overrides si scope='student'
-      // GUARD CONSTITUCIONAL: Overrides SOLO en scope='student', NUNCA en scope='all'
+      // ============================================================================
+      // APLICACIÓN DE OVERRIDES EN LIST-PROJECTION
+      // ============================================================================
+      // REGLA CONSTITUCIONAL: Overrides SOLO se aplican si scope='student'
+      // - scope='student' → Overrides se aplican (personalización por estudiante)
+      // - scope='all' → Overrides NO se aplican (estado agregado sin personalizaciones)
+      //
+      // MOMENTO DE APLICACIÓN:
+      // - Overrides se aplican ANTES de CPM (computeCleaningProjection)
+      // - CPM recibe effectiveConfig con overrides YA aplicados
+      // - CPM es "ciego" a overrides (solo ve valores efectivos)
+      //
+      // OVERRIDES HUÉRFANOS:
+      // - Si item_ref no existe en catálogo, override NO se aplica (silencioso)
+      // - Override huérfano NO rompe el sistema (simplemente no se aplica)
+      // ============================================================================
       if (scope === 'all') {
         // En scope='all', usar valores base (sin overrides)
         // Esto es constitucional: ALL muestra estado agregado sin personalizaciones
+        // NOTA: NO se llama resolveItemConfigForStudent en scope='all'
       } else if (scope === 'student' && !studentId) {
         throw new Error('ERROR_CANONICO: scope=student requiere studentId');
       }
@@ -813,6 +828,7 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
       
       if (scope === 'student' && studentId) {
         // Aplicar overrides de configuración de item
+        // REGLA CONSTITUCIONAL: Overrides SOLO en scope='student'
         effectiveConfig = await resolveItemConfigForStudent(
           effectiveConfig,
           studentId,

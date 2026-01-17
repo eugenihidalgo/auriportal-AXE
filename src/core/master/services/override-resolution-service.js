@@ -93,6 +93,21 @@ export async function resolveStudentField(student, field, baseValue, client = nu
  * Resuelve la configuración efectiva de un item para un estudiante.
  * Combina configuración base con override si existe.
  * 
+ * REGLA CONSTITUCIONAL: Override NO modifica estado persistido.
+ * - Override solo afecta lectura (cálculo de estado en CPM)
+ * - Override NO modifica cleaning_item_state
+ * - Override NO modifica effective_since
+ * - Override NO modifica contadores
+ * 
+ * MOMENTO DE APLICACIÓN:
+ * - Overrides se aplican ANTES de CPM
+ * - Overrides se aplican SOLO en READ operations (getStudentsForItem, list-projection)
+ * - Overrides NO se aplican en WRITE operations (markCleanStudent, resetStudentItemProgress, seed)
+ * 
+ * OVERRIDES HUÉRFANOS:
+ * - Si item_ref no existe en catálogo, override NO se aplica (silencioso)
+ * - Si estado no existe (antes del seed), override NO tiene efecto hasta que exista estado
+ * 
  * @param {Object} itemConfig - Configuración base del item
  * @param {string} student_uuid - UUID canónico del estudiante
  * @param {string} item_ref - Referencia del item
@@ -118,11 +133,15 @@ export async function resolveItemConfigForStudent(itemConfig, student_uuid, item
   }
   
   // Construir configuración efectiva
+  // NOTA: effectiveConfig es una copia de itemConfig, NO modifica el original
+  // Los overrides se aplican SOLO a esta copia, que se usa en CPM
   const effectiveConfig = { ...itemConfig };
   
   for (const overrideRecord of overrides) {
     const { override_key, override_value } = overrideRecord;
     
+    // REGLA CONSTITUCIONAL: Overrides desconocidos se ignoran silenciosamente (fail-safe)
+    // Solo 4 claves son reconocidas: required_count, threshold_days, nivel, descripcion
     // Aplicar override según clave
     if (override_key === 'required_count') {
       // Para items una_vez
