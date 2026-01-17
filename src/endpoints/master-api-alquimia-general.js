@@ -668,8 +668,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
       const params = extractRouteParams(path, '/master/api/alquimia-general/listas/:id/items');
       const listaId = params.id;
 
-      const items = await listItems(listaId, { onlyActive: true });
-      return jsonSuccess({ items }, traceId);
+      const listaItemsResult = await listItems(listaId, { onlyActive: true });
+      return jsonSuccess({ items: listaItemsResult }, traceId);
     }
 
     // GET /master/api/alquimia-general/list-projection
@@ -732,19 +732,19 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         // INVARIANTE MODO GOD: Validar que todos los items tienen state_by_view_layer
         // ============================================================================
         // CIERRE-001: Normalizar items a array (fallback seguro)
-        const items = Array.isArray(projection.items) ? projection.items : [];
+        const projectionItems = Array.isArray(projection.items) ? projection.items : [];
         
         if (!Array.isArray(projection.items)) {
           logWarn('MasterApiAlquimiaGeneral', '[CIERRE-001] projection.items no es array, normalizando', {
             traceId,
             projection_items_type: typeof projection.items,
             projection_items_value: projection.items,
-            normalized_to: items.length
+            normalized_to: projectionItems.length
           });
         }
 
-        // CIERRE-001: Validar que cada item tiene state_by_view_layer (usar items normalizado)
-        for (const item of items) {
+        // CIERRE-001: Validar que cada item tiene state_by_view_layer (usar projectionItems normalizado)
+        for (const item of projectionItems) {
           if (!item.state_by_view_layer) {
             const error = new Error(`[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT] Item ${item.item_ref || item.id} no tiene state_by_view_layer`);
             logError('MasterApiAlquimiaGeneral', '[INVARIANT_BROKEN][LIST_PROJECTION_OUTPUT]', {
@@ -819,14 +819,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           reviewed_pct: projection.metrics.reviewed_pct,
           dominant_state: projection.list_state.dominant_state,
           health_bucket: projection.list_state.health_bucket,
-          items_with_state_by_view_layer: items.length,
+          items_with_state_by_view_layer: projectionItems.length,
           view_layer: viewLayer,
           item_kind: itemKind
         });
 
         return jsonSuccess({
           data: {
-            items: items, // CIERRE-001: Usar items normalizado
+            items: projectionItems, // CIERRE-001: Usar projectionItems normalizado
             metrics: projection.metrics,
             list_state: projection.list_state,
             view_layer: viewLayer,
@@ -2070,14 +2070,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         }
         
         // Obtener items de la lista (filtrar por item_kind si viene)
-        const items = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
+        const resetListItems = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
         const filteredItems = item_kind 
-          ? items.filter(item => {
+          ? resetListItems.filter(item => {
               // Validar item_kind desde lista.tipo
               const itemKindFromList = lista.tipo;
               return itemKindFromList === item_kind;
             })
-          : items;
+          : resetListItems;
         
         // Resetear cada item usando Cleaning Engine
         let totalApplied = 0;
@@ -2344,14 +2344,14 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
         }
         
         // Obtener items de la lista (filtrar por item_kind si viene)
-        const items = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
+        const resetListAllItems = await catalogRepo.listItems(parseInt(list_id, 10), { onlyActive: true });
         const filteredItems = item_kind 
-          ? items.filter(item => {
+          ? resetListAllItems.filter(item => {
               // Validar item_kind desde lista.tipo
               const itemKindFromList = lista.tipo;
               return itemKindFromList === item_kind;
             })
-          : items;
+          : resetListAllItems;
         
         // Resetear cada item usando Cleaning Engine resetAllStudentsItemProgress
         let totalApplied = 0;
