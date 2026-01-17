@@ -184,9 +184,10 @@ async function getLastResetForItem(studentUuid, itemRef, cleanLayer, productKey 
  * @param {string} domainType - Tipo de dominio (default: 'transmutation')
  * @param {string} traceId - Trace ID para logs
  * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @param {Object} [currentCleanEvent] - Evento de limpieza actual (si se está ejecutando un CLEAN)
  * @returns {Promise<Object|null>} Estado reconstruido o null si falla
  */
-async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset, productKey = 'pde', domainType = 'transmutation', traceId, client = null) {
+async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset, productKey = 'pde', domainType = 'transmutation', traceId, client = null, currentCleanEvent = null) {
   try {
     const eventsRepo = getDefaultCleaningEventsRepo();
     const stateRepo = getDefaultCleaningItemStateRepo();
@@ -200,12 +201,23 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
       domain_type: domainType
     }, client);
     
-    // Filtrar limpiezas posteriores al RESET para esta capa
+    // FIX: Incluir evento de limpieza actual si se está ejecutando un CLEAN post-RESET
+    // Esto asegura que el evento recién insertado se considere aunque tenga created_at igual o muy cercano al resetAt
+    if (currentCleanEvent) {
+      const cleanEventDate = new Date(currentCleanEvent.created_at || new Date());
+      // Solo incluir si es posterior o igual al reset (>= para incluir eventos en el mismo momento)
+      if (cleanEventDate >= resetAt) {
+        allEvents.push(currentCleanEvent);
+      }
+    }
+    
+    // Filtrar limpiezas posteriores o iguales al RESET para esta capa
+    // FIX: Usar >= en lugar de > para incluir eventos que ocurren en el mismo momento que el reset
     const cleansAfterReset = allEvents
       .filter(e => 
         e.action_type === 'mark_clean' && 
         e.clean_layer === cleanLayer &&
-        new Date(e.created_at) > resetAt
+        new Date(e.created_at) >= resetAt
       )
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     
@@ -838,8 +850,59 @@ export async function markCleanStudent(options, client = null) {
           });
         }
         
-        // Reconstruir estado desde RESET
-        const rebasedState = await rebaseStateFromReset(student_uuid, item_ref, clean_layer, lastReset, product_key, domain_type, traceId, client);
+        // FIX: Pasar el evento de limpieza actual a rebaseStateFromReset para asegurar que se considere
+        // Esto resuelve el bug donde limpiar tras reset no actualiza correctamente last_cleaned_at
+        // Si el evento fue insertado exitosamente, usar su created_at; si ya existía, buscarlo
+        let currentCleanEvent = null;
+        if (eventResult && typeof eventResult === 'object' && !eventResult.already_executed) {
+          // Evento insertado exitosamente: usar el evento retornado
+          currentCleanEvent = {
+            action_type: 'mark_clean',
+            clean_layer: clean_layer,
+            created_at: eventResult.created_at,
+            execution_key: executionKey
+          };
+          logInfo('MASTER', '[CLEAN][RESET_REBASE] Evento actual incluido en rebase (recién insertado)', {
+            traceId,
+            student_uuid,
+            item_ref,
+            clean_layer,
+            execution_key: executionKey,
+            event_created_at: eventResult.created_at
+          });
+        } else if (eventResult && typeof eventResult === 'object' && eventResult.already_executed) {
+          // Evento ya existía: buscar el evento existente para obtener su created_at
+          const existingEvents = await eventsRepo.listEventsForStudentItem({
+            student_uuid,
+            item_ref,
+            product_key,
+            domain_type
+          }, client);
+          const existingCleanEvent = existingEvents.find(e => 
+            e.execution_key === executionKey && 
+            e.action_type === 'mark_clean' && 
+            e.clean_layer === clean_layer
+          );
+          if (existingCleanEvent) {
+            currentCleanEvent = {
+              action_type: 'mark_clean',
+              clean_layer: clean_layer,
+              created_at: existingCleanEvent.created_at,
+              execution_key: executionKey
+            };
+            logInfo('MASTER', '[CLEAN][RESET_REBASE] Evento actual incluido en rebase (ya existía)', {
+              traceId,
+              student_uuid,
+              item_ref,
+              clean_layer,
+              execution_key: executionKey,
+              event_created_at: existingCleanEvent.created_at
+            });
+          }
+        }
+        
+        // Reconstruir estado desde RESET (incluyendo el evento de limpieza actual si existe)
+        const rebasedState = await rebaseStateFromReset(student_uuid, item_ref, clean_layer, lastReset, product_key, domain_type, traceId, client, currentCleanEvent);
         
         if (isForensicsCase) {
           console.log('[FORENSICS][REBASE_RESULT]', {

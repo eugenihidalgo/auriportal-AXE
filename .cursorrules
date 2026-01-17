@@ -686,6 +686,24 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Excluir estudiantes pausados del recálculo
       - Log estructurado del recálculo con trace_id
 
+  - id: cleaning-engine-reset-clean-invariant
+    title: Invariante Reset no puede bloquear Clean (recurrente)
+    content: >
+      Si hay un RESET previo y se ejecuta un CLEAN, el CLEAN DEBE actualizar last_cleaned_at correctamente, independientemente de la proximidad temporal entre RESET y CLEAN.
+      PROHIBIDO:
+      - Excluir eventos de limpieza recién insertados en rebaseStateFromReset por comparación estricta created_at > resetAt
+      - Ignorar eventos de limpieza que ocurren en el mismo momento que el reset
+      - Calcular estado como 'reseteado' cuando last_cleaned_at > effective_since
+      OBLIGATORIO:
+      - rebaseStateFromReset debe aceptar currentCleanEvent como parámetro opcional
+      - markCleanStudent debe pasar currentCleanEvent a rebaseStateFromReset cuando hay reset previo
+      - Comparación de fechas debe usar >= en lugar de > para incluir eventos en el mismo momento
+      - Tras limpiar post-reset, last_cleaned_at debe ser posterior o igual a effective_since
+      - CPM debe detectar last_cleaned_at > effective_since y calcular estado como 'reviewed' (no 'reseteado')
+      REFERENCIAS:
+      - docs/ALQUIMIA_GENERAL_RESET_CLEAN_INVARIANT.md (documentación completa del fix)
+      - src/core/master/services/cleaning-engine-service.js (rebaseStateFromReset, markCleanStudent)
+
   - id: alquimia-archived-not-renderable
     title: Items/listas archivados no son renderizables en UI operativa
     content: >
