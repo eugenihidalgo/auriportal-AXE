@@ -456,21 +456,42 @@ export async function listItemGroups() {
   const traceId = getRequestId();
   
   try {
-    const groupsRepo = getDefaultPdeTransmutationItemGroupsRepo();
-    const groups = await groupsRepo.listActiveGroups();
+    logInfo('AlquimiaGeneralService', '[ALQ_TRANSFORM][START] listItemGroups iniciado', { traceId });
     
-    logInfo('AlquimiaGeneralService', 'listItemGroups completado', {
+    const groupsRepo = getDefaultPdeTransmutationItemGroupsRepo();
+    const groupsRaw = await groupsRepo.listActiveGroups();
+    
+    // ============================================================================
+    // NORMALIZACIÓN DEFENSIVA CANÓNICA: groupsRaw debe ser array válido
+    // DATOS INCOMPLETOS ≠ ERROR
+    // ============================================================================
+    const groups = Array.isArray(groupsRaw) ? groupsRaw : [];
+    
+    if (!Array.isArray(groupsRaw)) {
+      logWarn('AlquimiaGeneralService', '[ALQ_TRANSFORM][NORMALIZED] listActiveGroups no retornó array, normalizando', {
+        traceId,
+        groupsRaw_type: typeof groupsRaw,
+        normalized_to_empty: groups.length === 0
+      });
+    }
+    
+    logInfo('AlquimiaGeneralService', '[ALQ_TRANSFORM][OK] listItemGroups completado', {
       traceId,
       count: groups.length
     });
     
     return groups;
   } catch (error) {
-    logError('AlquimiaGeneralService', 'Error en listItemGroups', {
+    // ============================================================================
+    // FAIL-OPEN: Error en repositorio no rompe el endpoint
+    // Relación inconsistente ≠ Error estructural
+    // ============================================================================
+    logWarn('AlquimiaGeneralService', '[ALQ_TRANSFORM][SKIP_RELATION] Error en listItemGroups (fail-open)', {
       traceId,
-      error: error.message
+      error: error.message,
+      error_code: error.code
     });
-    // Fail-open: devolver array vacío
+    // Fail-open: devolver array vacío normalizado (estado válido)
     return [];
   }
 }

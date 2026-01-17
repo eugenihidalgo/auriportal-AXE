@@ -248,31 +248,59 @@ export async function updateListaTags(listaId, tagValues, options = {}) {
  * @returns {Promise<Array>} Array de valores de tags
  */
 export async function getListaTags(listaId) {
+  const traceId = getRequestId();
+  
+  // ============================================================================
+  // NORMALIZACIÓN DEFENSIVA CANÓNICA: listaId inválido → retornar [] (no throw)
+  // DATOS INCOMPLETOS ≠ ERROR
+  // ============================================================================
   if (!listaId) {
-    throw new Error('listaId es requerido');
+    logWarn('TagsSotService', '[ALQ_TRANSFORM][NORMALIZED] listaId inválido, retornando []', {
+      traceId,
+      listaId,
+      listaId_type: typeof listaId
+    });
+    return []; // Normalizar: retornar array vacío en lugar de lanzar error
   }
 
-  const traceId = getRequestId();
+  try {
+    const result = await query(
+      `SELECT ct.value
+       FROM pde_classification_terms ct
+       INNER JOIN transmutacion_lista_classifications tlc
+         ON ct.id = tlc.classification_term_id
+       WHERE tlc.lista_id = $1 AND ct.type = 'tag' AND ct.status = 'active'
+       ORDER BY ct.value ASC`,
+      [listaId]
+    );
 
-  const result = await query(
-    `SELECT ct.value
-     FROM pde_classification_terms ct
-     INNER JOIN transmutacion_lista_classifications tlc
-       ON ct.id = tlc.classification_term_id
-     WHERE tlc.lista_id = $1 AND ct.type = 'tag' AND ct.status = 'active'
-     ORDER BY ct.value ASC`,
-    [listaId]
-  );
+    // ============================================================================
+    // NORMALIZACIÓN DEFENSIVA CANÓNICA: result.rows siempre array válido
+    // ============================================================================
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const tags = rows
+      .map(row => row?.value)
+      .filter(value => value != null); // Filtrar null/undefined
 
-  const tags = result.rows.map(row => row.value);
+    logInfo('TagsSotService', '[ALQ_TRANSFORM][OK] getListaTags completado', {
+      lista_id: listaId,
+      tags_count: tags.length,
+      tags: tags,
+      traceId
+    });
 
-  // FIX v5.52.3: Log forense para debugging
-  logInfo('TagsSotService', '[CLASSIFICATION][TAGS][READ] getListaTags', {
-    lista_id: listaId,
-    tags_count: tags.length,
-    tags: tags,
-    traceId
-  });
-
-  return tags;
+    return tags;
+  } catch (error) {
+    // ============================================================================
+    // FAIL-OPEN: Error en query no rompe el endpoint
+    // Relación inconsistente ≠ Error estructural
+    // ============================================================================
+    logWarn('TagsSotService', '[ALQ_TRANSFORM][SKIP_RELATION] Error obteniendo tags (fail-open)', {
+      traceId,
+      lista_id: listaId,
+      error: error.message,
+      error_code: error.code
+    });
+    return []; // Normalizar: retornar array vacío en lugar de lanzar error
+  }
 }

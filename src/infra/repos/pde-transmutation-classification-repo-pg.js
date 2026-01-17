@@ -387,86 +387,142 @@ export class PdeTransmutationClassificationRepoPg extends PdeTransmutationClassi
   }
 
   async getListWithClassification(listId) {
-    // ═══════════════════════════════════════════════════════════════
-    // FIX v5.50.1: Leer desde transmutacion_lista_classifications (SOT)
-    // ═══════════════════════════════════════════════════════════════
-    // Proyección canónica: JOIN transmutacion_lista_classifications
-    // con pde_classification_terms para obtener category/subtype/tags
-    const sql = `
-      SELECT 
-        l.id,
-        l.nombre,
-        l.tipo,
-        l.descripcion,
-        l.activo,
-        l.orden,
-        l.created_at,
-        l.updated_at,
-        -- Category (type='key')
-        (SELECT ct.value
-         FROM transmutacion_lista_classifications tlc
-         INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
-         WHERE tlc.lista_id = l.id AND ct.type = 'key' AND ct.status = 'active'
-         LIMIT 1) as category_key,
-        -- Subtype (type='subkey')
-        (SELECT ct.value
-         FROM transmutacion_lista_classifications tlc
-         INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
-         WHERE tlc.lista_id = l.id AND ct.type = 'subkey' AND ct.status = 'active'
-         LIMIT 1) as subtype_key,
-        -- Tags (type='tag') - array
-        COALESCE(
-          (SELECT json_agg(ct.value ORDER BY ct.value)
-           FROM transmutacion_lista_classifications tlc
-           INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
-           WHERE tlc.lista_id = l.id AND ct.type = 'tag' AND ct.status = 'active'),
-          '[]'::json
-        ) as tags
-      FROM listas_transmutaciones l
-      WHERE l.id = $1
-    `;
+    const traceId = getRequestId();
     
-    const result = await query(sql, [listId]);
-    if (!result.rows[0]) return null;
-    
-    const row = result.rows[0];
-    
-    // Normalizar tags: puede ser JSON array, string JSON, o null
-    let tagsArray = [];
-    if (row.tags) {
-      if (Array.isArray(row.tags)) {
-        tagsArray = row.tags;
-      } else if (typeof row.tags === 'string') {
-        try {
-          tagsArray = JSON.parse(row.tags);
-        } catch (e) {
-          tagsArray = [];
-        }
-      } else if (typeof row.tags === 'object') {
-        tagsArray = Array.isArray(row.tags) ? row.tags : [];
-      }
+    // ============================================================================
+    // NORMALIZACIÓN DEFENSIVA CANÓNICA: listId inválido → retornar null (no throw)
+    // DATOS INCOMPLETOS ≠ ERROR
+    // ============================================================================
+    if (!listId) {
+      logWarn('PdeTransmutationClassificationRepo', '[ALQ_TRANSFORM][NORMALIZED] listId inválido, retornando null', {
+        traceId,
+        listId,
+        listId_type: typeof listId
+      });
+      return null;
     }
     
-    // FIX v5.52.0: Log de lectura de tags para debugging
-    // console.log('[CLASSIFICATION][TAG][READ]', {
-    //   lista_id: listId,
-    //   tags_count: tagsArray.length,
-    //   tags: tagsArray
-    // });
-    
-    return {
-      id: row.id,
-      nombre: row.nombre,
-      tipo: row.tipo,
-      descripcion: row.descripcion,
-      activo: row.activo,
-      orden: row.orden,
-      category_key: row.category_key || null,
-      subtype_key: row.subtype_key || null,
-      tags: tagsArray.length > 0 ? tagsArray : null,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    };
+    try {
+      // ═══════════════════════════════════════════════════════════════
+      // FIX v5.50.1: Leer desde transmutacion_lista_classifications (SOT)
+      // ═══════════════════════════════════════════════════════════════
+      // Proyección canónica: JOIN transmutacion_lista_classifications
+      // con pde_classification_terms para obtener category/subtype/tags
+      const sql = `
+        SELECT 
+          l.id,
+          l.nombre,
+          l.tipo,
+          l.descripcion,
+          l.activo,
+          l.orden,
+          l.created_at,
+          l.updated_at,
+          -- Category (type='key')
+          (SELECT ct.value
+           FROM transmutacion_lista_classifications tlc
+           INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+           WHERE tlc.lista_id = l.id AND ct.type = 'key' AND ct.status = 'active'
+           LIMIT 1) as category_key,
+          -- Subtype (type='subkey')
+          (SELECT ct.value
+           FROM transmutacion_lista_classifications tlc
+           INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+           WHERE tlc.lista_id = l.id AND ct.type = 'subkey' AND ct.status = 'active'
+           LIMIT 1) as subtype_key,
+          -- Tags (type='tag') - array
+          COALESCE(
+            (SELECT json_agg(ct.value ORDER BY ct.value)
+             FROM transmutacion_lista_classifications tlc
+             INNER JOIN pde_classification_terms ct ON tlc.classification_term_id = ct.id
+             WHERE tlc.lista_id = l.id AND ct.type = 'tag' AND ct.status = 'active'),
+            '[]'::json
+          ) as tags
+        FROM listas_transmutaciones l
+        WHERE l.id = $1
+      `;
+      
+      const result = await query(sql, [listId]);
+      
+      // ============================================================================
+      // NORMALIZACIÓN DEFENSIVA CANÓNICA: Lista no encontrada → null (no throw)
+      // ============================================================================
+      if (!result?.rows?.[0]) {
+        logInfo('PdeTransmutationClassificationRepo', '[ALQ_TRANSFORM][NORMALIZED] Lista no encontrada, retornando null', {
+          traceId,
+          listId
+        });
+        return null;
+      }
+      
+      const row = result.rows[0];
+      
+      // ============================================================================
+      // NORMALIZACIÓN DEFENSIVA CANÓNICA: Tags puede ser JSON array, string JSON, o null
+      // DATOS MAL FORMADOS ≠ ERROR (se normaliza a [])
+      // ============================================================================
+      let tagsArray = [];
+      if (row.tags) {
+        if (Array.isArray(row.tags)) {
+          tagsArray = row.tags;
+        } else if (typeof row.tags === 'string') {
+          try {
+            tagsArray = JSON.parse(row.tags);
+            // Validar que el parse produjo un array
+            if (!Array.isArray(tagsArray)) {
+              tagsArray = [];
+            }
+          } catch (e) {
+            // DATOS MAL FORMADOS: JSON inválido → normalizar a []
+            logWarn('PdeTransmutationClassificationRepo', '[ALQ_TRANSFORM][NORMALIZED] Tags JSON inválido, normalizando a []', {
+              traceId,
+              listId,
+              tags_raw: row.tags,
+              parse_error: e.message
+            });
+            tagsArray = [];
+          }
+        } else if (typeof row.tags === 'object') {
+          tagsArray = Array.isArray(row.tags) ? row.tags : [];
+        }
+      }
+      
+      const normalized = {
+        id: row.id,
+        nombre: row.nombre || null,
+        tipo: row.tipo || null,
+        descripcion: row.descripcion || null,
+        activo: row.activo != null ? row.activo : null,
+        orden: row.orden != null ? row.orden : null,
+        category_key: row.category_key || null,
+        subtype_key: row.subtype_key || null,
+        tags: tagsArray.length > 0 ? tagsArray : null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null
+      };
+      
+      logInfo('PdeTransmutationClassificationRepo', '[ALQ_TRANSFORM][OK] getListWithClassification completado', {
+        traceId,
+        listId,
+        has_category: !!normalized.category_key,
+        has_subtype: !!normalized.subtype_key,
+        tags_count: tagsArray.length
+      });
+      
+      return normalized;
+    } catch (error) {
+      // ============================================================================
+      // FAIL-OPEN: Error en query no rompe el endpoint
+      // Relación inconsistente ≠ Error estructural
+      // ============================================================================
+      logWarn('PdeTransmutationClassificationRepo', '[ALQ_TRANSFORM][SKIP_RELATION] Error obteniendo classification (fail-open)', {
+        traceId,
+        listId,
+        error: error.message,
+        error_code: error.code
+      });
+      return null; // Normalizar: retornar null en lugar de lanzar error
+    }
   }
 }
 
