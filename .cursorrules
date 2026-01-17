@@ -694,15 +694,21 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - Excluir eventos de limpieza recién insertados en rebaseStateFromReset por comparación estricta created_at > resetAt
       - Ignorar eventos de limpieza que ocurren en el mismo momento que el reset
       - Calcular estado como 'reseteado' cuando last_cleaned_at > effective_since
+      - Usar new Date() en lugar de created_at real del evento en upsertApplyRecurrent
+      - Omitir rebase cuando hay reset previo (needsRebase debe incluir hasReset ||)
       OBLIGATORIO:
       - rebaseStateFromReset debe aceptar currentCleanEvent como parámetro opcional
       - markCleanStudent debe pasar currentCleanEvent a rebaseStateFromReset cuando hay reset previo
       - Comparación de fechas debe usar >= en lugar de > para incluir eventos en el mismo momento
+      - upsertApplyRecurrent debe usar created_at real del evento insertado (no new Date())
+      - needsRebase debe incluir hasReset || para forzar rebase cuando hay reset previo
       - Tras limpiar post-reset, last_cleaned_at debe ser posterior o igual a effective_since
+      - last_cleaned_at debe coincidir exactamente con created_at del evento de limpieza
       - CPM debe detectar last_cleaned_at > effective_since y calcular estado como 'reviewed' (no 'reseteado')
       REFERENCIAS:
-      - docs/ALQUIMIA_GENERAL_RESET_CLEAN_INVARIANT.md (documentación completa del fix)
-      - src/core/master/services/cleaning-engine-service.js (rebaseStateFromReset, markCleanStudent)
+      - docs/ALQUIMIA_GENERAL_RESET_CLEAN_INVARIANT.md (fix v5.77.5)
+      - docs/ALQUIMIA_RESET_OVERRIDE_POSTMORTEM_V1.md (fix v5.77.6)
+      - src/core/master/services/cleaning-engine-service.js (rebaseStateFromReset, markCleanStudent, upsertApplyRecurrent)
 
   - id: alquimia-archived-not-renderable
     title: Items/listas archivados no son renderizables en UI operativa

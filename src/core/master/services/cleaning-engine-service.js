@@ -813,7 +813,12 @@ export async function markCleanStudent(options, client = null) {
       const currentCount = currentState?.[countColumn] || 0;
       
       // Detectar si el estado es anterior o incoherente con el RESET
-      const needsRebase = !currentEffective || 
+      // FIX: Si hay RESET previo y se está ejecutando un CLEAN, SIEMPRE hacer rebase
+      // para asegurar que last_cleaned_at se establezca correctamente post-reset
+      // Esto resuelve el bug donde limpiar tras reset no actualiza last_cleaned_at
+      const hasReset = lastReset !== null;
+      const needsRebase = hasReset || // SIEMPRE rebase si hay reset previo
+                         !currentEffective || 
                          currentEffective < resetAt ||
                          (currentLastCleaned && currentLastCleaned < resetAt) ||
                          (currentCount > 0 && !currentLastCleaned) ||
@@ -955,10 +960,54 @@ export async function markCleanStudent(options, client = null) {
     
     if (itemKind === 'recurrente') {
       // Recurrente: actualizar last_cleaned_at y clean_count (SIMÉTRICO)
+      // FIX: Usar created_at real del evento insertado (no new Date()) para preservar precisión
+      // Esto asegura que last_cleaned_at coincida exactamente con el evento y sea >= effective_since
+      let cleanedAt = new Date();
+      if (eventResult && typeof eventResult === 'object' && !eventResult.already_executed && eventResult.created_at) {
+        // Evento recién insertado: usar su created_at real de la DB
+        cleanedAt = new Date(eventResult.created_at);
+        logInfo('MASTER', '[CLEAN][TIMESTAMP] Usando created_at real del evento insertado', {
+          traceId,
+          student_uuid,
+          item_ref,
+          clean_layer,
+          event_created_at: eventResult.created_at,
+          cleaned_at: cleanedAt.toISOString()
+        });
+      } else if (eventResult && typeof eventResult === 'object' && eventResult.already_executed) {
+        // Evento ya existía: buscar su created_at real
+        // Reutilizar eventsRepo declarado arriba (línea 610) o crear uno nuevo si no está en scope
+        const eventsRepoForLookup = getDefaultCleaningEventsRepo();
+        const existingEvents = await eventsRepoForLookup.listEventsForStudentItem({
+          student_uuid,
+          item_ref,
+          product_key,
+          domain_type
+        }, client);
+        const existingCleanEvent = existingEvents.find(e => 
+          e.execution_key === executionKey && 
+          e.action_type === 'mark_clean' && 
+          e.clean_layer === clean_layer
+        );
+        if (existingCleanEvent && existingCleanEvent.created_at) {
+          cleanedAt = new Date(existingCleanEvent.created_at);
+          logInfo('MASTER', '[CLEAN][TIMESTAMP] Usando created_at real del evento existente', {
+            traceId,
+            student_uuid,
+            item_ref,
+            clean_layer,
+            event_created_at: existingCleanEvent.created_at,
+            cleaned_at: cleanedAt.toISOString()
+          });
+        }
+      }
+      
       logInfo('MASTER', 'Recurrente: usando upsertApplyRecurrent', {
         traceId,
         clean_layer,
-        capa: clean_layer === 'shared' ? 'SHARED' : 'PDE'
+        capa: clean_layer === 'shared' ? 'SHARED' : 'PDE',
+        cleaned_at: cleanedAt.toISOString(),
+        using_event_timestamp: eventResult && typeof eventResult === 'object' && !eventResult.already_executed
       });
       state = await stateRepo.upsertApplyRecurrent({
         student_uuid,
@@ -966,7 +1015,7 @@ export async function markCleanStudent(options, client = null) {
         domain_type,
         item_ref,
         clean_layer,
-        cleaned_at: new Date()
+        cleaned_at: cleanedAt
       }, client);
     } else {
       // Una vez: usar método según clean_layer (SIMÉTRICO)
