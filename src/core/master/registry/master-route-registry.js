@@ -149,6 +149,12 @@ export const MASTER_ROUTES = [
     method: 'POST'
   },
   {
+    key: 'master-api-alquimia-reset-list-all',
+    path: '/master/api/alquimia-general/reset-list-all',
+    type: 'api',
+    method: 'POST'
+  },
+  {
     key: 'master-api-alquimia-classifications',
     path: '/master/api/alquimia-general/classifications',
     type: 'api',

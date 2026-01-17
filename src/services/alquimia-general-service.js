@@ -787,6 +787,41 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
           })
         };
 
+        // ============================================================================
+        // LOG FORENSE TEMPORAL: Proyección RECURRENTE tras limpieza
+        // ============================================================================
+        const activeLayerState = stateByViewLayer[view_layer || 'shared'];
+        console.log('[FORENSIC][PROJECTION][RECURRENTE]', {
+          student_uuid: student.student_uuid,
+          item_ref: itemRef,
+          view_layer: view_layer || 'shared',
+          state: activeLayerState?.state || undefined,
+          visual_state: activeLayerState?.visual_state || undefined,
+          days_since: activeLayerState?.metrics?.days_since_last_clean || undefined,
+          last_cleaned_at: activeLayerState?.metrics?.last_cleaned_at || undefined,
+          effective_since: activeLayerState?.metrics?.effective_since || undefined,
+          clean_count: activeLayerState?.metrics?.clean_count || undefined,
+          full_state: activeLayerState || undefined,
+          state_by_view_layer: {
+            shared: {
+              state: stateByViewLayer.shared?.state || undefined,
+              visual_state: stateByViewLayer.shared?.visual_state || undefined,
+              days_since: stateByViewLayer.shared?.metrics?.days_since_last_clean || undefined
+            },
+            pde: {
+              state: stateByViewLayer.pde?.state || undefined,
+              visual_state: stateByViewLayer.pde?.visual_state || undefined,
+              days_since: stateByViewLayer.pde?.metrics?.days_since_last_clean || undefined
+            },
+            effective: {
+              state: stateByViewLayer.effective?.state || undefined,
+              visual_state: stateByViewLayer.effective?.visual_state || undefined,
+              days_since: stateByViewLayer.effective?.metrics?.days_since_last_clean || undefined
+            }
+          }
+        });
+        // ============================================================================
+
         return {
           ...student,
           // Asegurar que shared y pde están presentes (simétricos)

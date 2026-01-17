@@ -136,9 +136,11 @@ export function registerAction(actionDef) {
   }
 
   if (allowed_scopes) {
+    // Scopes UX válidos (lista cerrada) - PROHIBIDO usar conceptos de dominio backend
+    const validUXScopes = ['item', 'list', 'all', 'student', 'selection', 'context'];
     for (const scope of allowed_scopes) {
-      if (!['item', 'student', 'all'].includes(scope)) {
-        throw new Error(`[UX_ACTION_REGISTRY] allowed_scopes contiene valor inválido: ${scope}`);
+      if (!validUXScopes.includes(scope)) {
+        throw new Error(`[UX_ACTION_REGISTRY] allowed_scopes contiene valor inválido: ${scope}. Valores válidos: ${validUXScopes.join(', ')}`);
       }
     }
   }

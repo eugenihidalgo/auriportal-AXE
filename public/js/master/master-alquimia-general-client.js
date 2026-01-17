@@ -23,7 +23,7 @@
   const APP_VERSION = window.__AP_APP_VERSION__ || 'unknown';
   const BUILD_ID = window.__AP_BUILD_ID__ || 'unknown';
   const BUILD_TIMESTAMP = Date.now();
-  window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ = `MASTER_ALQUIMIA_GENERAL@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=float-layers-shared-pde-combo+simetric-dto`;
+  window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ = `MASTER_ALQUIMIA_GENERAL@${APP_VERSION}|BUILD=${BUILD_ID}|STAMP=${BUILD_TIMESTAMP}|FEATURES=float-layers-shared-pde-combo+simetric-dto+recurrent-state-projection-v1`;
   
   // BUILD MARKER FORENSE (FASE 0)
   console.log('[BOOT][ALQUIMIA_GENERAL] build_marker', 'AG_BUILD_2026-01-13T00:00Z');
@@ -1641,39 +1641,7 @@
           
           showToastSuccess(`Reset completado (${resetResult.applied} items, ${resetResult.skipped} omitidos)`);
 
-          // REFRESH ENGINE V1: Usar engine.afterMutation (OBLIGATORIO)
-          console.log('[REFRESH_ENGINE][ALQG][MUTATION] reset-list', {
-            list_id: state.listaActiva.id,
-            student_uuid: state.projection.student_uuid,
-            item_kind: itemKind,
-            view_layer: viewLayer,
-            layers_affected: resetResult.layers_affected
-          });
-
-          if (window.MasterRefreshEngineV1) {
-            await window.MasterRefreshEngineV1.afterMutation({
-              module: 'alquimia_general',
-              mutation_type: 'alquimia.reset.list',
-              scope: {
-                view_mode: state.projection.mode,
-                view_layer: viewLayer
-              },
-              context: {
-                list_id: state.listaActiva.id,
-                student_uuid: state.projection.student_uuid,
-                item_kind: itemKind,
-                layers_affected: resetResult.layers_affected
-              }
-            });
-          } else {
-            // Fallback si engine no está disponible
-            console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-            await refreshAfterProjectionMutation({
-              reason: 'reset-list',
-              item_ref: null,
-              forceModalRefresh: false
-            });
-          }
+          // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
         } catch (error) {
           console.error('[RESET][PROGRESS][LIST] Error:', error);
           showToastError(`Error: ${error.message}`);
@@ -1710,11 +1678,24 @@
               list_id: state.listaActiva?.id || null
             };
 
+            // Derivar clean_layer desde view_layer (REGLA CANÓNICA: effective → pde)
+            const activeViewLayer = state.projection.view_layer || 'shared';
+            let cleanLayer = 'pde'; // Reset ALL siempre PDE según contrato
+            if (activeViewLayer === 'effective') {
+              cleanLayer = 'pde'; // REGLA CANÓNICA
+            } else if (activeViewLayer === 'shared') {
+              cleanLayer = 'shared'; // Permitido para reset ALL desde shared
+            } else if (activeViewLayer === 'pde') {
+              cleanLayer = 'pde';
+            }
+
             const result = await window.performAction({
-              action_id: 'alquimia.reset.list.all',
+              action_id: 'alquimia.reset',
               context: {
+                reset_scope: 'LIST_ALL',
                 list_id: state.listaActiva.id,
-                item_kind: 'recurrente', // OBLIGATORIO: Reset ALL solo para recurrente
+                clean_layer: cleanLayer,
+                item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
               },
               uiState
             });
@@ -3236,7 +3217,8 @@
       // SHARED o PDE: usar estado calculado por backend
       // CPM v1: Usar state.projection.view_layer como única autoridad
       const activeViewLayer = state.projection.view_layer || 'shared';
-      stateDiv.textContent = getStudentStateDisplay(student, itemKind, activeViewLayer);
+      const stateDisplayText = getStudentStateDisplay(student, itemKind, activeViewLayer);
+      stateDiv.textContent = stateDisplayText || '❌ Estado no disponible';
     }
     row.appendChild(stateDiv);
 
@@ -3266,18 +3248,43 @@
       }
     } else if (layerView === 'combo' && itemKind === 'recurrente') {
       // COMBO RECURRENTE: mostrar ambos remaining desde backend
-      const sharedDays = student.shared?.days_since_last_clean;
-      const pdeDays = student.pde?.days_since_last_clean;
-      const sharedText = sharedDays !== null ? `${sharedDays}d` : 'Nunca';
-      const pdeText = pdeDays !== null ? `${pdeDays}d` : 'Nunca';
-      remainingDiv.textContent = `S:${sharedText} | P:${pdeText}`;
+      // REGLA CONSTITUCIONAL: Leer EXCLUSIVAMENTE desde state_by_view_layer
+      const sharedStateData = getRecurrenteStateFromProjection(student, 'shared');
+      const pdeStateData = getRecurrenteStateFromProjection(student, 'pde');
+      
+      if (!sharedStateData || !pdeStateData) {
+        remainingDiv.textContent = '❌ Estado no disponible';
+        remainingDiv.style.cssText += 'color: #fca5a5;';
+        console.error('[MasterAlquimiaGeneral] [UI][COMBO_RECURRENTE] state_by_view_layer faltante', {
+          student_uuid: student.student_uuid,
+          has_shared: !!sharedStateData,
+          has_pde: !!pdeStateData
+        });
+      } else {
+        const sharedDays = sharedStateData.days_since_last_clean;
+        const pdeDays = pdeStateData.days_since_last_clean;
+        const sharedText = sharedDays !== null ? `${sharedDays}d` : 'Nunca';
+        const pdeText = pdeDays !== null ? `${pdeDays}d` : 'Nunca';
+        remainingDiv.textContent = `S:${sharedText} | P:${pdeText}`;
+      }
     } else {
       // SHARED o PDE: mostrar remaining desde backend
       if (itemKind === 'recurrente') {
-        const days = layerView === 'pde' 
-          ? (student.pde?.days_since_last_clean)
-          : (student.shared?.days_since_last_clean);
-        remainingDiv.textContent = days !== null ? `${days}d` : 'Nunca';
+        // REGLA CONSTITUCIONAL: Leer EXCLUSIVAMENTE desde state_by_view_layer
+        const activeViewLayer = layerView === 'pde' ? 'pde' : 'shared';
+        const stateData = getRecurrenteStateFromProjection(student, activeViewLayer);
+        
+        if (!stateData) {
+          remainingDiv.textContent = '❌ Estado no disponible';
+          remainingDiv.style.cssText += 'color: #fca5a5;';
+          console.error('[MasterAlquimiaGeneral] [UI][RECURRENTE_DAYS] state_by_view_layer faltante', {
+            student_uuid: student.student_uuid,
+            view_layer: activeViewLayer
+          });
+        } else {
+          const days = stateData.days_since_last_clean;
+          remainingDiv.textContent = days !== null ? `${days}d` : 'Nunca';
+        }
       } else {
         // UNA_VEZ: mostrar faltan/excedente según clean_count vs required_count
         const layerData = layerView === 'pde' ? student.pde : student.shared;
@@ -3510,6 +3517,43 @@
   }
 
   /**
+   * Obtiene estado recurrente desde proyección backend (ÚNICA vía válida)
+   * 
+   * REGLA CONSTITUCIONAL: UI recurrente SOLO lee desde state_by_view_layer.
+   * PROHIBIDO: Leer desde student.shared o student.pde directamente.
+   * 
+   * @param {Object} student - Estudiante con state_by_view_layer
+   * @param {string} viewLayer - 'shared' | 'pde' | 'effective' (view_layer activo)
+   * @returns {Object|null} { state, visual_state, days_since, days_since_last_clean, metrics } o null si falta
+   */
+  function getRecurrenteStateFromProjection(student, viewLayer) {
+    // REGLA CONSTITUCIONAL: Leer EXCLUSIVAMENTE desde state_by_view_layer
+    if (!student.state_by_view_layer || !student.state_by_view_layer[viewLayer]) {
+      console.error('[MasterAlquimiaGeneral] [UI][RECURRENTE_STATE] state_by_view_layer no disponible', {
+        student_uuid: student.student_uuid,
+        view_layer: viewLayer,
+        has_state_by_view_layer: !!student.state_by_view_layer,
+        available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
+      });
+      return null; // Fail-loud: NO fallback silencioso
+    }
+    
+    const stateData = student.state_by_view_layer[viewLayer];
+    const metrics = stateData.metrics || stateData.computed_state || {};
+    
+    // Extraer days_since_last_clean desde metrics (ubicación canónica)
+    const daysSinceLastClean = metrics.days_since_last_clean ?? metrics.days_since ?? null;
+    
+    return {
+      state: stateData.state || 'never',
+      visual_state: stateData.visual_state || stateData.state || 'never',
+      days_since: stateData.days_since ?? daysSinceLastClean ?? null,
+      days_since_last_clean: daysSinceLastClean,
+      metrics: metrics
+    };
+  }
+
+  /**
    * Obtiene texto de display para estado (UI PASIVA: solo formatea, no calcula)
    * REGLA CANÓNICA: Usa EXCLUSIVAMENTE state_by_view_layer[view_layer]
    * 
@@ -3523,19 +3567,20 @@
     const activeViewLayer = viewLayer || state.projection.view_layer || 'shared';
     
     // Obtener estado desde state_by_view_layer[activeViewLayer]
+    // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO, NO hay fallback
     let stateData = null;
     if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
       stateData = student.state_by_view_layer[activeViewLayer];
     } else {
-      // Fallback temporal para compatibilidad (DEPRECATED)
-      console.warn('[MasterAlquimiaGeneral] [UI][STATE_DISPLAY] state_by_view_layer no disponible, usando fallback legacy', {
+      // BUG FIX: Eliminado fallback legacy - Si falta state_by_view_layer, NO renderizar
+      console.error('[MasterAlquimiaGeneral] [UI][STATE_DISPLAY] state_by_view_layer no disponible - BLOQUEANDO render', {
         student_uuid: student.student_uuid,
-        view_layer: activeViewLayer
+        view_layer: activeViewLayer,
+        has_state_by_view_layer: !!student.state_by_view_layer,
+        available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
       });
-      stateData = {
-        state: student.state || 'never',
-        visual_state: student.visual_state || 'never'
-      };
+      // NO usar fallback - Si falta state_by_view_layer, NO renderizar este estudiante
+      return null; // Retornar null para indicar que no se puede renderizar
     }
     
     // RECURRENTE: usar state
@@ -3682,9 +3727,9 @@
       
       // Log forense para RECURRENTE: idempotencia por capa
       if (itemKind === 'recurrente') {
-        // Obtener days_since_last_clean de la capa correspondiente desde state_by_view_layer
-        const stateData = student.state_by_view_layer?.[cleanLayer] || null;
-        const daysSinceLastClean = stateData?.computed_state?.days_since_last_clean ?? null;
+        // REGLA CONSTITUCIONAL: Usar función canónica para leer estado
+        const stateData = getRecurrenteStateFromProjection(student, cleanLayer);
+        const daysSinceLastClean = stateData?.days_since_last_clean ?? null;
         
         console.log('[UI][RECURRENTE][BUTTON] Intento de limpieza', {
           student_uuid: student.student_uuid,
@@ -4656,12 +4701,24 @@
                 list_id: state.listaActiva?.id || null
               };
 
+              // Derivar clean_layer desde view_layer (REGLA CANÓNICA: effective → pde)
+              const activeViewLayer = state.projection.view_layer || 'shared';
+              let cleanLayer = 'pde'; // Reset ALL siempre PDE según contrato
+              if (activeViewLayer === 'effective') {
+                cleanLayer = 'pde'; // REGLA CANÓNICA
+              } else if (activeViewLayer === 'shared') {
+                cleanLayer = 'shared'; // Permitido para reset ALL desde shared
+              } else if (activeViewLayer === 'pde') {
+                cleanLayer = 'pde';
+              }
+
               const result = await window.performAction({
-                action_id: 'alquimia.reset.item.all',
+                action_id: 'alquimia.reset',
                 context: {
+                  reset_scope: 'ITEM_ALL',
                   item_ref: item.item_ref,
-                  item_kind: 'recurrente', // OBLIGATORIO: Reset ALL solo para recurrente
-                  list_id: state.listaActiva?.id || null
+                  clean_layer: cleanLayer,
+                  item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
                 },
                 uiState
               });
@@ -4803,39 +4860,7 @@
               
               showToastSuccess(`Reset completado (${resetResult.applied} aplicado, ${resetResult.skipped} omitido)`);
 
-              // REFRESH ENGINE V1: Usar engine.afterMutation (OBLIGATORIO)
-              console.log('[REFRESH_ENGINE][ALQG][MUTATION] reset-item', {
-                item_ref: item.item_ref,
-                student_uuid: state.projection.student_uuid,
-                item_kind: itemKind,
-                view_layer: viewLayer,
-                layers_affected: resetResult.layers_affected
-              });
-
-              if (window.MasterRefreshEngineV1) {
-                await window.MasterRefreshEngineV1.afterMutation({
-                  module: 'alquimia_general',
-                  mutation_type: 'alquimia.reset.item',
-                  scope: {
-                    view_mode: state.projection.mode,
-                    view_layer: viewLayer
-                  },
-                  context: {
-                    item_ref: item.item_ref,
-                    student_uuid: state.projection.student_uuid,
-                    item_kind: itemKind,
-                    layers_affected: resetResult.layers_affected
-                  }
-                });
-              } else {
-                // Fallback si engine no está disponible
-                console.warn('[MasterAlquimiaGeneral] Refresh Engine no disponible, usando fallback');
-                await refreshAfterProjectionMutation({
-                  reason: 'reset-item',
-                  item_ref: item.item_ref,
-                  forceModalRefresh: true
-                });
-              }
+              // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
             } catch (error) {
               console.error('[RESET][PROGRESS][ITEM] Error:', error);
               showToastError(`Error: ${error.message}`);
@@ -6135,14 +6160,32 @@
    * @param {string} [view_layer] - Capa de vista activa (para derivar clean_layer)
    * @returns {Promise<Object>} { applied, skipped, layers_affected }
    */
+  /**
+   * Resetea el progreso de un alumno para un ítem específico (RESET CANÓNICO v1)
+   * @param {string} student_uuid - UUID del estudiante
+   * @param {string} item_ref - Referencia del item
+   * @param {string} [item_kind] - Tipo de item ('recurrente' | 'una_vez')
+   * @param {string} [view_layer] - Capa de vista activa (para derivar clean_layer)
+   * @returns {Promise<Object>} { applied, skipped, layers_affected }
+   */
   async function resetStudentItemProgress(student_uuid, item_ref, item_kind = null, view_layer = null) {
-    const query = {
-      student_uuid,
-      item_ref,
-      item_kind: item_kind || state.tipoActivo, // Usar tipo activo si no viene
-      scope: 'student', // REGLA CONSTITUCIONAL: scope='student' obligatorio
-      view_layer: view_layer || state.projection.view_layer || 'shared'
-    };
+    // REGLA CONSTITUCIONAL: Reset SOLO para recurrente
+    const effectiveItemKind = item_kind || state.tipoActivo;
+    if (effectiveItemKind !== 'recurrente') {
+      throw new Error('reset NO permitido para item_kind="una_vez". Reset solo para recurrente.');
+    }
+
+    // Derivar clean_layer desde view_layer
+    const activeViewLayer = view_layer || state.projection.view_layer || 'shared';
+    let cleanLayer = 'shared'; // Default
+    if (activeViewLayer === 'pde') {
+      cleanLayer = 'pde';
+    } else if (activeViewLayer === 'shared') {
+      cleanLayer = 'shared';
+    } else if (activeViewLayer === 'effective') {
+      // REGLA CANÓNICA: effective → pde
+      cleanLayer = 'pde';
+    }
 
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
@@ -6151,24 +6194,21 @@
       }
 
       const uiState = {
-        view_mode: 'proyeccion', // Reset siempre se ejecuta desde proyección
-        view_layer: query.view_layer || 'shared',
-        list_id: null,
+        view_mode: state.projection.mode || 'proyeccion',
+        view_layer: activeViewLayer,
+        list_id: state.listaActiva?.id || null,
         student_uuid: student_uuid
       };
 
-      // Usar acción consolidada 'alquimia.reset' con item_ref (scope='item' implícito)
+      // REGLA CANÓNICA: Usar reset_scope='ITEM_STUDENT' con clean_layer explícito
       const result = await window.performAction({
         action_id: 'alquimia.reset',
-        payload: {
-          student_uuid,
-          item_ref,
-          item_kind: query.item_kind || 'recurrente', // Reset SOLO para recurrente
-          view_layer: query.view_layer
-        },
         context: {
+          reset_scope: 'ITEM_STUDENT',
+          item_ref,
           student_uuid,
-          item_ref
+          clean_layer: cleanLayer,
+          item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
         },
         uiState
       });
@@ -6181,18 +6221,17 @@
       console.log('[RESET][ITEM][CANONICAL] Progreso reseteado', {
         student_uuid,
         item_ref,
-        item_kind: query.item_kind,
+        reset_scope: 'ITEM_STUDENT',
+        clean_layer: cleanLayer,
         applied: data.applied,
         skipped: data.skipped,
-        layers_affected: data.layers_affected,
-        mode: data.mode
+        layers_affected: data.layers_affected
       });
       
       return {
         applied: data.applied || false,
         skipped: data.skipped || 0,
-        layers_affected: data.layers_affected || [],
-        mode: data.mode || 'event'
+        layers_affected: data.layers_affected || []
       };
     } catch (error) {
       console.error('[RESET][ITEM] Error:', error);
@@ -6209,13 +6248,23 @@
    * @returns {Promise<Object>} { applied, skipped, layers_affected }
    */
   async function resetStudentListProgress(student_uuid, list_id, item_kind = null, view_layer = null) {
-    const query = {
-      student_uuid,
-      list_id,
-      item_kind: item_kind || null, // Opcional: si no viene, resetea todos los tipos
-      scope: 'student', // REGLA CONSTITUCIONAL: scope='student' obligatorio
-      view_layer: view_layer || state.projection.view_layer || 'shared'
-    };
+    // REGLA CONSTITUCIONAL: Reset SOLO para recurrente
+    const effectiveItemKind = item_kind || state.tipoActivo;
+    if (effectiveItemKind !== 'recurrente') {
+      throw new Error('reset NO permitido para item_kind="una_vez". Reset solo para recurrente.');
+    }
+
+    // Derivar clean_layer desde view_layer
+    const activeViewLayer = view_layer || state.projection.view_layer || 'shared';
+    let cleanLayer = 'shared'; // Default
+    if (activeViewLayer === 'pde') {
+      cleanLayer = 'pde';
+    } else if (activeViewLayer === 'shared') {
+      cleanLayer = 'shared';
+    } else if (activeViewLayer === 'effective') {
+      // REGLA CANÓNICA: effective → pde
+      cleanLayer = 'pde';
+    }
 
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
@@ -6224,24 +6273,21 @@
       }
 
       const uiState = {
-        view_mode: 'proyeccion', // Reset siempre se ejecuta desde proyección
-        view_layer: query.view_layer || 'shared',
+        view_mode: state.projection.mode || 'proyeccion',
+        view_layer: activeViewLayer,
         list_id: list_id,
         student_uuid: student_uuid
       };
 
-      // Usar acción consolidada 'alquimia.reset' con list_id (scope='list' implícito)
+      // REGLA CANÓNICA: Usar reset_scope='LIST_STUDENT' con clean_layer explícito
       const result = await window.performAction({
         action_id: 'alquimia.reset',
-        payload: {
-          student_uuid,
-          list_id,
-          item_kind: query.item_kind || 'recurrente', // Reset SOLO para recurrente
-          view_layer: query.view_layer
-        },
         context: {
+          reset_scope: 'LIST_STUDENT',
+          list_id,
           student_uuid,
-          list_id
+          clean_layer: cleanLayer,
+          item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
         },
         uiState
       });
@@ -6254,18 +6300,17 @@
       console.log('[RESET][LIST][CANONICAL] Progreso reseteado', {
         student_uuid,
         list_id,
-        item_kind: query.item_kind,
+        reset_scope: 'LIST_STUDENT',
+        clean_layer: cleanLayer,
         applied: data.applied,
         skipped: data.skipped,
-        layers_affected: data.layers_affected,
-        mode: data.mode
+        layers_affected: data.layers_affected
       });
       
       return {
         applied: data.applied || 0,
         skipped: data.skipped || 0,
-        layers_affected: data.layers_affected || [],
-        mode: data.mode || 'event'
+        layers_affected: data.layers_affected || []
       };
     } catch (error) {
       console.error('[RESET][LIST] Error:', error);

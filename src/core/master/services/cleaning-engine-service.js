@@ -133,6 +133,156 @@ export async function getStudentEffectiveLevel(studentUuid, lineKey = 'pde') {
 // ============================================================================
 
 /**
+ * Obtiene el último evento RESET para un item+student+layer
+ * REGLA CONSTITUCIONAL: RESET es frontera dura de estado
+ * 
+ * @param {string} studentUuid - UUID canónico del estudiante
+ * @param {string} itemRef - Referencia del item
+ * @param {string} cleanLayer - Capa de limpieza ('shared' | 'pde')
+ * @param {string} productKey - Clave del producto (default: 'pde')
+ * @param {string} domainType - Tipo de dominio (default: 'transmutation')
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object|null>} Último evento RESET o null si no existe
+ */
+async function getLastResetForItem(studentUuid, itemRef, cleanLayer, productKey = 'pde', domainType = 'transmutation', client = null) {
+  try {
+    const eventsRepo = getDefaultCleaningEventsRepo();
+    const events = await eventsRepo.listEventsForStudentItem({
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      product_key: productKey,
+      domain_type: domainType
+    }, client);
+    
+    // Filtrar solo eventos RESET para esta capa, ordenar por fecha DESC
+    const resetEvents = events
+      .filter(e => e.action_type === 'reset' && e.clean_layer === cleanLayer)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    return resetEvents[0] || null;
+  } catch (error) {
+    logWarn('MASTER', 'Error obteniendo último RESET (fail-open: no reset)', {
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      error: error.message
+    });
+    // Fail-open: si no se puede obtener, asumir no reset
+    return null;
+  }
+}
+
+/**
+ * Reconstruye el estado de cleaning_item_state desde el último RESET
+ * REGLA CONSTITUCIONAL: RESET es frontera dura de estado
+ * 
+ * @param {string} studentUuid - UUID canónico del estudiante
+ * @param {string} itemRef - Referencia del item
+ * @param {string} cleanLayer - Capa de limpieza ('shared' | 'pde')
+ * @param {Object} lastReset - Último evento RESET
+ * @param {string} productKey - Clave del producto (default: 'pde')
+ * @param {string} domainType - Tipo de dominio (default: 'transmutation')
+ * @param {string} traceId - Trace ID para logs
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object|null>} Estado reconstruido o null si falla
+ */
+async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset, productKey = 'pde', domainType = 'transmutation', traceId, client = null) {
+  try {
+    const eventsRepo = getDefaultCleaningEventsRepo();
+    const stateRepo = getDefaultCleaningItemStateRepo();
+    const resetAt = new Date(lastReset.created_at);
+    
+    // Obtener todos los eventos posteriores al RESET
+    const allEvents = await eventsRepo.listEventsForStudentItem({
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      product_key: productKey,
+      domain_type: domainType
+    }, client);
+    
+    // Filtrar limpiezas posteriores al RESET para esta capa
+    const cleansAfterReset = allEvents
+      .filter(e => 
+        e.action_type === 'mark_clean' && 
+        e.clean_layer === cleanLayer &&
+        new Date(e.created_at) > resetAt
+      )
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    // Reconstruir estado desde RESET
+    const effectiveSince = resetAt;
+    const lastCleanedAt = cleansAfterReset.length > 0 
+      ? new Date(cleansAfterReset[cleansAfterReset.length - 1].created_at)
+      : null;
+    const cleanCount = cleansAfterReset.length;
+    
+    // Aplicar reset canónico que establece effective_since y resetea contadores
+    // Luego ajustar last_cleaned_at y clean_count si hay limpiezas post-reset
+    const effectiveColumn = cleanLayer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+    const lastCleanedColumn = cleanLayer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+    const countColumn = cleanLayer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+    
+    // 1. Aplicar reset canónico (establece effective_since y resetea contadores)
+    // NOTA: upsertApplyReset establece effective_since = NOW(), pero necesitamos reset.created_at
+    // Por lo tanto, actualizamos manualmente después
+    await stateRepo.upsertApplyReset({
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      item_kind: 'recurrente', // Solo recurrente puede tener reset
+      product_key: productKey,
+      domain_type: domainType
+    }, client);
+    
+    // 2. Actualizar effective_since al reset.created_at y ajustar contadores desde eventos
+    const { query } = await import('../../../database/pg.js');
+    const queryFn = client ? client.query.bind(client) : query;
+    
+    await queryFn(`
+      UPDATE cleaning_item_state
+      SET ${effectiveColumn} = $1,
+          ${lastCleanedColumn} = $2,
+          ${countColumn} = $3,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE student_id = $4
+        AND product_key = $5
+        AND domain_type = $6
+        AND item_ref = $7
+    `, [
+      effectiveSince,
+      lastCleanedAt,
+      cleanCount,
+      studentUuid,
+      productKey,
+      domainType,
+      itemRef
+    ]);
+    
+    // 3. Obtener estado reconstruido
+    const rebasedState = await stateRepo.getState({
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      product_key: productKey,
+      domain_type: domainType
+    }, client);
+    
+    return rebasedState;
+  } catch (error) {
+    logError('MASTER', 'Error reconstruyendo estado desde RESET', {
+      traceId,
+      student_uuid: studentUuid,
+      item_ref: itemRef,
+      clean_layer: cleanLayer,
+      reset_at: lastReset.created_at,
+      error: error.message,
+      stack: error.stack
+    });
+    // Fail-open: si falla reconstrucción, continuar (pero loggear error)
+    return null;
+  }
+}
+
+/**
  * Marca limpio un alumno específico (recurrente o una_vez)
  * 
  * @param {Object} options - Opciones
@@ -469,7 +619,65 @@ export async function markCleanStudent(options, client = null) {
       return currentState;
     }
     
-    // 7. Aplicar a proyección cleaning_item_state (repositorio resuelve legacy_id internamente)
+    // 7. REGLA CONSTITUCIONAL: RESET ES FRONTERA DURA DE ESTADO
+    // ANTES de aplicar limpieza, verificar si hay RESET previo y reconstruir estado si es necesario
+    // NOTA: RESET solo aplica a recurrente (según contrato canónico)
+    const lastReset = itemKind === 'recurrente' 
+      ? await getLastResetForItem(student_uuid, item_ref, clean_layer, product_key, domain_type, client)
+      : null;
+    
+    if (lastReset && itemKind === 'recurrente') {
+      // Verificar si el estado actual es coherente con el RESET
+      const currentState = existingState || await stateRepo.getState({
+        student_uuid,
+        product_key,
+        domain_type,
+        item_ref
+      }, client);
+      
+      const resetAt = new Date(lastReset.created_at);
+      const effectiveColumn = clean_layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+      const lastCleanedColumn = clean_layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+      const countColumn = clean_layer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+      
+      const currentEffective = currentState?.[effectiveColumn] ? new Date(currentState[effectiveColumn]) : null;
+      const currentLastCleaned = currentState?.[lastCleanedColumn] ? new Date(currentState[lastCleanedColumn]) : null;
+      const currentCount = currentState?.[countColumn] || 0;
+      
+      // Detectar si el estado es anterior o incoherente con el RESET
+      const needsRebase = !currentEffective || 
+                         currentEffective < resetAt ||
+                         (currentLastCleaned && currentLastCleaned < resetAt) ||
+                         (currentCount > 0 && !currentLastCleaned) ||
+                         (currentCount === 0 && currentLastCleaned);
+      
+      if (needsRebase) {
+        // Reconstruir estado desde RESET
+        const rebasedState = await rebaseStateFromReset(student_uuid, item_ref, clean_layer, lastReset, product_key, domain_type, traceId, client);
+        
+        if (rebasedState) {
+          logWarn('MASTER', '[CLEANING_ENGINE][RESET_REBASE] Estado reconstruido desde RESET antes de aplicar limpieza', {
+            traceId,
+            student_uuid,
+            item_ref,
+            clean_layer,
+            reset_at: resetAt.toISOString(),
+            estado_detectado: {
+              effective_since: currentEffective?.toISOString() || null,
+              last_cleaned_at: currentLastCleaned?.toISOString() || null,
+              clean_count: currentCount
+            },
+            estado_reconstruido: {
+              effective_since: rebasedState[effectiveColumn]?.toISOString() || null,
+              last_cleaned_at: rebasedState[lastCleanedColumn]?.toISOString() || null,
+              clean_count: rebasedState[countColumn] || 0
+            }
+          });
+        }
+      }
+    }
+    
+    // 8. Aplicar a proyección cleaning_item_state (repositorio resuelve legacy_id internamente)
     // stateRepo ya está declarado arriba (línea 395), reutilizar
     let state;
     
@@ -536,7 +744,7 @@ export async function markCleanStudent(options, client = null) {
       }
     }
     
-    logInfo('MASTER', '[CLEAN][WRITE] Proyección aplicada', {
+    logInfo('MASTER', '[CLEAN][WRITE] Proyección aplicada (post-reset-rebase si aplicó)', {
       traceId,
       student_uuid,
       item_ref,
@@ -1326,17 +1534,69 @@ export async function resetStudentItemProgress(options, client = null) {
 
         const eventResult = await eventsRepo.insertEvent(eventData, client);
 
-        // Verificar idempotencia
+        // Verificar idempotencia con coherencia (BLINDAJE v1)
         if (eventResult === 'already_applied' || (eventResult && eventResult.already_executed === true)) {
-          logInfo('MASTER', '[RESET][IDEMPOTENCY] Reset ya aplicado para esta capa', {
-            traceId,
-            execution_key: executionKey,
+          // BLINDAJE: Verificar coherencia antes de omitir
+          const currentState = await stateRepo.getState({
             student_uuid,
             item_ref,
-            clean_layer: layer
-          });
-          skipped++;
-          continue;
+            product_key,
+            domain_type
+          }, client);
+
+          // Obtener el evento existente para verificar su fecha
+          const existingEvents = await eventsRepo.listEventsForStudentItem({
+            student_uuid,
+            item_ref,
+            product_key,
+            domain_type
+          }, client);
+
+          const existingResetEvent = existingEvents.find(e => 
+            e.execution_key === executionKey && 
+            e.action_type === 'reset' && 
+            e.clean_layer === layer
+          );
+
+          const effectiveColumn = layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+          const lastCleanedColumn = layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+          const countColumn = layer === 'shared' ? 'shared_clean_count' : 'pde_clean_count';
+
+          const currentEffective = currentState?.[effectiveColumn] ? new Date(currentState[effectiveColumn]) : null;
+          const eventCreatedAt = existingResetEvent?.created_at ? new Date(existingResetEvent.created_at) : new Date();
+          
+          // Verificar si el estado está coherente con el reset esperado
+          const isCoherent = currentEffective && 
+            currentEffective >= eventCreatedAt &&
+            currentState[lastCleanedColumn] === null &&
+            currentState[countColumn] === 0;
+
+          if (!isCoherent) {
+            // Estado incoherente: aplicar reset igualmente (idempotencia override)
+            logWarn('MASTER', '[RESET][IDEMPOTENCY_OVERRIDE] Evento existe pero estado incoherente, aplicando reset', {
+              traceId,
+              execution_key: executionKey,
+              student_uuid,
+              item_ref,
+              clean_layer: layer,
+              current_effective: currentEffective,
+              current_last_cleaned: currentState[lastCleanedColumn],
+              current_count: currentState[countColumn],
+              event_created_at: eventCreatedAt
+            });
+            // Continuar para aplicar reset (no hacer skipped++)
+          } else {
+            // Estado coherente: omitir correctamente
+            logInfo('MASTER', '[RESET][IDEMPOTENCY] Reset ya aplicado y estado coherente para esta capa', {
+              traceId,
+              execution_key: executionKey,
+              student_uuid,
+              item_ref,
+              clean_layer: layer
+            });
+            skipped++;
+            continue;
+          }
         }
 
         // Aplicar reset a proyección (establecer effective_since + resetear contadores)
@@ -1654,6 +1914,285 @@ export async function resetAllStudentsItemProgress(options, client = null) {
       code: error.code,
       stack: error.stack,
       item_ref
+    });
+    throw error;
+  }
+}
+
+/**
+ * Reset unificado por scope (CANÓNICO v1)
+ * 
+ * Mapea reset_scope a funciones específicas:
+ * - ITEM_STUDENT → resetStudentItemProgress()
+ * - ITEM_ALL → resetAllStudentsItemProgress()
+ * - LIST_STUDENT → iterar items + resetStudentItemProgress()
+ * - LIST_ALL → iterar items + resetAllStudentsItemProgress()
+ * 
+ * REGLA CONSTITUCIONAL:
+ * - effective_since = NOW()
+ * - last_cleaned_at = NULL
+ * - clean_count = 0
+ * - days_since resultante = recurrencia + 1 (PENDIENTE, no NUNCA)
+ * - execution_key generado internamente (BACKEND-ONLY)
+ * 
+ * @param {Object} options - Opciones
+ * @param {string} options.reset_scope - 'ITEM_STUDENT' | 'ITEM_ALL' | 'LIST_STUDENT' | 'LIST_ALL'
+ * @param {string} [options.item_ref] - Referencia del item (requerido si scope incluye ITEM)
+ * @param {string|number} [options.list_id] - ID de lista (requerido si scope incluye LIST)
+ * @param {string} [options.student_uuid] - UUID del estudiante (requerido si scope incluye STUDENT)
+ * @param {string} options.clean_layer - 'shared' | 'pde' (OBLIGATORIO)
+ * @param {string} [options.reason] - Razón del reset (opcional, para auditoría)
+ * @param {string} [options.product_key='pde'] - Clave del producto
+ * @param {string} [options.domain_type='transmutation'] - Tipo de dominio
+ * @param {string} [options.actor_type='master'] - Tipo de actor
+ * @param {string} [options.surface_key='master.alquimia_general'] - Clave de superficie
+ * @param {string} [options.execution_mode='APPLY'] - Modo de ejecución
+ * @param {Object} [options.meta={}] - Metadatos adicionales
+ * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
+ * @returns {Promise<Object>} Resultado con { applied, skipped, total, layers_affected, trace_id }
+ */
+export async function resetByScope(options, client = null) {
+  const traceId = getRequestId();
+  const {
+    reset_scope,
+    item_ref,
+    list_id,
+    student_uuid,
+    clean_layer,
+    reason,
+    product_key = 'pde',
+    domain_type = 'transmutation',
+    actor_type = 'master',
+    surface_key = 'master.alquimia_general',
+    execution_mode = 'APPLY',
+    meta = {}
+  } = options;
+
+  logInfo('MASTER', '[RESET][SCOPE][CANONICAL] resetByScope entrada', {
+    traceId,
+    reset_scope,
+    item_ref,
+    list_id,
+    student_uuid,
+    clean_layer,
+    reason
+  });
+
+  // Validar reset_scope
+  const validScopes = ['ITEM_STUDENT', 'ITEM_ALL', 'LIST_STUDENT', 'LIST_ALL'];
+  if (!reset_scope || !validScopes.includes(reset_scope)) {
+    throw new Error(`reset_scope debe ser uno de: ${validScopes.join(', ')}, recibido: ${reset_scope}`);
+  }
+
+  // Validar clean_layer obligatorio
+  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
+    throw new Error(`clean_layer es obligatorio y debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
+  }
+
+  // Validaciones según scope
+  if (reset_scope === 'ITEM_STUDENT' || reset_scope === 'ITEM_ALL') {
+    if (!item_ref) {
+      throw new Error('item_ref es obligatorio para reset_scope que incluye ITEM');
+    }
+  }
+
+  if (reset_scope === 'LIST_STUDENT' || reset_scope === 'LIST_ALL') {
+    if (!list_id) {
+      throw new Error('list_id es obligatorio para reset_scope que incluye LIST');
+    }
+  }
+
+  if (reset_scope === 'ITEM_STUDENT' || reset_scope === 'LIST_STUDENT') {
+    if (!student_uuid) {
+      throw new Error('student_uuid es obligatorio para reset_scope que incluye STUDENT');
+    }
+  }
+
+  try {
+    const catalogRepo = getDefaultAlquimiaCatalogRepo();
+    let totalApplied = 0;
+    let totalSkipped = 0;
+    const allLayersAffected = [];
+    const results = [];
+
+    // Mapeo de scopes a funciones
+    if (reset_scope === 'ITEM_STUDENT') {
+      // ITEM_STUDENT: Reset item para estudiante específico
+      const result = await resetStudentItemProgress({
+        student_uuid,
+        item_ref,
+        item_kind: 'recurrente', // Reset solo para recurrente
+        clean_layer,
+        product_key,
+        domain_type,
+        actor_type,
+        surface_key,
+        execution_mode,
+        meta: {
+          ...meta,
+          reset_scope,
+          reason
+        }
+      }, client);
+
+      totalApplied += result.applied ? 1 : 0;
+      totalSkipped += result.skipped || 0;
+      if (result.layers_affected) {
+        allLayersAffected.push(...result.layers_affected);
+      }
+      results.push(result);
+
+    } else if (reset_scope === 'ITEM_ALL') {
+      // ITEM_ALL: Reset item para todos los estudiantes
+      const result = await resetAllStudentsItemProgress({
+        item_ref,
+        item_kind: 'recurrente', // Reset solo para recurrente
+        clean_layer,
+        product_key,
+        domain_type,
+        actor_type,
+        surface_key,
+        execution_mode,
+        meta: {
+          ...meta,
+          reset_scope,
+          reason
+        }
+      }, client);
+
+      totalApplied += result.applied || 0;
+      totalSkipped += result.skipped || 0;
+      if (result.layers_affected) {
+        allLayersAffected.push(...result.layers_affected);
+      }
+      results.push(result);
+
+    } else if (reset_scope === 'LIST_STUDENT') {
+      // LIST_STUDENT: Reset lista para estudiante específico (iterar items)
+      const items = await catalogRepo.listItems(list_id, { onlyActive: true });
+      
+      logInfo('MASTER', '[RESET][SCOPE][LIST_STUDENT] Items obtenidos', {
+        traceId,
+        list_id,
+        items_count: items.length,
+        student_uuid
+      });
+
+      for (const item of items) {
+        // Solo resetear items recurrentes
+        if (item.tipo !== 'recurrente') {
+          logInfo('MASTER', '[RESET][SCOPE][LIST_STUDENT] Item saltado (no recurrente)', {
+            traceId,
+            item_ref: item.item_ref,
+            item_tipo: item.tipo
+          });
+          continue;
+        }
+
+        const result = await resetStudentItemProgress({
+          student_uuid,
+          item_ref: item.item_ref,
+          item_kind: 'recurrente',
+          clean_layer,
+          product_key,
+          domain_type,
+          actor_type,
+          surface_key,
+          execution_mode,
+          meta: {
+            ...meta,
+            reset_scope,
+            list_id,
+            reason
+          }
+        }, client);
+
+        totalApplied += result.applied ? 1 : 0;
+        totalSkipped += result.skipped || 0;
+        if (result.layers_affected) {
+          allLayersAffected.push(...result.layers_affected);
+        }
+        results.push({ item_ref: item.item_ref, ...result });
+      }
+
+    } else if (reset_scope === 'LIST_ALL') {
+      // LIST_ALL: Reset lista para todos los estudiantes (iterar items + students)
+      const items = await catalogRepo.listItems(list_id, { onlyActive: true });
+      
+      logInfo('MASTER', '[RESET][SCOPE][LIST_ALL] Items obtenidos', {
+        traceId,
+        list_id,
+        items_count: items.length
+      });
+
+      for (const item of items) {
+        // Solo resetear items recurrentes
+        if (item.tipo !== 'recurrente') {
+          logInfo('MASTER', '[RESET][SCOPE][LIST_ALL] Item saltado (no recurrente)', {
+            traceId,
+            item_ref: item.item_ref,
+            item_tipo: item.tipo
+          });
+          continue;
+        }
+
+        const result = await resetAllStudentsItemProgress({
+          item_ref: item.item_ref,
+          item_kind: 'recurrente',
+          clean_layer,
+          product_key,
+          domain_type,
+          actor_type,
+          surface_key,
+          execution_mode,
+          meta: {
+            ...meta,
+            reset_scope,
+            list_id,
+            reason
+          }
+        }, client);
+
+        totalApplied += result.applied || 0;
+        totalSkipped += result.skipped || 0;
+        if (result.layers_affected) {
+          allLayersAffected.push(...result.layers_affected);
+        }
+        results.push({ item_ref: item.item_ref, ...result });
+      }
+    }
+
+    // Eliminar duplicados de layers_affected
+    const uniqueLayersAffected = [...new Set(allLayersAffected)];
+
+    logInfo('MASTER', '[RESET][SCOPE][CANONICAL] resetByScope completado', {
+      traceId,
+      reset_scope,
+      total_applied: totalApplied,
+      total_skipped: totalSkipped,
+      layers_affected: uniqueLayersAffected,
+      items_processed: results.length
+    });
+
+    return {
+      applied: totalApplied > 0,
+      skipped: totalSkipped,
+      total: totalApplied + totalSkipped,
+      layers_affected: uniqueLayersAffected,
+      trace_id: traceId,
+      results: results.length > 1 ? results : (results[0] || {})
+    };
+
+  } catch (error) {
+    logError('MASTER', 'Error en resetByScope', {
+      traceId,
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      reset_scope,
+      item_ref,
+      list_id,
+      student_uuid
     });
     throw error;
   }

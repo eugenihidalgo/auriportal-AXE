@@ -1510,8 +1510,128 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     }
 
     // ============================================================================
-    // ENDPOINTS DE RESET (PROYECCIÓN DE ALUMNO)
+    // ENDPOINT ÚNICO DE RESET (CANÓNICO v1)
     // ============================================================================
+
+    // POST /master/api/alquimia-general/reset
+    // Endpoint único canónico para todos los tipos de reset
+    // Usa reset_scope: ITEM_STUDENT | ITEM_ALL | LIST_STUDENT | LIST_ALL
+    if (path === '/master/api/alquimia-general/reset' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const { reset_scope, item_ref, list_id, student_uuid, clean_layer, reason, item_kind } = body;
+
+        // Validaciones obligatorias
+        if (!reset_scope) {
+          return jsonError('reset_scope es obligatorio. Valores: ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL', 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        const validScopes = ['ITEM_STUDENT', 'ITEM_ALL', 'LIST_STUDENT', 'LIST_ALL'];
+        if (!validScopes.includes(reset_scope)) {
+          return jsonError(`reset_scope inválido: "${reset_scope}". Debe ser uno de: ${validScopes.join(', ')}`, 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
+          return jsonError('clean_layer es obligatorio y debe ser "shared" o "pde"', 'VALIDATION_ERROR', 400, traceId);
+        }
+
+        // Validaciones según scope
+        if (reset_scope === 'ITEM_STUDENT' || reset_scope === 'ITEM_ALL') {
+          if (!item_ref) {
+            return jsonError('item_ref es obligatorio para reset_scope que incluye ITEM', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        if (reset_scope === 'LIST_STUDENT' || reset_scope === 'LIST_ALL') {
+          if (!list_id) {
+            return jsonError('list_id es obligatorio para reset_scope que incluye LIST', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        if (reset_scope === 'ITEM_STUDENT' || reset_scope === 'LIST_STUDENT') {
+          if (!student_uuid) {
+            return jsonError('student_uuid es obligatorio para reset_scope que incluye STUDENT', 'VALIDATION_ERROR', 400, traceId);
+          }
+        }
+
+        // Validar item_kind si viene (debe ser recurrente)
+        if (item_kind && item_kind !== 'recurrente') {
+          return jsonError('reset NO permitido para item_kind="una_vez". Reset solo para recurrente.', 'RESET_UNA_VEZ_FORBIDDEN', 400, traceId);
+        }
+
+        logInfo('MasterApiAlquimiaGeneral', '[RESET][CANONICAL] POST /reset iniciado', {
+          traceId,
+          reset_scope,
+          item_ref,
+          list_id,
+          student_uuid,
+          clean_layer,
+          reason
+        });
+
+        // Importar función unificada
+        const { resetByScope } = await import('../core/master/services/cleaning-engine-service.js');
+
+        // Llamar función unificada
+        const result = await resetByScope({
+          reset_scope,
+          item_ref,
+          list_id,
+          student_uuid,
+          clean_layer,
+          reason,
+          product_key: body.product_key || 'pde',
+          domain_type: body.domain_type || 'transmutation',
+          actor_type: 'master',
+          actor_ref: authCtx?.adminId || null,
+          surface_key: 'master.alquimia_general',
+          execution_mode: 'APPLY',
+          meta: {
+            endpoint: '/master/api/alquimia-general/reset',
+            admin_id: authCtx?.adminId || null
+          }
+        });
+
+        logInfo('MasterApiAlquimiaGeneral', '[RESET][CANONICAL] POST /reset completado', {
+          traceId,
+          reset_scope,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total,
+          layers_affected: result.layers_affected
+        });
+
+        return jsonSuccess({
+          ok: true,
+          reset_scope,
+          applied: result.applied,
+          skipped: result.skipped,
+          total: result.total,
+          layers_affected: result.layers_affected,
+          trace_id: result.trace_id || traceId
+        }, traceId);
+
+      } catch (error) {
+        logError('MasterApiAlquimiaGeneral', 'Error en POST /reset', {
+          traceId,
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        return jsonError(
+          error.message || 'Error ejecutando reset',
+          error.code || 'INTERNAL_ERROR',
+          500,
+          traceId
+        );
+      }
+    }
+
+    // ============================================================================
+    // ENDPOINTS DE RESET (LEGACY - DEPRECATED)
+    // ============================================================================
+    // NOTA: Estos endpoints están deprecated. Usar POST /master/api/alquimia-general/reset
+    // con reset_scope apropiado en su lugar.
 
     // POST /master/api/alquimia-general/reset-item
     // Resetea el progreso de un alumno para un ítem específico (RESET CANÓNICO v1)

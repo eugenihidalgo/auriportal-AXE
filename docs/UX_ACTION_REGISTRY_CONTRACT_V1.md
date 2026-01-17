@@ -474,15 +474,67 @@ Toda acción ejecutada emite logs estructurados:
 
 ### allowed_scopes
 
-**Valores permitidos**: `['student', 'all']` o `null` (si no aplica)
+**REGLA CONSTITUCIONAL**: `allowed_scopes` SOLO puede contener scopes UX válidos. Está PROHIBIDO usar conceptos de dominio backend.
 
-**Ejemplos**:
-- `allowed_scopes: ['student']` → Solo acciones por estudiante
-- `allowed_scopes: ['all']` → Solo acciones masivas
-- `allowed_scopes: ['student', 'all']` → Ambos scopes
-- `allowed_scopes: null` → No aplica (ej: acciones sin scope)
+**Scopes UX válidos (lista cerrada)**:
+- `'item'` - Acción sobre un item específico
+- `'list'` - Acción sobre una lista específica
+- `'all'` - Acción masiva (todos los estudiantes/items)
+- `'student'` - Acción sobre un estudiante específico
+- `'selection'` - Acción sobre selección múltiple
+- `'context'` - Acción contextual
 
-**Validación**: `performAction()` valida que `payload.scope` esté en `allowed_scopes` (ERROR HARD si no)
+**PROHIBIDO ABSOLUTAMENTE**:
+- ❌ `'ITEM_STUDENT'`, `'ITEM_ALL'`, `'LIST_STUDENT'`, `'LIST_ALL'` (conceptos de dominio backend)
+- ❌ Cualquier valor que no esté en la lista cerrada de scopes UX válidos
+
+**Separación UX Scope vs Dominio**:
+- `allowed_scopes` = Scopes UX válidos (para validación de contrato UX)
+- `payload.reset_scope` = Semántica rica de dominio (ITEM_STUDENT, ITEM_ALL, etc.)
+- La semántica rica de dominio se expresa SOLO en el payload, NO en `allowed_scopes`
+
+**Ejemplos correctos**:
+```javascript
+// ✅ CORRECTO: Scopes UX válidos
+allowed_scopes: ['item', 'student']  // Reset item para estudiante
+allowed_scopes: ['item', 'all']      // Reset item para todos
+allowed_scopes: ['list', 'student']  // Reset lista para estudiante
+allowed_scopes: ['list', 'all']      // Reset lista para todos
+allowed_scopes: ['student', 'all']   // Limpiar para estudiante o todos
+```
+
+**Ejemplos incorrectos**:
+```javascript
+// ❌ INCORRECTO: Conceptos de dominio backend
+allowed_scopes: ['ITEM_STUDENT', 'ITEM_ALL']  // PROHIBIDO
+allowed_scopes: ['LIST_STUDENT', 'LIST_ALL']  // PROHIBIDO
+allowed_scopes: ['reset:item:student']         // PROHIBIDO
+```
+
+**Ejemplo completo (reset)**:
+```javascript
+// ✅ CORRECTO
+registerAction({
+  action_id: 'alquimia.reset',
+  allowed_scopes: ['item', 'list', 'all', 'student'], // UX scopes válidos
+  handler: {
+    buildPayload: (uiState, context) => ({
+      reset_scope: context.reset_scope, // 'ITEM_STUDENT' | 'ITEM_ALL' | etc. (dominio)
+      clean_layer: context.clean_layer,
+      // ...
+    })
+  }
+});
+
+// ❌ INCORRECTO
+registerAction({
+  action_id: 'alquimia.reset',
+  allowed_scopes: ['ITEM_STUDENT', 'ITEM_ALL'], // PROHIBIDO: conceptos de dominio
+  // ...
+});
+```
+
+**Validación**: `performAction()` valida que `payload.scope` (si existe) esté en `allowed_scopes` (ERROR HARD si no). La validación de `reset_scope` (dominio) se hace en `buildPayload`, no en `allowed_scopes`.
 
 ---
 

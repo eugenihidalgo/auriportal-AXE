@@ -54,6 +54,7 @@ const MASTER_HANDLER_MAP = {
   'master-api-alquimia-reset-item': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-reset-list': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-reset-item-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
+  'master-api-alquimia-reset-list-all': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-classifications': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-item-groups': () => import('../../../endpoints/master-api-alquimia-general.js'),
   'master-api-alquimia-lista-classification': () => import('../../../endpoints/master-api-alquimia-general.js'),
