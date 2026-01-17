@@ -235,7 +235,7 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
     }, client);
     
     // 2. Actualizar effective_since al reset.created_at y ajustar contadores desde eventos
-    const { query } = await import('../../../database/pg.js');
+    const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
     await queryFn(`
@@ -1998,7 +1998,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     }
 
     // 3. Obtener todos los estudiantes activos (UUID-only)
-    const { query } = await import('../../../database/pg.js');
+    const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
     const studentsResult = await queryFn(`
@@ -2212,6 +2212,7 @@ export async function resetByScope(options, client = null) {
     let totalSkipped = 0;
     const allLayersAffected = [];
     const results = [];
+    let totalItems = null; // Para LIST_STUDENT y LIST_ALL
 
     // Mapeo de scopes a funciones
     if (reset_scope === 'ITEM_STUDENT') {
@@ -2269,10 +2270,14 @@ export async function resetByScope(options, client = null) {
       // LIST_STUDENT: Reset lista para estudiante específico (iterar items)
       const items = await catalogRepo.listItems(list_id, { onlyActive: true });
       
+      // Calcular total_items (solo recurrentes)
+      totalItems = items.filter(item => item.tipo === 'recurrente').length;
+      
       logInfo('MASTER', '[RESET][SCOPE][LIST_STUDENT] Items obtenidos', {
         traceId,
         list_id,
         items_count: items.length,
+        total_items_recurrentes: totalItems,
         student_uuid
       });
 
@@ -2317,10 +2322,14 @@ export async function resetByScope(options, client = null) {
       // LIST_ALL: Reset lista para todos los estudiantes (iterar items + students)
       const items = await catalogRepo.listItems(list_id, { onlyActive: true });
       
+      // Calcular total_items (solo recurrentes)
+      totalItems = items.filter(item => item.tipo === 'recurrente').length;
+      
       logInfo('MASTER', '[RESET][SCOPE][LIST_ALL] Items obtenidos', {
         traceId,
         list_id,
-        items_count: items.length
+        items_count: items.length,
+        total_items_recurrentes: totalItems
       });
 
       for (const item of items) {
@@ -2368,11 +2377,12 @@ export async function resetByScope(options, client = null) {
       reset_scope,
       total_applied: totalApplied,
       total_skipped: totalSkipped,
+      total_items: totalItems,
       layers_affected: uniqueLayersAffected,
       items_processed: results.length
     });
 
-    return {
+    const response = {
       applied: totalApplied > 0,
       skipped: totalSkipped,
       total: totalApplied + totalSkipped,
@@ -2380,6 +2390,13 @@ export async function resetByScope(options, client = null) {
       trace_id: traceId,
       results: results.length > 1 ? results : (results[0] || {})
     };
+
+    // Incluir total_items solo para LIST_STUDENT y LIST_ALL
+    if (totalItems !== null) {
+      response.total_items = totalItems;
+    }
+
+    return response;
 
   } catch (error) {
     logError('MASTER', 'Error en resetByScope', {
