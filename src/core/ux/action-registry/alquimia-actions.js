@@ -501,7 +501,7 @@ registerActionFn({
   // alquimia.reset_overrides: Resetear overrides de un item para un estudiante
   registerActionFn({
     action_id: 'alquimia.reset_overrides',
-    domain: 'alquimia',
+    domain: 'master', // BUG-B HOTFIX: Cambiar de 'alquimia' a 'master' para que coincida con contexto MASTER
     request: {
       method: 'POST',
       endpointBuilder: (context) => `/master/api/alquimia-general/overrides/reset`,

@@ -6479,13 +6479,116 @@
      */
     async refetch(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
-      const surfaces = context.surfaces || [];
+      let surfaces = context.surfaces || [];
       
-      // Log forense estructurado
+      // ============================================================================
+      // BUG-A HOTFIX: Normalizador canónico de surfaces (antes de fail-hard)
+      // ============================================================================
+      // Log forense RAW: capturar estado original antes de normalizar
+      console.log('[REFRESH_ENGINE][ALQG][SURFACES_RAW]', {
+        mutation_type,
+        action_id: context.action_id || null,
+        surfaces_raw: surfaces,
+        surfaces_type: typeof surfaces,
+        surfaces_is_array: Array.isArray(surfaces),
+        surfaces_length: Array.isArray(surfaces) ? surfaces.length : 'N/A',
+        context,
+        uiState: {
+          view_mode: state.projection.mode,
+          view_layer: scope.view_layer || state.projection.view_layer,
+          list_id: context.list_id || state.listaActiva?.id,
+          student_uuid: context.student_uuid || state.projection.student_uuid
+        }
+      });
+      
+      // Normalizador canónico: asegurar que surfaces es array válido
+      function normalizeSurfacesOrFail({ surfaces, context, uiState, action_id }) {
+        // 1) Si surfaces es string 'legacy' o null -> tratar como []
+        if (surfaces === 'legacy' || surfaces === null || surfaces === undefined) {
+          surfaces = [];
+        }
+        
+        // 2) Si surfaces no es array -> []
+        if (!Array.isArray(surfaces)) {
+          surfaces = [];
+        }
+        
+        // 3) Aplicar regla constitucional: nunca vacío
+        // 4) Determinar default según uiState:
+        if (surfaces.length === 0) {
+          const view_mode = uiState.view_mode || state.projection.mode || 'operativa';
+          const list_id = uiState.list_id || context.list_id || state.listaActiva?.id;
+          
+          // Default según view_mode
+          if (view_mode === 'proyeccion' && list_id) {
+            surfaces.push('alquimia.list_projection');
+          } else if (view_mode === 'operativa' && list_id) {
+            surfaces.push('alquimia.items');
+          }
+          
+          // Si hay item_ref -> incluir flotante siempre
+          if (context.item_ref) {
+            surfaces.push('alquimia.flotante_students');
+          }
+          
+          // Parche obligatorio: si view_mode=proyeccion y list_id existe, SIEMPRE incluir
+          if (view_mode === 'proyeccion' && list_id && !surfaces.includes('alquimia.list_projection')) {
+            surfaces.push('alquimia.list_projection');
+          }
+          
+          // Log forense: default aplicado
+          console.warn('[REFRESH_ENGINE][ALQG][INVARIANT_ENFORCED][REFRESH_SURFACE_DEFAULT]', {
+            mutation_type,
+            action_id: action_id || null,
+            surfaces_before: [],
+            surfaces_after: surfaces,
+            defaults_applied: {
+              view_mode,
+              list_id,
+              item_ref: context.item_ref || null
+            }
+          });
+        }
+        
+        // 5) Regla dura: si tras aplicar defaults sigue vacío → fail-hard
+        if (surfaces.length === 0) {
+          throw new Error(`[INVARIANT_BROKEN][REFRESH_SURFACE_EMPTY] Normalizador no pudo determinar surfaces. view_mode: ${uiState.view_mode}, list_id: ${uiState.list_id}, item_ref: ${context.item_ref}`);
+        }
+        
+        // 6) Devolver array final
+        return surfaces;
+      }
+      
+      // Aplicar normalizador
+      // uiState se usa en normalizador y luego en surfaceRegistry.refetch
+      const uiState = {
+        view_mode: state.projection.mode,
+        view_layer: scope.view_layer || state.projection.view_layer || 'shared',
+        list_id: context.list_id || state.listaActiva?.id || null,
+        student_uuid: context.student_uuid || state.projection.student_uuid || null
+      };
+      
+      surfaces = normalizeSurfacesOrFail({
+        surfaces,
+        context,
+        uiState,
+        action_id: context.action_id || null
+      });
+      
+      // Log forense FINAL: surfaces normalizados
+      console.log('[REFRESH_ENGINE][ALQG][SURFACES_FINAL]', {
+        mutation_type,
+        action_id: context.action_id || null,
+        surfaces_final: surfaces,
+        surfaces_count: surfaces.length,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log forense estructurado (original, actualizado)
       console.log('[REFRESH_ENGINE][ALQG][REFETCH] Iniciando', {
         mutation_type,
         action_id: context.action_id || null,
-        surfaces: surfaces.length > 0 ? surfaces : 'legacy',
+        surfaces: surfaces,
         view_mode: state.projection.mode,
         view_layer: scope.view_layer || state.projection.view_layer,
         clean_layer: context.clean_layer,
@@ -6499,19 +6602,16 @@
       // ============================================================================
       // BUG-002 FIX: Eliminar fallback legacy - Refresh sin surfaces prohibido
       // REGLA CONSTITUCIONAL A2: Si surfaces está vacío → Error, no ejecutar refresh
+      // NOTA: Después del normalizador, esto NO debería ocurrir
       // ============================================================================
       if (surfaces.length === 0) {
-        const error = new Error(`[INVARIANT_BROKEN][REFRESH_SURFACE_EMPTY] buildRefreshPlan() retornó surfaces vacío. Esto viola Refresh Engine v2.`);
+        const error = new Error(`[INVARIANT_BROKEN][REFRESH_SURFACE_EMPTY] Normalizador no pudo determinar surfaces. Esto viola Refresh Engine v2.`);
         console.error('[REFRESH_ENGINE][ALQG][ERROR]', {
           mutation_type,
           action_id: context.action_id || null,
           error: error.message,
           context,
-          uiState: {
-            view_mode: state.projection.mode,
-            view_layer: scope.view_layer || state.projection.view_layer,
-            list_id: context.list_id || state.listaActiva?.id
-          }
+          uiState
         });
         throw error; // FAIL-HARD: No ejecutar refresh si surfaces está vacío
       }
@@ -6528,12 +6628,6 @@
       
       // UX CONTRACT v1: Usar Refresh Surface Registry (único camino válido)
       const surfaceRegistry = window.__AP_REFRESH_SURFACE_REGISTRY__;
-      const uiState = {
-        view_mode: state.projection.mode,
-        view_layer: scope.view_layer || state.projection.view_layer || 'shared',
-        list_id: context.list_id || state.listaActiva?.id || null,
-        student_uuid: context.student_uuid || state.projection.student_uuid || null
-      };
 
       console.log('[REFRESH_ENGINE][ALQG][SURFACES] Ejecutando surfaces declarativas', {
         mutation_type,

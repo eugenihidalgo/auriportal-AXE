@@ -197,22 +197,38 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
     // RESET_RECURRENTE_V1: Reset aplicado - iniciar nuevo ciclo
     const effectiveSinceDate = new Date(effectiveSince);
     
-    // Si hay last_cleaned_at, verificar si es posterior al reset
+    // Si hay last_cleaned_at, verificar si es posterior o igual al reset
     if (lastCleanedAt) {
       const lastCleanedDate = new Date(lastCleanedAt);
-      if (lastCleanedDate > effectiveSinceDate) {
-        // Hay limpieza posterior al reset - usar esa fecha
+      // BUG-C HOTFIX: Igualdad cuenta como "después" (>= en lugar de >)
+      // Si lastCleanedAt == effectiveSince, el CLEAN ocurrió "después" aunque caiga en el mismo ms
+      if (lastCleanedDate >= effectiveSinceDate) {
+        // Hay limpieza posterior o igual al reset - usar esa fecha
         lastEffectiveCleanAt = lastCleanedAt;
         const now = new Date();
         daysSince = Math.floor((now - lastCleanedDate) / (1000 * 60 * 60 * 24));
+        
+        // BUG-C HOTFIX: Log forense cuando hay igualdad de timestamps
+        if (lastCleanedDate.getTime() === effectiveSinceDate.getTime()) {
+          console.log('[CPM_V2][RESET_EDGE_EQUAL_TS]', {
+            item_ref: layerData?.item_ref,
+            layer,
+            lastCleanedAt: lastCleanedAt,
+            effectiveSince: effectiveSince,
+            decision: 'treat_as_clean_after_reset',
+            lastEffectiveCleanAt: lastEffectiveCleanAt ? new Date(lastEffectiveCleanAt).toISOString() : null,
+            daysSince
+          });
+        }
         
         if (isForensicsCase) {
           console.log('[FORENSICS][CPM_RESET_WITH_CLEAN]', {
             item_ref: layerData?.item_ref,
             layer,
-            decision: 'last_cleaned_at > effective_since → usar last_cleaned_at',
+            decision: 'last_cleaned_at >= effective_since → usar last_cleaned_at',
             lastEffectiveCleanAt: lastEffectiveCleanAt ? new Date(lastEffectiveCleanAt).toISOString() : null,
-            daysSince
+            daysSince,
+            is_equal: lastCleanedDate.getTime() === effectiveSinceDate.getTime()
           });
         }
       } else {
@@ -225,7 +241,7 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
           console.log('[FORENSICS][CPM_RESET_IGNORE_OLD_CLEAN]', {
             item_ref: layerData?.item_ref,
             layer,
-            decision: 'last_cleaned_at <= effective_since → IGNORAR limpieza antigua',
+            decision: 'last_cleaned_at < effective_since → IGNORAR limpieza antigua',
             lastEffectiveCleanAt,
             daysSince
           });

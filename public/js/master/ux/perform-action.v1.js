@@ -151,6 +151,19 @@
 
     const actionDef = actionRegistry.get(action_id);
     if (!actionDef) {
+      // BUG-B HOTFIX: Log forense cuando action_id no está registrado
+      const registryKeys = actionRegistry.actions ? Object.keys(actionRegistry.actions) : 
+                          (actionRegistry.constructor.name === 'Map' ? Array.from(actionRegistry.keys()) : 
+                          Object.keys(actionRegistry || {}));
+      console.error('[FORENSIC][ACTION_REGISTRY][MISSING_ACTION]', {
+        action_id,
+        available_actions: registryKeys.slice(0, 20), // Primeros 20 para no saturar
+        available_count: registryKeys.length,
+        context: typeof window !== 'undefined' ? window.__AP_CONTEXT__ : null,
+        build_stamp: typeof window !== 'undefined' ? window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ : null,
+        registry_type: actionRegistry.constructor.name,
+        has_get: typeof actionRegistry.get === 'function'
+      });
       throw new Error(`[PerformActionV1] action_id not registered: ${action_id}`);
     }
 
