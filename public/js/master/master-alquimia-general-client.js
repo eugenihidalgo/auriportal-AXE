@@ -1886,8 +1886,8 @@
         const aState = a.state_by_view_layer?.[viewLayer]?.state || 'never';
         const bState = b.state_by_view_layer?.[viewLayer]?.state || 'never';
         
-        // Orden canónico: never, important, pending, reviewed
-        const stateOrder = { never: 0, important: 1, pending: 2, reviewed: 3, completed: 3 };
+        // Orden canónico: never, reseteado, important, pending, reviewed
+        const stateOrder = { never: 0, reseteado: 1, important: 2, pending: 3, reviewed: 4, completed: 4 };
         const aOrder = stateOrder[aState] ?? 0;
         const bOrder = stateOrder[bState] ?? 0;
         
@@ -2040,7 +2040,7 @@
     const base = json?.data ?? json ?? {};
     const data = base?.data ?? base;
     const students = Array.isArray(data?.students) ? data.students : [];
-    const counts = data?.counts || { reviewed: 0, pending: 0, important: 0, never: 0 };
+    const counts = data?.counts || { reviewed: 0, pending: 0, important: 0, reseteado: 0, never: 0 };
     const total = Number.isFinite(data?.total) ? data.total : students.length;
     const warnings = json?.warnings || data?.warnings || [];
     const ok = json?.ok === true;
@@ -2703,6 +2703,7 @@
       reviewed: [],
       pending: [],
       important: [],
+      reseteado: [], // RECURRENTE: Nuevo ciclo abierto por reset
       never: [],
       completed: [],
       in_progress: [], // Para UNA_VEZ: En proceso
@@ -2814,7 +2815,7 @@
       // Determinar estado de columna según item_kind
       let columnState;
       if (itemKind === 'recurrente') {
-        // RECURRENTE: usar state (never | reviewed | pending | important)
+        // RECURRENTE: usar state (never | reseteado | important | pending | reviewed)
         columnState = stateData.state || 'never';
       } else {
         // UNA_VEZ: usar visual_state (never | in_progress | completed | empowered)
@@ -2927,23 +2928,28 @@
     const columnsContainer = document.createElement('div');
     
     if (tipo === 'recurrente') {
-      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
+      // Orden canónico: Nunca → Reseteado → Importante → Pendiente → Revisado
+      columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;';
       
-      // 🟢 REVISADO
-      const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, normalized);
-      columnsContainer.appendChild(colReviewed);
+      // ⚪ NUNCA (colapsable)
+      const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
+      columnsContainer.appendChild(colNever);
 
-      // 🟡 PENDIENTE
-      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
-      columnsContainer.appendChild(colPending);
+      // 🔵 RESETEADO
+      const colReseteado = createStateColumn('🔵 RESETEADO', studentsByState.reseteado, 'reseteado', item, normalized);
+      columnsContainer.appendChild(colReseteado);
 
       // 🔴 IMPORTANTE REVISAR
       const colImportant = createStateColumn('🔴 IMPORTANTE REVISAR', studentsByState.important, 'important', item, normalized);
       columnsContainer.appendChild(colImportant);
 
-      // ⚪ NUNCA (colapsable)
-      const colNever = createStateColumn('⚪ NUNCA', studentsByState.never, 'never', item, normalized, true);
-      columnsContainer.appendChild(colNever);
+      // 🟡 PENDIENTE
+      const colPending = createStateColumn('🟡 PENDIENTE', studentsByState.pending, 'pending', item, normalized);
+      columnsContainer.appendChild(colPending);
+
+      // 🟢 REVISADO
+      const colReviewed = createStateColumn('🟢 REVISADO', studentsByState.reviewed, 'reviewed', item, normalized);
+      columnsContainer.appendChild(colReviewed);
     } else {
       // una_vez: 4 columnas obligatorias basadas en TOTAL
       columnsContainer.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;';
@@ -3028,7 +3034,7 @@
    * Crea una columna de estado con estudiantes
    * @param {string} title - Título de la columna
    * @param {Array} students - Array de estudiantes para este estado
-   * @param {string} stateKey - Clave del estado (reviewed, pending, important, never)
+   * @param {string} stateKey - Clave del estado (reviewed, pending, important, reseteado, never)
    * @param {Object} item - Item con item_ref, nombre, etc.
    * @param {Object} normalized - Payload normalizado con counts, etc.
    * @param {boolean} collapsable - Si es colapsable (solo para NUNCA)
@@ -3048,6 +3054,8 @@
       header.style.cssText += 'background: rgba(234, 179, 8, 0.3); color: #fde047;';
     } else if (stateKey === 'important') {
       header.style.cssText += 'background: rgba(239, 68, 68, 0.3); color: #fca5a5;';
+    } else if (stateKey === 'reseteado') {
+      header.style.cssText += 'background: rgba(59, 130, 246, 0.3); color: #93c5fd;';
     } else {
       header.style.cssText += 'background: rgba(148, 163, 184, 0.3); color: #cbd5e1;';
     }
@@ -3126,6 +3134,8 @@
       row.style.cssText += 'background: rgba(234, 179, 8, 0.1);';
     } else if (stateKey === 'important') {
       row.style.cssText += 'background: rgba(239, 68, 68, 0.1);';
+    } else if (stateKey === 'reseteado') {
+      row.style.cssText += 'background: rgba(59, 130, 246, 0.1);';
     } else {
       row.style.cssText += 'background: rgba(148, 163, 184, 0.1);';
     }

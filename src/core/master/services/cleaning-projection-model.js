@@ -152,7 +152,8 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   
   // RESET_RECURRENTE_V1: Reset inicia un nuevo ciclo
   // REGLA: El cálculo del estado IGNORA eventos anteriores al último reset (effective_since)
-  // REGLA: Tras reset, el estado inicial del nuevo ciclo es 'never' con days_since = 0
+  // REGLA: Tras reset, el estado inicial del nuevo ciclo es 'reseteado' con days_since = 0
+  // REGLA: effective_since != null && last_cleaned_at == null => reseteado (nuevo ciclo abierto)
   
   // Determinar si hay reset aplicado
   const hasReset = effectiveSince !== null;
@@ -213,7 +214,7 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
         }
       } else {
         // La limpieza es anterior al reset - IGNORAR (reset inicia nuevo ciclo)
-        // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
+        // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'reseteado' con days_since = 0
         lastEffectiveCleanAt = null;
         daysSince = 0;
         
@@ -229,7 +230,7 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
       }
     } else {
       // No hay limpieza después del reset
-      // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'never' con days_since = 0
+      // RESET_RECURRENTE_V1: Estado inicial del ciclo = 'reseteado' con days_since = 0
       lastEffectiveCleanAt = null;
       daysSince = 0;
       
@@ -259,11 +260,12 @@ function computeRecurrenteLayerState({ threshold_days, criticalThreshold, layerD
   // Calcular estado según RESET_RECURRENTE_V1
   let state;
   if (hasReset && lastEffectiveCleanAt === null) {
-    // RESET_RECURRENTE_V1: Reset aplicado y sin limpieza posterior → 'never' con days_since = 0
-    state = 'never';
+    // RESET_RECURRENTE_V1: Reset aplicado y sin limpieza posterior → 'reseteado' con days_since = 0
+    // effective_since != null && last_cleaned_at == null => reseteado (nuevo ciclo abierto)
+    state = 'reseteado';
     daysSince = 0;
   } else if (lastEffectiveCleanAt === null) {
-    // Sin reset y sin limpieza → 'never'
+    // Sin reset y sin limpieza → 'never' (nunca trabajado)
     state = 'never';
   } else if (daysSince !== null && daysSince < threshold_days) {
     // Limpieza reciente → 'reviewed'

@@ -902,6 +902,7 @@ export async function getStudentsForItem(itemRef, tipo, productKey = 'pde', opti
         reviewed: students.filter(s => s.state === 'reviewed').length,
         pending: students.filter(s => s.state === 'pending').length,
         important: students.filter(s => s.state === 'important').length,
+        reseteado: students.filter(s => s.state === 'reseteado').length,
         never: students.filter(s => s.state === 'never').length
       };
 
