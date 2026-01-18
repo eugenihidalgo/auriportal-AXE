@@ -396,21 +396,26 @@ export class CleaningItemStateRepoPg {
   /**
    * Elimina el estado de limpieza para un item específico de un alumno.
    * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
-   * 
-   * REGLA: Eliminar la fila completa hace que el sistema asuma estado inicial.
-   * 
-   * ⚠️ DEPRECATED: Usar upsertApplyReset() en su lugar para reset canónico.
-   * Este método se mantiene solo para compatibilidad legacy.
-   * 
+   *
+   * ⚠️ DEPRECATED HARD - BLINDAJE LEGACY_RESET_DELETE_FORBIDDEN:
+   * Reset por DELETE está PROHIBIDO en MASTER. Usa cleaning-engine reset (evento+effective_since).
+   * Requiere options.allow_legacy_delete === true (solo scripts de mantenimiento offline).
+   *
    * @param {Object} options - Opciones
    * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
    * @param {string} options.item_ref - Referencia del item (OBLIGATORIO)
+   * @param {boolean} [options.allow_legacy_delete=false] - Debe ser true para permitir (solo mantenimiento offline)
    * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
    * @param {string} [options.domain_type] - Tipo de dominio (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<boolean>} true si se eliminó, false si no existía
    */
   async deleteState(options, client = null) {
+    if (options?.allow_legacy_delete !== true) {
+      const err = new Error('Reset por DELETE está prohibido en MASTER. Usa cleaning-engine reset (evento+effective_since).');
+      err.code = 'LEGACY_RESET_DELETE_FORBIDDEN';
+      throw err;
+    }
     if (!options || !options.student_uuid || !options.item_ref) {
       throw new Error('student_uuid e item_ref son requeridos');
     }
@@ -461,16 +466,26 @@ export class CleaningItemStateRepoPg {
   /**
    * Elimina todos los estados de limpieza de un alumno para una lista específica.
    * UUID-ONLY: Acepta SOLO student_uuid (UUID canónico)
-   * 
+   *
+   * ⚠️ DEPRECATED HARD - BLINDAJE LEGACY_RESET_DELETE_FORBIDDEN:
+   * Reset por DELETE está PROHIBIDO en MASTER. Usa cleaning-engine reset (evento+effective_since).
+   * Requiere options.allow_legacy_delete === true (solo scripts de mantenimiento offline).
+   *
    * @param {Object} options - Opciones
    * @param {string} options.student_uuid - UUID canónico del estudiante (OBLIGATORIO)
    * @param {string} options.list_id - ID de la lista (OBLIGATORIO)
+   * @param {boolean} [options.allow_legacy_delete=false] - Debe ser true para permitir (solo mantenimiento offline)
    * @param {string} [options.product_key='pde'] - Clave del producto (opcional)
    * @param {string} [options.domain_type] - Tipo de dominio (opcional)
    * @param {Object} [client] - Client de PostgreSQL (opcional, para transacciones)
    * @returns {Promise<number>} Número de estados eliminados
    */
   async deleteStatesByList(options, client = null) {
+    if (options?.allow_legacy_delete !== true) {
+      const err = new Error('Reset por DELETE está prohibido en MASTER. Usa cleaning-engine reset (evento+effective_since).');
+      err.code = 'LEGACY_RESET_DELETE_FORBIDDEN';
+      throw err;
+    }
     if (!options || !options.student_uuid || !options.list_id) {
       throw new Error('student_uuid y list_id son requeridos');
     }

@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { resetStudentItemProgress, resetAllStudentsItemProgress } from '../../src/core/master/services/cleaning-engine-service.js';
 import { query } from '../../database/pg.js';
 import { getDefaultCleaningEventsRepo } from '../../src/infra/repos/cleaning/cleaning-events-repo-pg.js';
+import { getDefaultCleaningItemStateRepo } from '../../src/infra/repos/cleaning/cleaning-item-state-repo-pg.js';
 
 describe('Tests Constitucionales - Reset v1', () => {
   let testCounter = 0;
@@ -728,6 +729,36 @@ describe('Tests Constitucionales - Reset v1', () => {
         if (e.message?.includes('Item no encontrado') || e.message?.includes('foreign key')) return;
         throw e;
       }
+    });
+  });
+
+  // ============================================================================
+  // LEGACY_RESET_DELETE_FORBIDDEN: deleteState/deleteStatesByList requieren allow_legacy_delete
+  // ============================================================================
+
+  describe('LEGACY_RESET_DELETE_FORBIDDEN - Repo deleteState', () => {
+    it('deleteState sin allow_legacy_delete debe lanzar con code LEGACY_RESET_DELETE_FORBIDDEN', async () => {
+      const stateRepo = getDefaultCleaningItemStateRepo();
+      await expect(
+        stateRepo.deleteState({
+          student_uuid: TEST_STUDENT_UUID,
+          item_ref: TEST_ITEM_REF,
+          product_key: TEST_PRODUCT_KEY,
+          domain_type: TEST_DOMAIN_TYPE
+        })
+      ).rejects.toMatchObject({ code: 'LEGACY_RESET_DELETE_FORBIDDEN' });
+    });
+
+    it('deleteStatesByList sin allow_legacy_delete debe lanzar con code LEGACY_RESET_DELETE_FORBIDDEN', async () => {
+      const stateRepo = getDefaultCleaningItemStateRepo();
+      await expect(
+        stateRepo.deleteStatesByList({
+          student_uuid: TEST_STUDENT_UUID,
+          list_id: 1,
+          product_key: TEST_PRODUCT_KEY,
+          domain_type: TEST_DOMAIN_TYPE
+        })
+      ).rejects.toMatchObject({ code: 'LEGACY_RESET_DELETE_FORBIDDEN' });
     });
   });
 });

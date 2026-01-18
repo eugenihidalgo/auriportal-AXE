@@ -43,11 +43,14 @@ if (typeof window !== 'undefined' && window.__AP_UX_ACTION_REGISTRY_CORE__) {
  */
 function buildRefreshPlan(context, uiState, responseData = null) {
   const surfaces = [];
-  // CIERRE-002: Validar que clean_layer está presente en contexto
-  const clean_layer = context.clean_layer;
+  // CIERRE-002: clean_layer desde context.clean_layer o context.reset_layers (reset: shared_and_pde → 'shared' para flotante)
+  let clean_layer = context.clean_layer;
+  if (!clean_layer && context.reset_layers) {
+    clean_layer = context.reset_layers === 'shared_and_pde' ? 'shared' : context.reset_layers;
+  }
   const view_layer = context.view_layer || uiState?.view_layer;
   const item_kind = context.item_kind;
-  
+
   if (!clean_layer) {
     console.warn('[AlquimiaActions][buildRefreshPlan][CIERRE-002] ⚠️ clean_layer no presente en context', {
       context_keys: Object.keys(context),

@@ -1140,4 +1140,32 @@ head -40 public/js/inject_main.js | grep -A 3 "__AP_CONTEXT__.*MASTER"
 
 ---
 
+## Invariante 23: Reset por DELETE Prohibido en MASTER (LEGACY_RESET_DELETE_FORBIDDEN)
+
+### Regla
+
+En MASTER, el reset de ciclo de Alquimia debe ser **siempre** por evento + effective_since (cleaning-engine). Está **prohibido** usar deleteState o deleteStatesByList de cleaning-item-state-repo para “resetear” (DELETE de filas).
+
+**PROHIBIDO:**
+- Llamar `deleteState` o `deleteStatesByList` sin `options.allow_legacy_delete === true`
+- Usar `alquimia-reset-service` o `alquimia-general-service.resetStudentItemProgress/resetStudentListProgress` (usan DELETE; lanzan LEGACY_RESET_DELETE_FORBIDDEN)
+- Que cualquier handler o servicio MASTER pase `allow_legacy_delete: true`
+
+**OBLIGATORIO:**
+- Reset de ciclo vía cleaning-engine: `resetStudentItemProgress`, `resetByScope`, `resetAllStudentsItemProgress` (evento en cleaning_events + upsertApplyReset)
+
+### Verificación
+
+**Comando:**
+```bash
+npm run check:forbid-legacy-reset-delete
+```
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V1.md`
+- `docs/DIAGNOSTICO_RESETS_Y_OVERRIDES_ALQUIMIA_20260118.md`
+- `scripts/check-forbid-legacy-reset-delete.js`
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**

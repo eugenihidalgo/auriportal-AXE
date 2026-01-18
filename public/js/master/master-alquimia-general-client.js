@@ -2052,7 +2052,9 @@
                 reset_scope: 'LIST_ALL',
                 list_id: state.listaActiva.id,
                 clean_layer: cleanLayer,
-                item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
+                item_kind: 'recurrente', // OBLIGATORIO: Reset solo para recurrente
+                item_ref: state.modal?.item?.item_ref || undefined, // Para refresh flotante si está abierto
+                view_layer: uiState.view_layer
               },
               uiState
             });
@@ -5207,8 +5209,10 @@
                 context: {
                   reset_scope: 'ITEM_ALL',
                   item_ref: item.item_ref,
+                  list_id: state.listaActiva?.id || undefined,
                   clean_layer: cleanLayer,
-                  item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
+                  item_kind: 'recurrente', // OBLIGATORIO: Reset solo para recurrente
+                  view_layer: uiState.view_layer
                 },
                 uiState
               });
@@ -5300,7 +5304,9 @@
                     context: {
                       student_uuid: state.projection.student_uuid,
                       item_ref: item.item_ref,
-                      list_id: state.listaActiva?.id || null
+                      list_id: state.listaActiva?.id || null,
+                      clean_layer: 'shared', // Para buildRefreshPlan y flotante
+                      view_layer: state.projection.view_layer || 'shared'
                     },
                     uiState
                   });
@@ -6726,8 +6732,10 @@
           reset_scope: 'ITEM_STUDENT',
           item_ref,
           student_uuid,
+          list_id: state.listaActiva?.id || undefined,
           clean_layer: cleanLayer,
-          item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
+          item_kind: 'recurrente', // OBLIGATORIO: Reset solo para recurrente
+          view_layer: uiState.view_layer
         },
         uiState
       });
@@ -6862,7 +6870,9 @@
           list_id,
           student_uuid,
           clean_layer: cleanLayer,
-          item_kind: 'recurrente' // OBLIGATORIO: Reset solo para recurrente
+          item_kind: 'recurrente', // OBLIGATORIO: Reset solo para recurrente
+          item_ref: state.modal?.item?.item_ref || undefined, // Para refresh flotante si está abierto
+          view_layer: uiState.view_layer
         },
         uiState
       });
