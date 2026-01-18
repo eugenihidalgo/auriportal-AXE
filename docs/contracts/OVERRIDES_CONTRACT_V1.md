@@ -4,8 +4,9 @@
 **Versión:** 1.0  
 **Fecha:** 2026-01-13  
 **Actualizado:** 2026-01-17 (basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md)  
+**Última actualización:** 2026-01-17 (cierre operativo del sistema)  
 **Dominio:** MASTER  
-**Estado:** Activo
+**Estado:** Activo ✅ Cerrado
 
 **⚠️ NOTA:** Este contrato refleja EXACTAMENTE el comportamiento real del sistema verificado en código. No propone cambios, solo documenta lo que YA ES CIERTO.
 
@@ -723,8 +724,9 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 **Regla:** Overrides SOLO se aplican en READ operations.
 
 **Verificación:**
-- `getStudentsForItem()` aplica overrides ✅
+- `getStudentsForItem()` (flotante) aplica overrides ✅
 - `computeListProjection()` (scope=student) aplica overrides ✅
+- `getMegalistForStudent()` (megalist) aplica overrides ✅ (v5.79.7)
 - `markCleanStudent()` NO lee overrides ✅
 - `resetStudentItemProgress()` NO lee overrides ✅
 - `ensureCleaningItemStateSeedForStudent()` NO lee overrides ✅
@@ -813,6 +815,58 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 
 ---
 
+## CIERRE OPERATIVO DEL SISTEMA DE OVERRIDES (2026-01)
+
+**Fecha de cierre:** 2026-01-17  
+**Versión de implementación:** v5.79.7  
+**Estado:** ✅ Sistema cerrado y alineado en READ pipeline
+
+### Alcance del Cierre
+
+El sistema de Overrides ha sido **cerrado definitivamente** tras su implementación completa en todas las vistas READ del dominio MASTER.
+
+**Implementación completa:**
+1. ✅ **Flotante** (`getStudentsForItem`) - Implementado anteriormente
+2. ✅ **List-Projection** (scope='student') - Implementado anteriormente
+3. ✅ **Megalist** (`getMegalistForStudent`) - Implementado v5.79.7
+
+**Orden invariante de resolución (OBLIGATORIO):**
+```
+Estado persistido → Item base → Override → Effective Config → CPM → Estado proyectado
+```
+
+**Guards mínimos añadidos (v5.79.7):**
+- ✅ Validación de existencia de `item_ref` en catálogo → `400 INVALID_ITEM_REF`
+- ✅ Validación de coherencia `override_key + item_kind` → `400 INVALID_OVERRIDE_FOR_ITEM_KIND`
+  - `required_count` SOLO permitido para `una_vez`
+  - `threshold_days` SOLO permitido para `recurrente`
+
+### Principios Constitucionales Confirmados
+
+**Overrides siguen siendo:**
+- ✅ **READ-only** (NO mutan estado persistido)
+- ✅ **Sin señales** (NO emiten eventos)
+- ✅ **Sin mutación de estado** (solo afectan lectura)
+- ✅ **Independientes de WRITE** (CLEAN, RESET, SEED NO leen overrides)
+
+**Todas las vistas READ aplican overrides:**
+- ✅ Flotante aplica overrides antes de CPM
+- ✅ List-Projection (scope='student') aplica overrides antes de CPM
+- ✅ Megalist aplica overrides antes de CPM
+
+**Resultado:**
+- ✅ Estado efectivo consistente entre todas las vistas READ
+- ✅ Overrides integrados en pipeline READ canónico
+- ✅ Sistema terminado y no experimental
+
+**⚠️ IMPORTANTE:**
+- Este sistema está **CERRADO** y **NO es experimental**
+- Todas las vistas READ devuelven estado con overrides aplicados
+- No existe distinción entre "estado base" y "estado overrideado" en vistas MASTER (por diseño)
+- Overrides NO bloquean WRITE operations (son independientes)
+
+---
+
 ## PREPARACIÓN FUTURA: METADATA DE OVERRIDES (NO IMPLEMENTADO)
 
 ### Metadata de Overrides en Respuestas
@@ -861,7 +915,7 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 
 **Versión actual:** 1.0  
 **Fecha de activación:** 2026-01-13  
-**Última actualización:** 2026-01-17
+**Última actualización:** 2026-01-17 (cierre operativo)
 
 **Historial:**
 - v1.0 (2026-01-13): Contrato canónico inicial
@@ -876,11 +930,13 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
   - Megalist es vista de estado efectivo
   - Todas las vistas READ aplican overrides consistentemente
   - Preparación futura: metadata de overrides en respuestas (NO implementado)
-- v1.0 (2026-01-17): Actualización decisión arquitectónica Opción B
-  - Megalist aplica overrides (decisión arquitectónica)
-  - Megalist es vista de estado efectivo
-  - Todas las vistas READ aplican overrides consistentemente
-  - Preparación futura: metadata de overrides en respuestas (NO implementado)
+- v1.0 (2026-01-17): **Cierre operativo del sistema** (v5.79.7)
+  - Implementación completa de overrides en megalist
+  - Guards mínimos añadidos (validación item_ref, coherencia override_key + item_kind)
+  - Sistema cerrado y alineado en READ pipeline
+  - Todas las vistas READ aplican overrides consistentemente (flotante, list-projection, megalist)
+  - Overrides integrados definitivamente en pipeline READ canónico
+  - **Estado:** Sistema terminado y no experimental
 
 ---
 
@@ -913,7 +969,7 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
    - `src/core/master/services/override-resolution-service.js` (resolver overrides, aplicar antes de CPM)
    - `src/core/master/services/list-projection-model.js` (aplica overrides si scope='student')
    - `src/services/alquimia-general-service.js` (aplica overrides en flotante)
-   - `src/core/master/services/alquimia-alumno-megalist-service.js` (NO aplica overrides, comportamiento actual)
+   - `src/core/master/services/alquimia-alumno-megalist-service.js` (aplica overrides en megalist - v5.79.7)
 
 4. **Endpoints:**
    - `src/endpoints/master-api-student-overrides.js` (CRUD de overrides de estudiante)

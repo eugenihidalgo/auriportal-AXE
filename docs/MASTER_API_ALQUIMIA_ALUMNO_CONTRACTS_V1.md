@@ -220,14 +220,15 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
 - Métricas: `calculateSeedReadinessMetrics()` → `seed-readiness-metrics-service.js`
 - Tablas: `cleaning_item_state`, `cleaning_events`, `items_transmutaciones`, `listas_transmutaciones`
 
-**⚠️ DECISIÓN ARQUITECTÓNICA (Opción B): Megalist aplica overrides**
-- Megalist es una vista READ de estado efectivo
-- GET /megalist devuelve estado con overrides aplicados
+**✅ Megalist es vista de estado efectivo (Sistema cerrado v5.79.7)**
+- **Megalist aplica overrides** igual que flotante y list-projection (scope='student')
+- **GET /megalist devuelve estado con overrides aplicados** (orden invariante: Estado persistido → Item base → Override → Effective Config → CPM)
 - Cualquier campo overrideable (`threshold_days`, `required_count`, `nivel`, `descripcion`) afecta la proyección final
 - No existe distinción entre "estado base" y "estado overrideado" en la respuesta (por diseño)
 - Overrides NO mutan estado persistido (solo afectan cálculo de estado proyectado)
 - Overrides NO bloquean seed/reset/clean (son independientes de WRITE operations)
-- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Megalist y Overrides")
+- **Estado:** Sistema cerrado y alineado en READ pipeline (v5.79.7)
+- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Cierre operativo del sistema de Overrides")
 
 **⚠️ PREPARACIÓN FUTURA: Metadata de Overrides (NO IMPLEMENTADO)**
 - Megalist está preparada para exponer metadatos de override en respuestas futuras

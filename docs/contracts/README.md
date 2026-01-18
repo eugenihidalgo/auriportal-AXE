@@ -25,12 +25,14 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
    - Contrato canónico del sistema de Overrides
    - Define cómo Overrides permiten sobrescribir valores base a nivel de alumno
    - Documenta orden de resolución, casos límite y comportamientos reales
-   - **DECISIÓN ARQUITECTÓNICA (Opción B):** Megalist aplica overrides (vista de estado efectivo)
-   - Todas las vistas READ aplican overrides consistentemente (flotante, list-projection, megalist)
+   - **Sistema cerrado y alineado en READ pipeline (v5.79.7):**
+     - Todas las vistas READ aplican overrides consistentemente (flotante, list-projection, megalist)
+     - Megalist aplica overrides (vista de estado efectivo)
+     - Orden invariante: Estado persistido → Item base → Override → Effective Config → CPM
    - Preparación futura: metadata de overrides en respuestas (NO implementado todavía)
    - Versión: 1.0
-   - Estado: Activo
-   - Actualizado: 2026-01-17 (decisión arquitectónica Opción B)
+   - Estado: ✅ Activo - Cerrado (sistema terminado y no experimental)
+   - Última actualización: 2026-01-17 (cierre operativo del sistema)
 
 4. **CLEAN_AFTER_RESET_CONTRACT_V1.md**
    - Contrato canónico del comportamiento CLEAN AFTER RESET
@@ -149,6 +151,14 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
   - Todas las vistas READ aplican overrides consistentemente
   - Preparación futura: metadata de overrides en respuestas (NO implementado todavía)
   - Actualizado MASTER_API_ALQUIMIA_ALUMNO_CONTRACTS_V1.md con decisión Opción B
+- 2026-01-17: **Cierre operativo del sistema de Overrides (v5.79.7)**
+  - Implementación completa de overrides en megalist
+  - Guards mínimos añadidos (validación item_ref, coherencia override_key + item_kind)
+  - Sistema cerrado y alineado en READ pipeline
+  - Todas las vistas READ aplican overrides consistentemente (flotante, list-projection, megalist)
+  - Overrides integrados definitivamente en pipeline READ canónico
+  - Estado: Sistema terminado y no experimental
+  - Actualizado OVERRIDES_CONTRACT_V1.md y MASTER_API_ALQUIMIA_ALUMNO_CONTRACTS_V1.md
 - 2026-01-17: Creación de CLEAN_AFTER_RESET_CONTRACT_V1.md
   - Contrato canónico que cierra el borde RESET → CLEAN
   - Documenta que CLEAN es acto fundador del nuevo ciclo
