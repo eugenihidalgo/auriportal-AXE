@@ -270,21 +270,49 @@
 
 ### Overrides y Megalist
 
-**Relación:** Independiente (megalist NO aplica overrides actualmente)
+**Relación:** Dependencia unidireccional (Megalist aplica overrides antes de CPM)
 
 **Comportamiento REAL:**
-- `getMegalistForStudent()` NO llama `resolveItemConfigForStudent()`
-- Usa valores base del catálogo directamente: `item.frecuencia_dias || 7`, `item.veces_limpiar || 1`
-- CPM recibe `itemConfig` base (SIN overrides aplicados)
-
-**⚠️ INCONSISTENCIA DOCUMENTADA (COMPORTAMIENTO ACTUAL):**
-- Megalist NO aplica overrides (diferente a flotante y list-projection)
-- Esta es una **DECISIÓN ACTUAL**, no un bug reportado
+- `getMegalistForStudent()` llama `resolveItemConfigForStudent()` ANTES de CPM
+- Aplica overrides igual que flotante y list-projection (scope='student')
+- CPM recibe `effectiveConfig` con overrides ya aplicados
 
 **Contrato:**
-- ✅ Megalist muestra valores base sin personalizaciones (comportamiento actual)
-- ⚠️ Flotante y list-projection muestran valores efectivos con overrides (comportamiento actual)
-- ⚠️ Esta inconsistencia debe documentarse explícitamente para evitar confusión
+- ✅ Megalist es una vista READ de estado efectivo
+- ✅ Megalist aplica overrides igual que CPM / LPM
+- ✅ No existe distinción entre "estado base" y "estado overrideado" en vistas MASTER
+- ✅ Megalist, flotante y list-projection muestran valores efectivos con overrides aplicados
+
+**DECISIÓN ARQUITECTÓNICA (Opción B):**
+- Megalist APLICA overrides
+- Megalist es vista de estado efectivo
+- Overrides siguen siendo READ-only (NO mutan estado persistido)
+
+---
+
+### Megalist y Overrides
+
+**Megalist es una vista READ de estado efectivo** que aplica overrides igual que CPM y LPM.
+
+**Principios constitucionales:**
+- ✅ Megalist aplica overrides ANTES de CPM (igual que flotante y list-projection)
+- ✅ Megalist muestra estado efectivo con personalizaciones por alumno
+- ✅ No existe distinción entre "estado base" y "estado overrideado" en vistas MASTER
+- ✅ Overrides NO mutan estado persistido (solo afectan cálculo de estado proyectado)
+- ✅ Overrides NO bloquean seed/reset/clean (son independientes de WRITE operations)
+
+**Orden de aplicación en Megalist:**
+1. Estado persistido (`cleaning_item_state`)
+2. Item base (catálogo)
+3. **Override aplicado** (`resolveItemConfigForStudent()`)
+4. Effective Config (valores con overrides ya aplicados)
+5. CPM recibe Effective Config y calcula estado proyectado
+6. Estado proyectado mostrado en Megalist
+
+**Contrato:**
+- Cualquier campo overrideable (`threshold_days`, `required_count`, `nivel`, `descripcion`) afecta la proyección final en Megalist
+- El estado proyectado en Megalist refleja los valores efectivos (base + override)
+- No hay distinción visual entre valores base y valores overrideados en la respuesta (por diseño)
 
 ---
 
@@ -341,23 +369,21 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 |-----------|-----------------|-------------------|-----------|
 | `getStudentsForItem()` (flotante) | ✅ SÍ | ✅ SÍ | `alquimia-general-service.js` |
 | `computeListProjection()` (scope='student') | ✅ SÍ | ✅ SÍ | `list-projection-model.js` |
-| `getMegalistForStudent()` (megalist) | ❌ NO | ❌ NO | `alquimia-alumno-megalist-service.js` ⚠️ |
+| `getMegalistForStudent()` (megalist) | ✅ SÍ | ✅ SÍ | `alquimia-alumno-megalist-service.js` |
 | `markCleanStudent()` (WRITE) | ❌ NO | ❌ NO | `cleaning-engine-service.js` |
 | `resetStudentItemProgress()` (WRITE) | ❌ NO | ❌ NO | `cleaning-engine-service.js` |
 | `ensureCleaningItemStateSeedForStudent()` (WRITE) | ❌ NO | ❌ NO | `cleaning-state-seed-service.js` |
 
-**⚠️ INCONSISTENCIA DOCUMENTADA (COMPORTAMIENTO ACTUAL):**
-- ✅ **Flotante** (`getStudentsForItem`) SÍ aplica overrides
-- ✅ **List-projection** (scope='student') SÍ aplica overrides
-- ❌ **Megalist** (`getMegalistForStudent`) NO aplica overrides actualmente (verificado en código línea 449-454)
-
-**DECISIÓN ACTUAL:** Esta inconsistencia es un comportamiento real del sistema, no un bug reportado. Debe documentarse explícitamente para evitar confusión.
+**DECISIÓN ARQUITECTÓNICA (Opción B):**
+- ✅ **Flotante** (`getStudentsForItem`) aplica overrides
+- ✅ **List-projection** (scope='student') aplica overrides
+- ✅ **Megalist** (`getMegalistForStudent`) aplica overrides
 
 **Contrato:**
-- READ operations en flotante y list-projection aplican overrides
-- READ operation en megalist NO aplica overrides (comportamiento actual)
-- WRITE operations NO leen overrides (obligatorio)
-- Overrides son "inocuos" para WRITE operations
+- ✅ READ operations en flotante, list-projection y megalist aplican overrides
+- ✅ Todas las vistas READ muestran estado efectivo con overrides aplicados
+- ✅ WRITE operations NO leen overrides (obligatorio)
+- ✅ Overrides son "inocuos" para WRITE operations (independientes)
 
 ---
 
@@ -669,9 +695,10 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 
 **Estos comportamientos NO estaban documentados pero ahora SÍ:**
 
-1. ✅ **Megalist NO aplica overrides** (comportamiento actual, ahora documentado)
+1. ✅ **Megalist aplica overrides** (decisión arquitectónica Opción B, ahora documentado)
 2. ✅ **Orden exacto de resolución** (Estado persistido → Item base → Override → Effective Config → CPM, ahora documentado)
 3. ✅ **Comportamiento de overrides huérfanos** (NO se aplican, silencioso, ahora documentado)
+4. ✅ **Todas las vistas READ aplican overrides** (flotante, list-projection, megalist)
 
 ---
 
@@ -786,6 +813,50 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
 
 ---
 
+## PREPARACIÓN FUTURA: METADATA DE OVERRIDES (NO IMPLEMENTADO)
+
+### Metadata de Overrides en Respuestas
+
+**⚠️ NOTA DE PREPARACIÓN:** Esta sección documenta una preparación futura. NO está implementado todavía y NO es obligatorio en el contrato actual.
+
+**Propósito futuro:**
+- Exponer metadatos de override en respuestas de vistas READ (megalist, flotante, list-projection)
+- Permitir al frontend identificar cuándo un valor proviene de override
+- Facilitar debugging y diagnóstico de overrides activos
+
+**Estructura propuesta (PREPARADA, NO IMPLEMENTADA):**
+```json
+{
+  "item_ref": "item_123",
+  "state": "reviewed",
+  "threshold_days": 14,
+  "override_metadata": {
+    "has_override": true,
+    "override_keys": ["threshold_days"],
+    "override_scope": "student",
+    "base_threshold_days": 7,
+    "effective_threshold_days": 14
+  }
+}
+```
+
+**Campos propuestos:**
+- `has_override` (boolean) - Indica si algún override está activo para este item
+- `override_keys` (array<string>) - Lista de claves overrideadas (ej: ["threshold_days", "required_count"])
+- `override_scope` (string) - Scope del override (siempre "student" para overrides de items)
+
+**Estado actual:**
+- ❌ NO implementado en código
+- ❌ NO requerido en contrato actual
+- ✅ Preparado en documentación para futura implementación
+
+**Cuando se implemente:**
+- Se añadirá como campo opcional en respuestas de vistas READ
+- Se mantendrá retrocompatibilidad (campo opcional, no obligatorio)
+- Se actualizará este contrato con la implementación real
+
+---
+
 ## VERSIONADO
 
 **Versión actual:** 1.0  
@@ -800,6 +871,16 @@ El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina 
   - Inconsistencia megalist/flotante documentada
   - Riesgos conocidos marcados como COMPORTAMIENTO INTENCIONAL
   - Cosas que NO hace el sistema documentadas explícitamente
+- v1.0 (2026-01-17): Actualización decisión arquitectónica Opción B
+  - Megalist aplica overrides (decisión arquitectónica)
+  - Megalist es vista de estado efectivo
+  - Todas las vistas READ aplican overrides consistentemente
+  - Preparación futura: metadata de overrides en respuestas (NO implementado)
+- v1.0 (2026-01-17): Actualización decisión arquitectónica Opción B
+  - Megalist aplica overrides (decisión arquitectónica)
+  - Megalist es vista de estado efectivo
+  - Todas las vistas READ aplican overrides consistentemente
+  - Preparación futura: metadata de overrides en respuestas (NO implementado)
 
 ---
 

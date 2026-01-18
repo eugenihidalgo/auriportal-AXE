@@ -25,10 +25,12 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
    - Contrato canónico del sistema de Overrides
    - Define cómo Overrides permiten sobrescribir valores base a nivel de alumno
    - Documenta orden de resolución, casos límite y comportamientos reales
-   - Incluye inconsistencia documentada: megalist NO aplica overrides (comportamiento actual)
+   - **DECISIÓN ARQUITECTÓNICA (Opción B):** Megalist aplica overrides (vista de estado efectivo)
+   - Todas las vistas READ aplican overrides consistentemente (flotante, list-projection, megalist)
+   - Preparación futura: metadata de overrides en respuestas (NO implementado todavía)
    - Versión: 1.0
    - Estado: Activo
-   - Actualizado: 2026-01-17 (basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md)
+   - Actualizado: 2026-01-17 (decisión arquitectónica Opción B)
 
 ### Sistema de Señales
 
@@ -113,3 +115,9 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
   - Casos límite documentados (8 casos)
   - Inconsistencia megalist/flotante documentada como COMPORTAMIENTO ACTUAL
   - Riesgos conocidos marcados como COMPORTAMIENTO INTENCIONAL
+- 2026-01-17: Actualización decisión arquitectónica Opción B (OVERRIDES_CONTRACT_V1.md)
+  - Megalist aplica overrides (decisión arquitectónica Opción B)
+  - Megalist es vista de estado efectivo
+  - Todas las vistas READ aplican overrides consistentemente
+  - Preparación futura: metadata de overrides en respuestas (NO implementado todavía)
+  - Actualizado MASTER_API_ALQUIMIA_ALUMNO_CONTRACTS_V1.md con decisión Opción B

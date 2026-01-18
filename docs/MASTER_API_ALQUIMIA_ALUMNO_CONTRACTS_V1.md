@@ -220,11 +220,20 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
 - Métricas: `calculateSeedReadinessMetrics()` → `seed-readiness-metrics-service.js`
 - Tablas: `cleaning_item_state`, `cleaning_events`, `items_transmutaciones`, `listas_transmutaciones`
 
-**⚠️ NOTA: Overrides NO se aplican en megalist (COMPORTAMIENTO ACTUAL)**
-- Megalist muestra valores base del catálogo (sin personalizaciones por alumno)
-- Flotante (`GET /master/api/alquimia-general/items/:item_ref/students`) y list-projection (scope='student') SÍ aplican overrides
-- Esta inconsistencia es un comportamiento real del sistema, no un bug
-- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Overrides y Megalist")
+**⚠️ DECISIÓN ARQUITECTÓNICA (Opción B): Megalist aplica overrides**
+- Megalist es una vista READ de estado efectivo
+- GET /megalist devuelve estado con overrides aplicados
+- Cualquier campo overrideable (`threshold_days`, `required_count`, `nivel`, `descripcion`) afecta la proyección final
+- No existe distinción entre "estado base" y "estado overrideado" en la respuesta (por diseño)
+- Overrides NO mutan estado persistido (solo afectan cálculo de estado proyectado)
+- Overrides NO bloquean seed/reset/clean (son independientes de WRITE operations)
+- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Megalist y Overrides")
+
+**⚠️ PREPARACIÓN FUTURA: Metadata de Overrides (NO IMPLEMENTADO)**
+- Megalist está preparada para exponer metadatos de override en respuestas futuras
+- Estructura preparada: `override_metadata: { has_override, override_keys, override_scope }`
+- **Estado:** Solo documentado como preparación, NO implementado todavía, NO obligatorio
+- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Preparación Futura: Metadata de Overrides")
 
 **Campo `seed_metrics`:**
 - **Propósito:** Observabilidad del estado de seed (diagnóstico SIN ejecutar seed)
