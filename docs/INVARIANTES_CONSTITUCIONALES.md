@@ -1163,8 +1163,80 @@ npm run check:forbid-legacy-reset-delete
 
 **Referencias:**
 - `docs/RESET_AND_DEFAULTS_CONTRACT_V1.md`
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md`
 - `docs/DIAGNOSTICO_RESETS_Y_OVERRIDES_ALQUIMIA_20260118.md`
 - `scripts/check-forbid-legacy-reset-delete.js`
+
+---
+
+## Invariante 24: ACTION_REGISTRY_PUBLIC_PARITY_V1
+
+### Regla
+
+Toda acción usada por UI MASTER debe estar registrada en `public/js/...` (fuente servida al browser). Está **prohibido** depender de `src/` para acciones que el frontend invoca.
+
+**PROHIBIDO:**
+- Definir acciones solo en `src/core/ux/action-registry/` (o equivalente) sin copia o equivalente en `public/js/core/ux/action-registry/`.
+- Asumir que el loader carga desde `src/`; el `ux-action-registry-loader` importa `public/.../alquimia-actions.js`.
+
+**OBLIGATORIO:**
+- Acciones canónicas de Alquimia (`alquimia.reset`, `alquimia.clean`, `alquimia.clean_all`, `alquimia.restore_defaults` y el alias `alquimia.reset_overrides`) deben existir en `public/js/core/ux/action-registry/alquimia-actions.js`.
+
+### Verificación
+
+**Comando:**
+```bash
+npm run check:action-registry-parity
+```
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md`
+- `docs/CHECK_ACTION_REGISTRY_PARITY_V1.md`
+- `scripts/check-action-registry-parity.js`
+
+---
+
+## Invariante 25: RESTORE_DEFAULTS_SEMANTICS_V1
+
+### Regla
+
+Restore defaults **jamás** toca `cleaning_item_state` ni `cleaning_events`. Solo afecta a `student_item_overrides` (DELETE según scope).
+
+**PROHIBIDO:**
+- Que el endpoint `POST /master/api/alquimia-general/overrides/reset` o el servicio `resetOverridesByScope` (o equivalentes) escriban en `cleaning_events` o `cleaning_item_state`.
+- Que `alquimia.restore_defaults` (o su alias) invoquen lógica de reset de ciclo.
+
+**OBLIGATORIO:**
+- Restore defaults solo ejecuta DELETE en `student_item_overrides` según scope (ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL).
+
+### Verificación
+
+Revisión de código: `alquimia-override-reset-service.js` y handler de `/overrides/reset` no deben importar ni llamar a cleaning-engine ni a repos de `cleaning_item_state`/`cleaning_events` para escritura.
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md`
+
+---
+
+## Invariante 26: RESET_SEMANTICS_V1
+
+### Regla
+
+Reset de ciclo **jamás** toca `student_item_overrides`. Solo afecta a `cleaning_events` (INSERT `action_type='reset'`) y `cleaning_item_state` (columnas `*_effective_since`).
+
+**PROHIBIDO:**
+- Que el endpoint `POST /master/api/alquimia-general/reset` o `resetByScope` (o equivalentes) modifiquen o borren filas en `student_item_overrides`.
+- Que `alquimia.reset` invoque lógica de restore defaults / overrides.
+
+**OBLIGATORIO:**
+- Reset de ciclo solo escribe en `cleaning_events` y en `cleaning_item_state` vía cleaning-engine (`upsertApplyReset`, `resetByScope`).
+
+### Verificación
+
+Revisión de código: handler de `/reset` y `cleaning-engine-service.resetByScope` no deben llamar a `resetOverridesByScope` ni a repos de `student_item_overrides` para escritura.
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md`
 
 ---
 
