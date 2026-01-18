@@ -77,10 +77,73 @@
   const reportContent = document.getElementById('report-content');
 
   /**
+   * Helper: Obtener tracer si está disponible (fail-open)
+   */
+  function getTracer() {
+    if (typeof window !== 'undefined' && window.apTrace && window.apTrace.enabled) {
+      return window.apTrace;
+    }
+    return null;
+  }
+
+  /**
+   * Helper: Snapshot de estado (solo campos relevantes)
+   */
+  function getStateSnapshot() {
+    return {
+      student_uuid: state.selectedStudentUuid,
+      view_layer: state.viewLayer,
+      lista_tipo: state.activeTab,
+      selected_item_ref: null, // Se actualizará cuando haya selección
+      selected_tab: state.activeTab,
+      level_cap: state.levelCap,
+      loading: state.loading,
+      has_megalist_data: !!state.megalistData
+    };
+  }
+
+  /**
    * Inicialización
    */
   async function init() {
     console.log('[MasterAlquimiaAlumno] Inicializando...');
+    
+    const tracer = getTracer();
+    
+    // TRACE: BOOT
+    if (tracer) {
+      // Obtener versión/build si está disponible
+      let buildInfo = null;
+      try {
+        if (window.__AP_APP_VERSION__ && window.__AP_BUILD_ID__) {
+          buildInfo = {
+            version: window.__AP_APP_VERSION__,
+            build_id: window.__AP_BUILD_ID__
+          };
+        }
+        // Intentar obtener versión desde endpoint (solo si tracer enabled)
+        const versionResponse = await fetch('/master/__version').catch(() => null);
+        if (versionResponse && versionResponse.ok) {
+          const versionData = await versionResponse.json().catch(() => null);
+          if (versionData) {
+            buildInfo = versionData;
+          }
+        }
+      } catch (e) {
+        // Fail-open: si falla obtener versión, continuar sin ella
+      }
+      
+      tracer.log('BOOT', {
+        url: window.location.href,
+        build_stamp: buildInfo,
+        context: window.__AP_CONTEXT__,
+        ready_state: document.readyState,
+        flags: {
+          url_trace: new URLSearchParams(window.location.search).get('ap_trace') === '1',
+          localStorage_trace: localStorage.getItem('ap_trace') === '1'
+        }
+      });
+    }
     
     // Renderizar selector de alumno
     renderStudentSelector();
@@ -334,6 +397,35 @@
         url += `&level_cap=${state.levelCap === 999 ? 'infinity' : state.levelCap}`;
       }
       
+      const tracer = getTracer();
+      const fetchStartTime = tracer ? tracer.now() : Date.now();
+      const localRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // TRACE: STATE BEFORE
+      if (tracer) {
+        tracer.log('STATE', {
+          type: 'BEFORE',
+          snapshot: getStateSnapshot()
+        });
+      }
+      
+      // TRACE: FETCH START
+      if (tracer) {
+        tracer.log('FETCH', {
+          type: 'START',
+          method: 'GET',
+          url: url,
+          query: {
+            student_uuid: studentUuid,
+            view_layer: viewLayer,
+            lista_tipo: listaTipo,
+            level_cap: state.levelCap
+          },
+          request_id: localRequestId,
+          timestamp: fetchStartTime
+        });
+      }
+      
       console.log('[MasterAlquimiaAlumno] [ALQUIMIA_ALUMNO][TAB_FETCH] GET megalist', {
         student_uuid: studentUuid,
         tab: activeTab,
@@ -342,8 +434,54 @@
         level_cap: state.levelCap
       });
       
-      const response = await fetch(url);
-      const result = await response.json();
+      let response;
+      let result;
+      let fetchError = null;
+      
+      try {
+        response = await fetch(url);
+        result = await response.json();
+      } catch (error) {
+        fetchError = error;
+        throw error;
+      } finally {
+        // TRACE: FETCH END/ERR
+        if (tracer) {
+          const fetchEndTime = tracer.now();
+          const fetchDuration = fetchEndTime - fetchStartTime;
+          
+          if (fetchError) {
+            tracer.log('FETCH', {
+              type: 'ERR',
+              method: 'GET',
+              url: url,
+              request_id: localRequestId,
+              error: fetchError.message,
+              stack: fetchError.stack,
+              duration_ms: fetchDuration
+            });
+          } else {
+            const traceId = result?.trace_id || null;
+            const ok = result?.ok || false;
+            const dataKeys = result?.data ? Object.keys(result.data).slice(0, 10) : [];
+            
+            tracer.log('FETCH', {
+              type: 'END',
+              method: 'GET',
+              url: url,
+              request_id: localRequestId,
+              status: response?.status || null,
+              duration_ms: fetchDuration,
+              trace_id: traceId,
+              ok: ok,
+              data_keys: dataKeys,
+              has_lists: !!result?.data?.lists,
+              lists_count: result?.data?.lists?.length || 0,
+              has_summary: !!result?.data?.summary
+            });
+          }
+        }
+      }
       
       if (!result.ok) {
         console.error('[MasterAlquimiaAlumno] Error cargando megalist:', result.error);
@@ -352,10 +490,55 @@
       }
       
       state.megalistData = result.data;
+      
+      // TRACE: STATE AFTER
+      const tracer = getTracer();
+      if (tracer) {
+        tracer.log('STATE', {
+          type: 'AFTER',
+          snapshot: getStateSnapshot()
+        });
+      }
+      
+      // TRACE: RENDER START
+      if (tracer) {
+        tracer.log('RENDER', {
+          type: 'START',
+          motivo: 'fetch_completed',
+          view_layer: viewLayer,
+          has_data: !!result.data,
+          lists_count: result.data?.lists?.length || 0
+        });
+      }
+      
       renderMegalist(result.data, viewLayer);
+      
+      // TRACE: RENDER END
+      if (tracer) {
+        const itemsRendered = document.querySelectorAll('[data-item-ref]').length;
+        const selectedItemPresent = state.selectedStudentUuid ? true : false;
+        
+        tracer.log('RENDER', {
+          type: 'END',
+          items_rendered_count: itemsRendered,
+          selected_item_present: selectedItemPresent,
+          view_layer: viewLayer
+        });
+      }
     } catch (error) {
       console.error('[MasterAlquimiaAlumno] Error cargando megalist:', error);
       showError('Error cargando datos: ' + error.message);
+      
+      // TRACE: FETCH ERR (si no se capturó antes)
+      const tracer = getTracer();
+      if (tracer) {
+        tracer.log('FETCH', {
+          type: 'ERR',
+          url: url,
+          error: error.message,
+          stack: error.stack
+        });
+      }
     } finally {
       state.loading = false;
       hideLoading();
@@ -1004,6 +1187,24 @@
       }
       
       cleanBtn.addEventListener('click', () => {
+        const tracer = getTracer();
+        
+        // TRACE: ACTION CLEAN CLICK
+        if (tracer) {
+          tracer.log('ACTION', {
+            type: 'CLEAN',
+            phase: 'CLICK',
+            item_ref: item.item_ref,
+            item_nombre: item.item_nombre,
+            lista_tipo: item.lista_tipo,
+            student_uuid: state.selectedStudentUuid,
+            view_layer: state.viewLayer,
+            previous_state: item.lista_tipo === 'recurrente' 
+              ? (stateData?.state || 'unknown')
+              : (stateData?.visual_state || 'unknown')
+          });
+        }
+        
         const requiredCount = item.item_veces_limpiar || 1;
         const cleanCount = stateData?.computed_state?.clean_count || 0;
         const confirmMsg = item.lista_tipo === 'una_vez' 
@@ -1113,6 +1314,9 @@
     document.body.appendChild(loadingMsg);
     
     try {
+      const tracer = getTracer();
+      const actionStartTime = tracer ? tracer.now() : Date.now();
+      
       const result = await performAction({
         action_id: 'alquimia.clean_student',
         payload: {
@@ -1135,6 +1339,25 @@
         }
       });
       
+      // TRACE: ACTION CLEAN RESPONSE
+      if (tracer) {
+        const actionEndTime = tracer.now();
+        const actionDuration = actionEndTime - actionStartTime;
+        
+        tracer.log('ACTION', {
+          type: 'CLEAN',
+          phase: 'RESPONSE',
+          item_ref: item.item_ref,
+          student_uuid: state.selectedStudentUuid,
+          ok: result?.ok || false,
+          applied: result?.data?.applied || false,
+          trace_id: result?.trace_id || null,
+          duration_ms: actionDuration,
+          error: result?.error || null,
+          reason: result?.data?.reason || null
+        });
+      }
+      
       // Remover indicador de carga
       if (loadingMsg.parentNode) {
         loadingMsg.parentNode.removeChild(loadingMsg);
@@ -1156,6 +1379,79 @@
       showToastSuccess(`✓ ${item.item_nombre} marcado como revisado`);
       
       console.log('[MasterAlquimiaAlumno] Item limpiado exitosamente, refresh automático vía refresh_plan');
+      
+      // TRACE: REFRESH REQUEST (después de acción exitosa)
+      if (tracer) {
+        tracer.log('REFRESH', {
+          type: 'REQUEST',
+          motivo: 'clean_success',
+          item_ref: item.item_ref,
+          student_uuid: state.selectedStudentUuid,
+          strategy: 'refresh_plan' // Indicar que se espera refresh automático
+        });
+        
+        // Detectar NO RE-RENDER: verificar si hay refresh/render en los próximos ms
+        let refreshDetected = false;
+        let renderDetected = false;
+        
+        // Guardar estado antes para detectar cambios
+        const stateBefore = getStateSnapshot();
+        
+        // Detectar refetch de megalist (interceptar fetch o verificar cambios de estado)
+        const originalFetch = window.fetch;
+        const fetchInterceptor = function(...args) {
+          const url = args[0];
+          if (typeof url === 'string' && url.includes('/master/api/alquimia-alumno/megalist')) {
+            refreshDetected = true;
+            if (tracer) {
+              tracer.log('REFRESH', {
+                type: 'DETECTED',
+                motivo: 'fetch_megalist_detected',
+                url: url
+              });
+            }
+          }
+          return originalFetch.apply(this, args);
+        };
+        
+        // Temporizar interceptor
+        window.fetch = fetchInterceptor;
+        
+        // Usar microtask + timeout para detectar refresh/render
+        Promise.resolve().then(() => {
+          setTimeout(() => {
+            const stateAfter = getStateSnapshot();
+            const stateChanged = JSON.stringify(stateBefore) !== JSON.stringify(stateAfter);
+            
+            // Verificar si hubo render (comprobar DOM)
+            const itemsAfter = document.querySelectorAll('[data-item-ref]').length;
+            renderDetected = itemsAfter > 0 && stateChanged;
+            
+            // Si pasó tiempo y no hay refresh/render, log WARN
+            if (!refreshDetected && !renderDetected && !stateChanged) {
+              tracer.log('WARN', {
+                tipo: 'NO_REFRESH_AFTER_ACTION',
+                mensaje: 'No refresh/render after action',
+                action: 'CLEAN',
+                item_ref: item.item_ref,
+                state_before: stateBefore,
+                state_after: stateAfter,
+                elapsed_ms: 250
+              });
+            } else if (refreshDetected || renderDetected) {
+              tracer.log('REFRESH', {
+                type: 'DONE',
+                refresh_detected: refreshDetected,
+                render_detected: renderDetected,
+                state_changed: stateChanged
+              });
+            }
+            
+            // Restaurar fetch original
+            window.fetch = originalFetch;
+          }, 250); // 250ms para detectar refresh/render
+        });
+      }
     } catch (error) {
       // Remover indicador de carga
       if (loadingMsg.parentNode) {

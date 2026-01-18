@@ -259,6 +259,16 @@
       "name": "Master Alumnos Client"
     },
     {
+      "id": "forensic-tracer-v1",
+      "guard_id": "FORENSIC_TRACER_V1",
+      "path": "/js/master/trace/forensic-tracer.v1.js",
+      "type": "module",
+      "required": false,
+      "critical": false,
+      "phase": "core",
+      "name": "Forensic Tracer v1"
+    },
+    {
       "id": "master-alquimia-alumno-client",
       "guard_id": "ALQUIMIA_ALUMNO_CLIENT",
       "path": "/js/master/master-alquimia-alumno-client.js",
