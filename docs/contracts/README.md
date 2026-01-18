@@ -24,8 +24,11 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 3. **OVERRIDES_CONTRACT_V1.md**
    - Contrato canónico del sistema de Overrides
    - Define cómo Overrides permiten sobrescribir valores base a nivel de alumno
+   - Documenta orden de resolución, casos límite y comportamientos reales
+   - Incluye inconsistencia documentada: megalist NO aplica overrides (comportamiento actual)
    - Versión: 1.0
    - Estado: Activo
+   - Actualizado: 2026-01-17 (basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md)
 
 ### Sistema de Señales
 
@@ -84,7 +87,9 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 
 **Diagnósticos que documentan el comportamiento real:**
 - `docs/DIAGNOSTICO_SEED_MASTER.md` - Análisis completo del sistema de seed
-- `docs/DIAGNOSTICO_OVERRIDES_MASTER.md` - Análisis completo del sistema de overrides
+- `docs/DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md` - Análisis completo y canónico del sistema de overrides (2026-01-17)
+  - ⚠️ Este diagnóstico reemplaza y actualiza `docs/DIAGNOSTICO_OVERRIDES_MASTER.md`
+  - Refleja el comportamiento REAL verificado en código actual
 - `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` - Verificación de CLEAN después de RESET
 - `docs/DIAGNOSTICO_THRESHOLD_RESET.md` - Análisis de PENDING después de RESET
 
@@ -101,3 +106,10 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 ---
 
 **Última actualización:** 2026-01-17
+
+**Cambios recientes:**
+- 2026-01-17: Actualización de OVERRIDES_CONTRACT_V1.md basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md
+  - Documentación explícita del orden de resolución
+  - Casos límite documentados (8 casos)
+  - Inconsistencia megalist/flotante documentada como COMPORTAMIENTO ACTUAL
+  - Riesgos conocidos marcados como COMPORTAMIENTO INTENCIONAL

@@ -220,6 +220,12 @@ Contratos canónicos de los endpoints API MASTER para el Panel Alquimia del Alum
 - Métricas: `calculateSeedReadinessMetrics()` → `seed-readiness-metrics-service.js`
 - Tablas: `cleaning_item_state`, `cleaning_events`, `items_transmutaciones`, `listas_transmutaciones`
 
+**⚠️ NOTA: Overrides NO se aplican en megalist (COMPORTAMIENTO ACTUAL)**
+- Megalist muestra valores base del catálogo (sin personalizaciones por alumno)
+- Flotante (`GET /master/api/alquimia-general/items/:item_ref/students`) y list-projection (scope='student') SÍ aplican overrides
+- Esta inconsistencia es un comportamiento real del sistema, no un bug
+- **Referencia:** `docs/contracts/OVERRIDES_CONTRACT_V1.md` (sección "Overrides y Megalist")
+
 **Campo `seed_metrics`:**
 - **Propósito:** Observabilidad del estado de seed (diagnóstico SIN ejecutar seed)
 - **Cuándo aparece:** Siempre presente en respuesta exitosa

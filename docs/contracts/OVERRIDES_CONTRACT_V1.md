@@ -3,23 +3,28 @@
 
 **Versión:** 1.0  
 **Fecha:** 2026-01-13  
+**Actualizado:** 2026-01-17 (basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md)  
 **Dominio:** MASTER  
 **Estado:** Activo
+
+**⚠️ NOTA:** Este contrato refleja EXACTAMENTE el comportamiento real del sistema verificado en código. No propone cambios, solo documenta lo que YA ES CIERTO.
 
 ---
 
 ## DEFINICIÓN ONTOLÓGICA
 
-### ¿Qué es Override?
+### ¿Qué es Override? (DEFINICIÓN CANÓNICA)
 
-**Override es una capa de lectura efectiva** que permite sobrescribir valores base del sistema a nivel de alumno individual, sin modificar el Source of Truth (SOT).
+**Override es una capa pura de lectura efectiva** que permite sobrescribir valores base del sistema a nivel de alumno individual, SIN modificar el Source of Truth (SOT) persistido.
 
-**Semántica:**
-- Override NO modifica valor base (nunca escribe en tablas base)
-- Override SOLO afecta lectura (cálculo de estado, visualización)
-- Override es scope='student' únicamente (prohibido scope='all')
-- Override es auditable y reversible
-- Override NO emite señales (no es acción WRITE)
+**Semántica REAL:**
+- ✅ **Override NO muta estado persistido** (nunca escribe en `cleaning_item_state`)
+- ✅ **Override SOLO afecta lectura** (cálculo de estado proyectado, visualización)
+- ✅ **Override es scope='student' únicamente** (prohibido scope='all')
+- ✅ **Override es auditable y reversible** (campos `reason`, `created_by`)
+- ✅ **Override NO emite señales** (no es acción WRITE, solo lectura)
+- ✅ **Override se aplica ANTES de CPM** (CPM recibe valores efectivos)
+- ✅ **Override persiste en PostgreSQL** (tablas dedicadas, no cache persistente)
 
 ---
 
@@ -35,9 +40,9 @@
 
 ---
 
-## SCOPE Y VALIDACIONES
+## SCOPE Y ALCANCE
 
-### Scope Permitido
+### Scope Permitido (DECISIÓN ACTUAL)
 
 **ÚNICO scope válido:** `scope='student'`
 
@@ -47,11 +52,28 @@
 
 **Validación:** Línea 90-92 de `master-api-student-item-overrides.js`
 
+**⚠️ RIESGO CONOCIDO:** NO es un bug. Overrides son intencionalmente solo para scope='student'. Para cambiar valores base, modificar catálogo directamente.
+
 ---
 
-### Campos Permitidos
+### Tablas PostgreSQL (ALCANCE REAL)
 
-#### Student Overrides (`student_overrides`)
+#### Tabla 1: `student_overrides`
+
+**Ubicación:** `database/migrations/v5.71.0-student-overrides-v1.sql`
+
+**Estructura:**
+- `id` (UUID PRIMARY KEY)
+- `student_uuid` (UUID, FK a `students.id` ON DELETE CASCADE)
+- `field_key` (TEXT, whitelist: 'nivel', 'fecha_creacion', 'apodo')
+- `override_value` (JSONB)
+- `reason` (TEXT, opcional, auditable)
+- `created_at` (TIMESTAMPTZ)
+- `created_by` (TEXT, opcional, auditable)
+
+**Constraints:**
+- UNIQUE: `(student_uuid, field_key)`
+- FK CASCADE: `student_uuid → students.id ON DELETE CASCADE`
 
 **Campos permitidos:**
 - `nivel` (number) - Nivel del estudiante
@@ -60,17 +82,34 @@
 
 **Whitelist:** Línea 94 de `master-api-student-overrides.js`
 
-#### Student Item Overrides (`student_item_overrides`)
+#### Tabla 2: `student_item_overrides`
+
+**Ubicación:** `database/migrations/v5.71.0-student-overrides-v1.sql`
+
+**Estructura:**
+- `id` (UUID PRIMARY KEY)
+- `student_uuid` (UUID, FK a `students.id` ON DELETE CASCADE)
+- `item_ref` (TEXT, **NO tiene FK a catálogo** ⚠️ RIESGO CONOCIDO)
+- `override_key` (TEXT, whitelist: 'required_count', 'threshold_days', 'nivel', 'descripcion')
+- `override_value` (JSONB)
+- `reason` (TEXT, opcional, auditable)
+- `created_at` (TIMESTAMPTZ)
+- `created_by` (TEXT, opcional, auditable)
+
+**Constraints:**
+- UNIQUE: `(student_uuid, item_ref, override_key)`
+- FK CASCADE: `student_uuid → students.id ON DELETE CASCADE`
+- ⚠️ **NO FK para `item_ref`** → Permite overrides huérfanos (RIESGO CONOCIDO, NO bug)
 
 **Campos permitidos:**
 - `required_count` (number ≥ 0) - Veces que debe limpiarse (una_vez)
 - `threshold_days` (number ≥ 0) - Días para considerar "reviewed" (recurrente)
-- `nivel` (number) - Nivel del item
-- `descripcion` (string) - Descripción del item
+- `nivel` (number) - Nivel del item (NO afecta CPM, solo display)
+- `descripcion` (string) - Descripción del item (NO afecta CPM, solo display)
 
 **Whitelist:** Línea 105 de `master-api-student-item-overrides.js`
 
-**⚠️ NOTA:** `nivel` y `descripcion` no se usan directamente en CPM, solo `threshold_days` y `required_count` afectan cálculo de estado.
+**⚠️ NOTA TÉCNICA:** `nivel` y `descripcion` existen como campos overrideables pero NO se usan directamente en CPM. Solo `threshold_days` y `required_count` afectan cálculo de estado. Estos overrides se usan para display (mostrar nivel/descripción diferente), no para cálculo.
 
 ---
 
@@ -84,10 +123,15 @@
 - ✅ `override_value` tipo correcto según `override_key`
 - ✅ `scope` = 'student' o undefined (prohibido 'all')
 
-**NO se valida (riesgos conocidos):**
-- ❌ Existencia de `item_ref` en catálogo (permite overrides huérfanos)
-- ❌ Coherencia `override_key + item_kind` (ej: `required_count` solo para `una_vez`)
-- ❌ Existencia de `student_uuid` en `students` (protegido por FK CASCADE)
+**NO se valida (RIESGOS CONOCIDOS - COMPORTAMIENTO INTENCIONAL):**
+- ❌ Existencia de `item_ref` en catálogo (permite overrides huérfanos, NO es bug)
+- ❌ Coherencia `override_key + item_kind` (ej: `required_count` solo para `una_vez`, se ignora silenciosamente si incoherente)
+- ❌ Existencia de `student_uuid` en `students` (protegido por FK CASCADE en BD)
+- ❌ Tipo de `override_value` en student-overrides endpoint (solo presencia)
+- ❌ Formato UUID en student-overrides endpoint (solo presencia)
+- ❌ Existencia de estado antes de aplicar override (override puede existir antes del seed)
+
+**⚠️ DECISIÓN ACTUAL:** Estas validaciones NO existen intencionalmente. El sistema es "perdonador" (fail-safe): overrides inválidos se ignoran silenciosamente sin romper el sistema.
 
 ---
 
@@ -192,84 +236,127 @@
 
 ### Overrides y CPM
 
-**Relación:**
-- CPM recibe `item_config` con overrides YA aplicados
-- CPM NO sabe que un valor es override (es "ciego" a overrides)
-- CPM solo ve valores efectivos
+**Relación:** Dependencia unidireccional (CPM depende de override, override NO depende de CPM)
 
-**Comportamiento:**
+**Comportamiento REAL:**
 1. `resolveItemConfigForStudent()` aplica overrides a `itemConfig`
-2. Retorna `effectiveConfig` con overrides aplicados
-3. CPM recibe `effectiveConfig` como `item_config`
-4. CPM calcula estado usando `effectiveConfig.threshold_days`
+2. Retorna `effectiveConfig` con overrides aplicados (copia, no modifica original)
+3. CPM recibe `effectiveConfig` como `item_config` (con overrides ya aplicados)
+4. CPM calcula estado usando `effectiveConfig.threshold_days` y `effectiveConfig.required_count`
+5. CPM es "ciego" a overrides (no sabe si un valor viene de override o es base)
 
 **Contrato:**
-- Overrides se aplican ANTES de CPM
-- CPM nunca recibe overrides directos (solo valores efectivos)
-- CPM es función pura respecto a overrides (mismo `effectiveConfig` → mismo resultado)
+- ✅ Overrides se aplican **ANTES de CPM** (obligatorio)
+- ✅ CPM nunca recibe overrides directos (solo valores efectivos)
+- ✅ CPM es función pura respecto a overrides (mismo `effectiveConfig` → mismo resultado)
+- ✅ CPM NO modifica estado persistido (solo cálculo, no escritura)
 
 ---
 
 ### Overrides y LPM
 
-**Relación:**
-- LPM aplica overrides SOLO si `scope='student'`
-- LPM NO aplica overrides si `scope='all'`
+**Relación:** Dependencia unidireccional (LPM aplica overrides antes de CPM)
 
-**Comportamiento:**
-- `scope='student'` → `resolveItemConfigForStudent()` se llama
-- `scope='all'` → `effectiveConfig = itemConfig` (sin overrides)
+**Comportamiento REAL:**
+- `scope='student'` → `resolveItemConfigForStudent()` se llama ANTES de CPM
+- `scope='all'` → `effectiveConfig = itemConfig` (sin overrides, valores base)
 
 **Contrato:**
-- List-projection ALL muestra valores base sin personalizaciones
-- List-projection STUDENT muestra valores efectivos con overrides
+- ✅ List-projection ALL muestra valores base sin personalizaciones
+- ✅ List-projection STUDENT muestra valores efectivos con overrides aplicados
+- ✅ Overrides se aplican en LPM SOLO si `scope='student'` (guards previenen scope='all')
 
 ---
 
-## MOMENTO DE APLICACIÓN
+### Overrides y Megalist
 
-### Pipeline Real
+**Relación:** Independiente (megalist NO aplica overrides actualmente)
 
-**Orden canónico de aplicación:**
+**Comportamiento REAL:**
+- `getMegalistForStudent()` NO llama `resolveItemConfigForStudent()`
+- Usa valores base del catálogo directamente: `item.frecuencia_dias || 7`, `item.veces_limpiar || 1`
+- CPM recibe `itemConfig` base (SIN overrides aplicados)
 
-```
-1. GET /master/api/alquimia-general/items/:item_ref/students
-   ↓
-2. Obtener estado bruto de cleaning_item_state
-   ↓
-3. Obtener item base del catálogo
-   ↓
-4. [AQUÍ SE APLICAN OVERRIDES]
-   resolveItemConfigForStudent(itemConfig, student_uuid, item_ref)
-   → effectiveConfig = { ...itemConfig, ...overrides }
-   ↓
-5. [CPM RECIBE effectiveConfig]
-   computeCleaningProjection({ item_config: effectiveConfig, ... })
-   ↓
-6. CPM calcula estado usando effectiveConfig.threshold_days
-   ↓
-7. Retorna estado proyectado
-```
+**⚠️ INCONSISTENCIA DOCUMENTADA (COMPORTAMIENTO ACTUAL):**
+- Megalist NO aplica overrides (diferente a flotante y list-projection)
+- Esta es una **DECISIÓN ACTUAL**, no un bug reportado
 
-**⚠️ CRÍTICO:** Overrides se aplican ANTES de CPM, NUNCA después.
+**Contrato:**
+- ✅ Megalist muestra valores base sin personalizaciones (comportamiento actual)
+- ⚠️ Flotante y list-projection muestran valores efectivos con overrides (comportamiento actual)
+- ⚠️ Esta inconsistencia debe documentarse explícitamente para evitar confusión
 
 ---
 
-### READ vs WRITE
+## ORDEN DE RESOLUCIÓN (CRÍTICO - OBLIGATORIO)
+
+### Orden Exacto Documentado (COMPORTAMIENTO REAL)
+
+El orden de resolución es **CONSTITUCIONAL** y define cómo el sistema combina estado persistido, valores base, overrides y CPM:
+
+```
+1. ESTADO PERSISTIDO (cleaning_item_state)
+   - last_cleaned_at, effective_since, clean_count, remaining, completed
+   - Valores REALES persistidos en BD (Source of Truth)
+   ↓
+2. ITEM BASE (catálogo)
+   - frecuencia_dias, veces_limpiar, nivel, descripcion
+   - Valores BASE del catálogo (items_transmutaciones, listas_transmutaciones)
+   ↓
+3. OVERRIDE (si existe)
+   - threshold_days, required_count, nivel, descripcion
+   - Valores SOBRESCRITOS desde student_item_overrides
+   - Se aplica ANTES de CPM (resolver)
+   ↓
+4. EFFECTIVE CONFIG (resultado de override)
+   - effectiveConfig.threshold_days = override.threshold_days || item.frecuencia_dias || 7
+   - effectiveConfig.required_count = override.required_count || item.veces_limpiar || 1
+   - Copia del itemConfig con overrides aplicados (NO modifica original)
+   ↓
+5. CPM (Cleaning Projection Model)
+   - Recibe: cleaning_state (bruto) + effectiveConfig (con overrides ya aplicados)
+   - Calcula: state_by_view_layer usando effectiveConfig
+   - CPM es "ciego" a overrides (solo ve valores efectivos, no sabe si son override)
+   ↓
+6. ESTADO PROYECTADO (resultado final)
+   - state_by_view_layer[view_layer].state
+   - Calculado usando override aplicado (si existía)
+```
+
+**REGLA CONSTITUCIONAL:**
+- ✅ Override se aplica **ANTES de CPM** (obligatorio)
+- ✅ CPM **NO distingue** entre valores base y valores override (es "ciego")
+- ✅ Estado persistido **NO cambia** por override (override solo afecta lectura)
+- ✅ Override solo participa en **READ operations**, nunca en WRITE
+
+**⚠️ CRÍTICO:** Este orden es INVARIANTE. Cualquier cambio a este orden rompe el contrato constitucional.
+
+---
+
+### READ vs WRITE (COMPORTAMIENTO REAL)
 
 **Overrides SOLO se aplican en READ operations:**
 
-| Operación | ¿Lee Overrides? | ¿Aplica Overrides? |
-|-----------|-----------------|-------------------|
-| `getStudentsForItem()` (megalist, flotante) | ✅ SÍ | ✅ SÍ |
-| `computeListProjection()` (scope=student) | ✅ SÍ | ✅ SÍ |
-| `markCleanStudent()` (WRITE) | ❌ NO | ❌ NO |
-| `resetStudentItemProgress()` (WRITE) | ❌ NO | ❌ NO |
-| `ensureCleaningItemStateSeedForStudent()` (WRITE) | ❌ NO | ❌ NO |
+| Operación | ¿Lee Overrides? | ¿Aplica Overrides? | Ubicación |
+|-----------|-----------------|-------------------|-----------|
+| `getStudentsForItem()` (flotante) | ✅ SÍ | ✅ SÍ | `alquimia-general-service.js` |
+| `computeListProjection()` (scope='student') | ✅ SÍ | ✅ SÍ | `list-projection-model.js` |
+| `getMegalistForStudent()` (megalist) | ❌ NO | ❌ NO | `alquimia-alumno-megalist-service.js` ⚠️ |
+| `markCleanStudent()` (WRITE) | ❌ NO | ❌ NO | `cleaning-engine-service.js` |
+| `resetStudentItemProgress()` (WRITE) | ❌ NO | ❌ NO | `cleaning-engine-service.js` |
+| `ensureCleaningItemStateSeedForStudent()` (WRITE) | ❌ NO | ❌ NO | `cleaning-state-seed-service.js` |
+
+**⚠️ INCONSISTENCIA DOCUMENTADA (COMPORTAMIENTO ACTUAL):**
+- ✅ **Flotante** (`getStudentsForItem`) SÍ aplica overrides
+- ✅ **List-projection** (scope='student') SÍ aplica overrides
+- ❌ **Megalist** (`getMegalistForStudent`) NO aplica overrides actualmente (verificado en código línea 449-454)
+
+**DECISIÓN ACTUAL:** Esta inconsistencia es un comportamiento real del sistema, no un bug reportado. Debe documentarse explícitamente para evitar confusión.
 
 **Contrato:**
-- READ operations aplican overrides
-- WRITE operations NO leen overrides
+- READ operations en flotante y list-projection aplican overrides
+- READ operation en megalist NO aplica overrides (comportamiento actual)
+- WRITE operations NO leen overrides (obligatorio)
 - Overrides son "inocuos" para WRITE operations
 
 ---
@@ -397,40 +484,194 @@
 
 ---
 
-## POLÍTICA DE FALLOS
+## CASOS LÍMITE DOCUMENTADOS
 
-### Fail-Safe Absoluto
+### Caso 1: Override sin estado base
 
-**Regla constitucional:** Overrides son fail-safe.
+**Escenario:** Override existe para item+estudiante que NO tiene `cleaning_item_state`.
 
-**Comportamiento:**
-- Si faltan parámetros → Retorna valor base (log WARN)
-- Si `override_key` desconocido → Se ignora silenciosamente (log WARN)
-- Si override huérfano → NO se aplica (silencioso)
-- Si override antes del seed → NO tiene efecto hasta que exista estado (silencioso)
+**Comportamiento REAL:**
+1. Override existe en `student_item_overrides`
+2. `cleaning_item_state` NO existe → `cleaning_state` es `null` o `undefined`
+3. `resolveItemConfigForStudent()` lee override y retorna `effectiveConfig` con override aplicado
+4. CPM recibe `effectiveConfig` pero `cleaning_state = null`
+5. CPM calcula estado como `'never'` (sin estado)
+6. Override NO tiene efecto hasta que exista estado
 
-**Contrato:**
-- Overrides NUNCA rompen el sistema
-- Overrides desconocidos o inválidos se ignoran
-- Sistema funciona correctamente sin overrides
+**Veredicto:** ✅ **Funciona pero es raro** (override existe pero no tiene efecto hasta seed)
+
+**⚠️ RIESGO CONOCIDO:** NO es bug. Override puede existir antes del seed y se aplicará cuando exista estado.
 
 ---
 
-### Validación de Coherencia
+### Caso 2: Override + Reset
 
-**NO se valida coherencia:**
-- ❌ `override_key + item_kind` (ej: `required_count` solo para `una_vez`)
-- ❌ Existencia de `item_ref` en catálogo
-- ❌ Existencia de estado antes de crear override
+**Escenario:** Override existe, luego se ejecuta RESET.
 
-**Comportamiento:**
-- Overrides incoherentes se ignoran silenciosamente
-- Overrides huérfanos NO se aplican
-- Sistema funciona correctamente con overrides inválidos
+**Comportamiento REAL:**
+1. Override persiste (reset NO modifica overrides)
+2. Reset establece `effective_since`
+3. `resolveItemConfigForStudent()` lee override y retorna `effectiveConfig` con override
+4. CPM calcula estado usando `effective_since` (del reset) + `threshold_days` (del override)
+
+**Veredicto:** ✅ **Funciona correctamente** (override se aplica después de reset)
+
+**Contrato:** Overrides persisten después de RESET y se aplican correctamente en lectura.
+
+---
+
+### Caso 3: Override + Clean después de Reset
+
+**Escenario:** Override existe, se ejecuta RESET, luego CLEAN.
+
+**Comportamiento REAL:**
+1. Override persiste (clean NO modifica overrides)
+2. Reset establece `effective_since`
+3. CLEAN actualiza `last_cleaned_at` (clean NO lee overrides)
+4. `resolveItemConfigForStudent()` lee override y retorna `effectiveConfig` con override
+5. CPM calcula estado usando `last_cleaned_at` (del clean) + `threshold_days` (del override)
+
+**Veredicto:** ✅ **Funciona correctamente** (override se aplica después de reset+clean)
+
+**Contrato:** Overrides NO bloquean CLEAN after RESET. CLEAN es independiente de overrides.
+
+---
+
+### Caso 4: Override + Seed
+
+**Escenario:** Override existe antes del seed, luego se ejecuta seed.
+
+**Comportamiento REAL:**
+1. Override existe antes del seed
+2. Seed crea estado con valores base (seed NO lee overrides)
+3. Estado creado tiene valores base (NO valores overrideados)
+4. Cuando se lee estado: `resolveItemConfigForStudent()` aplica override → CPM calcula con override
+
+**Veredicto:** ✅ **Funciona correctamente** (seed NO aplica overrides, pero overrides se aplican en lectura)
+
+**Contrato:** Seed es independiente de overrides. Overrides se aplican después del seed en lectura.
+
+---
+
+### Caso 5: Override con item UNA_VEZ
+
+**Escenario:** Item tipo `una_vez`, override de `required_count = 5` (base: 3).
+
+**Comportamiento REAL:**
+1. Override existe: `student_item_overrides` tiene `override_key='required_count'`, `override_value=5`
+2. `resolveItemConfigForStudent()` retorna `effectiveConfig.required_count = 5`
+3. CPM calcula estado para `una_vez` usando `required_count = 5` (del override)
+
+**Veredicto:** ✅ **Funciona correctamente** (override se aplica en UNA_VEZ)
+
+**⚠️ RIESGO CONOCIDO:** NO se valida que `required_count` solo aplique a `una_vez`. Se puede crear override `required_count` para `recurrente` (se ignora silenciosamente en CPM). NO es bug, es comportamiento intencional.
+
+---
+
+### Caso 6: Override con item RECURRENTE
+
+**Escenario:** Item tipo `recurrente`, override de `threshold_days = 14` (base: 7).
+
+**Comportamiento REAL:**
+1. Override existe: `student_item_overrides` tiene `override_key='threshold_days'`, `override_value=14`
+2. `resolveItemConfigForStudent()` retorna `effectiveConfig.threshold_days = 14`
+3. CPM calcula estado para `recurrente` usando `threshold_days = 14` (del override)
+
+**Veredicto:** ✅ **Funciona correctamente** (override se aplica en RECURRENTE)
+
+**⚠️ RIESGO CONOCIDO:** NO se valida que `threshold_days` solo aplique a `recurrente`. Se puede crear override `threshold_days` para `una_vez` (se ignora silenciosamente en CPM). NO es bug, es comportamiento intencional.
+
+---
+
+### Caso 7: Override ALL vs por alumno
+
+**Escenario:** Intento de crear override con `scope='all'`.
+
+**Comportamiento REAL:**
+1. Endpoint valida: `if (scope !== undefined && scope !== 'student')` → Error 400
+2. Error: "Overrides solo disponibles en scope=student. En scope=all debe actualizarse el ítem base directamente."
+3. Override NO se crea
+
+**Veredicto:** ✅ **Funciona correctamente** (guards previenen scope='all')
+
+---
+
+### Caso 8: Override que intenta forzar estado final
+
+**Escenario:** Item `recurrente` con `last_cleaned_at = null`, override de `threshold_days = 999` (muy alto).
+
+**Comportamiento REAL:**
+1. Override existe: `threshold_days = 999`
+2. `resolveItemConfigForStudent()` retorna `effectiveConfig.threshold_days = 999`
+3. CPM calcula: `last_cleaned_at = null` → `days_since = null` → Estado = `'never'` (sin limpieza previa)
+4. Override NO fuerza estado (CPM calcula desde contadores, override solo afecta threshold)
+
+**Veredicto:** ✅ **Funciona correctamente** (override NO fuerza estado, solo afecta cálculo de threshold)
+
+**⚠️ ACLARACIÓN:** Override NO puede forzar estado final (ej: "siempre limpio"). Override solo afecta `threshold_days` y `required_count`, pero el estado se calcula desde contadores reales.
+
+---
+
+## POLÍTICA DE FALLOS (FAIL-SAFE ABSOLUTO)
+
+### Regla Constitucional
+
+**Overrides son fail-safe absoluto:** NUNCA rompen el sistema, incluso con datos inválidos.
+
+**Comportamiento REAL:**
+- Si faltan parámetros → Retorna valor base (log WARN, no error)
+- Si `override_key` desconocido → Se ignora silenciosamente (log WARN, no error)
+- Si override huérfano (item inexistente) → NO se aplica (silencioso, no error)
+- Si override antes del seed → NO tiene efecto hasta que exista estado (silencioso, no error)
+- Si override incoherente (`required_count` para `recurrente`) → Se ignora en CPM (silencioso)
 
 **Contrato:**
-- Es responsabilidad del usuario crear overrides coherentes
-- Sistema es "perdonador" (ignora overrides inválidos)
+- ✅ Overrides NUNCA rompen el sistema (fail-safe)
+- ✅ Overrides desconocidos o inválidos se ignoran (perdonador)
+- ✅ Sistema funciona correctamente sin overrides o con overrides inválidos
+
+---
+
+## COSAS QUE NO HACE EL SISTEMA (COMPORTAMIENTO INTENCIONAL)
+
+### Validaciones que NO existen
+
+**Estas validaciones NO existen intencionalmente (NO son bugs):**
+
+1. ❌ **NO se valida existencia de `item_ref`** en catálogo al crear override (permite overrides huérfanos)
+2. ❌ **NO se valida `item_kind`** al crear override
+3. ❌ **NO se valida coherencia `override_key + item_kind`** (ej: `required_count` solo para `una_vez`)
+4. ❌ **NO se valida si alumno está pausado** al crear override
+5. ❌ **NO se valida tipo de `override_value`** en student-overrides endpoint (solo presencia)
+6. ❌ **NO se valida formato UUID** en student-overrides endpoint (solo presencia)
+7. ❌ **NO hay validación de existencia de estado** antes de aplicar override
+
+**⚠️ DECISIÓN ACTUAL:** Estas validaciones NO existen porque el sistema es "perdonador" (fail-safe). Overrides inválidos se ignoran silenciosamente sin romper el sistema.
+
+---
+
+### Guards que NO existen
+
+**Estos guards NO existen intencionalmente:**
+
+1. ❌ **NO hay guard que prevenga override para item inexistente** (FK ausente es intencional)
+2. ❌ **NO hay guard que prevenga override incoherente con item_kind** (se ignora silenciosamente)
+3. ❌ **NO hay guard que invalide cache request-scoped** al modificar override durante la misma request
+
+**⚠️ DECISIÓN ACTUAL:** Estos guards NO existen porque:
+- Overrides huérfanos simplemente no se aplican (no rompen sistema)
+- Overrides incoherentes se ignoran en CPM (no rompen sistema)
+- Cache request-scoped se recrea en cada nueva request (no es problema persistente)
+
+---
+
+### Contratos implícitos documentados explícitamente
+
+**Estos comportamientos NO estaban documentados pero ahora SÍ:**
+
+1. ✅ **Megalist NO aplica overrides** (comportamiento actual, ahora documentado)
+2. ✅ **Orden exacto de resolución** (Estado persistido → Item base → Override → Effective Config → CPM, ahora documentado)
+3. ✅ **Comportamiento de overrides huérfanos** (NO se aplican, silencioso, ahora documentado)
 
 ---
 
@@ -548,42 +789,61 @@
 ## VERSIONADO
 
 **Versión actual:** 1.0  
-**Fecha de activación:** 2026-01-13
+**Fecha de activación:** 2026-01-13  
+**Última actualización:** 2026-01-17
 
 **Historial:**
 - v1.0 (2026-01-13): Contrato canónico inicial
+- v1.0 (2026-01-17): Actualización basada en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md
+  - Documentación explícita del orden de resolución
+  - Casos límite documentados (8 casos)
+  - Inconsistencia megalist/flotante documentada
+  - Riesgos conocidos marcados como COMPORTAMIENTO INTENCIONAL
+  - Cosas que NO hace el sistema documentadas explícitamente
 
 ---
 
 ## REFERENCIAS
 
+### Documentación Canónica
+
+**Diagnóstico canónico:**
+- `docs/DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md` - Análisis completo del comportamiento REAL del sistema (2026-01-17)
+
+**⚠️ NOTA:** El diagnóstico canónico reemplaza y actualiza el diagnóstico anterior `docs/DIAGNOSTICO_OVERRIDES_MASTER.md`. El diagnóstico canónico refleja el comportamiento REAL verificado en código actual.
+
+### Contratos Relacionados
+
+- `docs/contracts/RESET_CONTRACT_V1.md` - Contrato canónico del sistema de reset
+- `docs/contracts/SEED_CONTRACT_V1.md` - Contrato canónico del Cleaning State Seed
+- `docs/contracts/CLEANING_PROJECTION_MODEL_V1.md` - Contrato canónico de CPM
+- `docs/contracts/SIGNALS_CONTRACT_V1.md` - Contrato canónico del sistema de señales
+
 ### Archivos Clave
 
 1. **Migración:**
-   - `database/migrations/v5.71.0-student-overrides-v1.sql`
+   - `database/migrations/v5.71.0-student-overrides-v1.sql` (tablas: `student_overrides`, `student_item_overrides`)
 
 2. **Repositorios:**
-   - `src/infra/repos/student-overrides-repo-pg.js`
-   - `src/infra/repos/student-item-overrides-repo-pg.js`
+   - `src/infra/repos/student-overrides-repo-pg.js` (CRUD de overrides de estudiante)
+   - `src/infra/repos/student-item-overrides-repo-pg.js` (CRUD de overrides de items)
 
 3. **Servicios:**
-   - `src/core/master/services/override-resolution-service.js`
-   - `src/core/master/services/alquimia-override-reset-service.js`
+   - `src/core/master/services/override-resolution-service.js` (resolver overrides, aplicar antes de CPM)
+   - `src/core/master/services/list-projection-model.js` (aplica overrides si scope='student')
+   - `src/services/alquimia-general-service.js` (aplica overrides en flotante)
+   - `src/core/master/services/alquimia-alumno-megalist-service.js` (NO aplica overrides, comportamiento actual)
 
 4. **Endpoints:**
-   - `src/endpoints/master-api-student-overrides.js`
-   - `src/endpoints/master-api-student-item-overrides.js`
-
-5. **Aplicación:**
-   - `src/services/alquimia-general-service.js`
-   - `src/core/master/services/list-projection-model.js`
+   - `src/endpoints/master-api-student-overrides.js` (CRUD de overrides de estudiante)
+   - `src/endpoints/master-api-student-item-overrides.js` (CRUD de overrides de items)
 
 ---
 
 ### Tests
 
 **Tests constitucionales:**
-- `tests/overrides/overrides-constitutional.test.js`
+- `tests/overrides/overrides-constitutional.test.js` (verifica invariantes constitucionales)
 
 ---
 
