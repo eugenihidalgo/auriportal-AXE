@@ -30,9 +30,11 @@
     return;
   }
 
+  // Guard adicional: Solo ejecutar en página de Alquimia Alumno (no en General)
   const rootContainer = document.getElementById('master-alquimia-alumno-root');
   if (!rootContainer) {
-    console.warn('[MASTER][ALQUIMIA_ALUMNO] root not found');
+    // No es error: este script solo se ejecuta en su propia página
+    // Evitar ejecución en alquimia-general u otras páginas
     return;
   }
 

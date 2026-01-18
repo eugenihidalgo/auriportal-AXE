@@ -4143,7 +4143,10 @@
    */
   async function handleLimpiarEstudianteInternal(student, item, cleanLayer, itemKind) {
     // #region agent log
-    fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3695',message:'handleLimpiarEstudianteInternal ENTRY',data:{student_uuid:student?.student_uuid,item_ref:item?.item_ref,cleanLayer,itemKind},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+    // if (location.hostname === 'localhost') {
+    //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3695',message:'handleLimpiarEstudianteInternal ENTRY',data:{student_uuid:student?.student_uuid,item_ref:item?.item_ref,cleanLayer,itemKind},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // }
     // #endregion
     
     // REGLA CONSTITUCIONAL: clean_layer y item_kind DEBEN ser explícitos
@@ -4306,8 +4309,11 @@
         timestamp: new Date().toISOString()
       });
       
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3804',message:'BEFORE performAction call',data:{action_id:'alquimia.clean',context:{item_ref:item.item_ref,student_uuid:student.student_uuid,item_kind:itemKind,clean_layer:cleanLayer,scope:'student'},uiState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+      // #region agent log (disabled)
+      // if (location.hostname === 'localhost') {
+      //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3804',message:'BEFORE performAction call',data:{action_id:'alquimia.clean',context:{item_ref:item.item_ref,student_uuid:student.student_uuid,item_kind:itemKind,clean_layer:cleanLayer,scope:'student'},uiState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // }
       // #endregion
       const result = await window.performAction({
         action_id: 'alquimia.clean',
@@ -4320,8 +4326,11 @@
         },
         uiState
       });
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3814',message:'AFTER performAction call',data:{result_ok:result?.ok,result_error:result?.error,has_data:!!result?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+      // #region agent log (disabled)
+      // if (location.hostname === 'localhost') {
+      //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'master-alquimia-general-client.js:3814',message:'AFTER performAction call',data:{result_ok:result?.ok,result_error:result?.error,has_data:!!result?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // }
       // #endregion
 
       if (!result.ok) {

@@ -72,15 +72,34 @@
   registry.registerRefreshSurface({
     surface_id: 'alquimia.items',
     buildKey: (context, uiState) => {
-      const list_id = uiState.list_id || context.list_id || 'unknown';
+      // FIX: NO usar 'unknown' - si no hay list_id, devolver null para indicar SKIP
+      const list_id = uiState.list_id || context.list_id;
+      if (!list_id) {
+        return null; // null indica SKIP (no construir key)
+      }
       return `items:${list_id}`;
     },
     refetch: async (context, uiState) => {
-      const list_id = uiState.list_id || context.list_id;
-      if (!list_id) {
-        console.warn('[AlquimiaSurfacesRegistry] list_id no disponible para alquimia.items');
-        return;
+      // FIX: Obtener list_id desde autoridad de vista canónica
+      let list_id = uiState.list_id || context.list_id;
+      
+      // Intentar desde estado expuesto canónico si no está en context/uiState
+      if (!list_id && window.__AP_ALQUIMIA_GENERAL_STATE__) {
+        const viewState = window.__AP_ALQUIMIA_GENERAL_STATE__.viewState;
+        if (viewState && viewState.list_id) {
+          list_id = viewState.list_id;
+        }
       }
+      
+      if (!list_id) {
+        // SKIP: No hacer fetch, loguear y retornar
+        console.log('[Surfaces][alquimia.items] SKIP: missing precondition viewState.list_id', {
+          uiState: uiState ? { list_id: uiState.list_id } : null,
+          context: context ? { list_id: context.list_id } : null
+        });
+        return; // Early return: NO fetch, NO render
+      }
+      
       const loadItems = getAlquimiaFunction('loadItems');
       await loadItems(list_id);
     },

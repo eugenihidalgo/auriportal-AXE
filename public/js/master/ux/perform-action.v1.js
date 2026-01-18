@@ -343,13 +343,19 @@
       };
 
       const startTime = Date.now();
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:301',message:'BEFORE fetch POST',data:{action_id,endpoint,method,payload:finalPayload},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+      // #region agent log (disabled)
+      // if (typeof location !== 'undefined' && location.hostname === 'localhost') {
+      //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:301',message:'BEFORE fetch POST',data:{action_id,endpoint,method,payload:finalPayload},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // }
       // #endregion
       response = await fetch(endpoint, fetchOptions);
       const duration = Date.now() - startTime;
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:302',message:'AFTER fetch POST',data:{action_id,status:response.status,statusText:response.statusText,contentType:response.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+      // #region agent log (disabled)
+      // if (typeof location !== 'undefined' && location.hostname === 'localhost') {
+      //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:302',message:'AFTER fetch POST',data:{action_id,status:response.status,statusText:response.statusText,contentType:response.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // }
       // #endregion
 
       // Verificar content-type
@@ -368,8 +374,11 @@
       }
 
       responseData = await response.json();
-      // #region agent log
-      fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:319',message:'AFTER response.json()',data:{action_id,response_ok:responseData?.ok,response_error:responseData?.error,has_data:!!responseData?.data,has_state:!!responseData?.data?.state},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // Telemetría localhost desactivada en producción (ensucia consola con CORS)
+      // #region agent log (disabled)
+      // if (typeof location !== 'undefined' && location.hostname === 'localhost') {
+      //   fetch('http://localhost:7242/ingest/a630ca16-542f-4dbf-9bac-2114a2a30cf8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'perform-action.v1.js:319',message:'AFTER response.json()',data:{action_id,response_ok:responseData?.ok,response_error:responseData?.error,has_data:!!responseData?.data,has_state:!!responseData?.data?.state},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // }
       // #endregion
 
       // Log forense de respuesta

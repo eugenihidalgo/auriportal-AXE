@@ -342,9 +342,43 @@
       refresh: buildRefreshPlan
     });
 
+    // ============================================================================
+    // ACCIÓN 8: alquimia.create_lista
+    // ============================================================================
+    registry.register({
+      action_id: 'alquimia.create_lista',
+      domain: 'master',
+      description: 'Crear nueva lista de transmutación',
+      handler: {
+        method: 'POST',
+        endpointBuilder: () => {
+          return '/master/api/alquimia-general/listas';
+        },
+        buildPayload: (uiState, context) => {
+          if (!context.nombre || !context.nombre.trim()) {
+            throw new Error('nombre es obligatorio para alquimia.create_lista');
+          }
+          return {
+            nombre: context.nombre.trim(),
+            tipo: context.tipo || 'transmutacion',
+            descripcion: context.descripcion || '',
+            orden: context.orden || 0
+          };
+        }
+      },
+      refresh: function(context, uiState) {
+        // Refrescar listas después de crear
+        const surfaces = ['alquimia.listas'];
+        
+        // Si el endpoint devuelve lista creada con id, actualizar viewState y refrescar items
+        // (esto se maneja en el cliente después de recibir la respuesta)
+        return surfaces;
+      }
+    });
+
     // Log temporal para debug
     const registeredActions = registry.list ? registry.list() : [];
-    console.log('[AlquimiaActionsRegistry] ✅ 7 acciones registradas en UX Action Registry', {
+    console.log('[AlquimiaActionsRegistry] ✅ 8 acciones registradas en UX Action Registry', {
       total: registeredActions.length,
       actions: registeredActions.map(a => a.action_id)
     });
