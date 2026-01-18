@@ -932,7 +932,36 @@ export async function markCleanStudent(options, client = null) {
       }
     }
     
-    // 7. REGLA CONSTITUCIONAL: RESET ES FRONTERA DURA DE ESTADO
+    // ============================================================================
+    // REGLA CANÓNICA: CLEAN AFTER RESET (CONSTITUCIONAL)
+    // ============================================================================
+    // CLEAN ejecutado sobre estado 'reseteado' normaliza el estado y arranca el nuevo ciclo.
+    // 
+    // REGLAS OBLIGATORIAS:
+    // - CLEAN sobre estado 'reseteado' SIEMPRE es válido (guard semántico)
+    // - CLEAN NUNCA falla por venir de reset
+    // - CLEAN NO depende del tiempo desde reset
+    // - effective_since se PRESERVA (no se modifica a NOW(), queda como reset.created_at)
+    // - last_cleaned_at se establece a NOW() (o created_at del evento)
+    // - clean_count se incrementa
+    // - Estado efectivo pasa de 'reseteado' → 'reviewed' (NO 'pending')
+    // - NO usar threshold_days para validar (CLEAN es acto fundador, siempre válido)
+    // - NO aplicar overrides aquí (overrides son READ-only, no afectan WRITE)
+    //
+    // RECURRENTE:
+    // - shared_last_cleaned_at = NOW() (o created_at del evento)
+    // - shared_effective_since se PRESERVA (no cambia)
+    // - shared_clean_count += 1
+    // - days_since = 0 (derivado)
+    // - Estado efectivo: 'reviewed' (porque days_since = 0 < threshold_days)
+    //
+    // UNA_VEZ:
+    // - Reset NO invalida lógica UNA_VEZ
+    // - shared_completed += 1
+    // - shared_remaining -= 1
+    // - Si shared_remaining <= 0 → completado
+    // - Si no → progreso normal
+    //
     // ANTES de aplicar limpieza, verificar si hay RESET previo y reconstruir estado si es necesario
     // NOTA: RESET solo aplica a recurrente (según contrato canónico)
     const FORENSICS_TARGET_STUDENT = '0d29eedc-6f42-44d1-bb12-53dba2fc9490';
@@ -971,6 +1000,34 @@ export async function markCleanStudent(options, client = null) {
       const currentEffective = currentState?.[effectiveColumn] ? new Date(currentState[effectiveColumn]) : null;
       const currentLastCleaned = currentState?.[lastCleanedColumn] ? new Date(currentState[lastCleanedColumn]) : null;
       const currentCount = currentState?.[countColumn] || 0;
+      
+      // ============================================================================
+      // REGLA CANÓNICA: CLEAN AFTER RESET - Detectar estado 'reseteado'
+      // ============================================================================
+      // Estado 'reseteado' = effective_since presente && last_cleaned_at null después del reset
+      const isPreviousStateReseteado = currentEffective !== null && 
+                                       currentLastCleaned === null && 
+                                       currentEffective.getTime() <= resetAt.getTime();
+      
+      if (isPreviousStateReseteado) {
+        // CLEAN sobre estado 'reseteado': Log forense obligatorio
+        logInfo('MASTER', '[CLEAN_AFTER_RESET] CLEAN ejecutado sobre estado reseteado', {
+          traceId,
+          student_uuid,
+          item_ref,
+          item_kind: itemKind,
+          clean_layer,
+          previous_state: 'reseteado',
+          reset_at: resetAt.toISOString(),
+          effective_since: currentEffective.toISOString(),
+          // Guard semántico: CLEAN SIEMPRE es válido sobre estado reseteado
+          clean_valid: true,
+          // Regla canónica: effective_since se PRESERVA (no se modifica a NOW())
+          effective_since_preserved: true,
+          // Regla canónica: last_cleaned_at se establecerá a cleanedAt (NOW() o created_at del evento)
+          last_cleaned_at_will_be_set: true
+        });
+      }
       
       // Detectar si el estado es anterior o incoherente con el RESET
       // FIX: Si hay RESET previo y se está ejecutando un CLEAN, SIEMPRE hacer rebase
@@ -1224,6 +1281,16 @@ export async function markCleanStudent(options, client = null) {
         cleaned_at: cleanedAt
       }, client);
     } else {
+      // ========================================================================
+      // REGLA CANÓNICA: CLEAN UNA_VEZ sobre estado 'reseteado'
+      // ========================================================================
+      // - Reset NO invalida lógica UNA_VEZ
+      // - shared_completed += 1
+      // - shared_remaining -= 1
+      // - Si shared_remaining <= 0 → completado
+      // - Si no → progreso normal
+      // - NO aplicar overrides aquí (overrides son READ-only, no afectan WRITE)
+      //
       // Una vez: usar método según clean_layer (SIMÉTRICO)
       if (clean_layer === 'pde') {
         // PDE: incrementar pde_clean_count y recalcular pde_remaining/pde_completed (simétrico a SHARED)
@@ -1278,6 +1345,39 @@ export async function markCleanStudent(options, client = null) {
         pde_completed: state?.pde_completed
       }
     });
+    
+    // ============================================================================
+    // REGLA CANÓNICA: CLEAN AFTER RESET - Verificar estado resultante
+    // ============================================================================
+    // Si había estado 'reseteado' previo, verificar que el CLEAN lo normalizó
+    if (lastReset && itemKind === 'recurrente') {
+      const effectiveColumn = clean_layer === 'shared' ? 'shared_effective_since' : 'pde_effective_since';
+      const lastCleanedColumn = clean_layer === 'shared' ? 'shared_last_cleaned_at' : 'pde_last_cleaned_at';
+      
+      const resultingEffective = state?.[effectiveColumn] ? new Date(state[effectiveColumn]) : null;
+      const resultingLastCleaned = state?.[lastCleanedColumn] ? new Date(state[lastCleanedColumn]) : null;
+      
+      // Estado ya no es 'reseteado': last_cleaned_at está establecido
+      if (resultingEffective && resultingLastCleaned && resultingLastCleaned >= resultingEffective) {
+        logInfo('MASTER', '[CLEAN_AFTER_RESET] CLEAN normalizó estado reseteado → reviewed', {
+          traceId,
+          student_uuid,
+          item_ref,
+          item_kind: itemKind,
+          clean_layer,
+          previous_state: 'reseteado',
+          resulting_state: 'reviewed',
+          // Regla canónica: effective_since se PRESERVÓ (no se modificó a NOW())
+          effective_since: resultingEffective.toISOString(),
+          effective_since_preserved: true,
+          // Regla canónica: last_cleaned_at establecido (acto fundador del nuevo ciclo)
+          last_cleaned_at: resultingLastCleaned.toISOString(),
+          last_cleaned_at_set: true,
+          // Guard semántico: CLEAN siempre válido sobre estado reseteado
+          clean_after_reset_valid: true
+        });
+      }
+    }
     
     // ============================================================================
     // UUID-ONLY: syncToStudentItemState() ELIMINADA
