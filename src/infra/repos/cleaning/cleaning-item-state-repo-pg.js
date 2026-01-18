@@ -75,13 +75,18 @@ export class CleaningItemStateRepoPg {
     const domainType = options.domain_type;
 
     // Determinar qué columna actualizar según clean_layer
-    const lastCleanedColumn = options.clean_layer === 'shared' 
-      ? 'shared_last_cleaned_at' 
+    const lastCleanedColumn = options.clean_layer === 'shared'
+      ? 'shared_last_cleaned_at'
       : 'pde_last_cleaned_at';
     const countColumn = options.clean_layer === 'shared'
       ? 'shared_clean_count'
       : 'pde_clean_count';
+    const effectiveSinceColumn = options.clean_layer === 'shared'
+      ? 'shared_effective_since'
+      : 'pde_effective_since';
 
+    // RESET_CLEAN_TIMESTAMP_INVARIANT_V1: last_cleaned_at >= effective_since cuando effective_since no es null.
+    // GREATEST(cleaned_at, effective_since) garantiza el invariante tras CLEAN post-RESET.
     const result = await queryFn(`
       INSERT INTO cleaning_item_state (
         student_id, product_key, domain_type, item_ref,
@@ -91,7 +96,7 @@ export class CleaningItemStateRepoPg {
       )
       ON CONFLICT (student_id, product_key, domain_type, item_ref)
       DO UPDATE SET
-        ${lastCleanedColumn} = $5,
+        ${lastCleanedColumn} = GREATEST($5, COALESCE(cleaning_item_state.${effectiveSinceColumn}, $5)),
         ${countColumn} = cleaning_item_state.${countColumn} + 1,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *

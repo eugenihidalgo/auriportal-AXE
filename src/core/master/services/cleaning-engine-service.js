@@ -333,10 +333,12 @@ async function rebaseStateFromReset(studentUuid, itemRef, cleanLayer, lastReset,
     const { query } = await import('../../../../database/pg.js');
     const queryFn = client ? client.query.bind(client) : query;
     
+    // RESET_CLEAN_TIMESTAMP_INVARIANT_V1: last_cleaned_at >= effective_since cuando effective_since no es null.
+    // GREATEST(lastCleanedAt, effectiveSince) garantiza el invariante; si lastCleanedAt es null, GREATEST devuelve null.
     await queryFn(`
       UPDATE cleaning_item_state
       SET ${effectiveColumn} = $1,
-          ${lastCleanedColumn} = $2,
+          ${lastCleanedColumn} = GREATEST($2, $1),
           ${countColumn} = $3,
           updated_at = CURRENT_TIMESTAMP
       WHERE student_id = $4
