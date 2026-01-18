@@ -1437,6 +1437,74 @@ Cualquier código UI que viole PDUI debe rechazarse o refactorizarse.
       - Resolver promesas de ready si registry core no está disponible
       OBLIGATORIO:
       - perform-action.v1.js usa EXCLUSIVAMENTE __AP_UX_ACTION_REGISTRY_CORE__
+
+ - id: master-scripts-no-globals-iife
+   title: Scripts MASTER: No-globals + IIFE obligatorio
+   # [OPERATIONAL INVARIANT] - Postmortem: SyntaxError por redeclaración tracer (fixpack v5.79.11)
+   content: >
+     Ningún script MASTER puede romper el parseo por globals duplicados.
+     PROHIBIDO:
+     - Declarar variables const/let/var top-level fuera de IIFE en scripts MASTER
+     - Redeclarar variables globales compartidas (ej: const tracer duplicado)
+     - Guards que generen warnings innecesarios si no corresponden a la página actual
+     OBLIGATORIO:
+     - Todos los scripts MASTER deben estar en IIFE: (function() { 'use strict'; ... })();
+     - Guards deben ser silenciosos si el script no corresponde a la página actual
+     - Leer globals desde singleton (ej: window.apTrace) sin redeclarar
+     REFERENCIAS:
+     - docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md (Fix 1)
+     - docs/INVARIANTES_CONSTITUCIONALES.md (Invariante 18)
+
+ - id: surfaces-no-unknown-keys
+   title: Surfaces: No usar 'unknown' en keys, usar SKIP
+   # [OPERATIONAL INVARIANT] - Postmortem: items:unknown en refresh v2 (fixpack v5.79.11)
+   content: >
+     Ninguna surface puede emitir key con unknown o valores inválidos.
+     PROHIBIDO:
+     - buildKey() retornar keys con valores unknown como strings (ej: items:unknown)
+     - refetch() intentar fetch con valores unknown o inválidos
+     - Silenciar SKIP sin log claro
+     OBLIGATORIO:
+     - buildKey() debe retornar null si falta precondición crítica (no string unknown)
+     - refetch() debe hacer SKIP explícito con log: [Surfaces][surface_id] SKIP: missing precondition [campo]
+     - Obtener precondiciones desde autoridad canónica (ej: window.__AP_ALQUIMIA_GENERAL_STATE__)
+     REFERENCIAS:
+     - docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md (Fix 3)
+     - docs/INVARIANTES_CONSTITUCIONALES.md (Invariante 19)
+
+ - id: actions-must-be-registered
+   title: Acciones UI: action_id debe estar registrado antes de usar
+   # [OPERATIONAL INVARIANT] - Postmortem: alquimia.create_lista no registrada (fixpack v5.79.11)
+   content: >
+     Toda mutación UI debe mapear a acción registrada en el registry cliente.
+     PROHIBIDO:
+     - Llamar performAction() con action_id no registrado
+     - Registrar acción en backend pero no en cliente
+     - Usar action_id desde UI sin registro previo
+     OBLIGATORIO:
+     - performAction() debe fallar hard si action_id no está registrado
+     - Registry cliente (alquimia-actions-registry.v1.js) debe estar sincronizado con uso en clientes
+     - Verificar acción existe antes de usar desde UI
+     REFERENCIAS:
+     - docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md (Fix 2)
+     - docs/INVARIANTES_CONSTITUCIONALES.md (Invariante 20)
+
+ - id: telemetry-no-localhost-prod
+   title: Telemetría nunca apunta a localhost en producción
+   # [OPERATIONAL INVARIANT] - Postmortem: CORS errors por telemetría localhost (fixpack v5.79.11)
+   content: >
+     Telemetría/debug fetches nunca deben apuntar a localhost en producción.
+     PROHIBIDO:
+     - Fetches hardcodeados a localhost:7242 o similar sin validación
+     - Enviar telemetría a localhost en producción (genera errores CORS)
+     - Silenciar errores CORS con .catch(() => {}) sin desactivar el fetch
+     OBLIGATORIO:
+     - Validar location.hostname === 'localhost' antes de enviar telemetría
+     - O desactivar completamente si no hay endpoint same-origin
+     - Código comentado es preferible a código activo que falla
+     REFERENCIAS:
+     - docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md (Fix 4)
+     - docs/INVARIANTES_CONSTITUCIONALES.md (Invariante 21)
       - Si registry core no está disponible -> error explícito
       - Runtime debe estar READY antes de exponer performAction
       REFERENCIAS:

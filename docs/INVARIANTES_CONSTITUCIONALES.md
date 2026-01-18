@@ -892,4 +892,167 @@ grep -r "LEGACY_REFRESH" public/js/master --exclude-dir=node_modules
 
 ---
 
+## Invariante 18: No-Globals + IIFE en Scripts MASTER
+
+### Regla
+
+Ningún script MASTER puede romper el parseo por globals duplicados. Todos los scripts deben estar en IIFE y no declarar variables top-level compartidas.
+
+**PROHIBIDO:**
+- ❌ Declarar variables `const/let/var` top-level fuera de IIFE en scripts MASTER
+- ❌ Redeclarar variables globales compartidas (ej: `const tracer` duplicado)
+- ❌ Guards que generen warnings innecesarios si no corresponden a la página actual
+
+**OBLIGATORIO:**
+- ✅ Todos los scripts MASTER deben estar en IIFE: `(function() { 'use strict'; ... })();`
+- ✅ Guards deben ser silenciosos si el script no corresponde a la página actual
+- ✅ Leer globals desde singleton (ej: `window.apTrace`) sin redeclarar
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar IIFE en scripts MASTER
+grep -L "^\(function\|\(function\|\(\(\)" public/js/master/*.js
+
+# Verificar globals duplicados (debe devolver 0 resultados)
+grep -r "^const tracer|^let tracer|^var tracer" public/js/master --exclude-dir=node_modules | wc -l
+```
+
+**Referencias:**
+- `docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md` (Fix 1)
+
+---
+
+## Invariante 19: Surfaces Preconditions y SKIP
+
+### Regla
+
+Ninguna surface puede emitir key con `unknown` o valores inválidos. Si falta precondición crítica, debe hacer SKIP explícito.
+
+**PROHIBIDO:**
+- ❌ `buildKey()` retornar keys con valores `unknown` o `null` como strings (ej: `items:unknown`)
+- ❌ `refetch()` intentar fetch con valores `unknown` o inválidos
+- ❌ Silenciar SKIP sin log claro
+
+**OBLIGATORIO:**
+- ✅ `buildKey()` debe retornar `null` si falta precondición crítica (no string `unknown`)
+- ✅ `refetch()` debe hacer SKIP explícito con log: `[Surfaces][surface_id] SKIP: missing precondition [campo]`
+- ✅ Obtener precondiciones desde autoridad canónica (ej: `window.__AP_ALQUIMIA_GENERAL_STATE__`)
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que no hay keys con "unknown" como string
+grep -r ":unknown\||unknown" public/js/master/ux/*-surfaces-registry*.js
+
+# Verificar logs de SKIP
+grep -r "SKIP: missing precondition" public/js/master --exclude-dir=node_modules
+```
+
+**Referencias:**
+- `docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md` (Fix 3)
+
+---
+
+## Invariante 20: Acciones Registradas Obligatorias
+
+### Regla
+
+Toda mutación UI debe mapear a acción registrada en el registry cliente. Usar `action_id` no registrado falla hard con mensaje claro.
+
+**PROHIBIDO:**
+- ❌ Llamar `performAction()` con `action_id` no registrado
+- ❌ Registrar acción en backend pero no en cliente
+- ❌ Silenciar error "action_id not registered" con try/catch
+
+**OBLIGATORIO:**
+- ✅ `performAction()` debe fallar hard si `action_id` no está registrado
+- ✅ Registry cliente (`alquimia-actions-registry.v1.js`) debe estar sincronizado con uso en clientes
+- ✅ No usar `action_id` desde UI sin registro previo
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que no hay "action_id not registered" en logs
+grep -i "action_id not registered" /var/log/pm2/aurelinportal-out.log
+
+# Verificar sincronización: buscar action_id usados vs registrados
+grep -r "action_id:" public/js/master/*-client.js | grep -v "//"
+```
+
+**Referencias:**
+- `docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md` (Fix 2)
+- `docs/UX_CONTRACT_V1.md`
+
+---
+
+## Invariante 21: Telemetría Nunca Apunta a localhost en Producción
+
+### Regla
+
+Telemetría/debug fetches nunca deben apuntar a localhost en producción. Validar `location.hostname` o desactivar completamente.
+
+**PROHIBIDO:**
+- ❌ Fetches hardcodeados a `localhost:7242` o similar sin validación
+- ❌ Enviar telemetría a localhost en producción (genera errores CORS)
+- ❌ Silenciar errores CORS con `.catch(() => {})` sin desactivar el fetch
+
+**OBLIGATORIO:**
+- ✅ Validar `location.hostname === 'localhost'` antes de enviar telemetría
+- ✅ O desactivar completamente si no hay endpoint same-origin
+- ✅ Código comentado es preferible a código activo que falla
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que no hay fetches a localhost sin validación
+grep -r "localhost:7242\|localhost:[0-9]" public/js/master --exclude-dir=node_modules
+
+# Verificar que están comentados o con guard
+grep -A 2 "localhost:7242" public/js/master/**/*.js
+```
+
+**Referencias:**
+- `docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md` (Fix 4)
+
+---
+
+## Invariante 22: inject_main.js Jamás Ejecuta en MASTER
+
+### Regla
+
+`inject_main.js` jamás ejecuta en MASTER por contrato de contexto. Guard constitucional dura debe abortar inmediatamente.
+
+**PROHIBIDO:**
+- ❌ Ejecutar código de `inject_main.js` en páginas MASTER
+- ❌ Loguear warnings cuando se aborta por contexto MASTER (ruido innecesario)
+- ❌ Depender de que el script no se carga (debe abortar si se carga)
+
+**OBLIGATORIO:**
+- ✅ Guard constitucional dura al inicio del IIFE
+- ✅ Verificar `window.__AP_CONTEXT__ === 'MASTER'` → `return` inmediato
+- ✅ No loguear warnings cuando se aborta (evitar ruido)
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que el guard existe y es correcto
+head -40 public/js/inject_main.js | grep -A 3 "__AP_CONTEXT__.*MASTER"
+
+# En consola del navegador (página MASTER):
+# Array.from(document.scripts).map(s => s.src).filter(s => s.includes('inject_main'))
+# Resultado esperado: [] o script abortado sin efectos
+```
+
+**Referencias:**
+- `docs/FORENSICS_ALQUIMIA_GENERAL_FIXPACK_V1.md` (Fix 5)
+- `docs/DOMAIN_CONTEXT_CONTRACT.md`
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**
