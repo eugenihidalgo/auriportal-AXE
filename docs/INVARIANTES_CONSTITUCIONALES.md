@@ -1270,4 +1270,31 @@ Revisión de código: `perform-action.v1.js` y `buildRefreshPlan` en registries 
 
 ---
 
+## Invariante 28: UX_ACTION_EXECUTION_KEY_UNIQUE_V1
+
+### Regla
+
+Cada `performAction` generado por la UI debe llevar **execution_key único por click**. El backend lo usa para idempotencia de **reintentos** (mismo request), no para colapsar **acciones distintas** del usuario.
+
+**Idempotencia DB no debe colapsar acciones distintas del usuario.**
+
+**PROHIBIDO:**
+- Usar un execution_key estable por (item_ref, student_uuid, día) para reset: varios clicks el mismo día quedarían colapsados y el segundo reset→clean→reset no aplicaría.
+- Omitir el envío de execution_key desde el frontend en performAction.
+
+**OBLIGATORIO:**
+- perform-action.v1.js: `finalPayload.execution_key = finalPayload.execution_key || trace_id` (trace_id único por performAction).
+- Backend /reset: leer `execution_key` del body; si no viene, `randomUUID()`. Pasarlo a resetByScope → resetStudentItemProgress / resetAllStudentsItemProgress.
+- En el servicio de reset: si viene `execution_key`, usarlo para construir la clave por (student, layer): `{execution_key}:{layer}` o `{execution_key}:{student_uuid}:{layer}` según scope. Si no viene, fallback a `generateExecutionKey` (comportamiento legacy).
+
+### Verificación
+
+- `npm run check:no-legacy-reset-overrides-ui` (UI no usa `alquimia.reset_overrides`; restore_defaults solo).
+- Revisión: `cleaning_events` debe registrar resets con execution_key distinto por click (forense `[RESET][FORENSIC]`).
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md` (sección "execution_key y reintentos vs clicks distintos")
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**

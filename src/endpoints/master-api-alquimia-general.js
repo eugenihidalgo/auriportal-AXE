@@ -5,6 +5,7 @@
 // Usa requireAdminContext() para auth (mismo sistema de sesión que Admin)
 // Devuelve JSON siempre (nunca HTML)
 
+import { randomUUID } from 'crypto';
 import { requireAdminContext } from '../core/auth-context.js';
 import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo, logWarn } from '../core/observability/logger.js';
@@ -1846,7 +1847,9 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path === '/master/api/alquimia-general/reset' && method === 'POST') {
       try {
         const body = await request.json();
-        const { reset_scope, item_ref, list_id, student_uuid, reset_layers, clean_layer, reason, item_kind } = body;
+        const { reset_scope, item_ref, list_id, student_uuid, reset_layers, clean_layer, reason, item_kind, execution_key: bodyExecutionKey } = body;
+        // UX_ACTION_EXECUTION_KEY_UNIQUE_V1: único por click; si no viene, generar (p. ej. cliente legacy).
+        const execution_key = bodyExecutionKey || randomUUID();
 
         // Validaciones obligatorias
         if (!reset_scope) {
@@ -1904,7 +1907,8 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           item_ref,
           list_id,
           student_uuid,
-          reason
+          reason,
+          execution_key
         });
 
         // Importar función unificada
@@ -1918,6 +1922,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           student_uuid,
           reset_layers: resolvedResetLayers,
           reason,
+          execution_key,
           product_key: body.product_key || 'pde',
           domain_type: body.domain_type || 'transmutation',
           actor_type: 'master',
@@ -1937,6 +1942,17 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           skipped: result.skipped,
           total: result.total,
           layers_affected: result.layers_affected
+        });
+
+        logInfo('MasterApiAlquimiaGeneral', '[RESET][FORENSIC]', {
+          trace_id: traceId,
+          execution_key,
+          scope: reset_scope,
+          item_ref,
+          student_uuid,
+          reset_layers: resolvedResetLayers,
+          applied: result.applied,
+          skipped: result.skipped
         });
 
         return jsonSuccess({

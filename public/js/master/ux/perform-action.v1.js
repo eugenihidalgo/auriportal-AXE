@@ -302,6 +302,10 @@
       throw error;
     }
 
+    // UX_ACTION_EXECUTION_KEY_UNIQUE_V1: cada performAction lleva execution_key único (trace_id)
+    // para evitar colisión de idempotencia en backend (mismo día mismo item/student colapsaba).
+    finalPayload.execution_key = finalPayload.execution_key || trace_id;
+
     // Log forense inicial
     const method = actionDef.handler?.method || actionDef.request?.method || 'POST';
     const logInput = actionDef.telemetry?.log_input !== false;

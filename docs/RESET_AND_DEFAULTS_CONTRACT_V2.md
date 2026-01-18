@@ -168,16 +168,35 @@ Ver **Invariante 27 (ACTION_FORCES_PROJECTION_V1)** en `docs/INVARIANTES_CONSTIT
 
 ---
 
-## 7. Reglas de no regresión y checks
+## 7. execution_key y reintentos vs clicks distintos (UX_ACTION_EXECUTION_KEY_UNIQUE_V1)
+
+Cada click de reset (o restore defaults, si en el futuro usara auditoría por execution_key) debe llevar **execution_key único**. El backend usa `(execution_key, student_id)` en `cleaning_events` para idempotencia: **reintentos** del mismo request (doble click, retry) no duplican el evento. Pero **clicks distintos** (reset → clean → reset el mismo día) no deben colapsar: antes, `generateExecutionKey` usaba `{actionType}:{item_ref}:{student_uuid}:{layer}:{day}`, de modo que el segundo reset del día quedaba omitido.
+
+**Regla:**
+- **Frontend:** `perform-action.v1.js` añade `finalPayload.execution_key = trace_id` (único por performAction). El `trace_id` ya es único por llamada.
+- **Backend /reset:** Lee `execution_key` del body; si no viene (cliente legacy), `randomUUID()`. Lo pasa a `resetByScope` → `resetStudentItemProgress` / `resetAllStudentsItemProgress`.
+- **Servicio:** Si `options.execution_key` existe, se usa para construir la clave por capa: `{execution_key}:{layer}` (ITEM_STUDENT), `{execution_key}:{student_uuid}:{layer}` (ITEM_ALL), análogo para LIST_*. Si no existe, se usa `generateExecutionKey` (legacy, por día).
+
+**Reintentos vs clicks distintos:**
+- **Reintento:** Mismo `performAction` (mismo `trace_id`/`execution_key`) enviado dos veces → backend inserta una vez, segunda es `ON CONFLICT DO NOTHING` → idempotencia correcta.
+- **Click distinto:** Nuevo `performAction` → nuevo `trace_id`/`execution_key` → nuevo insert → reset aplica. Ej. reset → clean → reset: tres actions, tres execution_keys, tres eventos (dos reset, uno mark_clean).
+
+Ver **Invariante 28 (UX_ACTION_EXECUTION_KEY_UNIQUE_V1)** y `npm run check:no-legacy-reset-overrides-ui`.
+
+---
+
+## 8. Reglas de no regresión y checks
 
 - **Invariante 23:** Reset por DELETE prohibido en MASTER. `npm run check:forbid-legacy-reset-delete`.
 - **RESET_CLEAN_TIMESTAMP_INVARIANT_V1:** Tras CLEAN, `last_cleaned_at >= effective_since` en la capa correspondiente.
 - **Check de paridad:** `npm run check:action-registry-parity`. Valida que en `public/.../alquimia-actions.js` existan las acciones críticas (incl. `alquimia.reset_overrides` como alias). Ver `docs/CHECK_ACTION_REGISTRY_PARITY_V1.md`.
 - **Invariante 27 (ACTION_FORCES_PROJECTION_V1):** Refresh siempre cuando ok; applied/skipped solo para toast.
+- **Invariante 28 (UX_ACTION_EXECUTION_KEY_UNIQUE_V1):** execution_key único por click; ver sección 7.
+- **check:no-legacy-reset-overrides-ui:** La UI no debe usar `alquimia.reset_overrides`; solo `alquimia.restore_defaults`.
 
 ---
 
-## 8. Smoke tests (manuales)
+## 9. Smoke tests (manuales)
 
 1. **Restore defaults:** En /master/alquimia-general, proyección con overrides, pulsar "Restaurar valores por defecto". Sin "action_id not registered", POST /overrides/reset en red, refetch, overrides a 0.
 2. **Reset de ciclo:** Pulsar reset 5 veces; idempotente, sin estado roto. "No se aplicaron cambios" aceptable.
@@ -189,6 +208,6 @@ Ver **Invariante 27 (ACTION_FORCES_PROJECTION_V1)** en `docs/INVARIANTES_CONSTIT
 
 - `docs/RESET_AND_DEFAULTS_CONTRACT_V1.md` (historial)
 - `docs/CHECK_ACTION_REGISTRY_PARITY_V1.md`
-- `docs/INVARIANTES_CONSTITUCIONALES.md` (Inv. 23, 24, 25, 26, 27 ACTION_FORCES_PROJECTION_V1)
+- `docs/INVARIANTES_CONSTITUCIONALES.md` (Inv. 23, 24, 25, 26, 27, 28)
 - `docs/RESET_CLEAN_TIMESTAMP_INVARIANT_V1.md`
 - `docs/DIAGNOSTICO_RESETS_RESTORE_DEFAULTS_20260118.md`

@@ -2021,6 +2021,7 @@ export async function resetStudentItemProgress(options, client = null) {
     item_kind,
     reset_layers: optResetLayers = null,
     clean_layer = null,
+    execution_key: optExecutionKey = null,
     product_key = 'pde',
     domain_type = 'transmutation',
     actor_type,
@@ -2149,8 +2150,11 @@ export async function resetStudentItemProgress(options, client = null) {
 
     for (const layer of layersToReset) {
       try {
-        // Generar execution_key para esta capa
-        const executionKey = generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, layer);
+        // UX_ACTION_EXECUTION_KEY_UNIQUE_V1: si viene execution_key (p. ej. trace_id), único por click.
+        // Si no, fallback a generateExecutionKey (por día, puede colisionar en reset->clean->reset mismo día).
+        const executionKey = optExecutionKey
+          ? `${optExecutionKey}:${layer}`
+          : generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, layer);
 
         // Insertar evento reset
         const eventData = {
@@ -2399,6 +2403,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     item_kind,
     reset_layers: optResetLayers = null,
     clean_layer = null,
+    execution_key: optExecutionKey = null,
     product_key = 'pde',
     domain_type = 'transmutation',
     actor_type,
@@ -2522,6 +2527,7 @@ export async function resetAllStudentsItemProgress(options, client = null) {
           item_ref,
           item_kind,
           reset_layers,
+          execution_key: optExecutionKey ? `${optExecutionKey}:${studentUuid}` : undefined,
           product_key,
           domain_type,
           actor_type,
@@ -2636,6 +2642,7 @@ export async function resetByScope(options, client = null) {
     reset_layers: optResetLayers,
     clean_layer,
     reason,
+    execution_key: optExecutionKey,
     product_key = 'pde',
     domain_type = 'transmutation',
     actor_type = 'master',
@@ -2704,6 +2711,7 @@ export async function resetByScope(options, client = null) {
         item_ref,
         item_kind: 'recurrente', // Reset solo para recurrente
         reset_layers,
+        execution_key: optExecutionKey,
         product_key,
         domain_type,
         actor_type,
@@ -2729,6 +2737,7 @@ export async function resetByScope(options, client = null) {
         item_ref,
         item_kind: 'recurrente', // Reset solo para recurrente
         reset_layers,
+        execution_key: optExecutionKey,
         product_key,
         domain_type,
         actor_type,
@@ -2779,6 +2788,7 @@ export async function resetByScope(options, client = null) {
           item_ref: item.item_ref,
           item_kind: 'recurrente',
           reset_layers,
+          execution_key: optExecutionKey ? `${optExecutionKey}:${item.item_ref}:${student_uuid}` : undefined,
           product_key,
           domain_type,
           actor_type,
@@ -2829,6 +2839,7 @@ export async function resetByScope(options, client = null) {
           item_ref: item.item_ref,
           item_kind: 'recurrente',
           reset_layers,
+          execution_key: optExecutionKey ? `${optExecutionKey}:${item.item_ref}` : undefined,
           product_key,
           domain_type,
           actor_type,
