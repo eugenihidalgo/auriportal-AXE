@@ -18,6 +18,7 @@ import { getRequestId } from '../core/observability/request-context.js';
 import { logError, logInfo } from '../core/observability/logger.js';
 import { requireAdminContext } from '../core/auth-context.js';
 import { getDefaultStudentItemOverridesRepoPg } from '../infra/repos/student-item-overrides-repo-pg.js';
+import { getDefaultAlquimiaCatalogRepo } from '../infra/repos/alquimia-catalog-repo-pg.js';
 
 /**
  * Helper: Respuesta JSON de error
@@ -125,6 +126,39 @@ export async function createStudentItemOverrideHandler(request, env, ctx) {
     } else {
       return jsonError(`override_key no reconocido: ${override_key}`, 'VALIDATION_ERROR', 400, traceId);
     }
+    
+    // ============================================================================
+    // GUARD MÍNIMO A: Validar que item_ref existe en catálogo
+    // ============================================================================
+    const catalogRepo = getDefaultAlquimiaCatalogRepo();
+    const catalogItem = await catalogRepo.getItemByRef(item_ref);
+    
+    if (!catalogItem) {
+      return jsonError(`item_ref no encontrado en catálogo: ${item_ref}`, 'INVALID_ITEM_REF', 400, traceId);
+    }
+    
+    // Obtener lista para validar item_kind
+    const lista = await catalogRepo.getListaById(catalogItem.lista_id);
+    if (!lista) {
+      return jsonError(`Lista no encontrada para item: ${item_ref}`, 'INVALID_ITEM_REF', 400, traceId);
+    }
+    
+    const itemKind = lista.tipo; // 'recurrente' | 'una_vez'
+    
+    // ============================================================================
+    // GUARD MÍNIMO B: Validar coherencia override_key + item_kind
+    // ============================================================================
+    // required_count SOLO permitido para una_vez
+    // threshold_days SOLO permitido para recurrente
+    if (override_key === 'required_count' && itemKind !== 'una_vez') {
+      return jsonError(`override_key 'required_count' solo permitido para items 'una_vez'. Este item es '${itemKind}'`, 'INVALID_OVERRIDE_FOR_ITEM_KIND', 400, traceId);
+    }
+    
+    if (override_key === 'threshold_days' && itemKind !== 'recurrente') {
+      return jsonError(`override_key 'threshold_days' solo permitido para items 'recurrente'. Este item es '${itemKind}'`, 'INVALID_OVERRIDE_FOR_ITEM_KIND', 400, traceId);
+    }
+    
+    // nivel y descripcion son válidos para ambos tipos (no requieren validación de coherencia)
     
     const repo = getDefaultStudentItemOverridesRepoPg();
     

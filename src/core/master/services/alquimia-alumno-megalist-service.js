@@ -19,6 +19,7 @@ import { getDefaultPausaRepo } from '../../../infra/repos/pausa-repo-pg.js';
 import { computeVisualState } from './cleaning-projection-model.js';
 import { validateViewLayer } from './cleaning-layer-constants.js';
 import { calculateSeedReadinessMetrics } from './seed-readiness-metrics-service.js';
+import { resolveItemConfigForStudent } from './override-resolution-service.js';
 
 /**
  * Calcula days_since_last_clean desde last_cleaned_at
@@ -285,6 +286,9 @@ export async function getMegalistForStudent(options = {}) {
       // REGLA CANÓNICA: resolveItemsFromCatalog solo devuelve items activos (status='active')
       const item = itemsByRef[state.item_ref];
       
+      // Guardar item_ref para uso posterior (resolveItemConfigForStudent)
+      const itemRef = state.item_ref;
+      
       if (!item) {
         // Si el estado existe pero el item no está en itemsByRef, puede ser porque:
         // 1. Está archivado (status='archived') → NO RENDERIZAR
@@ -445,12 +449,66 @@ export async function getMegalistForStudent(options = {}) {
       // CPM v2: NO calcular combo aquí, CPM lo calcula internamente
       const comboData = null;
       
-      // Configuración para computeVisualState
-      const config = itemKind === 'recurrente' ? {
+      // ============================================================================
+      // REGLA CANÓNICA: APLICAR OVERRIDES EN MEGALIST (Opción B)
+      // ============================================================================
+      // Megalist es vista READ de estado efectivo (scope='student' implícito)
+      // Aplicar overrides igual que flotante y list-projection
+      // Overrides se aplican ANTES de CPM (CPM recibe effectiveConfig con overrides ya aplicados)
+      // 
+      // REGLA CONSTITUCIONAL: Overrides solo afectan lectura (NO mutan estado persistido)
+      // REGLA CONSTITUCIONAL: Overrides NO se aplican en WRITE (CLEAN, RESET, SEED)
+      // 
+      // Construir itemConfig base
+      const baseConfig = itemKind === 'recurrente' ? {
         threshold_days: item.frecuencia_dias || 7,
-        critical_multiplier: item.critical_multiplier || 2.0
+        critical_multiplier: item.critical_multiplier || 2.0,
+        required_count: null,
+        nivel: item.nivel || null,
+        descripcion: item.descripcion || null
       } : {
-        required_count: item.veces_limpiar || 1
+        required_count: item.veces_limpiar || 1,
+        threshold_days: null,
+        critical_multiplier: null,
+        nivel: item.nivel || null,
+        descripcion: item.descripcion || null
+      };
+      
+      // Aplicar overrides de configuración de item (scope='student' implícito en megalist)
+      let effectiveConfig;
+      try {
+        effectiveConfig = await resolveItemConfigForStudent(
+          baseConfig,
+          student_uuid,
+          itemRef
+        );
+        
+        logInfo('AlquimiaAlumnoMegalist', '[OVERRIDE][APPLY] Overrides aplicados en megalist', {
+          traceId,
+          student_uuid,
+          item_ref: itemRef,
+          item_kind: itemKind,
+          base_config: baseConfig,
+          effective_config: effectiveConfig,
+          has_override: JSON.stringify(baseConfig) !== JSON.stringify(effectiveConfig)
+        });
+      } catch (overrideError) {
+        // Fail-open: si falla aplicar overrides, usar baseConfig
+        logWarn('AlquimiaAlumnoMegalist', 'Error aplicando overrides (fail-open: usando baseConfig)', {
+          traceId,
+          student_uuid,
+          item_ref: itemRef,
+          error: overrideError.message
+        });
+        effectiveConfig = baseConfig;
+      }
+      
+      // Configuración para computeVisualState (con overrides aplicados)
+      const config = itemKind === 'recurrente' ? {
+        threshold_days: effectiveConfig.threshold_days || 7,
+        critical_multiplier: effectiveConfig.critical_multiplier || 2.0
+      } : {
+        required_count: effectiveConfig.required_count || 1
       };
       
       // Calcular state_by_view_layer para todas las view_layers posibles
