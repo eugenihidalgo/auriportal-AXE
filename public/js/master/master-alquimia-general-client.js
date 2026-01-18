@@ -647,10 +647,11 @@
     // B.4) RENDER: Log END y actualizar lastRenderAt
     const renderDuration_ms = Date.now() - renderStartTime;
     const itemsRendered = state.items ? state.items.length : 0;
-    const floatStudentsRendered = state.modal.item && state.modal.students ? state.modal.students.length : 0;
-    
+    // FLOTANTE_PROJECTION_ONLY_V1: state.modal.students no existe; no guardamos proyección en modal
+    const floatStudentsRendered = 0;
+
     lastRenderAt = Date.now();
-    
+
     traceLog('RENDER', {
       event: 'RENDER_END',
       reason: 'renderView',
@@ -2804,15 +2805,9 @@
    * @param {Object} normalized - Payload normalizado con students, counts, warnings, etc.
    */
   function showFlotanteVer(item, normalized) {
-    // BUG-010 FIX: Limpiar estado anterior de estudiantes para forzar re-render completo
-    if (normalized && normalized.students && Array.isArray(normalized.students)) {
-      normalized.students.forEach(student => {
-        // Eliminar referencias de estado anterior para forzar re-render determinista
-        delete student._last_column_state;
-        delete student._action_expected_change;
-      });
-    }
-    
+    // FLOTANTE_PROJECTION_ONLY_V1: PROHIBIDO mutar objetos student (proyección backend).
+    // No se usa _last_column_state ni _action_expected_change.
+
     // Eliminar flotante existente si hay
     const existingFlotante = document.getElementById('flotante-ver-alquimia');
     if (existingFlotante) {
@@ -3262,52 +3257,9 @@
         // UNA_VEZ: usar visual_state (never | in_progress | completed | empowered)
         columnState = stateData.visual_state || 'never';
       }
-      
-      // ============================================================================
-      // BUG-010 FIX: Re-render determinista - NO solo loggear, FORZAR movimiento visual
-      // ============================================================================
-      const stateBefore = student._last_column_state || null;
-      if (stateBefore && stateBefore !== columnState) {
-        console.log('[UI][COLUMN] [BUG-010] Movimiento de columna detectado - re-render forzado', {
-          student_uuid: student.student_uuid,
-          item_ref: item.item_ref,
-          view_layer: activeViewLayer,
-          state_before: stateBefore,
-          state_after: columnState,
-          item_kind: itemKind
-        });
-        // BUG-010: Forzar re-render eliminando referencia anterior
-        delete student._last_column_state;
-      } else if (stateBefore === null) {
-        // Primera vez que se renderiza este estudiante
-        console.log('[UI][COLUMN] Estudiante renderizado por primera vez', {
-          student_uuid: student.student_uuid,
-          item_ref: item.item_ref,
-          view_layer: activeViewLayer,
-          initial_state: columnState,
-          item_kind: itemKind
-        });
-      } else if (stateBefore === columnState) {
-        // BUG-010 FIX: Si no hay cambio tras acción esperada, forzar re-render de todas formas
-        // (puede ser que el backend cambió pero el estado visual no se actualizó)
-        if (student._action_expected_change) {
-          console.warn('[UI][COLUMN] [BUG-010] ⚠️ No hubo cambio de columna tras acción - FORZANDO re-render', {
-            student_uuid: student.student_uuid,
-            item_ref: item.item_ref,
-            view_layer: activeViewLayer,
-            state: columnState,
-            item_kind: itemKind,
-            expected_change: student._action_expected_change
-          });
-          // BUG-010: Forzar re-render eliminando referencia para que se re-agrupe
-          delete student._last_column_state;
-          delete student._action_expected_change;
-        }
-      }
-      
-      // Guardar estado actual para siguiente comparación
-      student._last_column_state = columnState;
-      
+
+      // FLOTANTE_PROJECTION_ONLY_V1: PROHIBIDO mutar student. Agrupar por estado sin _last_column_state.
+
       // Agrupar por estado
       if (studentsByState[columnState]) {
         studentsByState[columnState].push(student);
@@ -3536,11 +3488,8 @@
    * @param {Object} normalized - Payload normalizado
    */
   function createStudentRow(student, stateKey, item, normalized) {
-    // BUG-014 FIX: Forzar re-render completo eliminando referencias anteriores
-    // Esto asegura que colores y estado siempre vienen del backend (no se "recuerdan")
-    delete student._last_row_element;
-    delete student._last_row_state;
-    
+    // FLOTANTE_PROJECTION_ONLY_V1: PROHIBIDO mutar student (_last_row_*).
+
     const row = document.createElement('div');
     row.style.cssText = 'padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 0.25rem; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0.5rem; align-items: center;';
     
@@ -3565,10 +3514,6 @@
     } else {
       row.style.cssText += 'background: rgba(148, 163, 184, 0.1);';
     }
-    
-    // Guardar referencia para siguiente comparación
-    student._last_row_element = row;
-    student._last_row_state = stateKey;
 
     // Columna 1: Alumno
     const nameDiv = document.createElement('div');
@@ -4030,35 +3975,9 @@
    * @returns {Object|null} { state, visual_state, days_since, days_since_last_clean, metrics } o null si falta
    */
   function getRecurrenteStateFromProjection(student, viewLayer) {
-    // REGLA CONSTITUCIONAL: Leer EXCLUSIVAMENTE desde state_by_view_layer
-    if (!student.state_by_view_layer || !student.state_by_view_layer[viewLayer]) {
-      console.error('[MasterAlquimiaGeneral] [UI][RECURRENTE_STATE] state_by_view_layer no disponible', {
-        student_uuid: student.student_uuid,
-        view_layer: viewLayer,
-        has_state_by_view_layer: !!student.state_by_view_layer,
-        available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
-      });
-      
-      // REGLA CANÓNICA: fallback a CPM (student.state viene del backend calculado por CPM)
-      // student.state es el estado activo calculado por CPM según view_layer (autoridad backend)
-      if (student.state) {
-        console.warn('[MasterAlquimiaGeneral] [UI][RECURRENTE_STATE] Usando fallback a student.state (CPM)', {
-          student_uuid: student.student_uuid,
-          view_layer: viewLayer,
-          fallback_state: student.state
-        });
-        // Retornar estado CPM como fallback seguro (mejor que bloquear render)
-        return {
-          state: student.state,
-          visual_state: student.visual_state || student.state,
-          days_since: null, // No calcular días en frontend (CPM lo calcula)
-          days_since_last_clean: null, // No calcular días en frontend
-          metrics: {} // Metrics no disponibles en fallback
-        };
-      }
-      
-      return null; // Fail-loud: NO fallback silencioso si tampoco hay student.state
-    }
+    // FLOTANTE_PROJECTION_ONLY_V1: SOLO estudiantes de GET /items/:item_ref/students (con state_by_view_layer).
+    // Si falta, return null. PROHIBIDO log [UI][RECURRENTE_STATE] state_by_view_layer no disponible (imposible por diseño).
+    if (!student?.state_by_view_layer?.[viewLayer]) return null;
     
     const stateData = student.state_by_view_layer[viewLayer];
     const metrics = stateData.metrics || stateData.computed_state || {};
@@ -4088,22 +4007,10 @@
     // CPM v1: Usar state.projection.view_layer como única autoridad
     const activeViewLayer = viewLayer || state.projection.view_layer || 'shared';
     
-    // Obtener estado desde state_by_view_layer[activeViewLayer]
-    // REGLA CONSTITUCIONAL: state_by_view_layer es OBLIGATORIO, NO hay fallback
-    let stateData = null;
-    if (student.state_by_view_layer && student.state_by_view_layer[activeViewLayer]) {
-      stateData = student.state_by_view_layer[activeViewLayer];
-    } else {
-      // BUG FIX: Eliminado fallback legacy - Si falta state_by_view_layer, NO renderizar
-      console.error('[MasterAlquimiaGeneral] [UI][STATE_DISPLAY] state_by_view_layer no disponible - BLOQUEANDO render', {
-        student_uuid: student.student_uuid,
-        view_layer: activeViewLayer,
-        has_state_by_view_layer: !!student.state_by_view_layer,
-        available_layers: student.state_by_view_layer ? Object.keys(student.state_by_view_layer) : []
-      });
-      // NO usar fallback - Si falta state_by_view_layer, NO renderizar este estudiante
-      return null; // Retornar null para indicar que no se puede renderizar
-    }
+    // FLOTANTE_PROJECTION_ONLY_V1: SOLO estudiantes proyectados (GET /items/:item_ref/students).
+    if (!student?.state_by_view_layer?.[activeViewLayer]) return null;
+
+    const stateData = student.state_by_view_layer[activeViewLayer];
     
     // RECURRENTE: usar state
     if (itemKind === 'recurrente') {
@@ -4260,48 +4167,25 @@
         surface_key: 'master.alquimia_general'
       };
       
-      // ============================================================================
-      // LOG FORENSE OBLIGATORIO: action.clean_layer, view_layer, state calculado
-      // ============================================================================
-      // CPM v1: Usar state.projection.view_layer como única autoridad
+      // FLOTANTE_PROJECTION_ONLY_V1: NO calcular elegibilidad en frontend. Validación en backend.
+      // getRecurrenteStateFromProjection SOLO si student es proyección (tiene state_by_view_layer).
       const activeViewLayer = state.projection.view_layer || (itemKind === 'una_vez' ? 'combo' : 'shared');
-      
-      // Log forense para RECURRENTE: idempotencia por capa
+
       if (itemKind === 'recurrente') {
-        // REGLA CONSTITUCIONAL: Usar función canónica para leer estado
-        const stateData = getRecurrenteStateFromProjection(student, cleanLayer);
-        const daysSinceLastClean = stateData?.days_since_last_clean ?? null;
-        const currentState = stateData?.state || 'never';
-        
-        // Validar elegibilidad usando función canónica
-        const canClean = isCleanAllowed(currentState);
-        
-        if (!canClean) {
-          console.warn('[CLEAN_BLOCKED]', {
-            state: currentState,
-            reason: 'state_not_cleanable',
-            student_uuid: student.student_uuid,
-            item_ref: item.item_ref,
-            clean_layer: cleanLayer,
-            allowed_states: ['never', 'reseteado', 'pending', 'important']
-          });
-          showToastError(`No se puede limpiar desde estado "${currentState}". Estados permitidos: never, reseteado, pending, important.`);
-          return;
-        }
-        
+        const stateData = student?.state_by_view_layer?.[cleanLayer]
+          ? getRecurrenteStateFromProjection(student, cleanLayer)
+          : null;
         console.log('[CLEAN_ALLOWED]', {
-          state: currentState,
+          state: stateData?.state ?? 'validación en backend',
           action: 'alquimia.clean',
           student_uuid: student.student_uuid,
           item_ref: item.item_ref,
           action_clean_layer: cleanLayer,
           view_layer: activeViewLayer,
-          days_since_last_clean: daysSinceLastClean,
-          enabled: true, // UI siempre permite intentar (idempotencia en backend)
-          idempotency_by_layer: true
+          days_since_last_clean: stateData?.days_since_last_clean ?? null,
+          from_projection: !!student?.state_by_view_layer
         });
       } else {
-        // UNA_VEZ: siempre permitir (infinito)
         console.log('[CLEAN_ALLOWED]', {
           state: 'una_vez',
           action: 'alquimia.clean',
@@ -7129,7 +7013,8 @@
      */
     invalidate(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
-      
+      if (context.__v2_handled_refetch__) return; // v2 ya refetcheó; no invalidar (evitar doble camino)
+
       // Log forense estructurado
       console.log('[REFRESH_ENGINE][ALQG][INVALIDATE]', {
         mutation_type,
@@ -7164,8 +7049,10 @@
      */
     async refetch(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
+      if (context.__v2_handled_refetch__) return; // v2 ya refetcheó; refetch ÚNICO por mutación
+
       let surfaces = context.surfaces || [];
-      
+
       // ============================================================================
       // BUG-A HOTFIX: Normalizador canónico de surfaces (antes de fail-hard)
       // ============================================================================

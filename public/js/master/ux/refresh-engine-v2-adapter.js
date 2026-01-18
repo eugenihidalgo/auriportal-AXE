@@ -85,18 +85,16 @@
         timestamp: new Date().toISOString()
       });
 
-      // Después de surfaces, ejecutar invalidate y render vía adapter
-      // Obtener adapter del módulo
+      // FLOTANTE_PROJECTION_ONLY_V1: v2 ya ejecutó Surface Registry (refetch único).
+      // v1 debe hacer solo render; invalidate y refetch se omiten para evitar doble handleVerItem/GET.
       const modules = engineV1.getEngineInfo?.()?.registeredModules || [];
       if (module && modules.includes(module)) {
-        // El adapter se obtiene internamente en v1, pero necesitamos ejecutar invalidate y render
-        // Por ahora, delegamos a v1 para invalidate y render
         await engineV1.afterMutation({
           ...mutation,
-          // No pasar surfaces a v1 (ya se ejecutaron)
           context: {
             ...context,
-            surfaces: [] // Limpiar para que v1 no intente ejecutarlas de nuevo
+            surfaces: [],
+            __v2_handled_refetch__: true
           }
         });
       }

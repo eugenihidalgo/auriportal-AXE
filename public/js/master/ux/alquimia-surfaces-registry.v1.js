@@ -124,33 +124,29 @@
         return;
       }
 
-      // CIERRE CANÓNICO v1: Verificar modal abierto ANTES de ejecutar GET
-      // PROHIBIDO: Ejecutar GET si modal no está visible
+      // FLOTANTE_PROJECTION_ONLY_V1: Si no podemos refetch, CERRAR flotante (nunca reutilizar DOM viejo).
       const alquimiaState = window.__AP_ALQUIMIA_STATE__;
       if (!alquimiaState || !alquimiaState.modal || !alquimiaState.modal.item) {
-        // CIERRE-003: Early return silencioso (no es error, modal simplemente no está abierto)
-        console.log('[AlquimiaSurfacesRegistry][CIERRE-003] Flotante OMITIDO: modal no abierto', {
-          item_ref,
-          has_state: !!alquimiaState,
-          has_modal: !!alquimiaState?.modal,
-          has_item: !!alquimiaState?.modal?.item
-        });
-        return; // Early return: NO ejecutar GET, NO render
+        const el = document.getElementById('flotante-ver-alquimia');
+        if (el) el.remove();
+        if (alquimiaState?.modal) {
+          alquimiaState.modal.item = null;
+          alquimiaState.modal.cleanLayer = 'shared';
+        }
+        console.log('[AlquimiaSurfacesRegistry][FLOTANTE_PROJECTION_ONLY] No se puede refetch: cerrando flotante para evitar DOM viejo', { item_ref, has_state: !!alquimiaState, has_modal_item: !!alquimiaState?.modal?.item });
+        return;
       }
 
-      // Validar que item_ref coincide (seguridad adicional)
+      // Validar que item_ref coincide
       const modalItemRef = alquimiaState.modal.item.item_ref;
       if (modalItemRef !== item_ref) {
-        console.log('[AlquimiaSurfacesRegistry][CIERRE-003] Flotante OMITIDO: item_ref no coincide', {
-          requested_item_ref: item_ref,
-          modal_item_ref: modalItemRef
-        });
+        console.log('[AlquimiaSurfacesRegistry][CIERRE-003] Flotante OMITIDO: item_ref no coincide', { requested_item_ref: item_ref, modal_item_ref: modalItemRef });
         return;
       }
 
       const item = alquimiaState.modal.item;
-      // CIERRE-002: Propagación explícita de clean_layer y view_layer
-      const view_layer = context.view_layer || alquimiaState.modal.layerView || 'shared';
+      // CIERRE-002: view_layer desde context o state.projection (autoridad única)
+      const view_layer = context.view_layer || alquimiaState?.projection?.view_layer || 'shared';
       const clean_layer = context.clean_layer || alquimiaState.modal.cleanLayer || 'shared';
 
       console.log('[AlquimiaSurfacesRegistry][CIERRE-002] Refrescar flotante con context propagado', {
