@@ -789,8 +789,28 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       PROHIBIDO:
       - Asumir que el estado local está sincronizado sin refetch
       - Dejar UI desincronizada tras acciones exitosas
+  REFERENCIAS:
+  - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+
+  - id: post-reset-view-invalidation-mandatory
+    title: RESET implica invalidación obligatoria del estado de vista y rehidratación desde backend
+    # [CONSTITUTIONAL — POST-RESET VIEW STATE v1]
+    content: >
+      Toda acción RESET exitosa (item, list, list ALL) en Alquimia General invalida el estado de vista del cliente y rehidrata desde backend.
+      PROHIBIDO:
+      - Reutilizar estado de vista previo al RESET (items, projection.data, groups)
+      - Depender de BUILD_ID o client-state-reset.js para RESET en caliente
+      - Usar localStorage.clear()
+      - Recargar la página para corregir vista post-RESET
+      - Inferir o calcular estados en frontend; el backend es la única autoridad
+      OBLIGATORIO:
+      - Invalidar (descartar en memoria) state.items, state.projection.data, state.groups antes o en el flujo POST-RESET
+      - Rehidratar: pedir list-projection/items al backend y reconstruir desde datos frescos
+      - Hook explícito: invalidar → (performAction RESET) → rehidratar → render
+      - Logs forenses: [POST_RESET][INVALIDATE_VIEW], [POST_RESET][REHYDRATE_VIEW]
       REFERENCIAS:
-      - docs/ALQUIMIA_CIERRE_TOTAL_V5_65_2.md
+      - docs/POST_RESET_VIEW_STATE_CONTRACT_V1.md
+      - docs/POST_RESET_VIEW_STATE_DESIGN_CERTIFICATION_V1.md
 
   - id: alquimia-toast-no-confirm
     title: No usar confirm() ni alert() en flujos de limpieza

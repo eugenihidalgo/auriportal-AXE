@@ -181,6 +181,47 @@ grep -r "effective_since.*=.*NOW\|effective_since.*=.*CURRENT_TIMESTAMP" src/inf
 
 ---
 
+## Invariante 12b: POST-RESET View Invalidation (MASTER · Alquimia General)
+
+### Regla
+
+Toda acción RESET exitosa (item, list, list ALL) **invalida obligatoriamente** el estado de vista del cliente y **rehidrata** desde el backend. RESET implica cambio de época: todo estado de vista previo es inválido.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ Reutilizar `state.items`, `state.projection.data`, `state.groups` previos al RESET
+- ❌ Depender de `BUILD_ID` o `client-state-reset.js` para RESET en caliente
+- ❌ Usar `localStorage.clear()`
+- ❌ Recargar la página como mecanismo de corrección
+- ❌ Inferir o calcular estados en frontend; el backend es la única autoridad
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ Invalidar (descartar en memoria) items, projection.data, groups antes o en el flujo POST-RESET
+- ✅ Rehidratar: pedir list-projection/items al backend y reconstruir desde datos frescos
+- ✅ Hook explícito: invalidar → (performAction RESET) → rehidratar → render
+- ✅ Logs forenses: `[POST_RESET][INVALIDATE_VIEW]`, `[POST_RESET][REHYDRATE_VIEW]`
+
+### Verificación
+
+**Comandos:**
+```bash
+# Verificar que invalidate y rehydrate existen y se usan tras RESET
+grep -n "invalidateAlquimiaViewState\|rehydrateAlquimiaViewState" public/js/master/master-alquimia-general-client.js
+
+# Verificar logs forenses
+grep -n "\[POST_RESET\]\[INVALIDATE_VIEW\]\|\[POST_RESET\]\[REHYDRATE_VIEW\]" public/js/master/master-alquimia-general-client.js
+```
+
+**Referencias:**
+- `docs/POST_RESET_VIEW_STATE_CONTRACT_V1.md`
+- `docs/POST_RESET_VIEW_STATE_DESIGN_CERTIFICATION_V1.md`
+- `docs/FORENSICS_RESET_VIEWSTATE_V1.md`
+
+---
+
 ## Invariante 4: Separación RECURRENTE vs UNA_VEZ
 
 ### Regla

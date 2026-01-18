@@ -9,6 +9,26 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.80.0] - 2026-01-13
+
+### Added
+- **POST-RESET VIEW STATE v1 (MASTER · Alquimia General):** Invalidación obligatoria del estado de vista y rehidratación desde backend tras cualquier RESET exitoso (item, list, list ALL).
+  - `invalidateAlquimiaViewState()`: descarta en memoria `state.items`, `state.projection.data`, `state.groups`; no usa `localStorage.clear()`.
+  - `rehydrateAlquimiaViewState()`: asegura `list_id`/`listaActiva`, llama a `loadListProjection` o `loadItems` según `view_mode`, `renderView()` y `handleVerItem` si el modal está abierto.
+  - Hook en: `resetStudentItemProgress`, `resetStudentListProgress`, Reset lista ALL, Reset ALL.
+  - Logs forenses: `[POST_RESET][INVALIDATE_VIEW]`, `[POST_RESET][REHYDRATE_VIEW]`.
+- **Contrato y documentación:**
+  - `docs/POST_RESET_VIEW_STATE_CONTRACT_V1.md`
+  - `docs/POST_RESET_VIEW_STATE_DESIGN_CERTIFICATION_V1.md`
+  - `docs/FORENSICS_RESET_VIEWSTATE_V1.md`
+- **Invariante 12b** en `docs/INVARIANTES_CONSTITUCIONALES.md`: POST-RESET View Invalidation.
+- **Regla** `post-reset-view-invalidation-mandatory` en `.cursorrules`.
+
+### Fixed
+- **RESET → CLEAN en caliente:** La secuencia CLEAN → RESET → CLEAN deja de depender de BUILD_ID, `client-state-reset.js` o recarga; la vista se invalida y rehidrata de forma determinista tras cada RESET.
+
+---
+
 ## [5.67.0] - 2026-01-11
 
 ### Added

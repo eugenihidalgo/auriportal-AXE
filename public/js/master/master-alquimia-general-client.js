@@ -285,6 +285,57 @@
   }
 
   // ============================================================================
+  // B.2.1) POST-RESET VIEW STATE v1: Invalidación y rehidratación obligatorias
+  // ============================================================================
+  // CONTRATO: docs/POST_RESET_VIEW_STATE_CONTRACT_V1.md
+  // RESET implica cambio de época: todo estado de vista previo es inválido.
+  // Invalidar (descartar en memoria) y rehidratar desde backend.
+  // PROHIBIDO: localStorage.clear(), reload, inferencias frontend.
+
+  function invalidateAlquimiaViewState() {
+    state.items = [];
+    state.projection.data = null;
+    state.groups = [];
+    state.projection.loading = false;
+    // Claves específicas de Alquimia General en localStorage: ninguna hoy; aquí si se añaden
+    console.log('[POST_RESET][INVALIDATE_VIEW]', { list_id: state.list_id, view_mode: state.projection.mode });
+  }
+
+  async function rehydrateAlquimiaViewState() {
+    try {
+      let listId = state.list_id;
+      if (!listId && Array.isArray(state.listas) && state.listas.length > 0) {
+        state.list_id = state.listas[0].id;
+        state.listaActiva = state.listas[0];
+        listId = state.list_id;
+      }
+      if (!listId && (!Array.isArray(state.listas) || state.listas.length === 0)) {
+        await loadListas(state.tipoActivo);
+        if (Array.isArray(state.listas) && state.listas.length > 0) {
+          state.list_id = state.listas[0].id;
+          state.listaActiva = state.listas[0];
+          listId = state.list_id;
+        }
+      }
+      if (listId && !state.listaActiva) {
+        state.listaActiva = (state.listas || []).find(function(l) { return l.id === listId; }) || null;
+      }
+      if (state.projection.mode === 'proyeccion' && state.listaActiva) {
+        await loadListProjection();
+      } else if (state.projection.mode === 'operativa' && listId) {
+        await loadItems(listId);
+      }
+      renderView();
+      if (state.modal && state.modal.item) {
+        await handleVerItem(state.modal.item, state.modal.cleanLayer || 'shared', state.projection.view_layer || 'shared');
+      }
+      console.log('[POST_RESET][REHYDRATE_VIEW]', { list_id: state.list_id, view_mode: state.projection.mode });
+    } catch (e) {
+      console.warn('[POST_RESET][REHYDRATE_VIEW] Error en rehidratación (fail-open):', e && e.message);
+    }
+  }
+
+  // ============================================================================
   // B.3) STATE snapshots: Helper para capturar estado UI compacto
   // ============================================================================
   
@@ -1968,6 +2019,7 @@
           });
           
           try {
+            invalidateAlquimiaViewState();
             if (typeof window.performAction !== 'function') {
               throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
             }
@@ -2034,6 +2086,8 @@
             // B.6) REFRESH detection
             checkRefreshAfterAction('RESET_LIST_ALL', actionOkAt);
 
+            await rehydrateAlquimiaViewState();
+
             const applied = result.data?.applied || 0;
             const skipped = result.data?.skipped || 0;
             const totalItems = result.data?.total_items || 0;
@@ -2051,8 +2105,6 @@
             } else {
               showToastSuccess(`Reset lista ALL completado (${applied} aplicados, ${skipped} omitidos en ${totalItems} items)`);
             }
-            
-            // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
           } catch (error) {
             const actionDuration_ms = Date.now() - actionStartTime;
             traceLog('ACTION', {
@@ -5244,6 +5296,7 @@
             // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
             // Usar toasts no bloqueantes
             try {
+              invalidateAlquimiaViewState();
               if (typeof window.performAction !== 'function') {
                 throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
               }
@@ -5297,8 +5350,8 @@
               } else {
                 showToastSuccess(`Reset ALL completado (${applied} aplicados, ${skipped} omitidos de ${total} estudiantes)`);
               }
-              
-              // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
+
+              await rehydrateAlquimiaViewState();
             } catch (error) {
               console.error('[RESET][ALL][ITEM] Error:', error);
               showToastError(`Error: ${error.message}`);
@@ -6763,6 +6816,8 @@
       clean_layer: cleanLayer
     });
 
+    invalidateAlquimiaViewState();
+
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
       if (typeof window.performAction !== 'function') {
@@ -6822,6 +6877,8 @@
       
       // B.6) REFRESH detection
       checkRefreshAfterAction('RESET_ITEM', actionOkAt);
+
+      await rehydrateAlquimiaViewState();
 
       const data = result.data || {};
       console.log('[RESET][ITEM][CANONICAL] Progreso reseteado', {
@@ -6894,6 +6951,8 @@
       clean_layer: cleanLayer
     });
 
+    invalidateAlquimiaViewState();
+
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
       if (typeof window.performAction !== 'function') {
@@ -6953,6 +7012,8 @@
       
       // B.6) REFRESH detection
       checkRefreshAfterAction('RESET_LIST', actionOkAt);
+
+      await rehydrateAlquimiaViewState();
 
       const data = result.data || {};
       console.log('[RESET][LIST][CANONICAL] Progreso reseteado', {
