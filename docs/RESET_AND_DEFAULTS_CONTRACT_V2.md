@@ -12,7 +12,7 @@
 
 - **Qué toca:** `cleaning_events` (INSERT `action_type='reset'`) y `cleaning_item_state` (solo `*_effective_since`).
 - **Qué NO toca:** `student_item_overrides`.  
-  → **Invariante:** Reset **jamás** toca `student_item_overrides` (REST_SEMANTICS_V1).
+  → **Invariante:** Reset **jamás** toca `student_item_overrides` (RESET_SEMANTICS_V1).
 - **Semántica:** Inicia un nuevo ciclo de limpieza; el CLEAN posterior actualiza `last_cleaned_at` y contadores.
 - **item_kind:** Solo `recurrente`. UNA_VEZ → hard fail en backend.
 
@@ -156,15 +156,28 @@ Para restore_defaults, el `context` debe incluir `scope`, `item_ref`/`list_id`/`
 
 ---
 
-## 6. Reglas de no regresión y checks
+## 6. Idempotencia de escritura vs proyección (ACTION_FORCES_PROJECTION_V1)
+
+Cuando el backend responde `ok=true` con `applied=0` y `skipped>0` (idempotencia en DB: ya estaba reseteado, ya estaba limpio, overrides ya no existían), la **proyección y la UI deben recalcularse igual**. La idempotencia de **escritura** no implica idempotencia de **proyección**: el estado proyectado (CPM/LPM, columna, color) puede depender de datos que solo un GET fresco devuelve.
+
+**Regla:**
+- Si `result.ok === true` → ejecutar SIEMPRE el refresh pipeline (surfaces, GET, CPM, render). NUNCA condicionar a `applied > 0` ni `skipped`.
+- `applied`/`skipped` solo afectan al **toast** (ej. "Acción sin cambios persistentes" cuando `applied=0`).
+
+Ver **Invariante 27 (ACTION_FORCES_PROJECTION_V1)** en `docs/INVARIANTES_CONSTITUCIONALES.md`.
+
+---
+
+## 7. Reglas de no regresión y checks
 
 - **Invariante 23:** Reset por DELETE prohibido en MASTER. `npm run check:forbid-legacy-reset-delete`.
 - **RESET_CLEAN_TIMESTAMP_INVARIANT_V1:** Tras CLEAN, `last_cleaned_at >= effective_since` en la capa correspondiente.
 - **Check de paridad:** `npm run check:action-registry-parity`. Valida que en `public/.../alquimia-actions.js` existan las acciones críticas (incl. `alquimia.reset_overrides` como alias). Ver `docs/CHECK_ACTION_REGISTRY_PARITY_V1.md`.
+- **Invariante 27 (ACTION_FORCES_PROJECTION_V1):** Refresh siempre cuando ok; applied/skipped solo para toast.
 
 ---
 
-## 7. Smoke tests (manuales)
+## 8. Smoke tests (manuales)
 
 1. **Restore defaults:** En /master/alquimia-general, proyección con overrides, pulsar "Restaurar valores por defecto". Sin "action_id not registered", POST /overrides/reset en red, refetch, overrides a 0.
 2. **Reset de ciclo:** Pulsar reset 5 veces; idempotente, sin estado roto. "No se aplicaron cambios" aceptable.
@@ -176,6 +189,6 @@ Para restore_defaults, el `context` debe incluir `scope`, `item_ref`/`list_id`/`
 
 - `docs/RESET_AND_DEFAULTS_CONTRACT_V1.md` (historial)
 - `docs/CHECK_ACTION_REGISTRY_PARITY_V1.md`
-- `docs/INVARIANTES_CONSTITUCIONALES.md` (Inv. 23, ACTION_REGISTRY_PUBLIC_PARITY_V1, RESTORE_DEFAULTS_SEMANTICS_V1, RESET_SEMANTICS_V1)
+- `docs/INVARIANTES_CONSTITUCIONALES.md` (Inv. 23, 24, 25, 26, 27 ACTION_FORCES_PROJECTION_V1)
 - `docs/RESET_CLEAN_TIMESTAMP_INVARIANT_V1.md`
 - `docs/DIAGNOSTICO_RESETS_RESTORE_DEFAULTS_20260118.md`

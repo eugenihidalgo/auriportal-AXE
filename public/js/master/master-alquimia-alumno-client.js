@@ -1371,9 +1371,14 @@
         return;
       }
       
+      // ACTION_FORCES_PROJECTION_V1: applied=0 no bloquea refresh (ya corrió en performAction). Solo toast.
       if (!result.data?.applied) {
-        console.warn('[MasterAlquimiaAlumno] Limpieza no aplicada:', result.data?.reason);
-        showToastError('Limpieza no aplicada: ' + (result.data?.reason || 'Razón desconocida'));
+        console.warn('[MasterAlquimiaAlumno] Limpieza idempotente (applied=0):', result.data?.reason);
+        if (typeof showToastWarning === 'function') {
+          showToastWarning('Acción sin cambios persistentes (idempotente)');
+        } else {
+          showToastError('Acción sin cambios persistentes (idempotente)');
+        }
         return;
       }
       

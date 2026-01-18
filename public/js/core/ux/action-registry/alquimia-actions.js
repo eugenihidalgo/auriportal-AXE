@@ -18,12 +18,14 @@ import { registerAction } from './ux-action-registry.js';
 
 /**
  * Helper para construir refresh plan canónico
+ * ACTION_FORCES_PROJECTION_V1: responseData.applied/skipped se ignoran; las surfaces son siempre
+ * las mismas. La proyección debe recalcularse siempre que ok=true. Idempotencia en DB ≠ en proyección.
  * @param {Object} context - Contexto de la mutación
  * @param {Object} uiState - Estado de UI
- * @param {Object} responseData - Respuesta del backend (opcional)
+ * @param {Object} [_responseData] - Respuesta del backend (opcional, NUNCA usado para filtrar surfaces)
  * @returns {Array<string>} Lista de surface_ids a refrescar
  */
-function buildRefreshPlan(context, uiState, responseData = null) {
+function buildRefreshPlan(context, uiState, _responseData = null) {
   const surfaces = [];
   // HOTFIX: Robustecer obtención de view_mode y list_id (pueden venir de context o uiState)
   const view_mode = uiState?.view_mode || context?.view_mode || 'operativa';

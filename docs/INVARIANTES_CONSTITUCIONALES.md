@@ -1240,4 +1240,34 @@ Revisión de código: handler de `/reset` y `cleaning-engine-service.resetByScop
 
 ---
 
+## Invariante 27: ACTION_FORCES_PROJECTION_V1
+
+### Regla
+
+La proyección y la UI deben **recalcularse** tras toda acción de mutación válida (reset, clean, clean_all, restore_defaults), **independientemente** de la idempotencia en escritura. Cuando el backend responde `ok=true` con `applied=0` y `skipped>0` (idempotencia de DB), el frontend **debe** forzar igualmente: re-fetch, recomputación CPM/LPM, re-render, reubicación visual.
+
+**Idempotencia de DB ≠ idempotencia de proyección.**
+
+**PROHIBIDO:**
+- Condicionar el refresh a `applied > 0`, `skipped === total`, `!changed` o análogos.
+- Que `buildRefreshPlan` use `responseData.applied` o `responseData.skipped` para reducir o vaciar las surfaces.
+- Que `applied`/`skipped` afecten al flujo de invalidate/refetch/render; solo pueden afectar al mensaje/toast.
+
+**OBLIGATORIO:**
+- Si `result.ok === true`, ejecutar SIEMPRE el refresh pipeline (surfaces declaradas, GET list-projection, recomputación CPM, renderView con datos nuevos).
+- `applied`/`skipped` solo para toast (ej. "Acción sin cambios persistentes" cuando `applied=0`).
+
+### Acciones afectadas
+
+`alquimia.reset`, `alquimia.reset.item`, `alquimia.reset.list`, `alquimia.reset.item.all`, `alquimia.reset.list.all`, `alquimia.clean`, `alquimia.clean_all`, `alquimia.restore_defaults`, `alquimia.reset_overrides`.
+
+### Verificación
+
+Revisión de código: `perform-action.v1.js` y `buildRefreshPlan` en registries no deben contener `if (applied > 0)`, `if (skipped === total)`, ni lógica que omita refresh en función de `responseData.applied`/`skipped`.
+
+**Referencias:**
+- `docs/RESET_AND_DEFAULTS_CONTRACT_V2.md` (sección "Idempotencia de escritura vs proyección")
+
+---
+
 **FIN DE DOCUMENTACIÓN INVARIANTES CONSTITUCIONALES**

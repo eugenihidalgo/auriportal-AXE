@@ -409,11 +409,15 @@
         throw new Error(`${errorMsg} (trace_id=${backendTraceId})`);
       }
 
+      // ACTION_FORCES_PROJECTION_V1: Si result.ok, el refresh se ejecuta SIEMPRE.
+      // applied/skipped (idempotencia en DB) NUNCA condicionan el refresh.
+      // Idempotencia de escritura ≠ idempotencia de proyección.
       // FIX 3: Ejecutar refresh plan SIEMPRE, independiente de Refresh Engine
       const refreshEngine = window.MasterRefreshEngineV1;
       const refreshPlan = actionDef.refresh || actionDef.refresh_plan;
       let surfacesToRefresh = [];
       
+      // buildRefreshPlan NO debe usar responseData.applied/skipped para filtrar surfaces
       if (typeof refreshPlan === 'function') {
         surfacesToRefresh = refreshPlan({ ...context, ...payload }, uiState, responseData);
       } else if (Array.isArray(refreshPlan)) {

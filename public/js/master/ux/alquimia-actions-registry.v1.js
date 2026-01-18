@@ -45,6 +45,7 @@
      * @param {Object} uiState - Estado de UI
      * @returns {Array} Lista de surface_ids a refrescar
      */
+    // ACTION_FORCES_PROJECTION_V1: applied/skipped en response nunca condicionan surfaces; refresh siempre.
     function buildRefreshPlan(context, uiState) {
       const surfaces = [];
       const view_mode = uiState.view_mode || 'operativa';
