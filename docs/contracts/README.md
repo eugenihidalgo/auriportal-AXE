@@ -32,9 +32,18 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
    - Estado: Activo
    - Actualizado: 2026-01-17 (decisión arquitectónica Opción B)
 
+4. **CLEAN_AFTER_RESET_CONTRACT_V1.md**
+   - Contrato canónico del comportamiento CLEAN AFTER RESET
+   - Define cómo CLEAN normaliza un ítem tras un reset
+   - Documenta que CLEAN es acto fundador del nuevo ciclo
+   - Cierra el borde RESET → CLEAN que no estaba formalizado anteriormente
+   - Versión: 1.0
+   - Estado: Activo
+   - Fecha: 2026-01-17
+
 ### Sistema de Señales
 
-4. **SIGNALS_CONTRACT_V1.md**
+5. **SIGNALS_CONTRACT_V1.md**
    - Contrato canónico del sistema de señales
    - Define cómo las señales se emiten desde acciones WRITE
    - Versión: 1.0
@@ -85,6 +94,24 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 
 ---
 
+### RESET ↔ CLEAN AFTER RESET
+
+**Relación:**
+- RESET inicia el nuevo ciclo (establece `effective_since`)
+- CLEAN AFTER RESET consolida ese ciclo (establece `last_cleaned_at`)
+- RESET NO bloquea CLEAN (CLEAN siempre es válido)
+
+**Contrato:**
+- RESET → CLEAN → Estado válido (nunca queda en 'reseteado')
+- `effective_since` se PRESERVA (no se modifica por CLEAN)
+- CLEAN no depende del tiempo desde reset
+
+**Referencias cruzadas:**
+- `RESET_CONTRACT_V1.md` → `CLEAN_AFTER_RESET_CONTRACT_V1.md`
+- `CLEAN_AFTER_RESET_CONTRACT_V1.md` → `RESET_CONTRACT_V1.md`
+
+---
+
 ## Diagnósticos Relacionados
 
 **Diagnósticos que documentan el comportamiento real:**
@@ -93,6 +120,7 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
   - ⚠️ Este diagnóstico reemplaza y actualiza `docs/DIAGNOSTICO_OVERRIDES_MASTER.md`
   - Refleja el comportamiento REAL verificado en código actual
 - `docs/DIAGNOSTICO_CLEAN_AFTER_RESET.md` - Verificación de CLEAN después de RESET
+  - Diagnóstico que validó el comportamiento REAL antes de formalizar el contrato
 - `docs/DIAGNOSTICO_THRESHOLD_RESET.md` - Análisis de PENDING después de RESET
 
 ---
@@ -121,3 +149,8 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
   - Todas las vistas READ aplican overrides consistentemente
   - Preparación futura: metadata de overrides en respuestas (NO implementado todavía)
   - Actualizado MASTER_API_ALQUIMIA_ALUMNO_CONTRACTS_V1.md con decisión Opción B
+- 2026-01-17: Creación de CLEAN_AFTER_RESET_CONTRACT_V1.md
+  - Contrato canónico que cierra el borde RESET → CLEAN
+  - Documenta que CLEAN es acto fundador del nuevo ciclo
+  - Formaliza comportamiento que no estaba documentado anteriormente
+  - Elimina ambigüedad histórica sobre CLEAN después de reset
