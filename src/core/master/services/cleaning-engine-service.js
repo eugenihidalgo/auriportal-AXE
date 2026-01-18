@@ -2017,8 +2017,8 @@ export async function resetStudentItemProgress(options, client = null) {
     student_uuid,
     item_ref,
     item_kind,
+    reset_layers: optResetLayers = null,
     clean_layer = null,
-    view_layer = null,
     product_key = 'pde',
     domain_type = 'transmutation',
     actor_type,
@@ -2028,13 +2028,13 @@ export async function resetStudentItemProgress(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('MASTER', '[RESET][CANONICAL] resetStudentItemProgress entrada', {
+  logInfo('MASTER', '[RESET_LIST_V2] resetStudentItemProgress entrada', {
     traceId,
     student_uuid,
     item_ref,
     item_kind,
+    reset_layers: optResetLayers,
     clean_layer,
-    view_layer,
     product_key,
     actor_type,
     surface_key
@@ -2120,68 +2120,23 @@ export async function resetStudentItemProgress(options, client = null) {
       throw new Error(`item_kind no coincide con lista.tipo: item_kind=${item_kind}, lista.tipo=${lista.tipo}`);
     }
 
-    // 4. Determinar capas a resetear
-    // MAJOR-2 FIX: Validar coherencia view_layer + clean_layer
-    // REGLA CANÓNICA: view_layer='effective' → clean_layer='pde' (OBLIGATORIO)
-    if (view_layer === 'effective' && item_kind === 'recurrente') {
-      // REGLA CONSTITUCIONAL: Reset desde effective → SOLO PDE
-      if (clean_layer && clean_layer !== 'pde') {
-        const error = new Error(`[MAJOR-2] Coherencia violada: view_layer='effective' requiere clean_layer='pde', recibido: ${clean_layer}`);
-        error.code = 'VIEW_LAYER_CLEAN_LAYER_COHERENCE_VIOLATION';
-        logError('MASTER', '[MAJOR-2] Coherencia view_layer/clean_layer violada', {
-          traceId,
-          view_layer,
-          clean_layer,
-          item_kind
-        });
-        throw error;
-      }
-      // Forzar clean_layer='pde' si no viene explícito
-      if (!clean_layer) {
-        clean_layer = 'pde';
-        logInfo('MASTER', '[MAJOR-2] view_layer=effective → clean_layer=pde (regla canónica)', {
-          traceId,
-          student_uuid,
-          item_ref
-        });
-      }
-    }
-    
-    // REGLA V1: Si clean_layer viene explícito, reset solo esa capa
-    // Si no viene, derivar de view_layer:
-    //   - effective (recurrente) => reset SOLO pde (regla canónica)
-    //   - combo (una_vez) => reset BOTH (shared + pde)
-    //   - shared/pde => reset solo esa capa
+    // 4. Determinar capas a resetear (RESET LIST V2)
+    // GUARDRAIL 0: effective/combo son SOLO view_layer; escritura SOLO reset_layers o clean_layer (compat).
+    // PROHIBIDO: view_layer en POST; no inferir desde view_layer.
     let layersToReset = [];
-    if (clean_layer) {
-      if (clean_layer !== 'shared' && clean_layer !== 'pde') {
-        throw new Error(`clean_layer debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
-      }
+    if (optResetLayers && ['shared', 'pde', 'shared_and_pde'].includes(optResetLayers)) {
+      if (optResetLayers === 'shared') layersToReset = ['shared'];
+      else if (optResetLayers === 'pde') layersToReset = ['pde'];
+      else if (optResetLayers === 'shared_and_pde') layersToReset = ['shared', 'pde'];
+    } else if (clean_layer && (clean_layer === 'shared' || clean_layer === 'pde')) {
       layersToReset = [clean_layer];
-    } else if (view_layer) {
-      if (view_layer === 'effective' && item_kind === 'recurrente') {
-        // MAJOR-2 FIX: effective → SOLO pde (regla canónica)
-        layersToReset = ['pde'];
-      } else if (view_layer === 'combo' && item_kind === 'una_vez') {
-        layersToReset = ['shared', 'pde'];
-      } else if (view_layer === 'shared' || view_layer === 'pde') {
-        layersToReset = [view_layer];
-      } else {
-        // Default: reset shared si no se puede determinar
-        logWarn('MASTER', 'view_layer no permite derivar clean_layer, usando shared', {
-          traceId,
-          view_layer,
-          item_kind
-        });
-        layersToReset = ['shared'];
-      }
     } else {
-      // Default: reset shared si no hay información
-      logWarn('MASTER', 'No se proporcionó clean_layer ni view_layer, usando shared', {
-        traceId
-      });
+      logWarn('MASTER', '[RESET_LIST_V2] Sin reset_layers ni clean_layer válido, usando shared', { traceId });
       layersToReset = ['shared'];
     }
+
+    // Época lógica única para shared_and_pde (mismo reset_at en ambas capas)
+    const logicalResetAt = layersToReset.length > 1 ? new Date() : null;
 
     // 5. Aplicar reset a cada capa
     const eventsRepo = getDefaultCleaningEventsRepo();
@@ -2287,14 +2242,15 @@ export async function resetStudentItemProgress(options, client = null) {
 
         // Aplicar reset a proyección (SOLO effective_since según RESET CANÓNICO v1)
         // REGLA CONSTITUCIONAL: Reset SOLO modifica effective_since
-        // Los contadores se calcularán desde eventos post-RESET cuando se ejecute rebaseStateFromReset()
+        // shared_and_pde: misma época lógica (logicalResetAt); una capa: timestamp del evento
+        const resetAtToUse = (logicalResetAt != null) ? logicalResetAt : resetTimestamp;
         await stateRepo.upsertApplyReset({
           student_uuid,
           product_key,
           domain_type,
           item_ref,
           clean_layer: layer,
-          reset_at: resetTimestamp // Usar timestamp del evento RESET (no NOW())
+          reset_at: resetAtToUse
         }, client);
 
         applied++;
@@ -2333,7 +2289,8 @@ export async function resetStudentItemProgress(options, client = null) {
     try {
       // Obtener reset_at (effective_since) del estado final
       const resetAt = finalState?.shared_effective_since || finalState?.pde_effective_since || new Date();
-      const resetExecutionKey = generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, clean_layer);
+      const layerForSignal = (layersAffected && layersAffected[0]) || 'shared';
+      const resetExecutionKey = generateExecutionKey('reset', item_ref, student_uuid, new Date(), execution_mode, item_kind, layerForSignal);
       
       await dispatchSignal({
         signal_key: 'reset.executed',
@@ -2341,7 +2298,7 @@ export async function resetStudentItemProgress(options, client = null) {
           student_uuid,
           item_ref,
           target_ref: student_uuid, // Obligatorio: identifica entidad afectada
-          clean_layer,
+          clean_layer: layerForSignal,
           item_kind,
           actor_type,
           execution_key: resetExecutionKey,
@@ -2368,7 +2325,7 @@ export async function resetStudentItemProgress(options, client = null) {
         traceId,
         student_uuid,
         item_ref,
-        clean_layer,
+        clean_layer: layerForSignal,
         execution_key: resetExecutionKey
       });
     } catch (signalError) {
@@ -2377,7 +2334,7 @@ export async function resetStudentItemProgress(options, client = null) {
         traceId,
         student_uuid,
         item_ref,
-        clean_layer,
+        clean_layer: layerForSignal,
         error: signalError.message
       });
     }
@@ -2422,7 +2379,8 @@ export async function resetStudentItemProgress(options, client = null) {
  * @param {Object} options - Opciones
  * @param {string} options.item_ref - Referencia del item
  * @param {string} options.item_kind - Tipo de item ('recurrente' | 'una_vez') - OBLIGATORIO
- * @param {string} options.clean_layer - Capa a resetear ('shared' | 'pde') - OBLIGATORIO
+ * @param {string} [options.reset_layers] - 'shared' | 'pde' | 'shared_and_pde' (V2). ITEM_ALL/LIST_ALL aceptan los tres (V2).
+ * @param {string} [options.clean_layer] - 'shared' | 'pde' (V1 compat: se mapea a reset_layers si no hay reset_layers)
  * @param {string} [options.product_key='pde'] - Clave del producto
  * @param {string} [options.domain_type='transmutation'] - Tipo de dominio
  * @param {string} options.actor_type - Tipo de actor ('master')
@@ -2437,7 +2395,8 @@ export async function resetAllStudentsItemProgress(options, client = null) {
   const {
     item_ref,
     item_kind,
-    clean_layer,
+    reset_layers: optResetLayers = null,
+    clean_layer = null,
     product_key = 'pde',
     domain_type = 'transmutation',
     actor_type,
@@ -2447,24 +2406,33 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('MASTER', '[RESET][ALL][CANONICAL] resetAllStudentsItemProgress entrada', {
+  // RESET LIST V2: reset_layers (o mapeo desde clean_layer). GUARDRAIL 1: RESET_ALL_INVALID_LAYER eliminado.
+  // ITEM_ALL y LIST_ALL aceptan reset_layers='shared', 'pde' y 'shared_and_pde'.
+  let reset_layers = optResetLayers;
+  if (!reset_layers && clean_layer && (clean_layer === 'shared' || clean_layer === 'pde')) {
+    reset_layers = clean_layer;
+  }
+  if (!reset_layers || !['shared', 'pde', 'shared_and_pde'].includes(reset_layers)) {
+    throw new Error(`reset_layers es obligatorio y debe ser 'shared', 'pde' o 'shared_and_pde'. Por compatibilidad se acepta clean_layer='shared'|'pde'. Recibido: reset_layers=${optResetLayers}, clean_layer=${clean_layer}`);
+  }
+
+  logInfo('MASTER', '[RESET_LIST_V2] resetAllStudentsItemProgress entrada', {
     traceId,
     item_ref,
     item_kind,
-    clean_layer,
+    reset_layers,
     product_key,
     actor_type,
     surface_key
   });
 
   // Validar campos requeridos
-  if (!item_ref || !actor_type || !item_kind || !surface_key || !clean_layer) {
+  if (!item_ref || !actor_type || !item_kind || !surface_key) {
     const missing = [];
     if (!item_ref) missing.push('item_ref');
     if (!actor_type) missing.push('actor_type');
     if (!item_kind) missing.push('item_kind');
     if (!surface_key) missing.push('surface_key');
-    if (!clean_layer) missing.push('clean_layer');
     throw new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
   }
 
@@ -2482,29 +2450,6 @@ export async function resetAllStudentsItemProgress(options, client = null) {
       item_ref,
       item_kind
     });
-    throw error;
-  }
-
-  // Validar clean_layer
-  if (clean_layer !== 'shared' && clean_layer !== 'pde') {
-    throw new Error(`clean_layer debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
-  }
-
-  // ============================================================================
-  // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE (FALLO DURO)
-  // ============================================================================
-  if (clean_layer !== 'pde') {
-    logError('MASTER', '[RESET][ALL][INVALID_LAYER] Reset ALL solo permitido con clean_layer=pde', {
-      traceId,
-      clean_layer_provided: clean_layer,
-      reset_scope: 'ITEM_ALL',
-      contract_violation: true,
-      required_clean_layer: 'pde'
-    });
-    
-    const error = new Error('Reset ALL solo permitido con clean_layer=pde según RESET_CONTRACT_V1. clean_layer proporcionado: ' + clean_layer);
-    error.code = 'RESET_ALL_INVALID_LAYER';
-    error.trace_id = traceId;
     throw error;
   }
 
@@ -2569,13 +2514,12 @@ export async function resetAllStudentsItemProgress(options, client = null) {
           continue;
         }
 
-        // Resetear usando función canónica
+        // Resetear usando función canónica (reset_layers; view_layer NUNCA)
         const resetResult = await resetStudentItemProgress({
           student_uuid: studentUuid,
           item_ref,
           item_kind,
-          clean_layer,
-          view_layer: null,
+          reset_layers,
           product_key,
           domain_type,
           actor_type,
@@ -2616,11 +2560,11 @@ export async function resetAllStudentsItemProgress(options, client = null) {
       }
     }
 
-    logInfo('MASTER', '[RESET][ALL][CANONICAL] Reset ALL completado', {
+    logInfo('MASTER', '[RESET_LIST_V2] Reset ALL completado', {
       traceId,
       item_ref,
       item_kind,
-      clean_layer,
+      reset_layers,
       applied,
       skipped,
       total,
@@ -2668,7 +2612,8 @@ export async function resetAllStudentsItemProgress(options, client = null) {
  * @param {string} [options.item_ref] - Referencia del item (requerido si scope incluye ITEM)
  * @param {string|number} [options.list_id] - ID de lista (requerido si scope incluye LIST)
  * @param {string} [options.student_uuid] - UUID del estudiante (requerido si scope incluye STUDENT)
- * @param {string} options.clean_layer - 'shared' | 'pde' (OBLIGATORIO)
+ * @param {string} [options.reset_layers] - 'shared' | 'pde' | 'shared_and_pde' (V2). Si no, se usa clean_layer.
+ * @param {string} [options.clean_layer] - 'shared' | 'pde' (V1 compat: se mapea a reset_layers si no hay reset_layers)
  * @param {string} [options.reason] - Razón del reset (opcional, para auditoría)
  * @param {string} [options.product_key='pde'] - Clave del producto
  * @param {string} [options.domain_type='transmutation'] - Tipo de dominio
@@ -2686,6 +2631,7 @@ export async function resetByScope(options, client = null) {
     item_ref,
     list_id,
     student_uuid,
+    reset_layers: optResetLayers,
     clean_layer,
     reason,
     product_key = 'pde',
@@ -2696,13 +2642,22 @@ export async function resetByScope(options, client = null) {
     meta = {}
   } = options;
 
-  logInfo('MASTER', '[RESET][SCOPE][CANONICAL] resetByScope entrada', {
+  // RESET LIST V2: reset_layers obligatorio (o mapeo desde clean_layer). view_layer NUNCA.
+  let reset_layers = optResetLayers;
+  if (!reset_layers && clean_layer && (clean_layer === 'shared' || clean_layer === 'pde')) {
+    reset_layers = clean_layer;
+  }
+  if (!reset_layers || !['shared', 'pde', 'shared_and_pde'].includes(reset_layers)) {
+    throw new Error(`reset_layers es obligatorio y debe ser 'shared', 'pde' o 'shared_and_pde'. Por compatibilidad se acepta clean_layer='shared'|'pde'. Recibido: reset_layers=${optResetLayers}, clean_layer=${clean_layer}`);
+  }
+
+  logInfo('MASTER', '[RESET_LIST_V2] resetByScope entrada', {
     traceId,
     reset_scope,
+    reset_layers,
     item_ref,
     list_id,
     student_uuid,
-    clean_layer,
     reason
   });
 
@@ -2710,11 +2665,6 @@ export async function resetByScope(options, client = null) {
   const validScopes = ['ITEM_STUDENT', 'ITEM_ALL', 'LIST_STUDENT', 'LIST_ALL'];
   if (!reset_scope || !validScopes.includes(reset_scope)) {
     throw new Error(`reset_scope debe ser uno de: ${validScopes.join(', ')}, recibido: ${reset_scope}`);
-  }
-
-  // Validar clean_layer obligatorio
-  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
-    throw new Error(`clean_layer es obligatorio y debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
   }
 
   // Validaciones según scope
@@ -2751,7 +2701,7 @@ export async function resetByScope(options, client = null) {
         student_uuid,
         item_ref,
         item_kind: 'recurrente', // Reset solo para recurrente
-        clean_layer,
+        reset_layers,
         product_key,
         domain_type,
         actor_type,
@@ -2772,11 +2722,11 @@ export async function resetByScope(options, client = null) {
       results.push(result);
 
     } else if (reset_scope === 'ITEM_ALL') {
-      // ITEM_ALL: Reset item para todos los estudiantes
+      // ITEM_ALL: Reset item para todos los estudiantes (V2: acepta shared y shared_and_pde)
       const result = await resetAllStudentsItemProgress({
         item_ref,
         item_kind: 'recurrente', // Reset solo para recurrente
-        clean_layer,
+        reset_layers,
         product_key,
         domain_type,
         actor_type,
@@ -2826,7 +2776,7 @@ export async function resetByScope(options, client = null) {
           student_uuid,
           item_ref: item.item_ref,
           item_kind: 'recurrente',
-          clean_layer,
+          reset_layers,
           product_key,
           domain_type,
           actor_type,
@@ -2876,7 +2826,7 @@ export async function resetByScope(options, client = null) {
         const result = await resetAllStudentsItemProgress({
           item_ref: item.item_ref,
           item_kind: 'recurrente',
-          clean_layer,
+          reset_layers,
           product_key,
           domain_type,
           actor_type,

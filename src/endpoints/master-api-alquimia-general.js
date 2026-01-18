@@ -1846,7 +1846,7 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     if (path === '/master/api/alquimia-general/reset' && method === 'POST') {
       try {
         const body = await request.json();
-        const { reset_scope, item_ref, list_id, student_uuid, clean_layer, reason, item_kind } = body;
+        const { reset_scope, item_ref, list_id, student_uuid, reset_layers, clean_layer, reason, item_kind } = body;
 
         // Validaciones obligatorias
         if (!reset_scope) {
@@ -1858,8 +1858,19 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError(`reset_scope inválido: "${reset_scope}". Debe ser uno de: ${validScopes.join(', ')}`, 'VALIDATION_ERROR', 400, traceId);
         }
 
-        if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
-          return jsonError('clean_layer es obligatorio y debe ser "shared" o "pde"', 'VALIDATION_ERROR', 400, traceId);
+        // RESET LIST V2: reset_layers (o mapeo desde clean_layer por compatibilidad)
+        // PROHIBIDO: view_layer en POST; effective/combo no son capas de escritura.
+        let resolvedResetLayers = null;
+        if (reset_layers === 'effective' || reset_layers === 'combo' || clean_layer === 'effective' || clean_layer === 'combo') {
+          return jsonError('reset_layers y clean_layer no pueden ser "effective" ni "combo". Son solo view_layer (lectura). Use "shared", "pde" o "shared_and_pde".', 'VALIDATION_ERROR', 400, traceId);
+        }
+        if (reset_layers && ['shared', 'pde', 'shared_and_pde'].includes(reset_layers)) {
+          resolvedResetLayers = reset_layers;
+        } else if (clean_layer && (clean_layer === 'shared' || clean_layer === 'pde')) {
+          resolvedResetLayers = clean_layer;
+        }
+        if (!resolvedResetLayers) {
+          return jsonError('reset_layers es obligatorio y debe ser "shared", "pde" o "shared_and_pde". Por compatibilidad se acepta clean_layer="shared" o "pde".', 'VALIDATION_ERROR', 400, traceId);
         }
 
         // Validaciones según scope
@@ -1886,26 +1897,26 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
           return jsonError('reset NO permitido para item_kind="una_vez". Reset solo para recurrente.', 'RESET_UNA_VEZ_FORBIDDEN', 400, traceId);
         }
 
-        logInfo('MasterApiAlquimiaGeneral', '[RESET][CANONICAL] POST /reset iniciado', {
+        logInfo('MasterApiAlquimiaGeneral', '[RESET_LIST_V2] POST /reset iniciado', {
           traceId,
           reset_scope,
+          reset_layers: resolvedResetLayers,
           item_ref,
           list_id,
           student_uuid,
-          clean_layer,
           reason
         });
 
         // Importar función unificada
         const { resetByScope } = await import('../core/master/services/cleaning-engine-service.js');
 
-        // Llamar función unificada
+        // Llamar función unificada (reset_layers; view_layer NUNCA en POST)
         const result = await resetByScope({
           reset_scope,
           item_ref,
           list_id,
           student_uuid,
-          clean_layer,
+          reset_layers: resolvedResetLayers,
           reason,
           product_key: body.product_key || 'pde',
           domain_type: body.domain_type || 'transmutation',

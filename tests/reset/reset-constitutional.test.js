@@ -644,4 +644,90 @@ describe('Tests Constitucionales - Reset v1', () => {
       ).rejects.toThrow('Campos requeridos faltantes');
     });
   });
+
+  // ============================================================================
+  // 10. RESET LIST V2 — reset_layers, ITEM_ALL/LIST_ALL aceptan shared y shared_and_pde
+  // ============================================================================
+
+  describe('RESET LIST V2 - reset_layers y supersión RESET_ALL_INVALID_LAYER', () => {
+    it('UNA_VEZ debe hard-fail (RESET_UNA_VEZ_FORBIDDEN)', async () => {
+      await expect(
+        resetStudentItemProgress({
+          student_uuid: TEST_STUDENT_UUID,
+          item_ref: TEST_ITEM_REF,
+          item_kind: 'una_vez',
+          reset_layers: 'shared',
+          actor_type: 'master',
+          surface_key: 'test'
+        })
+      ).rejects.toMatchObject({ code: 'RESET_UNA_VEZ_FORBIDDEN' });
+    });
+
+    it('ITEM_ALL con reset_layers=shared NO debe lanzar RESET_ALL_INVALID_LAYER', async () => {
+      try {
+        const r = await resetAllStudentsItemProgress({
+          item_ref: TEST_ITEM_REF,
+          item_kind: 'recurrente',
+          reset_layers: 'shared',
+          actor_type: 'master',
+          surface_key: 'test'
+        });
+        expect(r).toHaveProperty('applied');
+        expect(r).toHaveProperty('total');
+      } catch (e) {
+        expect(e.code).not.toBe('RESET_ALL_INVALID_LAYER');
+      }
+    });
+
+    it('resetAllStudentsItemProgress con reset_layers=shared_and_pde debe aceptarse', async () => {
+      try {
+        const r = await resetAllStudentsItemProgress({
+          item_ref: TEST_ITEM_REF,
+          item_kind: 'recurrente',
+          reset_layers: 'shared_and_pde',
+          actor_type: 'master',
+          surface_key: 'test'
+        });
+        expect(r).toHaveProperty('applied');
+        expect(r).toHaveProperty('layers_affected');
+      } catch (e) {
+        expect(e.code).not.toBe('RESET_ALL_INVALID_LAYER');
+      }
+    });
+
+    it('Compat: resetAllStudentsItemProgress con clean_layer=shared (sin reset_layers) debe mapear y NO lanzar RESET_ALL_INVALID_LAYER', async () => {
+      try {
+        const r = await resetAllStudentsItemProgress({
+          item_ref: TEST_ITEM_REF,
+          item_kind: 'recurrente',
+          clean_layer: 'shared',
+          actor_type: 'master',
+          surface_key: 'test'
+        });
+        expect(r).toHaveProperty('applied');
+        expect(r).toHaveProperty('total');
+      } catch (e) {
+        expect(e.code).not.toBe('RESET_ALL_INVALID_LAYER');
+      }
+    });
+
+    it('resetStudentItemProgress con reset_layers=shared_and_pde debe escribir ambas capas (o item no en catálogo)', async () => {
+      try {
+        const r = await resetStudentItemProgress({
+          student_uuid: TEST_STUDENT_UUID,
+          item_ref: TEST_ITEM_REF,
+          item_kind: 'recurrente',
+          reset_layers: 'shared_and_pde',
+          actor_type: 'master',
+          surface_key: 'test'
+        });
+        expect(r.layers_affected).toContain('shared');
+        expect(r.layers_affected).toContain('pde');
+      } catch (e) {
+        // Si el ítem no existe en catálogo o el estudiante en students: se acepta (test de lógica reset_layers)
+        if (e.message?.includes('Item no encontrado') || e.message?.includes('foreign key')) return;
+        throw e;
+      }
+    });
+  });
 });

@@ -9,6 +9,26 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.81.0] - 2026-01-13
+
+### Added
+- **RESET LIST V2 (multicapa):** `reset_layers` ∈ { 'shared', 'pde', 'shared_and_pde' }; ITEM_ALL y LIST_ALL aceptan shared y shared_and_pde (supersede RESET_ALL_INVALID_LAYER).
+  - Endpoint `POST /master/api/alquimia-general/reset`: acepta `reset_layers`; si no, mapea `clean_layer`→`reset_layers`. Rechaza effective/combo en escritura.
+  - Engine: `resetByScope`, `resetStudentItemProgress`, `resetAllStudentsItemProgress` con `reset_layers`; `shared_and_pde` → dos resets con misma época lógica.
+  - `buildResetPayload`: `reset_layers` o `clean_layer` (compat); `allowed_layers` incluye `shared_and_pde`.
+- **Regla** `reset-list-v2-write-contract` en `.cursorrules`: POST reset usa reset_layers; view_layer nunca en escritura.
+- **Tests** en `tests/reset/reset-constitutional.test.js`: UNA_VEZ hard-fail, ITEM_ALL+reset_layers=shared, reset_layers=shared_and_pde, compat clean_layer=shared, shared_and_pde escribe ambas capas.
+
+### Changed
+- Restricción «Reset ALL solo pde» eliminada: gobernada por `reset_layers`; `clean_layer='shared'` en *_ALL se acepta (mapeo a reset_layers).
+- `resetStudentItemProgress`: se elimina MAJOR-2 y derivación desde `view_layer`; capas solo desde `reset_layers` o `clean_layer`.
+
+### References
+- `docs/contracts/RESET_LIST_V2.md`, `docs/RESET_LIST_V2_DESIGN.md`, `docs/RESET_LIST_V2_IMPLEMENTATION_REPORT.md`
+- Invariante 12c en `docs/INVARIANTES_CONSTITUCIONALES.md`
+
+---
+
 ## [5.80.0] - 2026-01-13
 
 ### Added

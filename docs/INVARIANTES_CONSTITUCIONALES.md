@@ -222,6 +222,50 @@ grep -n "\[POST_RESET\]\[INVALIDATE_VIEW\]\|\[POST_RESET\]\[REHYDRATE_VIEW\]" pu
 
 ---
 
+## Invariante 12c: RESET LIST V2 — reset_layers y Reset ALL multicapa (previsto)
+
+**Alcance:** Entra en vigor con la implementación de RESET_LIST_V2. Supersede la restricción "Reset ALL solo PDE" (RESET_CONTRACT_V1) en ese alcance.
+
+### Regla
+
+En RESET, las capas a resetear se expresan con **`reset_layers`**: `'shared'` | `'pde'` | `'shared_and_pde'`. Reset ALL (ITEM_ALL, LIST_ALL) **acepta** los tres valores. `effective` y `combo` **no** son capas de escritura en RESET.
+
+### Prohibiciones
+
+**PROHIBIDO:**
+- ❌ `reset_layers` (o su equivalente) con valores distintos de 'shared', 'pde', 'shared_and_pde'
+- ❌ Usar 'effective' o 'combo' como capa de escritura en RESET
+- ❌ Reset de más de una lista en una sola operación
+
+### Obligaciones
+
+**OBLIGATORIO:**
+- ✅ Aceptar `reset_layers='shared'`, `'pde'`, `'shared_and_pde'` en ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL
+- ✅ Permitir Reset ALL (LIST_ALL, ITEM_ALL) con `reset_layers='shared'` y `'shared_and_pde'` (no solo pde)
+- ✅ `shared_and_pde`: resetar ambas capas en una operación lógica (mismo reset_at por capa)
+- ✅ Compatibilidad: si solo llega `clean_layer` ('shared'|'pde'), mapear a `reset_layers`
+
+### Verificación
+
+**Comandos (tras implementación):**
+```bash
+# Verificar que reset_layers o su mapeo existe en endpoint y resetByScope
+grep -n "reset_layers\|clean_layer" src/endpoints/master-api-alquimia-general.js
+
+# Verificar que resetAllStudentsItemProgress (o equivalente) acepta shared y shared_and_pde para *_ALL
+grep -n "reset_layers\|clean_layer\|RESET_ALL_INVALID_LAYER" src/core/master/services/cleaning-engine-service.js
+```
+
+**Referencias:**
+- `docs/contracts/RESET_LIST_V2.md`
+- `docs/RESET_LIST_V2_DESIGN.md`
+- `docs/SUPERDIAGNOSTICO_FORENSE_RESET_CLEAN_LISTA_ALUMNOS_CAPA_V1.md`
+- `docs/contracts/RESET_CONTRACT_V1.md` (histórico; restricción Reset ALL solo PDE supersedida por V2)
+- `docs/contracts/CLEAN_AFTER_RESET_CONTRACT_V1.md`
+- `docs/CLEANING_PROJECTION_MODEL_V1.md` (CPM; view_layer solo lectura)
+
+---
+
 ## Invariante 4: Separación RECURRENTE vs UNA_VEZ
 
 ### Regla

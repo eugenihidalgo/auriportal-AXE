@@ -812,6 +812,24 @@ Cuando Cursor crea o modifica un endpoint `/master/api/**`:
       - docs/POST_RESET_VIEW_STATE_CONTRACT_V1.md
       - docs/POST_RESET_VIEW_STATE_DESIGN_CERTIFICATION_V1.md
 
+  - id: reset-list-v2-write-contract
+    title: POST reset usa reset_layers; view_layer NUNCA en escritura (RESET LIST V2)
+    # [CONSTITUTIONAL — RESET LIST V2]
+    content: >
+      En RESET, la escritura se expresa SOLO con reset_layers (V2) o clean_layer (V1 compat).
+      PROHIBIDO:
+      - Usar view_layer en POST /master/api/alquimia-general/reset (ni recibirlo ni inferirlo para capas)
+      - reset_layers o clean_layer = 'effective' o 'combo' (son SOLO view_layer, lectura)
+      - Restricción "Reset ALL solo pde": ITEM_ALL y LIST_ALL aceptan reset_layers='shared' y 'shared_and_pde'
+      OBLIGATORIO:
+      - reset_layers ∈ { 'shared', 'pde', 'shared_and_pde' }; si no llega, mapear clean_layer→reset_layers
+      - shared_and_pde exige reset_layers (no se puede expresar con clean_layer)
+      - effective y combo son SOLO view_layer; la UI traduce intención a reset_layers
+      REFERENCIAS:
+      - docs/contracts/RESET_LIST_V2.md
+      - docs/RESET_LIST_V2_DESIGN.md
+      - Invariante 12c en docs/INVARIANTES_CONSTITUCIONALES.md
+
   - id: alquimia-toast-no-confirm
     title: No usar confirm() ni alert() en flujos de limpieza
     content: >

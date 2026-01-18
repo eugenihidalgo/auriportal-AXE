@@ -206,13 +206,14 @@ function buildResetEndpoint(context) {
 }
 
 /**
- * Construye payload para acciones de reset (canónico v1)
+ * Construye payload para acciones de reset (RESET LIST V2)
+ * POST reset usa reset_layers; view_layer NUNCA en escritura. effective/combo son solo view_layer.
  * @param {Object} uiState - Estado de UI
- * @param {Object} context - Contexto (reset_scope, item_ref, list_id, student_uuid, clean_layer, reason)
+ * @param {Object} context - Contexto (reset_scope, item_ref, list_id, student_uuid, reset_layers|clean_layer, reason)
  * @returns {Object} Payload para el backend
  */
 function buildResetPayload(uiState, context) {
-  const { reset_scope, item_ref, list_id, student_uuid, clean_layer, reason, item_kind } = context;
+  const { reset_scope, item_ref, list_id, student_uuid, reset_layers, clean_layer, reason, item_kind } = context;
 
   // Validación dura: reset SOLO para recurrente
   if (item_kind === 'una_vez') {
@@ -229,9 +230,14 @@ function buildResetPayload(uiState, context) {
     throw new Error(`reset_scope inválido: "${reset_scope}". Debe ser uno de: ${validScopes.join(', ')}`);
   }
 
-  // Validar clean_layer obligatorio
-  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
-    throw new Error('clean_layer es obligatorio y debe ser "shared" o "pde"');
+  // RESET LIST V2: reset_layers o clean_layer (compat). PROHIBIDO: effective/combo (solo view_layer).
+  if (reset_layers === 'effective' || reset_layers === 'combo' || clean_layer === 'effective' || clean_layer === 'combo') {
+    throw new Error('reset_layers y clean_layer no pueden ser "effective" ni "combo". Use "shared", "pde" o "shared_and_pde".');
+  }
+  const hasResetLayers = reset_layers && ['shared', 'pde', 'shared_and_pde'].includes(reset_layers);
+  const hasCleanLayer = clean_layer && (clean_layer === 'shared' || clean_layer === 'pde');
+  if (!hasResetLayers && !hasCleanLayer) {
+    throw new Error('reset_layers es obligatorio ("shared", "pde" o "shared_and_pde") o clean_layer ("shared"|"pde") por compatibilidad.');
   }
 
   // ============================================================================
@@ -279,11 +285,11 @@ function buildResetPayload(uiState, context) {
   }
 
   // ============================================================================
-  // CONSTRUIR PAYLOAD CANÓNICO (NO incluir execution_key - es backend-only)
+  // CONSTRUIR PAYLOAD CANÓNICO (reset_layers V2 o clean_layer compat; execution_key backend-only)
   // ============================================================================
   const payload = {
     reset_scope,
-    clean_layer
+    ...(hasResetLayers ? { reset_layers: reset_layers } : { clean_layer: clean_layer })
   };
 
   // Incluir campos según scope (validaciones ya pasaron arriba)
@@ -392,7 +398,7 @@ registerActionFn({
   domain: 'master',
   description: 'Resetear progreso de item o lista (SOLO recurrente) - Canónico v1',
   allowed_item_kinds: ['recurrente'], // ❗ SOLO recurrente
-  allowed_layers: ['shared', 'pde'], // clean_layer es OBLIGATORIO
+  allowed_layers: ['shared', 'pde', 'shared_and_pde'], // reset_layers (V2) o clean_layer (compat)
   allowed_scopes: ['item', 'list', 'all', 'student'], // UX scopes válidos (reset_scope en payload es dominio)
   handler: {
     method: 'POST',
