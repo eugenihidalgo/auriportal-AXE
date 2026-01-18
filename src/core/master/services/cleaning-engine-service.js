@@ -2490,13 +2490,22 @@ export async function resetAllStudentsItemProgress(options, client = null) {
     throw new Error(`clean_layer debe ser 'shared' o 'pde', recibido: ${clean_layer}`);
   }
 
-  // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE
+  // ============================================================================
+  // REGLA CONSTITUCIONAL: Reset ALL solo afecta PDE (FALLO DURO)
+  // ============================================================================
   if (clean_layer !== 'pde') {
-    logWarn('MASTER', 'Reset ALL debe usar clean_layer=pde según contrato', {
+    logError('MASTER', '[RESET][ALL][INVALID_LAYER] Reset ALL solo permitido con clean_layer=pde', {
       traceId,
-      clean_layer_provided: clean_layer
+      clean_layer_provided: clean_layer,
+      reset_scope: 'ITEM_ALL',
+      contract_violation: true,
+      required_clean_layer: 'pde'
     });
-    // No fallar, pero advertir (puede ser que se quiera resetear shared también en el futuro)
+    
+    const error = new Error('Reset ALL solo permitido con clean_layer=pde según RESET_CONTRACT_V1. clean_layer proporcionado: ' + clean_layer);
+    error.code = 'RESET_ALL_INVALID_LAYER';
+    error.trace_id = traceId;
+    throw error;
   }
 
   try {
