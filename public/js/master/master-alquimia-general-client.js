@@ -5280,14 +5280,13 @@
             const overrides = await getItemOverrides(state.projection.student_uuid, item.item_ref);
             if (overrides.length > 0) {
               const btnReset = document.createElement('button');
-              btnReset.textContent = 'Reset Overrides';
+              btnReset.textContent = 'Restaurar valores por defecto';
               btnReset.style.cssText = 'padding: 0.375rem 0.75rem; background: #f59e0b; color: #fff; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; font-weight: 500;';
               btnReset.addEventListener('click', async () => {
                 if (!confirm(`¿Eliminar todos los overrides de este item para este alumno?`)) {
                   return;
                 }
-                
-                // BUG-006 FIX: Usar performAction() en lugar de función directa
+
                 try {
                   if (typeof window.performAction !== 'function') {
                     throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
@@ -5300,28 +5299,27 @@
                   };
 
                   const result = await window.performAction({
-                    action_id: 'alquimia.reset_overrides',
+                    action_id: 'alquimia.restore_defaults',
                     context: {
+                      scope: 'ITEM_STUDENT',
                       student_uuid: state.projection.student_uuid,
                       item_ref: item.item_ref,
                       list_id: state.listaActiva?.id || null,
-                      clean_layer: 'shared', // Para buildRefreshPlan y flotante
                       view_layer: state.projection.view_layer || 'shared'
                     },
                     uiState
                   });
 
                   if (!result.ok) {
-                    throw new Error(result.error || 'Error reseteando overrides');
+                    throw new Error(result.error || 'Error restaurando valores por defecto');
                   }
 
-                  const deletedCount = result.data?.deleted_count || 0;
-                  console.log('[MasterAlquimiaGeneral] [BUG-006] Overrides reseteados usando performAction:', deletedCount);
-                  showToastSuccess(`${deletedCount} override(s) eliminado(s)`);
-                  
-                  // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
+                  const deletedCount = result.data?.deleted_count ?? result.data?.applied ?? 0;
+                  console.log('[MasterAlquimiaGeneral] [RESTORE_DEFAULTS] Overrides eliminados:', deletedCount);
+                  showToastSuccess(deletedCount > 0 ? `${deletedCount} override(s) eliminado(s)` : 'Valores por defecto restaurados');
+
                 } catch (error) {
-                  console.error('[OVERRIDES][RESET] Error:', error);
+                  console.error('[RESTORE_DEFAULTS] Error:', error);
                   showToastError(`Error: ${error.message}`);
                 }
               });

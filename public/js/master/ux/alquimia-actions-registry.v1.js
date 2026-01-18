@@ -208,11 +208,12 @@
 
     // ============================================================================
     // ACCIÓN 4: alquimia.reset.item
+    // DEPRECATED: use alquimia.reset + POST /master/api/alquimia-general/reset
     // ============================================================================
     registry.register({
       action_id: 'alquimia.reset.item',
       domain: 'master',
-      description: 'Resetear progreso de item para un estudiante (recurrente)',
+      description: 'DEPRECATED: use alquimia.reset. Resetear progreso de item para un estudiante (recurrente)',
       handler: {
         method: 'POST',
         endpointBuilder: () => {
@@ -242,11 +243,12 @@
 
     // ============================================================================
     // ACCIÓN 5: alquimia.reset.list
+    // DEPRECATED: use alquimia.reset + POST /master/api/alquimia-general/reset
     // ============================================================================
     registry.register({
       action_id: 'alquimia.reset.list',
       domain: 'master',
-      description: 'Resetear progreso de lista completa para un estudiante (recurrente)',
+      description: 'DEPRECATED: use alquimia.reset. Resetear progreso de lista para un estudiante (recurrente)',
       handler: {
         method: 'POST',
         endpointBuilder: () => {
@@ -276,11 +278,12 @@
 
     // ============================================================================
     // ACCIÓN 6: alquimia.reset.item.all
+    // DEPRECATED: use alquimia.reset + POST /master/api/alquimia-general/reset
     // ============================================================================
     registry.register({
       action_id: 'alquimia.reset.item.all',
       domain: 'master',
-      description: 'Resetear progreso de item para TODOS los estudiantes (recurrente, scope=all, clean_layer=pde)',
+      description: 'DEPRECATED: use alquimia.reset. Resetear progreso de item para TODOS (recurrente)',
       handler: {
         method: 'POST',
         endpointBuilder: () => {
@@ -310,11 +313,12 @@
 
     // ============================================================================
     // ACCIÓN 7: alquimia.reset.list.all
+    // DEPRECATED: use alquimia.reset + POST /master/api/alquimia-general/reset
     // ============================================================================
     registry.register({
       action_id: 'alquimia.reset.list.all',
       domain: 'master',
-      description: 'Resetear progreso de lista completa para TODOS los estudiantes (recurrente, scope=all, clean_layer=pde)',
+      description: 'DEPRECATED: use alquimia.reset. Resetear progreso de lista para TODOS (recurrente)',
       handler: {
         method: 'POST',
         endpointBuilder: () => {
@@ -376,7 +380,8 @@
       }
     });
 
-    // Log temporal para debug
+    console.warn('[AlquimiaActionsRegistry] DEPRECATED: alquimia.reset.item, .reset.list, .reset.item.all, .reset.list.all. Use alquimia.reset + POST /reset.');
+
     const registeredActions = registry.list ? registry.list() : [];
     console.log('[AlquimiaActionsRegistry] ✅ 8 acciones registradas en UX Action Registry', {
       total: registeredActions.length,

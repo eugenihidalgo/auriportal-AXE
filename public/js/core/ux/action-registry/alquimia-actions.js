@@ -137,20 +137,20 @@ function buildResetEndpoint(context) {
 }
 
 /**
- * Construye payload para acciones de reset (canónico v1)
+ * Construye payload para acciones de reset (canónico v1, reset_layers + clean_layer).
+ * Backend acepta reset_layers (shared|pde|shared_and_pde) o clean_layer (shared|pde). effective/combo no son de escritura.
  * @param {Object} uiState - Estado de UI
- * @param {Object} context - Contexto (reset_scope, item_ref, list_id, student_uuid, clean_layer, reason)
+ * @param {Object} context - reset_scope, item_ref, list_id, student_uuid, reset_layers?, clean_layer?, reason, item_kind
  * @returns {Object} Payload para el backend
  */
 function buildResetPayload(uiState, context) {
-  const { reset_scope, item_ref, list_id, student_uuid, clean_layer, reason, item_kind } = context;
+  const { reset_scope, item_ref, list_id, student_uuid, reset_layers, clean_layer, reason, item_kind } = context;
 
   // Validación dura: reset SOLO para recurrente
   if (item_kind === 'una_vez') {
     throw new Error('reset NO permitido para item_kind="una_vez". Reset solo para recurrente.');
   }
 
-  // Validaciones obligatorias según reset_scope
   if (!reset_scope) {
     throw new Error('reset_scope es obligatorio. Valores: ITEM_STUDENT, ITEM_ALL, LIST_STUDENT, LIST_ALL');
   }
@@ -160,87 +160,110 @@ function buildResetPayload(uiState, context) {
     throw new Error(`reset_scope inválido: "${reset_scope}". Debe ser uno de: ${validScopes.join(', ')}`);
   }
 
-  // Validar clean_layer obligatorio
-  if (!clean_layer || (clean_layer !== 'shared' && clean_layer !== 'pde')) {
-    throw new Error('clean_layer es obligatorio y debe ser "shared" o "pde"');
+  // reset_layers (V2) o clean_layer (compat). Backend rechaza effective/combo.
+  const hasResetLayers = reset_layers && ['shared', 'pde', 'shared_and_pde'].includes(reset_layers);
+  const hasCleanLayer = clean_layer && (clean_layer === 'shared' || clean_layer === 'pde');
+  if (!hasResetLayers && !hasCleanLayer) {
+    throw new Error('reset_layers ("shared"|"pde"|"shared_and_pde") o clean_layer ("shared"|"pde") es obligatorio');
   }
 
   // ============================================================================
   // VALIDACIONES CONDICIONALES POR reset_scope (CONTRATO CANÓNICO)
   // ============================================================================
-  
-  // ITEM_STUDENT: require student_uuid + item_ref
+
   if (reset_scope === 'ITEM_STUDENT') {
-    if (!item_ref) {
-      throw new Error('item_ref es obligatorio para reset_scope="ITEM_STUDENT"');
-    }
-    if (!student_uuid) {
-      throw new Error('student_uuid es obligatorio para reset_scope="ITEM_STUDENT"');
-    }
+    if (!item_ref) throw new Error('item_ref es obligatorio para reset_scope="ITEM_STUDENT"');
+    if (!student_uuid) throw new Error('student_uuid es obligatorio para reset_scope="ITEM_STUDENT"');
   }
-
-  // LIST_STUDENT: require student_uuid + list_id
   if (reset_scope === 'LIST_STUDENT') {
-    if (!list_id) {
-      throw new Error('list_id es obligatorio para reset_scope="LIST_STUDENT"');
-    }
-    if (!student_uuid) {
-      throw new Error('student_uuid es obligatorio para reset_scope="LIST_STUDENT"');
-    }
+    if (!list_id) throw new Error('list_id es obligatorio para reset_scope="LIST_STUDENT"');
+    if (!student_uuid) throw new Error('student_uuid es obligatorio para reset_scope="LIST_STUDENT"');
   }
-
-  // ITEM_ALL: require item_ref, PROHIBIR student_uuid
   if (reset_scope === 'ITEM_ALL') {
-    if (!item_ref) {
-      throw new Error('item_ref es obligatorio para reset_scope="ITEM_ALL"');
-    }
-    if (student_uuid) {
-      throw new Error('student_uuid está PROHIBIDO para reset_scope="ITEM_ALL". Reset ALL no acepta student_uuid.');
-    }
+    if (!item_ref) throw new Error('item_ref es obligatorio para reset_scope="ITEM_ALL"');
+    if (student_uuid) throw new Error('student_uuid está PROHIBIDO para reset_scope="ITEM_ALL"');
   }
-
-  // LIST_ALL: require list_id, PROHIBIR student_uuid
   if (reset_scope === 'LIST_ALL') {
-    if (!list_id) {
-      throw new Error('list_id es obligatorio para reset_scope="LIST_ALL"');
-    }
-    if (student_uuid) {
-      throw new Error('student_uuid está PROHIBIDO para reset_scope="LIST_ALL". Reset ALL no acepta student_uuid.');
-    }
+    if (!list_id) throw new Error('list_id es obligatorio para reset_scope="LIST_ALL"');
+    if (student_uuid) throw new Error('student_uuid está PROHIBIDO para reset_scope="LIST_ALL"');
   }
 
   // ============================================================================
-  // CONSTRUIR PAYLOAD CANÓNICO (NO incluir execution_key - es backend-only)
+  // CONSTRUIR PAYLOAD. Backend: reset_layers o clean_layer.
   // ============================================================================
-  const payload = {
-    reset_scope,
-    clean_layer
-  };
+  const payload = { reset_scope };
+  if (hasResetLayers) {
+    payload.reset_layers = reset_layers;
+  } else {
+    payload.clean_layer = clean_layer;
+  }
 
-  // Incluir campos según scope (validaciones ya pasaron arriba)
-  if (item_ref) {
-    payload.item_ref = item_ref;
-  }
-  if (list_id) {
-    payload.list_id = list_id;
-  }
-  // REGLA CONSTITUCIONAL: student_uuid SOLO para *_STUDENT, NUNCA para *_ALL
+  if (item_ref) payload.item_ref = item_ref;
+  if (list_id) payload.list_id = list_id;
   if (reset_scope === 'ITEM_STUDENT' || reset_scope === 'LIST_STUDENT') {
-    if (student_uuid) {
-      payload.student_uuid = student_uuid;
-    }
+    if (student_uuid) payload.student_uuid = student_uuid;
   }
-  // NOTA: Para *_ALL, student_uuid NO se incluye (ya validado arriba que no existe)
-
-  if (reason) {
-    payload.reason = reason;
-  }
-  if (item_kind) {
-    payload.item_kind = item_kind; // Para validación en backend
-  }
+  if (reason) payload.reason = reason;
+  if (item_kind) payload.item_kind = item_kind;
 
   return payload;
 }
+
+/**
+ * Endpoint para restore defaults (overrides). Backend: POST /overrides/reset, body.scope.
+ * @param {Object} context
+ * @returns {string}
+ */
+function buildRestoreDefaultsEndpoint(context) {
+  return '/master/api/alquimia-general/overrides/reset';
+}
+
+/**
+ * Payload para restore defaults. Backend espera: scope, student_uuid?, item_ref?, list_id?.
+ * Guards: ITEM_STUDENT (student_uuid+item_ref), ITEM_ALL (item_ref), LIST_STUDENT (student_uuid+list_id), LIST_ALL (list_id).
+ * @param {Object} uiState
+ * @param {Object} context - scope o reset_scope, student_uuid, item_ref, list_id
+ * @returns {Object}
+ */
+function buildRestoreDefaultsPayload(uiState, context) {
+  const scope = context.scope || context.reset_scope;
+  const { student_uuid, item_ref, list_id, item_kind, view_layer } = context;
+
+  if (!scope || !['ITEM_STUDENT', 'ITEM_ALL', 'LIST_STUDENT', 'LIST_ALL'].includes(scope)) {
+    throw new Error('scope es obligatorio y debe ser ITEM_STUDENT, ITEM_ALL, LIST_STUDENT o LIST_ALL');
+  }
+  if (scope === 'ITEM_STUDENT') {
+    if (!student_uuid) throw new Error('student_uuid es obligatorio para scope ITEM_STUDENT');
+    if (!item_ref) throw new Error('item_ref es obligatorio para scope ITEM_STUDENT');
+  }
+  if (scope === 'ITEM_ALL') {
+    if (!item_ref) throw new Error('item_ref es obligatorio para scope ITEM_ALL');
+    if (student_uuid) throw new Error('student_uuid está prohibido para scope ITEM_ALL');
+  }
+  if (scope === 'LIST_STUDENT') {
+    if (!student_uuid) throw new Error('student_uuid es obligatorio para scope LIST_STUDENT');
+    if (!list_id) throw new Error('list_id es obligatorio para scope LIST_STUDENT');
+  }
+  if (scope === 'LIST_ALL') {
+    if (!list_id) throw new Error('list_id es obligatorio para scope LIST_ALL');
+    if (student_uuid) throw new Error('student_uuid está prohibido para scope LIST_ALL');
+  }
+
+  const payload = { scope };
+  if (student_uuid != null) payload.student_uuid = student_uuid;
+  if (item_ref != null) payload.item_ref = item_ref;
+  if (list_id != null) payload.list_id = list_id;
+  if (item_kind != null) payload.item_kind = item_kind;
+  if (view_layer != null) payload.view_layer = view_layer;
+  return payload;
+}
+
+/** Handler compartido restore_defaults y alias reset_overrides */
+const restoreDefaultsHandler = {
+  method: 'POST',
+  endpointBuilder: buildRestoreDefaultsEndpoint,
+  buildPayload: buildRestoreDefaultsPayload
+};
 
 // ============================================================================
 // ACCIÓN 1: alquimia.clean
@@ -332,4 +355,29 @@ registerAction({
   refresh: buildRefreshPlan
 });
 
-console.log('[AlquimiaActions] ✅ 3 acciones consolidadas registradas en UX Action Registry');
+// ============================================================================
+// ACCIÓN 4: alquimia.restore_defaults (CANÓNICO)
+// ============================================================================
+// Restaurar valores por defecto (eliminar overrides). NO toca cleaning_item_state.
+// Endpoint: POST /master/api/alquimia-general/overrides/reset, body.scope (ITEM_STUDENT|ITEM_ALL|LIST_STUDENT|LIST_ALL).
+registerAction({
+  action_id: 'alquimia.restore_defaults',
+  domain: 'master',
+  description: 'Restaurar valores por defecto (eliminar overrides de item/lista). No toca cleaning.',
+  handler: restoreDefaultsHandler,
+  refresh: buildRefreshPlan
+});
+
+// ============================================================================
+// ACCIÓN 5: alquimia.reset_overrides (DEPRECATED: use alquimia.restore_defaults)
+// ============================================================================
+// Alias temporal: mismo endpoint, payload y refresh que restore_defaults. Evita "action_id not registered".
+registerAction({
+  action_id: 'alquimia.reset_overrides',
+  domain: 'master',
+  description: 'DEPRECATED: use alquimia.restore_defaults. Alias para compatibilidad.',
+  handler: restoreDefaultsHandler,
+  refresh: buildRefreshPlan
+});
+
+console.log('[AlquimiaActions] ✅ 5 acciones consolidadas registradas en UX Action Registry');

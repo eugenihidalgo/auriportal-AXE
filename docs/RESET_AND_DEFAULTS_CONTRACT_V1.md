@@ -10,7 +10,7 @@
 | Concepto | Nombre habitual | Tablas que toca | Endpoint | Acción UX |
 |----------|------------------|-----------------|----------|-----------|
 | **Reset de ciclo** | Reset (progreso) | `cleaning_events` (INSERT action_type=reset), `cleaning_item_state` (solo `*_effective_since`) | `POST /master/api/alquimia-general/reset` | `alquimia.reset` |
-| **Restore defaults** | Reset overrides / Eliminar override | `student_item_overrides` (DELETE) | `POST /master/api/alquimia-general/overrides/reset` | `alquimia.reset_overrides` |
+| **Restore defaults** | Restaurar valores por defecto / Eliminar override | `student_item_overrides` (DELETE) | `POST /master/api/alquimia-general/overrides/reset` | `alquimia.restore_defaults` (alias: `alquimia.reset_overrides`) |
 
 - **Reset de ciclo** NO toca `student_item_overrides`.
 - **Restore defaults** NO toca `cleaning_item_state` ni `cleaning_events`.
@@ -44,10 +44,10 @@
 
 Construcción del plan: `buildRefreshPlan(context, uiState)` en la acción. Context debe incluir `clean_layer` (o `reset_layers`), `list_id`/`item_ref` según scope, `view_layer` si se quiere propagar al flotante.
 
-### alquimia.reset_overrides
+### alquimia.restore_defaults (y alias alquimia.reset_overrides)
 
 - Mismo `buildRefreshPlan`: `alquimia.list_projection`, `alquimia.items`, `alquimia.flotante_students` (si aplica).  
-- Context debe incluir `item_ref`, `list_id` (o en uiState), `clean_layer` (p. ej. `'shared'`) y `view_layer` para que el flotante refetch use los mismos criterios.
+- Context debe incluir `scope` (ITEM_STUDENT|ITEM_ALL|LIST_STUDENT|LIST_ALL), `item_ref`/`list_id`/`student_uuid` según scope, y `item_ref` para flotante.
 
 ---
 
@@ -70,6 +70,13 @@ Construcción del plan: `buildRefreshPlan(context, uiState)` en la acción. Cont
 
 - Invariante 23: en MASTER no se usa reset por DELETE (`deleteState`/`deleteStatesByList` sin `allow_legacy_delete`). Ver `npm run check:forbid-legacy-reset-delete`.
 - `docs/RESET_CLEAN_TIMESTAMP_INVARIANT_V1.md`: tras CLEAN, `last_cleaned_at >= effective_since` en la capa correspondiente.
+- `npm run check:action-registry-parity`: alquimia.reset, alquimia.clean, alquimia.clean_all, alquimia.restore_defaults, alquimia.reset_overrides deben existir en `public/.../alquimia-actions.js`.
+
+## 6. Smoke tests (manuales)
+
+1. **Restore defaults:** En /master/alquimia-general, proyección scope=student con overrides, pulsar "Restaurar valores por defecto". Verificar: no "action_id not registered", POST /overrides/reset en red, refetch, overrides a 0.
+2. **Reset de ciclo:** Pulsar reset 5 veces; idempotente, sin estado roto. "No se aplicaron cambios" aceptable; no bloquear resets posteriores.
+3. **Flotante:** Abrir VER de un ítem, reset y restore defaults si hay botón; comprobar refetch.
 
 ---
 
