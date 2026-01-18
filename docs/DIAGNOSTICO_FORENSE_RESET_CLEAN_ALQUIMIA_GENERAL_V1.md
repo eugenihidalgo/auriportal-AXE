@@ -1,8 +1,9 @@
 # DIAGNÓSTICO FORENSE — RESET y CLEAN en Alquimia General v1
 **Fecha:** 2026-01-18  
 **Versión:** v1.0  
+**Última actualización:** 2026-01-18 (violación cerrada v5.79.9)  
 **Dominio:** MASTER - Alquimia General  
-**Estado:** ✅ Diagnóstico completado
+**Estado:** ✅ Diagnóstico completado — Violación cerrada (v5.79.9)
 
 ---
 
@@ -758,11 +759,13 @@ El reset antiguo probablemente:
 
 ### F.2 — Violaciones Contractuales Detectadas
 
-| Violación | Ubicación | Severidad | Impacto |
-|-----------|-----------|-----------|---------|
-| Reset ALL no falla si clean_layer !== 'pde' | `cleaning-engine-service.js:2494-2499` | Media | Funciona pero no cumple contrato estrictamente |
+| Violación | Ubicación | Severidad | Estado |
+|-----------|-----------|-----------|--------|
+| Reset ALL no falla si clean_layer !== 'pde' | `cleaning-engine-service.js:2494-2499` | Media | ✅ CERRADA (v5.79.9) |
 
-**Total:** 1 violación (severidad media)
+**Total:** 1 violación detectada, **1 violación cerrada (v5.79.9)**
+
+**⚠️ NOTA:** La violación fue detectada en el diagnóstico inicial y cerrada en v5.79.9 mediante fallo duro obligatorio.
 
 ---
 
@@ -879,8 +882,8 @@ El reset antiguo probablemente:
 ### I.1 — Estado General del Sistema
 
 **RESET:**
-- ✅ **Estado:** Mayormente canónico
-- ⚠️ **Violación:** Reset ALL no falla si `clean_layer !== 'pde'` (funciona pero no cumple contrato estrictamente)
+- ✅ **Estado:** Completamente canónico (violación cerrada v5.79.9)
+- ✅ **Violación:** CERRADA (v5.79.9) - Reset ALL ahora falla si `clean_layer !== 'pde'`
 - ⚠️ **Legacy:** Métodos y endpoints deprecated aún presentes (no se usan pero existen)
 
 **CLEAN AFTER RESET:**
@@ -892,17 +895,19 @@ El reset antiguo probablemente:
 
 ### I.2 — Recomendaciones
 
-1. **Fix Violación Reset ALL:**
-   - Hacer que `resetAllStudentsItemProgress()` falle si `clean_layer !== 'pde'` (en lugar de solo warning)
-   - Ubicación: `src/core/master/services/cleaning-engine-service.js:2494-2499`
+1. ✅ **Fix Violación Reset ALL:**
+   - ✅ **COMPLETADO (v5.79.9):** `resetAllStudentsItemProgress()` ahora falla si `clean_layer !== 'pde'`
+   - ✅ Ubicación: `src/core/master/services/cleaning-engine-service.js:2493-2505`
+   - ✅ Error code: `RESET_ALL_INVALID_LAYER`
+   - ✅ Log estructurado: Prefijo `[RESET][ALL][INVALID_LAYER]`
 
-2. **Eliminar Código Legacy:**
+2. **Eliminar Código Legacy (Pendiente):**
    - Eliminar método `deleteState()` o añadir guard que bloquee uso
    - Eliminar endpoints deprecated o añadir guard que bloquee uso
 
 3. **Verificación:**
-   - Ejecutar tests de RESET y CLEAN AFTER RESET
-   - Verificar que reset ALL falla con `clean_layer='shared'`
+   - ✅ Ejecutar tests de RESET y CLEAN AFTER RESET
+   - ✅ Verificar que reset ALL falla con `clean_layer='shared'` (v5.79.9+)
 
 ---
 

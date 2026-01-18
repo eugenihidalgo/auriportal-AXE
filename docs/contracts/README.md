@@ -137,7 +137,7 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
 
 ---
 
-**Última actualización:** 2026-01-17
+**Última actualización:** 2026-01-18
 
 **Cambios recientes:**
 - 2026-01-17: Actualización de OVERRIDES_CONTRACT_V1.md basado en DIAGNOSTICO_OVERRIDES_MASTER_CANONICO.md
@@ -164,3 +164,10 @@ Este directorio contiene los contratos canónicos que definen el comportamiento 
   - Documenta que CLEAN es acto fundador del nuevo ciclo
   - Formaliza comportamiento que no estaba documentado anteriormente
   - Elimina ambigüedad histórica sobre CLEAN después de reset
+- 2026-01-18: **Cierre constitucional RESET ALL (v5.79.9)**
+  - Reset ALL ahora cumple RESET_CONTRACT_V1 estrictamente
+  - Fallo duro obligatorio: Reset ALL solo permite clean_layer='pde'
+  - Antes de v5.79.9: Warning si clean_layer !== 'pde' pero continuaba ejecución (violaba contrato)
+  - Desde v5.79.9: Error duro si clean_layer !== 'pde' (cumple contrato estrictamente)
+  - Error code: RESET_ALL_INVALID_LAYER
+  - Actualizado RESET_CONTRACT_V1.md con validación constitucional explícita

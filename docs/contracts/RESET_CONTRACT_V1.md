@@ -270,10 +270,10 @@
 
 ---
 
-### Fail-Open en Reset ALL
+### Fail-Open en Reset ALL (Estudiantes Individuales)
 
 **Comportamiento:**
-- Reset ALL itera sobre estudiantes y continúa aunque falle (línea 2423)
+- Reset ALL itera sobre estudiantes y continúa aunque falle (línea 2596-2607)
 - Si un estudiante falla, se registra error pero continúa con siguiente
 - Retorna resumen: `{ updated, failed, skipped, total }`
 
@@ -286,6 +286,34 @@
 - Log estructurado con prefijo `[RESET][ALL]`
 - Incluir trace_id en todos los logs
 - Incluir error.message y error.code en logs
+
+---
+
+### Validación Constitucional: Reset ALL solo PDE (v5.79.9+)
+
+**REGLA CONSTITUCIONAL ABSOLUTA:**
+- **Reset ALL solo permitido con `clean_layer='pde'`**
+- **Cualquier otro valor (`clean_layer='shared'` u otro) debe FALLAR**
+
+**Comportamiento:**
+- Si `clean_layer !== 'pde'` en `resetAllStudentsItemProgress()` → Error explícito `RESET_ALL_INVALID_LAYER`
+- Aborta inmediatamente antes de ejecutar cualquier reset
+- NO se ejecuta ningún reset parcial
+- NO se insertan eventos RESET
+- NO se modifican estados
+
+**Código:**
+- Ubicación: `src/core/master/services/cleaning-engine-service.js:2493-2505`
+- Error code: `RESET_ALL_INVALID_LAYER`
+- Log estructurado: Prefijo `[RESET][ALL][INVALID_LAYER]`
+
+**⚠️ NOTA HISTÓRICA:**
+- **Antes de v5.79.9:** Existía un warning si `clean_layer !== 'pde'` pero continuaba ejecución (violaba contrato)
+- **Desde v5.79.9:** Fallo duro obligatorio (cumple `RESET_CONTRACT_V1` estrictamente)
+
+**Verificación:**
+- Test que verifica que reset ALL falla con `clean_layer='shared'`
+- Test que verifica que reset ALL funciona con `clean_layer='pde'`
 
 ---
 
@@ -311,6 +339,7 @@
 3. Campos requeridos faltantes → Error explícito
 4. Formato UUID inválido → Error explícito
 5. Reset en GET → Error explícito `RESET_IN_GET_FORBIDDEN`
+6. **Reset ALL con `clean_layer !== 'pde'`** → Error explícito `RESET_ALL_INVALID_LAYER` (v5.79.9+)
 
 **Fail-open:**
 - Error en señal → Log WARN y continuar
@@ -624,9 +653,27 @@ async function resetStudentItemProgress(options, client = null)
 
 ---
 
+## VERSIONADO
+
+**Versión actual:** 1.0  
+**Fecha de activación:** 2026-01-13  
+**Última actualización:** 2026-01-18
+
+**Historial:**
+- v1.0 (2026-01-13): Contrato canónico inicial
+- v1.0 (2026-01-18): Cierre constitucional RESET ALL
+  - **Fallo duro obligatorio:** Reset ALL solo permite `clean_layer='pde'`
+  - **Antes de v5.79.9:** Existía warning si `clean_layer !== 'pde'` pero continuaba ejecución (violaba contrato)
+  - **Desde v5.79.9:** Fallo duro obligatorio (cumple `RESET_CONTRACT_V1` estrictamente)
+  - Error code: `RESET_ALL_INVALID_LAYER`
+  - Log estructurado: Prefijo `[RESET][ALL][INVALID_LAYER]`
+
+---
+
 ## REFERENCIAS
 
 - **Diagnóstico FASE 0:** `docs/DIAGNOSTICO_RESET_FASE0.md`
+- **Diagnóstico Forense:** `docs/DIAGNOSTICO_FORENSE_RESET_CLEAN_ALQUIMIA_GENERAL_V1.md` (violación detectada y cerrada v5.79.9)
 - **Servicio actual:** `src/core/master/services/cleaning-engine-service.js:1871-2761`
 - **Repositorio:** `src/infra/repos/cleaning/cleaning-item-state-repo-pg.js:340-403`
 - **Endpoint:** `src/endpoints/master-api-alquimia-general.js:2062-2192`
