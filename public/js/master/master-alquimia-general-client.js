@@ -49,6 +49,73 @@
     return;
   }
 
+  // ============================================================================
+  // FORENSIC TRACER v1: Instrumentación forense del pipeline client-side
+  // ============================================================================
+  
+  // Helper para verificar si el tracer está activo
+  const isTracingEnabled = () => {
+    try {
+      return window.apTrace && window.apTrace.enabled;
+    } catch (e) {
+      return false;
+    }
+  };
+  
+  // Helper para log seguro (fail-open)
+  const traceLog = (eventName, payload) => {
+    try {
+      if (window.apTrace && window.apTrace.log) {
+        window.apTrace.log(eventName, payload);
+      }
+    } catch (e) {
+      // Fail-open: si el tracer falla, continuar sin afectar UI
+    }
+  };
+  
+  // ============================================================================
+  // B.1) BOOT: Log inicial forense
+  // ============================================================================
+  
+  if (isTracingEnabled()) {
+    const bootInfo = {
+      url: window.location.href,
+      build_stamp: window.__AP_MASTER_ALQUIMIA_GENERAL_STAMP__ || 'unknown',
+      app_version: APP_VERSION,
+      build_id: BUILD_ID,
+      context: window.__AP_CONTEXT__,
+      flags: {
+        ap_trace_url: new URLSearchParams(window.location.search).get('ap_trace') === '1',
+        ap_trace_localStorage: localStorage.getItem('ap_trace') === '1'
+      }
+    };
+    
+    traceLog('BOOT', bootInfo);
+    
+    // Fetch fail-open a /master/__version para capturar version si existe
+    try {
+      const versionStart = Date.now();
+      fetch('/master/__version')
+        .then(res => res.ok ? res.json() : null)
+        .then(versionData => {
+          const duration_ms = Date.now() - versionStart;
+          traceLog('BOOT', {
+            ...bootInfo,
+            version_fetch: { ok: true, duration_ms, data: versionData || null }
+          });
+        })
+        .catch(err => {
+          const duration_ms = Date.now() - versionStart;
+          traceLog('BOOT', {
+            ...bootInfo,
+            version_fetch: { ok: false, duration_ms, error: err.message }
+          });
+        });
+    } catch (e) {
+      // Fail-open: si falla el fetch de version, continuar
+    }
+  }
+
   // Toast helpers: se cargan desde /js/master/ui/toast.js (common helper)
   // showToastSuccess y showToastError están disponibles globalmente
 
@@ -217,11 +284,198 @@
     return newViewState;
   }
 
+  // ============================================================================
+  // B.3) STATE snapshots: Helper para capturar estado UI compacto
+  // ============================================================================
+  
+  function snapshotState(reason) {
+    try {
+      const snapshot = {
+        list_id: state.list_id,
+        items_count: Array.isArray(state.items) ? state.items.length : 0,
+        students_count: Array.isArray(state.students) ? state.students.length : 0,
+        selected_student_uuid: state.modal.item ? (state.projection.student_uuid || null) : null,
+        selected_item_ref: state.modal.item ? (state.modal.item.item_ref || null) : null,
+        view_layer: state.projection.view_layer || 'shared',
+        clean_layer: state.modal.cleanLayer || 'shared',
+        lista_tipo: state.listaActiva ? state.listaActiva.tipo : null,
+        item_kind: state.tipoActivo,
+        view_mode: state.projection.mode
+      };
+      
+      // Hash simple de keys críticas (cortar a 200 chars)
+      try {
+        const stableKeys = JSON.stringify({
+          list_id: snapshot.list_id,
+          item_ref: snapshot.selected_item_ref,
+          student_uuid: snapshot.selected_student_uuid
+        });
+        snapshot.state_hash = stableKeys.substring(0, 200);
+      } catch (e) {
+        snapshot.state_hash = 'error';
+      }
+      
+      return snapshot;
+    } catch (e) {
+      return { error: 'snapshot failed', reason };
+    }
+  }
+
+  // ============================================================================
+  // B.2) NETWORK wrapper: Instrumentar fetch para trazado forense
+  // ============================================================================
+  
+  // Timestamps para refresh detection (B.6)
+  let lastActionOkAt = null;
+  let lastProjectionFetchAt = null;
+  let lastRenderAt = null;
+  
+  // Función helper para extraer top-level keys de respuesta
+  function getTopLevelKeys(obj) {
+    try {
+      if (typeof obj !== 'object' || obj === null) return [];
+      return Object.keys(obj).slice(0, 10); // Max 10 keys
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  // Wrapper de fetch con instrumentación forense
+  async function apFetch(url, options = {}) {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const method = (options.method || 'GET').toUpperCase();
+    const startTime = Date.now();
+    
+    // Log FETCH START
+    traceLog('FETCH', {
+      method,
+      url: url.toString ? url.toString() : String(url),
+      query: url.searchParams ? Object.fromEntries(url.searchParams) : null,
+      request_id: requestId,
+      ts: startTime
+    });
+    
+    try {
+      const response = await fetch(url, options);
+      const duration_ms = Date.now() - startTime;
+      
+      // Detectar si es fetch de proyección (para refresh detection)
+      const urlStr = url.toString ? url.toString() : String(url);
+      if (urlStr.includes('/list-projection') || urlStr.includes('/items/') && urlStr.includes('/students')) {
+        lastProjectionFetchAt = Date.now();
+      }
+      
+      // Intentar extraer trace_id y datos de respuesta JSON
+      let trace_id = null;
+      let top_level_keys = [];
+      let responseData = null;
+      
+      try {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const clonedResponse = response.clone(); // Clonar para leer sin consumir
+          responseData = await clonedResponse.json();
+          trace_id = responseData.trace_id || null;
+          top_level_keys = getTopLevelKeys(responseData);
+        }
+      } catch (e) {
+        // Fail-open: si no se puede parsear JSON, continuar
+      }
+      
+      // Log FETCH END
+      traceLog('FETCH', {
+        method,
+        url: urlStr,
+        request_id: requestId,
+        status: response.status,
+        ok: response.ok,
+        duration_ms,
+        trace_id,
+        top_level_keys
+      });
+      
+      return response;
+    } catch (error) {
+      const duration_ms = Date.now() - startTime;
+      
+      // Log FETCH ERR
+      traceLog('FETCH', {
+        method,
+        url: url.toString ? url.toString() : String(url),
+        request_id: requestId,
+        error: error.message,
+        stack: error.stack ? error.stack.substring(0, 500) : null,
+        duration_ms
+      });
+      
+      throw error;
+    }
+  }
+  
+  // ============================================================================
+  // B.6) REFRESH detection: Helper para detectar "NO REFRESH" tras acciones
+  // ============================================================================
+  
+  function checkRefreshAfterAction(actionType, actionOkAt) {
+    // Guardar timestamp de acción exitosa
+    if (actionOkAt) {
+      lastActionOkAt = actionOkAt;
+    }
+    
+    // Detector: después de 400ms, verificar si hubo refresh
+    setTimeout(() => {
+      try {
+        const now = Date.now();
+        const hasProjectionFetch = lastProjectionFetchAt && lastProjectionFetchAt >= actionOkAt;
+        const hasRender = lastRenderAt && lastRenderAt >= actionOkAt;
+        
+        if (!hasProjectionFetch && !hasRender) {
+          // NO REFRESH detectado
+          traceLog('WARN', {
+            event: 'NO_REFRESH_AFTER_ACTION',
+            action: actionType,
+            action_ok_at: actionOkAt,
+            last_projection_fetch_at: lastProjectionFetchAt,
+            last_render_at: lastRenderAt,
+            elapsed_ms: now - actionOkAt,
+            snapshot_before: snapshotState('before_action'),
+            snapshot_after: snapshotState('after_no_refresh')
+          });
+        } else {
+          // Refresh detectado correctamente
+          traceLog('REFRESH', {
+            event: 'REFRESH_DETECTED_AFTER_ACTION',
+            action: actionType,
+            has_projection_fetch: hasProjectionFetch,
+            has_render: hasRender,
+            elapsed_ms: now - actionOkAt
+          });
+        }
+      } catch (e) {
+        // Fail-open: si falla la verificación, continuar
+      }
+    }, 400);
+  }
+
   /**
    * GATILLO ÚNICO DE RENDER
    * Decide si puede renderizar y qué renderizar según viewState
    */
   function renderView() {
+    const renderStartTime = Date.now();
+    const viewState = getViewState();
+    
+    // B.4) RENDER: Log START
+    traceLog('RENDER', {
+      event: 'RENDER_START',
+      reason: 'renderView',
+      list_id: state.list_id,
+      lista_tipo: state.listaActiva?.tipo || null,
+      clean_layer: state.modal.cleanLayer || 'shared',
+      view_mode: viewState.viewMode,
+      view_layer: viewState.view_layer
+    });
+    
     // Log forense con token de render (si engine está disponible)
     const engine = window.MasterRefreshEngineV1;
     const lastToken = engine ? engine.getLastRenderToken() : null;
@@ -244,10 +498,14 @@
     // VALIDAR DOM ROOT (FASE 1)
     if (!listaContent) {
       console.error('[FATAL][renderView] listaContent not found. CHECK DOM ID');
+      traceLog('RENDER', {
+        event: 'RENDER_SKIP',
+        reason: 'listaContent not found',
+        why: 'DOM element missing'
+      });
       return;
     }
     
-    const viewState = getViewState();
     const canRender = viewState.list_id !== null;
     
     console.log('[TRACE][renderView] decision', { canRender, list_id: state.list_id });
@@ -272,6 +530,11 @@
         waitingMsg.textContent = 'Selecciona una lista para comenzar';
         listaContent.appendChild(waitingMsg);
       }
+      traceLog('RENDER', {
+        event: 'RENDER_SKIP',
+        reason: 'no list selected',
+        why: 'canRender === false'
+      });
       return;
     }
     
@@ -329,6 +592,24 @@
     } else {
       renderOperativeView();
     }
+    
+    // B.4) RENDER: Log END y actualizar lastRenderAt
+    const renderDuration_ms = Date.now() - renderStartTime;
+    const itemsRendered = state.items ? state.items.length : 0;
+    const floatStudentsRendered = state.modal.item && state.modal.students ? state.modal.students.length : 0;
+    
+    lastRenderAt = Date.now();
+    
+    traceLog('RENDER', {
+      event: 'RENDER_END',
+      reason: 'renderView',
+      list_id: state.list_id,
+      items_rendered_count: itemsRendered,
+      float_students_rendered_count: floatStudentsRendered,
+      selected_student_present: !!state.projection.student_uuid,
+      selected_item_present: !!state.modal.item,
+      duration_ms: renderDuration_ms
+    });
   }
 
   /**
@@ -1672,6 +1953,20 @@
         btnResetListAll.addEventListener('click', async () => {
           // REGLA CONSTITUCIONAL: No usar confirm() ni alert()
           // Usar toasts no bloqueantes
+          
+          // B.5) ACTIONS: Instrumentar RESET LIST ALL
+          const previousUIState = snapshotState('before_reset_list_all');
+          const actionStartTime = Date.now();
+          
+          traceLog('ACTION', {
+            event: 'RESET_CLICK',
+            reset_scope: 'LIST_ALL',
+            list_id: state.listaActiva?.id || null,
+            item_ref: null,
+            student_uuid: null,
+            clean_layer: 'to_be_determined'
+          });
+          
           try {
             if (typeof window.performAction !== 'function') {
               throw new Error('[MasterAlquimiaGeneral] performAction no disponible.');
@@ -1694,7 +1989,11 @@
               cleanLayer = 'pde';
             }
 
-            const result = await window.performAction({
+            let result;
+            let actionDuration_ms;
+            let trace_id = null;
+            
+            result = await window.performAction({
               action_id: 'alquimia.reset',
               context: {
                 reset_scope: 'LIST_ALL',
@@ -1705,9 +2004,35 @@
               uiState
             });
 
+            actionDuration_ms = Date.now() - actionStartTime;
+            trace_id = result.trace_id || null;
+
             if (!result.ok) {
+              traceLog('ACTION', {
+                event: 'RESET_RESPONSE',
+                ok: false,
+                status: 'error',
+                trace_id,
+                duration_ms: actionDuration_ms,
+                error: result.error || 'Error reseteando lista para todos',
+                reason: result.error
+              });
               throw new Error(result.error || 'Error reseteando lista para todos');
             }
+
+            // B.5) ACTION: Log success response
+            const actionOkAt = Date.now();
+            traceLog('ACTION', {
+              event: 'RESET_RESPONSE',
+              ok: true,
+              status: 'success',
+              trace_id,
+              duration_ms: actionDuration_ms,
+              reset_scope: 'LIST_ALL'
+            });
+            
+            // B.6) REFRESH detection
+            checkRefreshAfterAction('RESET_LIST_ALL', actionOkAt);
 
             const applied = result.data?.applied || 0;
             const skipped = result.data?.skipped || 0;
@@ -1729,6 +2054,15 @@
             
             // NOTA: Refresh ya se ejecutó dentro de performAction() vía Refresh Engine
           } catch (error) {
+            const actionDuration_ms = Date.now() - actionStartTime;
+            traceLog('ACTION', {
+              event: 'RESET_RESPONSE',
+              ok: false,
+              status: 'exception',
+              duration_ms: actionDuration_ms,
+              error: error.message,
+              reason: error.message
+            });
             console.error('[RESET][LIST][ALL] Error:', error);
             showToastError(`Error: ${error.message}`);
           }
@@ -2268,8 +2602,22 @@
       }
       
       // ============================================================================
-      // LOG FORENSE: Acción masiva con clean_layer explícito
+      // B.5) ACTIONS: Instrumentar CLEAN
       // ============================================================================
+      
+      const previousUIState = snapshotState('before_clean');
+      const actionStartTime = Date.now();
+      
+      traceLog('ACTION', {
+        event: 'CLEAN_CLICK',
+        student_uuid: null, // CLEAN ALL, no student_uuid
+        item_ref: item.item_ref,
+        item_kind: itemKind,
+        clean_layer: cleanLayer,
+        previous_ui_state: previousUIState
+      });
+      
+      // LOG FORENSE: Acción masiva con clean_layer explícito
       console.log('[UI][BULK][CLEAN] Enviando mark-clean-all', {
         item_ref: item.item_ref,
         item_kind: itemKind,
@@ -2291,21 +2639,63 @@
       };
 
       // Usar acción consolidada 'alquimia.clean_all' (scope='all' implícito)
-      const result = await window.performAction({
-        action_id: 'alquimia.clean_all',
-        payload: {
-          item_ref: item.item_ref,
-          clean_layer: cleanLayer,
-          item_kind: itemKind
-        },
-        context: {
-          item_ref: item.item_ref
-        },
-        uiState
-      });
+      let result;
+      let actionDuration_ms;
+      let trace_id = null;
+      
+      try {
+        result = await window.performAction({
+          action_id: 'alquimia.clean_all',
+          payload: {
+            item_ref: item.item_ref,
+            clean_layer: cleanLayer,
+            item_kind: itemKind
+          },
+          context: {
+            item_ref: item.item_ref
+          },
+          uiState
+        });
 
-      if (!result.ok) {
-        throw new Error(result.error || 'Error limpiando item');
+        actionDuration_ms = Date.now() - actionStartTime;
+        trace_id = result.trace_id || null;
+
+        if (!result.ok) {
+          traceLog('ACTION', {
+            event: 'CLEAN_RESPONSE',
+            ok: false,
+            status: 'error',
+            trace_id,
+            duration_ms: actionDuration_ms,
+            error: result.error || 'Error limpiando item'
+          });
+          throw new Error(result.error || 'Error limpiando item');
+        }
+        
+        // B.5) ACTION: Log success response
+        const actionOkAt = Date.now();
+        traceLog('ACTION', {
+          event: 'CLEAN_RESPONSE',
+          ok: true,
+          status: 'success',
+          trace_id,
+          duration_ms: actionDuration_ms
+        });
+        
+        // B.6) REFRESH detection: Verificar que hay refresh tras acción exitosa
+        checkRefreshAfterAction('CLEAN', actionOkAt);
+        
+      } catch (actionError) {
+        actionDuration_ms = Date.now() - actionStartTime;
+        traceLog('ACTION', {
+          event: 'CLEAN_RESPONSE',
+          ok: false,
+          status: 'exception',
+          duration_ms: actionDuration_ms,
+          error: actionError.message,
+          reason: actionError.message
+        });
+        throw actionError;
       }
 
       const data = result.data || {};
@@ -6351,6 +6741,19 @@
       cleanLayer = 'pde';
     }
 
+    // B.5) ACTIONS: Instrumentar RESET ITEM
+    const previousUIState = snapshotState('before_reset_item');
+    const actionStartTime = Date.now();
+    
+    traceLog('ACTION', {
+      event: 'RESET_CLICK',
+      reset_scope: 'ITEM_STUDENT',
+      list_id: null,
+      item_ref,
+      student_uuid,
+      clean_layer: cleanLayer
+    });
+
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
       if (typeof window.performAction !== 'function') {
@@ -6365,7 +6768,11 @@
       };
 
       // REGLA CANÓNICA: Usar reset_scope='ITEM_STUDENT' con clean_layer explícito
-      const result = await window.performAction({
+      let result;
+      let actionDuration_ms;
+      let trace_id = null;
+      
+      result = await window.performAction({
         action_id: 'alquimia.reset',
         context: {
           reset_scope: 'ITEM_STUDENT',
@@ -6377,9 +6784,35 @@
         uiState
       });
 
+      actionDuration_ms = Date.now() - actionStartTime;
+      trace_id = result.trace_id || null;
+
       if (!result.ok) {
+        traceLog('ACTION', {
+          event: 'RESET_RESPONSE',
+          ok: false,
+          status: 'error',
+          trace_id,
+          duration_ms: actionDuration_ms,
+          error: result.error || 'Error reseteando progreso del ítem',
+          reason: result.error
+        });
         throw new Error(result.error || 'Error reseteando progreso del ítem');
       }
+
+      // B.5) ACTION: Log success response
+      const actionOkAt = Date.now();
+      traceLog('ACTION', {
+        event: 'RESET_RESPONSE',
+        ok: true,
+        status: 'success',
+        trace_id,
+        duration_ms: actionDuration_ms,
+        reset_scope: 'ITEM_STUDENT'
+      });
+      
+      // B.6) REFRESH detection
+      checkRefreshAfterAction('RESET_ITEM', actionOkAt);
 
       const data = result.data || {};
       console.log('[RESET][ITEM][CANONICAL] Progreso reseteado', {
@@ -6398,6 +6831,15 @@
         layers_affected: data.layers_affected || []
       };
     } catch (error) {
+      const actionDuration_ms = Date.now() - actionStartTime;
+      traceLog('ACTION', {
+        event: 'RESET_RESPONSE',
+        ok: false,
+        status: 'exception',
+        duration_ms: actionDuration_ms,
+        error: error.message,
+        reason: error.message
+      });
       console.error('[RESET][ITEM] Error:', error);
       throw error;
     }
@@ -6430,6 +6872,19 @@
       cleanLayer = 'pde';
     }
 
+    // B.5) ACTIONS: Instrumentar RESET LIST
+    const previousUIState = snapshotState('before_reset_list');
+    const actionStartTime = Date.now();
+    
+    traceLog('ACTION', {
+      event: 'RESET_CLICK',
+      reset_scope: 'LIST_STUDENT',
+      list_id,
+      item_ref: null,
+      student_uuid,
+      clean_layer: cleanLayer
+    });
+
     try {
       // UX CONTRACT v1: Usar performAction() wrapper canónico
       if (typeof window.performAction !== 'function') {
@@ -6444,7 +6899,11 @@
       };
 
       // REGLA CANÓNICA: Usar reset_scope='LIST_STUDENT' con clean_layer explícito
-      const result = await window.performAction({
+      let result;
+      let actionDuration_ms;
+      let trace_id = null;
+      
+      result = await window.performAction({
         action_id: 'alquimia.reset',
         context: {
           reset_scope: 'LIST_STUDENT',
@@ -6456,9 +6915,35 @@
         uiState
       });
 
+      actionDuration_ms = Date.now() - actionStartTime;
+      trace_id = result.trace_id || null;
+
       if (!result.ok) {
+        traceLog('ACTION', {
+          event: 'RESET_RESPONSE',
+          ok: false,
+          status: 'error',
+          trace_id,
+          duration_ms: actionDuration_ms,
+          error: result.error || 'Error reseteando progreso de la lista',
+          reason: result.error
+        });
         throw new Error(result.error || 'Error reseteando progreso de la lista');
       }
+
+      // B.5) ACTION: Log success response
+      const actionOkAt = Date.now();
+      traceLog('ACTION', {
+        event: 'RESET_RESPONSE',
+        ok: true,
+        status: 'success',
+        trace_id,
+        duration_ms: actionDuration_ms,
+        reset_scope: 'LIST_STUDENT'
+      });
+      
+      // B.6) REFRESH detection
+      checkRefreshAfterAction('RESET_LIST', actionOkAt);
 
       const data = result.data || {};
       console.log('[RESET][LIST][CANONICAL] Progreso reseteado', {
@@ -6477,6 +6962,15 @@
         layers_affected: data.layers_affected || []
       };
     } catch (error) {
+      const actionDuration_ms = Date.now() - actionStartTime;
+      traceLog('ACTION', {
+        event: 'RESET_RESPONSE',
+        ok: false,
+        status: 'exception',
+        duration_ms: actionDuration_ms,
+        error: error.message,
+        reason: error.message
+      });
       console.error('[RESET][LIST] Error:', error);
       throw error;
     }

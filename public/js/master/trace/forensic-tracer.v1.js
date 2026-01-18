@@ -117,6 +117,7 @@
     
     /**
      * Volcar resumen al console y copiar JSON al clipboard (si posible)
+     * Incluye resúmenes estructurados: últimos fetches, actions, renders
      */
     dump: function() {
       if (!enabled) {
@@ -125,16 +126,72 @@
       }
       
       try {
+        const events = ringBuffer.slice().sort((a, b) => a.index - b.index);
+        const last30Events = events.slice(-30);
+        
+        // Extraer resúmenes por tipo
+        const fetches = events.filter(e => 
+          e.event && (e.event.includes('FETCH') || e.event.includes('NETWORK'))
+        ).slice(-20);
+        
+        const actions = events.filter(e => 
+          e.event && e.event.includes('ACTION')
+        ).slice(-20);
+        
+        const renders = events.filter(e => 
+          e.event && (e.event.includes('RENDER') || e.event.includes('REFRESH'))
+        ).slice(-20);
+        
+        const warnings = events.filter(e => 
+          e.event && (e.event.includes('WARN') || e.event.includes('NO_REFRESH'))
+        );
+        
         const summary = {
           total_events: ringBuffer.length,
           event_count: eventCount,
           max_events: MAX_EVENTS,
-          events: ringBuffer.slice().sort((a, b) => a.index - b.index)
+          last_30_events: last30Events,
+          summaries: {
+            last_fetches: fetches.map(e => ({
+              event: e.event,
+              timestamp: e.timestampISO,
+              url: e.payload?.url || e.payload?.method || 'unknown',
+              status: e.payload?.status,
+              trace_id: e.payload?.trace_id,
+              duration_ms: e.payload?.duration_ms
+            })),
+            last_actions: actions.map(e => ({
+              event: e.event,
+              timestamp: e.timestampISO,
+              action_type: e.payload?.action || e.payload?.type || 'unknown',
+              ok: e.payload?.ok,
+              trace_id: e.payload?.trace_id,
+              duration_ms: e.payload?.duration_ms
+            })),
+            last_renders: renders.map(e => ({
+              event: e.event,
+              timestamp: e.timestampISO,
+              reason: e.payload?.reason,
+              items_rendered: e.payload?.items_rendered_count,
+              duration_ms: e.payload?.duration_ms
+            })),
+            warnings: warnings.map(e => ({
+              event: e.event,
+              timestamp: e.timestampISO,
+              message: e.payload?.message || e.payload?.error || 'warning'
+            }))
+          },
+          all_events: events
         };
         
         console.group('[TRACE][DUMP] Resumen completo');
         console.log('Total eventos:', summary.total_events);
         console.log('Eventos capturados:', summary.event_count);
+        console.log('Últimos fetches:', summary.summaries.last_fetches.length);
+        console.log('Últimas actions:', summary.summaries.last_actions.length);
+        console.log('Últimos renders:', summary.summaries.last_renders.length);
+        console.log('Warnings:', summary.summaries.warnings.length);
+        console.log('Resúmenes:', summary.summaries);
         console.log('Buffer completo:', summary);
         console.groupEnd();
         
