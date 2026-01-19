@@ -177,6 +177,10 @@
     students: [] // Lista de estudiantes para selector
   };
 
+  // FASE 2 (v5.82.6): Evitar encallamiento por respuestas fuera de orden (race).
+  // Solo la respuesta de la petición más reciente aplica; las obsoletas se descartan.
+  let _loadListProjectionRequestId = 0;
+
   // UX CONTRACT v1: Exponer state y funciones para registries
   // NOTA: Estas funciones se exponen después de ser definidas (más abajo en el código)
   // Se actualizarán en boot() después de que todas las funciones estén definidas
@@ -1790,6 +1794,7 @@
     state.projection.loading = true;
     
     try {
+      const myId = ++_loadListProjectionRequestId;
       const params = new URLSearchParams({
         list_id: state.listaActiva.id,
         item_kind: itemKind,
@@ -1829,8 +1834,26 @@
         throw new Error(result.error || 'Error cargando proyección');
       }
       
+      // FASE 2 (v5.82.6): Ignorar respuestas obsoletas (evitar que una proyección antigua pise una más nueva).
+      if (myId !== _loadListProjectionRequestId) {
+        state.projection.loading = false;
+        return null;
+      }
+      const prevData = state.projection.data;
       state.projection.data = result.data;
       state.projection.loading = false;
+      
+      // FASE 1: [UI_PROJECTION_APPLY] Log forense (diagnóstico race/reconciliación).
+      console.log('[UI_PROJECTION_APPLY]', {
+        item_count: result.data?.items?.length ?? 0,
+        sample: result.data?.items?.[0] ? {
+          item_ref: result.data.items[0].item_ref,
+          prev_state: prevData?.items?.[0]?.state_by_view_layer ?? null,
+          next_state: result.data.items[0].state_by_view_layer ?? null
+        } : null,
+        action_id: 'loadListProjection',
+        ts: new Date().toISOString()
+      });
       
       // FASE 4 FIX: Asegurar que el state se actualiza
       // Actualizar window.__AP_ALQUIMIA_STATE__ si está expuesto (puede haber cambiado)

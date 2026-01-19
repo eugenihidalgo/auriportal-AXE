@@ -18,7 +18,7 @@ import { getDefaultStudentItemOverridesRepoPg } from '../../../infra/repos/stude
 import { getDefaultAlquimiaCatalogRepo } from '../../../infra/repos/alquimia-catalog-repo-pg.js';
 import { getRequestId } from '../../observability/request-context.js';
 import { logError, logInfo } from '../../observability/logger.js';
-import { query } from '../../../database/pg.js';
+import { query } from '../../../../database/pg.js';
 
 /**
  * Resetea overrides de un item para un estudiante específico.
