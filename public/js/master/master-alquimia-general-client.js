@@ -1814,13 +1814,18 @@
         student_uuid: state.projection.student_uuid
       });
       
-      // Log forense (FASE 4)
+      // FASE 1 (v5.82.7): view_layer estable; log [UI_VIEW_LAYER]
+      console.log('[UI_VIEW_LAYER]', {
+        view_layer: activeViewLayer,
+        scope: state.projection.scope,
+        action_id: 'loadListProjection'
+      });
       console.log('[REFRESH][GET] list-projection', {
         endpoint: '/master/api/alquimia-general/list-projection',
         params: {
           list_id: state.listaActiva.id,
           item_kind: itemKind,
-          view_layer: activeViewLayer, // BUG-009: Usar view_layer preservado
+          view_layer: activeViewLayer,
           scope: state.projection.scope,
           student_uuid: state.projection.student_uuid
         },
@@ -2300,8 +2305,9 @@
       const createRow = createItemTableRow(null, true);
       tbody.appendChild(createRow);
       
-      // PDUI: Extraer view_layer al principio (derivado de proyección)
-      const viewLayer = state.projection.view_layer;
+      // PDUI: view_layer desde state.projection (única autoridad). Verde = reviewed EN ESA CAPA.
+      const viewLayer = state.projection.view_layer || 'shared';
+      console.log('[UI_VIEW_LAYER]', { view_layer: viewLayer, scope: state.projection.scope, action_id: 'render' });
       
       // Ordenar items por estado (never, important, pending, reviewed) y luego por nivel
       const sortedItems = [...state.projection.data.items].sort((a, b) => {
@@ -2344,17 +2350,26 @@
         }
         lastState = itemState;
         
-        // REGLA DURA: Solo añadir botones si scope === 'student' y hay student_uuid
         const isProjectionStudent = state.projection.scope === 'student' && !!state.projection.student_uuid;
         const itemRow = createItemTableRow(item, false, isProjectionStudent);
         
-        // Estilizar filas según estado
+        // FASE 2 (v5.82.7): inspección ALL worst-case (tooltip + data-* para console)
+        if (item && item.debug) {
+          itemRow.dataset.debugWorst = item.debug.worst_state || '';
+          itemRow.dataset.debugLayer = item.debug.worst_layer || '';
+          itemRow.dataset.debugForcing = (item.debug.forcing_students || []).slice(0, 5).join(',');
+          itemRow.title = (itemRow.title ? itemRow.title + ' | ' : '') + '[ALL] ' + (item.debug.worst_state || '') + ' en ' + (item.debug.worst_layer || '') + (item.debug.forcing_students && item.debug.forcing_students.length ? ' (' + item.debug.forcing_students.length + ')' : '');
+        }
+        
+        // FASE 3 (v5.82.7): Verde = reviewed EN ESA CAPA. reseteado en pde = correcto si reset PDE sin clean PDE.
         if (itemState === 'reviewed' || itemState === 'completed') {
           itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(34, 197, 94, 0.1);';
         } else if (itemState === 'important') {
           itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(239, 68, 68, 0.1);';
         } else if (itemState === 'pending' || itemState === 'in_progress') {
           itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(251, 191, 36, 0.1);';
+        } else if (itemState === 'reseteado') {
+          itemRow.style.cssText = itemRow.style.cssText + 'background: rgba(148, 163, 184, 0.12);'; // distinto de verde
         }
         
         tbody.appendChild(itemRow);
@@ -7040,11 +7055,12 @@
    */
   const AlquimiaGeneralRefreshAdapter = {
     /**
-     * Invalida state local según el tipo de mutación
+     * Invalida state local según el tipo de mutación.
+     * REGLA (v5.82.7): invalidate/refetch NUNCA modifican state.projection.view_layer.
      */
     invalidate(mutation) {
       const { mutation_type, scope = {}, context = {} } = mutation;
-      if (context.__v2_handled_refetch__) return; // v2 ya refetcheó; no invalidar (evitar doble camino)
+      if (context.__v2_handled_refetch__) return;
 
       // Log forense estructurado
       console.log('[REFRESH_ENGINE][ALQG][INVALIDATE]', {
@@ -7162,14 +7178,18 @@
         return surfaces;
       }
       
-      // Aplicar normalizador
-      // uiState se usa en normalizador y luego en surfaceRegistry.refetch
+      // uiState: view_layer desde state.projection (refetch NUNCA lo modifica)
       const uiState = {
         view_mode: state.projection.mode,
         view_layer: scope.view_layer || state.projection.view_layer || 'shared',
         list_id: context.list_id || state.listaActiva?.id || null,
         student_uuid: context.student_uuid || state.projection.student_uuid || null
       };
+      console.log('[UI_VIEW_LAYER]', {
+        view_layer: uiState.view_layer,
+        scope: state.projection.scope,
+        action_id: context.action_id || 'refetch'
+      });
       
       surfaces = normalizeSurfacesOrFail({
         surfaces,

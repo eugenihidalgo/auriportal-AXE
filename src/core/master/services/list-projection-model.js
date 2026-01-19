@@ -143,7 +143,6 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
   }
   
   if (!layerStates || layerStates.length === 0) {
-    // Si no hay estados, devolver estado vacío (never)
     console.log('[LPM][DEBUG][WORST_STATE][EMPTY]', {
       item_kind: itemKind,
       reason: 'no layer states'
@@ -153,49 +152,48 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       remaining: null,
       completed: false,
       last_cleaned_at: null,
-      effective_since: null
+      effective_since: null,
+      _forcing_student_uuids: []
     };
   }
   
   if (itemKind === 'recurrente') {
-    // RECURRENTE: NULL tiene prioridad máxima (nunca trabajado)
-    // CPM v2: Calcular days_since desde last_cleaned_at y effective_since
     let worstDaysSince = null;
     let worstLastCleanedAt = null;
     let hasNull = false;
+    const nullUuids = [];
+    let worstForcingUuids = [];
     
-    // CPM v2: Calcular days_since desde last_cleaned_at y effective_since
     layerStates.forEach(state => {
       const lastCleanedAt = state.last_cleaned_at;
       const effectiveSince = state.effective_since;
+      const su = state._student_uuid || null;
       
-      // Calcular last_effective_clean (igual que CPM v2)
       let lastEffectiveCleanAt = null;
       if (lastCleanedAt && effectiveSince) {
-        lastEffectiveCleanAt = new Date(lastCleanedAt) > new Date(effectiveSince) ? lastCleanedAt : effectiveSince;
+        lastEffectiveCleanAt = new Date(lastCleanedAt) >= new Date(effectiveSince) ? lastCleanedAt : effectiveSince;
       } else if (effectiveSince) {
         lastEffectiveCleanAt = effectiveSince;
       } else if (lastCleanedAt) {
         lastEffectiveCleanAt = lastCleanedAt;
       }
       
-      // NULL significa "nunca trabajado" (sin last_effective_clean)
       if (lastEffectiveCleanAt === null) {
         hasNull = true;
+        if (su) nullUuids.push(su);
       } else if (!hasNull) {
-        // Calcular days_since
         const now = new Date();
-        const lastEffective = new Date(lastEffectiveCleanAt);
-        const daysSince = Math.floor((now - lastEffective) / (1000 * 60 * 60 * 24));
-        
+        const daysSince = Math.floor((now - new Date(lastEffectiveCleanAt)) / (1000 * 60 * 60 * 24));
         if (worstDaysSince === null || daysSince > worstDaysSince) {
           worstDaysSince = daysSince;
           worstLastCleanedAt = lastEffectiveCleanAt;
+          worstForcingUuids = su ? [su] : [];
+        } else if (daysSince === worstDaysSince && su) {
+          worstForcingUuids.push(su);
         }
       }
     });
     
-    // CPM v2: Incluir effective_since en peor estado (NO had_history, PROHIBIDO)
     let worstEffectiveSince = null;
     layerStates.forEach(state => {
       if (state.effective_since) {
@@ -205,24 +203,23 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       }
     });
 
+    const forcing = hasNull ? nullUuids : worstForcingUuids;
     const worstStateResult = {
-      clean_count: 0, // No aplica en agregación para recurrente
-      remaining: null, // No aplica en agregación
-      completed: false, // No aplica en agregación
+      clean_count: 0,
+      remaining: null,
+      completed: false,
       last_cleaned_at: hasNull ? null : worstLastCleanedAt,
-      effective_since: worstEffectiveSince
+      effective_since: worstEffectiveSince,
+      _forcing_student_uuids: forcing.filter(Boolean)
     };
     
-    // DIAGNÓSTICO: Log resultado del cálculo de peor estado para recurrente
     console.log('[LPM][DEBUG][WORST_STATE][RECURRENTE]', {
       item_kind: itemKind,
       students_count: layerStates.length,
       has_null: hasNull,
       worst_last_cleaned_at: worstLastCleanedAt,
       worst_effective_since: worstEffectiveSince,
-      worst_last_cleaned_at: worstLastCleanedAt,
-      worst_effective_since: worstEffectiveSince,
-      result: worstStateResult
+      _forcing_count: forcing.length
     });
     
     return worstStateResult;
@@ -306,11 +303,11 @@ function calculateWorstStateForLayer(layerStates, itemKind, item) {
       clean_count: worstCleanCount,
       remaining: worstRemaining,
       completed: worstCompleted,
-      last_cleaned_at: null, // No aplica en una_vez
-      effective_since: null // UNA_VEZ NO tiene reset
+      last_cleaned_at: null,
+      effective_since: null,
+      _forcing_student_uuids: [] // una_vez: no calculado en v5.82.7
     };
     
-    // DIAGNÓSTICO: Log resultado del cálculo de peor estado para una_vez
     console.log('[LPM][DEBUG][WORST_STATE][UNA_VEZ]', {
       item_kind: itemKind,
       students_count: layerStates.length,
@@ -553,12 +550,15 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         row.pde_clean_count || 0
       );
       
+      // FASE 2 (v5.82.7): _student_uuid para debug ALL worst-case (forcing_students)
+      const su = row.student_id || row.student_uuid || null;
       statesByItem[itemRef].shared.push({
         clean_count: sharedNormalized.clean_count,
         remaining: row.shared_remaining || null,
         completed: row.shared_completed || false,
         last_cleaned_at: sharedNormalized.last_cleaned_at,
-        effective_since: sharedNormalized.effective_since
+        effective_since: sharedNormalized.effective_since,
+        _student_uuid: su
       });
       
       statesByItem[itemRef].pde.push({
@@ -566,7 +566,8 @@ async function getCleaningStatesForItems(items, scope, studentId = null, itemKin
         remaining: row.pde_remaining || null,
         completed: row.pde_completed || false,
         last_cleaned_at: pdeNormalized.last_cleaned_at,
-        effective_since: pdeNormalized.effective_since
+        effective_since: pdeNormalized.effective_since,
+        _student_uuid: su
       });
     });
     
@@ -974,6 +975,18 @@ export async function computeListProjection({ list_id, item_kind, view_layer, sc
         active_state: activeState?.state || 'never',
         active_visual_state: activeState?.visual_state || 'never'
       };
+      
+      // FASE 2 (v5.82.7): debug ALL worst-case cuando estado != reviewed (solo MASTER / inspección)
+      const s = activeState?.state;
+      if (scope === 'all' && s && s !== 'reviewed' && s !== 'completed') {
+        const sh = cleaningState.shared?._forcing_student_uuids || [];
+        const pd = cleaningState.pde?._forcing_student_uuids || [];
+        effectiveItem.debug = {
+          worst_state: s,
+          worst_layer: view_layer,
+          forcing_students: [...new Set([].concat(sh, pd))]
+        };
+      }
       
       return effectiveItem;
     }));

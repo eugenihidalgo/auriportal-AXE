@@ -1985,10 +1985,9 @@ export default async function masterApiAlquimiaGeneralHandler(request, env, ctx)
     // ENDPOINT RESET OVERRIDES (CANÓNICO v1)
     // ============================================================================
 
-    // POST /master/api/alquimia-general/overrides/reset
-    // Endpoint canónico para resetear overrides de configuración de items
-    // REGLA CONSTITUCIONAL: Override ≠ cleaning state, Override ≠ reset
-    // Solo afecta a overrides (student_item_overrides), NO modifica cleaning_item_state
+    // POST /master/api/alquimia-general/overrides/reset (Restore defaults)
+    // REGLA: Override ≠ cleaning. Solo student_item_overrides. NO cleaning_item_state ni cleaning_events.
+    // FASE 4 (v5.82.7): Tras ok, proyección ALL se recalcula vía refresh_plan (performAction).
     if (path === '/master/api/alquimia-general/overrides/reset' && method === 'POST') {
       try {
         const body = await request.json();
